@@ -265,7 +265,10 @@ par Firefox/Safari. La page est **responsive** (s'adapte à la taille d'écran).
       (maître diffuse anim+seed, chaque droïde la joue). Build OK.
 - [ ] 5. `audio` : wrapper DFPlayer + mapping (maître).
 - [ ] 6. `droid` + `main.cpp` : machine à états et câblage des modules.
-- [ ] 7. `config_store` (NVS) + `registry` : persistance et inventaire des droïdes.
+- [x] 7. `config_store` (NVS) + `registry` : persistance et inventaire des droïdes.
+      → `src/config_store.{h,cpp}` (volume, params d'anim, noms en NVS) et
+      `src/registry.{h,cpp}` (inventaire vivant : srcId, RSSI, lastSeen).
+      Intégrés au maître : détection nouveau B1 + passage hors-ligne. Build OK.
 - [ ] 8. `serial_console` : pont JSON USB (maître).
 - [~] 9. `web/dashboard.html` : page de supervision Web Serial.
       → Page autonome créée (liste droïdes, anim, volume, piste son, params,
