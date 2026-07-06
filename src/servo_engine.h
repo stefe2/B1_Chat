@@ -7,10 +7,10 @@
 //  - Easing ease-in-out entre positions cibles (pas de mouvement linéaire brut)
 //  - Bruit d'idle optionnel (micro-oscillations) pour un rendu vivant
 //  Les angles sont bornés aux limites mécaniques définies dans config.h.
+//  PWM piloté via l'API LEDC native du core ESP32 (pas de dépendance externe).
 // ============================================================================
 
 #include <Arduino.h>
-#include <ESP32Servo.h>
 
 class ServoEngine {
 public:
@@ -38,9 +38,6 @@ public:
     float tilt() const { return _curTilt; }
 
 private:
-    Servo _panServo;
-    Servo _tiltServo;
-
     // Interpolation
     float _startPan = 0, _startTilt = 0;
     float _targetPan = 0, _targetTilt = 0;

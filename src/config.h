@@ -12,7 +12,7 @@
 //  1 = MAÎTRE (un seul dans le réseau : coordination + son + console web)
 //  0 = ESCLAVE (valeur par défaut pour tous les autres droïdes)
 // ---------------------------------------------------------------------------
-#define IS_MASTER 0
+#define IS_MASTER 1
 
 // ---------------------------------------------------------------------------
 //  Réseau & clé de groupe (définis par les build flags dans platformio.ini)

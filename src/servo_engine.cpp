@@ -13,14 +13,23 @@ inline float easeInOut(float t) {
 inline float clampf(float v, float lo, float hi) {
     return v < lo ? lo : (v > hi ? hi : v);
 }
+
+// PWM servo via LEDC natif : 50 Hz, résolution 16 bits (période 20 ms).
+const uint32_t SERVO_LEDC_FREQ = 50;
+const uint8_t  SERVO_LEDC_BITS = 16;
+const uint32_t SERVO_PERIOD_US = 1000000UL / SERVO_LEDC_FREQ;  // 20000 µs
+const uint32_t SERVO_MAX_DUTY  = (1UL << SERVO_LEDC_BITS) - 1;
+
+// Convertit une largeur d'impulsion (µs) en rapport cyclique LEDC.
+inline uint32_t usToDuty(float us) {
+    return (uint32_t)((us * SERVO_MAX_DUTY) / SERVO_PERIOD_US);
+}
 }  // namespace
 
 void ServoEngine::begin() {
-    // Résolution/plage standard des servos analogiques.
-    _panServo.setPeriodHertz(50);
-    _tiltServo.setPeriodHertz(50);
-    _panServo.attach(PIN_SERVO_PAN, SERVO_MIN_US, SERVO_MAX_US);
-    _tiltServo.attach(PIN_SERVO_TILT, SERVO_MIN_US, SERVO_MAX_US);
+    // Attache les sorties PWM (API pin-based du core ESP32 3.x).
+    ledcAttach(PIN_SERVO_PAN, SERVO_LEDC_FREQ, SERVO_LEDC_BITS);
+    ledcAttach(PIN_SERVO_TILT, SERVO_LEDC_FREQ, SERVO_LEDC_BITS);
 
     _curPan = SERVO_PAN_CENTER;
     _curTilt = SERVO_TILT_CENTER;
@@ -59,8 +68,13 @@ float ServoEngine::noise(float t, float phase) const {
 void ServoEngine::writeServos(float panDeg, float tiltDeg) {
     panDeg = clampf(panDeg, SERVO_PAN_MIN, SERVO_PAN_MAX);
     tiltDeg = clampf(tiltDeg, SERVO_TILT_MIN, SERVO_TILT_MAX);
-    _panServo.write((int)lroundf(panDeg));
-    _tiltServo.write((int)lroundf(tiltDeg));
+
+    // Angle (0..180°) -> largeur d'impulsion (µs) -> rapport cyclique LEDC.
+    const float span = SERVO_MAX_US - SERVO_MIN_US;
+    const float usPan = SERVO_MIN_US + (panDeg / 180.0f) * span;
+    const float usTilt = SERVO_MIN_US + (tiltDeg / 180.0f) * span;
+    ledcWrite(PIN_SERVO_PAN, usToDuty(usPan));
+    ledcWrite(PIN_SERVO_TILT, usToDuty(usTilt));
 }
 
 void ServoEngine::update() {
