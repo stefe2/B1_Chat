@@ -18,7 +18,6 @@
 enum MeshMsgType : uint8_t {
     MSG_ANIM      = 1,
     MSG_CONFIG    = 2,
-    MSG_REKEY     = 3,
     MSG_HEARTBEAT = 4,
 };
 
@@ -52,12 +51,6 @@ struct HeartbeatPayload {
     uint32_t uptimeMs;
     uint8_t  state;
 };
-
-// Clé HMAC (SHA256 du mot de passe) transmise lors d'un changement de clé,
-// authentifiée par le HMAC calculé avec l'ANCIENNE clé.
-struct RekeyPayload {
-    uint8_t newKey[32];
-};
 #pragma pack(pop)
 
 // Callback appelé pour chaque message valide et non dupliqué.
@@ -75,13 +68,6 @@ public:
 
     // Émet un message (signé) en broadcast avec le TTL par défaut.
     bool send(uint8_t type, const void* payload, uint8_t len);
-
-    // Diffuse une nouvelle clé de groupe (signée avec l'ancienne) puis l'adopte.
-    void rekey(const char* newPassword);
-
-    // Remplace la clé courante (32 octets déjà dérivés). Utilisé par la
-    // persistance NVS au démarrage.
-    void setKey(const uint8_t key32[32]);
 
     // Dérive une clé HMAC (SHA256) à partir d'un mot de passe.
     static void deriveKey(const char* password, uint8_t out32[32]);

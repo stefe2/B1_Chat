@@ -30,10 +30,6 @@ void MeshComm::deriveKey(const char* password, uint8_t out32[32]) {
     mbedtls_sha256((const unsigned char*)password, strlen(password), out32, 0);
 }
 
-void MeshComm::setKey(const uint8_t key32[32]) {
-    memcpy(_key, key32, 32);
-}
-
 bool MeshComm::begin(const char* groupPassword) {
     _instance = this;
     deriveKey(groupPassword, _key);
@@ -121,14 +117,6 @@ bool MeshComm::send(uint8_t type, const void* payload, uint8_t len) {
     return rawBroadcast(frame, signedLen + HMAC_LEN);
 }
 
-void MeshComm::rekey(const char* newPassword) {
-    RekeyPayload p;
-    deriveKey(newPassword, p.newKey);
-    // Diffusé signé avec l'ANCIENNE clé, puis on adopte la nouvelle.
-    send(MSG_REKEY, &p, sizeof(p));
-    setKey(p.newKey);
-}
-
 bool MeshComm::alreadySeen(uint16_t srcId, uint16_t seq) {
     const uint32_t key = ((uint32_t)srcId << 16) | seq;
     for (uint8_t i = 0; i < 32; i++) {
@@ -161,17 +149,10 @@ void MeshComm::handleRaw(const uint8_t* mac, const uint8_t* data, int len, int r
     const uint8_t payloadLen = (uint8_t)len - HDR_LEN - HMAC_LEN;
     const uint8_t* payload = data + HDR_LEN;
 
-    // 3) Traitement interne : changement de clé de groupe.
-    if (hdr.type == MSG_REKEY && payloadLen == sizeof(RekeyPayload)) {
-        RekeyPayload p;
-        memcpy(&p, payload, sizeof(p));
-        setKey(p.newKey);
-    }
-
-    // 4) Remonte à l'application.
+    // 3) Remonte à l'application.
     if (_handler) _handler(hdr.type, payload, payloadLen, hdr.srcId, rssi);
 
-    // 5) Relais multi-sauts : décrémente le TTL et re-broadcast (HMAC exclut
+    // 4) Relais multi-sauts : décrémente le TTL et re-broadcast (HMAC exclut
     //    le TTL, donc la signature reste valide).
     if (hdr.ttl > 0) {
         uint8_t relay[HDR_LEN + MAX_PAYLOAD + HMAC_LEN];

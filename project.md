@@ -33,7 +33,7 @@ et **son joué par le droïde maître** via un DFPlayer Mini + ampli externe.
 | Supervision | **Page web autonome (Web Serial API)** branchée en **USB sur le maître** |
 | Réglages | Persistés dans l'ESP32 (**NVS / Preferences**) |
 | Clé de réseau | **HMAC-SHA256** par groupe (sépare 2 séries B1, anti-falsification) |
-| Attribution clé | **Défaut compilé** (`-D GROUP_KEY`) + **re-clé via page web** (NVS) |
+| Attribution clé | **Compilée uniquement** (`-D GROUP_KEY`), non modifiable à l'exécution |
 
 ---
 
@@ -86,7 +86,7 @@ src/
   audio.{h,cpp}     → wrapper DFPlayer (maître), mapping animation → piste
   droid.{h,cpp}     → machine à états haut niveau
   registry.{h,cpp}  → (maître) inventaire des droïdes (srcId, MAC, lastSeen, RSSI, nom)
-  config_store.{h,cpp} → persistance NVS (clé réseau, noms, volume, params d'anim)
+  config_store.{h,cpp} → persistance NVS (noms, volume, params d'anim)
   serial_console.{h,cpp} → (maître) pont JSON USB <-> mesh pour la page web
 web/
   dashboard.html    → page autonome Web Serial (UI + JS, aucun serveur)
@@ -138,7 +138,6 @@ struct MsgHeader {
 |------|--------------|--------|
 | `MSG_ANIM` | `targetId (0xFFFF=tous), animId, syncDelayMs, seed` | Oui |
 | `MSG_CONFIG` | `targetId, freq, amplitude, vitesse` (params d'anim) | Oui |
-| `MSG_REKEY` | `newKeyHash` (authentifié avec l'ancienne clé) | Oui |
 | `MSG_HEARTBEAT` | `uptime, état` (présence/voisinage) | Oui |
 | `MSG_SOUND` | interne maître → DFPlayer | Non (local) |
 
@@ -211,15 +210,12 @@ appliquée **au niveau du message**.
 - **Anti-rejeu** : dédup `(srcId, seq)` + `seq` monotone (protection suffisante
   pour un prop, pas une garantie cryptographique absolue).
 
-### Attribution et re-clé
-- **Défaut compilé** : `-D GROUP_KEY="..."` → un droïde neuf démarre dans le bon
-  groupe sans configuration.
-- **Re-clé via page web** : `{cmd:"setKey", password}` → le maître stocke en
-  **NVS**, puis diffuse un **`MSG_REKEY`** (relayé, **authentifié avec l'ancienne
-  clé**) → les droïdes du groupe adoptent la nouvelle clé et la persistent.
-- **Droïde neuf après re-clé** : encore sur la clé par défaut → admission par
-  re-flash du même défaut **ou** fenêtre de provisioning (retour temporaire au
-  défaut). Compromis inhérent à la distribution de clé sans canal préalable.
+### Attribution de la clé
+- **Clé compilée uniquement** : `-D GROUP_KEY="..."` (dans `platformio.ini`).
+  Tous les droïdes d'une série partagent la même clé ; deux séries = deux clés
+  différentes.
+- **Non modifiable à l'exécution** : pas de changement de clé par la page web ni
+  par le mesh (décision projet). Pour changer de clé, on recompile/reflashe.
 
 ---
 
@@ -232,8 +228,7 @@ droïdes (via `MSG_HEARTBEAT`) et relaie les commandes.
 ### Protocole série JSON (une ligne = un message)
 - **PC → maître** : `{cmd:"list"}`, `{cmd:"anim",target,animId}`,
   `{cmd:"config",target,freq,amp,speed}`, `{cmd:"volume",value}`,
-  `{cmd:"name",id,name}`, `{cmd:"playTrack",track}`, `{cmd:"setKey",password}`,
-  `{cmd:"getConfig"}`
+  `{cmd:"name",id,name}`, `{cmd:"playTrack",track}`, `{cmd:"getConfig"}`
 - **Maître → PC** : `{evt:"droids",list:[...]}`, `{evt:"log",msg}`,
   `{evt:"state",...}`
 
@@ -244,11 +239,10 @@ droïdes (via `MSG_HEARTBEAT`) et relaie les commandes.
 - Nommer les droïdes (association ID/MAC → nom, persistée)
 - Régler les paramètres d'anim (fréquence, amplitude, vitesse)
 - Tester une piste son précise
-- Changer le mot de passe du groupe
 - Voir logs / état en temps réel
 
 **Note** : Web Serial requiert **Chrome/Edge** (contexte sécurisé). Non supporté
-par Firefox/Safari.
+par Firefox/Safari. La page est **responsive** (s'adapte à la taille d'écran).
 
 ---
 
@@ -261,10 +255,10 @@ par Firefox/Safari.
 - [x] 2. `servo_engine` : interpolation + easing + bruit d'idle.
       → `src/servo_engine.{h,cpp}` en **PWM LEDC natif** (ESP32Servo abandonné,
       bug de double-attach). Banc de test dans `main.cpp`. Build OK.
-- [x] 3. `mesh_comm` : ESP-NOW, en-tête, dédup, relais multi-sauts, **HMAC** + `MSG_REKEY`.
+- [x] 3. `mesh_comm` : ESP-NOW, en-tête, dédup, relais multi-sauts, **HMAC**.
       → `src/mesh_comm.{h,cpp}` (ID auto MAC, canal fixe, HMAC-SHA256 tronqué,
       relais TTL). LED de vie onboard (GPIO2) ajoutée. Rôle réglé dans le code
-      (`IS_MASTER`). Build OK.
+      (`IS_MASTER`). Clé de groupe **compilée uniquement** (re-clé retirée). Build OK.
 - [x] 4. `animation` : keyframes + lecteur + RNG.
       → `src/animation.{h,cpp}` (8 anims en offsets pan/tilt, lecteur non
       bloquant, jitter déterministe par seed). Intégré au banc de test
@@ -273,7 +267,10 @@ par Firefox/Safari.
 - [ ] 6. `droid` + `main.cpp` : machine à états et câblage des modules.
 - [ ] 7. `config_store` (NVS) + `registry` : persistance et inventaire des droïdes.
 - [ ] 8. `serial_console` : pont JSON USB (maître).
-- [ ] 9. `web/dashboard.html` : page de supervision Web Serial.
+- [~] 9. `web/dashboard.html` : page de supervision Web Serial.
+      → Page autonome créée (liste droïdes, anim, volume, piste son, params,
+      clé de groupe, journal) avec **mode démo** (données simulées) et client
+      Web Serial déjà câblé au protocole JSON. Fonctionnera dès l'étape 8.
 
 ---
 
@@ -284,9 +281,9 @@ par Firefox/Safari.
 3. `MSG_ANIM` émis par le maître **relayé sur ≥ 2 sauts** et exécuté par un
    esclave distant (dédup : pas de tempête de broadcast).
 4. Animation sur le maître **joue la piste son** correspondante (1 des 10).
-5. Deux groupes avec **mots de passe différents** s'ignorent mutuellement ;
+5. Deux groupes avec **clés `GROUP_KEY` différentes** s'ignorent mutuellement ;
    message falsifié rejeté.
 6. `dashboard.html` (Chrome) connecté au maître : la **liste des droïdes** se
-   peuple ; anim/volume/nom/clé déclenchés depuis la page ; réglages **persistés**
-   après reboot.
+   peuple ; anim/volume/nom déclenchés depuis la page ; réglages **persistés**
+   après reboot. La page **s'adapte** à la taille de l'écran.
 
