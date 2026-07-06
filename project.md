@@ -87,6 +87,7 @@ src/
   droid.{h,cpp}     → machine à états haut niveau
   registry.{h,cpp}  → (maître) inventaire des droïdes (srcId, MAC, lastSeen, RSSI, nom)
   config_store.{h,cpp} → persistance NVS (noms, volume, params d'anim)
+  sequence_store.{h,cpp} → (maître) séquences persistées en NVS (slots)
   serial_console.{h,cpp} → (maître) pont JSON USB <-> mesh pour la page web
 web/
   dashboard.html    → page autonome Web Serial (UI + JS, aucun serveur)
@@ -230,9 +231,11 @@ droïdes (via `MSG_HEARTBEAT`) et relaie les commandes.
 - **PC → maître** : `{cmd:"list"}`, `{cmd:"anim",target,animId}`,
   `{cmd:"config",target,freq,amp,speed}`, `{cmd:"volume",value}`,
   `{cmd:"name",id,name}`, `{cmd:"playTrack",track}`, `{cmd:"servo",target,enabled}`,
-  `{cmd:"getConfig"}`
+  `{cmd:"getConfig"}`, `{cmd:"seqList"}`, `{cmd:"seqSave",slot,name,loop,steps[]}`,
+  `{cmd:"seqLoad",slot}`, `{cmd:"seqRun",slot}`, `{cmd:"seqStop"}`,
+  `{cmd:"seqDelete",slot}`
 - **Maître → PC** : `{evt:"droids",list:[...]}`, `{evt:"log",msg}`,
-  `{evt:"state",...}`
+  `{evt:"state",...}`, `{evt:"seqList",list:[...]}`, `{evt:"seqData",...}`
 
 ### Fonctions
 - Lister les droïdes détectés (le **maître en premier**, ID, RSSI, rôle)
@@ -247,6 +250,8 @@ droïdes (via `MSG_HEARTBEAT`) et relaie les commandes.
 - **Auto-sauvegarde** (debounce ~1,2 s) avec encart d'état dans la barre du haut
   (« Enregistrement… » → « Sauvegardé ✓ », ou « Hors ligne »)
 - Bouton **Connecter/Déconnecter** (bascule ; libère l'USB)
+- **Séquenceur persistant** : sauvegarde/chargement/suppression par slot en NVS
+  sur le maître, et exécution autonome (`seqRun`) sans PC connecté
 
 **Note** : Web Serial requiert **Chrome/Edge** (contexte sécurisé). Non supporté
 par Firefox/Safari. La page est **responsive** (s'adapte à la taille d'écran).
@@ -285,6 +290,11 @@ par Firefox/Safari. La page est **responsive** (s'adapte à la taille d'écran).
       + colonne Rôle, colonne Servos (bouton par droïde), info-bulles au survol,
       auto-sauvegarde (encart d'état), bouton Connecter/Déconnecter. Colonne MAC
       retirée. Fonctionnelle (hors volume/son : étape 5 audio).
+- [x] 10. Séquences stockées sur le maître (autonomie sans PC).
+  → `src/sequence_store.{h,cpp}` (NVS, 8 slots, jusqu'à 32 étapes/slot),
+  commandes série `seqSave/seqList/seqLoad/seqRun/seqStop/seqDelete`,
+  exécution non bloquante dans `main.cpp` (prioritaire sur l'aléatoire maître),
+  UI dashboard (slot + nom + sauver/charger/supprimer/jouer).
 
 ---
 
@@ -300,4 +310,7 @@ par Firefox/Safari. La page est **responsive** (s'adapte à la taille d'écran).
 6. `dashboard.html` (Chrome) connecté au maître : la **liste des droïdes** se
    peuple ; anim/volume/nom déclenchés depuis la page ; réglages **persistés**
    après reboot. La page **s'adapte** à la taille de l'écran.
+7. Créer une séquence dans le dashboard, la sauvegarder dans un slot, redémarrer
+  le maître, puis lancer `Jouer` : la séquence repart depuis la mémoire du
+  maître sans dépendre du PC.
 

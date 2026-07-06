@@ -6,6 +6,7 @@
 #include "registry.h"
 #include "config_store.h"
 #include "serial_console.h"
+#include "sequence_store.h"
 
 // NOTE: banc de test temporaire (étapes 2-8). Sera remplacé par la machine
 // à états du droïde à l'étape 6.
@@ -33,6 +34,14 @@ static uint32_t nextMeshSend = 0;
 static uint32_t nextHeartbeat = 0;
 static uint32_t nextPresenceScan = 0;
 static uint32_t nextDroidsPush = 0;
+
+// Lecteur de séquence stockée (maître) : exécution autonome sans PC.
+#if IS_MASTER
+static StoredSequence gSeq;
+static bool gSeqPlaying = false;
+static uint8_t gSeqIndex = 0;
+static uint32_t gSeqNextAt = 0;
+#endif
 
 // Suivi hors-ligne (maître) : mémorise l'état en ligne pour signaler les pertes.
 static const uint32_t DROID_TIMEOUT_MS = 7000;
@@ -62,6 +71,37 @@ static void onServoCmd(uint16_t target, bool en) {
     ServoPayload p{target, (uint8_t)(en ? 1 : 0)};
     Mesh.send(MSG_SERVO, &p, sizeof(p));
     if (target == MESH_TARGET_ALL || target == Mesh.myId()) applyServos(en);
+}
+
+static bool onSeqSave(uint8_t slot, const StoredSequence& seq) {
+    return Sequences.save(slot, seq);
+}
+
+static uint8_t onSeqList(StoredSequenceMeta* out, uint8_t maxOut) {
+    return Sequences.list(out, maxOut);
+}
+
+static bool onSeqLoad(uint8_t slot, StoredSequence& out) {
+    return Sequences.load(slot, out);
+}
+
+static bool onSeqDelete(uint8_t slot) {
+    return Sequences.remove(slot);
+}
+
+static void onSeqRun(uint8_t slot) {
+    if (!Sequences.load(slot, gSeq) || gSeq.stepCount == 0) {
+        gSeqPlaying = false;
+        LOGF("sequence slot=%u introuvable/vide", slot);
+        return;
+    }
+    gSeqPlaying = true;
+    gSeqIndex = 0;
+    gSeqNextAt = millis();
+}
+
+static void onSeqStop() {
+    gSeqPlaying = false;
 }
 #endif
 
@@ -106,6 +146,9 @@ void setup() {
     pinMode(PIN_LED_ONBOARD, OUTPUT);
 
     Config.begin();
+#if IS_MASTER
+    Sequences.begin();
+#endif
 
     head.begin();
     head.setIdleNoise(true);
@@ -124,6 +167,12 @@ void setup() {
     Console.begin();
     Console.onAnim(playLocalAnim);
     Console.onServo(onServoCmd);
+    Console.onSeqSave(onSeqSave);
+    Console.onSeqList(onSeqList);
+    Console.onSeqLoad(onSeqLoad);
+    Console.onSeqRun(onSeqRun);
+    Console.onSeqStop(onSeqStop);
+    Console.onSeqDelete(onSeqDelete);
     Console.setMasterServos(gServos);
 #endif
 
@@ -159,6 +208,28 @@ void loop() {
     }
 
 #if IS_MASTER
+    // Séquence persistée en cours (prioritaire sur le random maître).
+    if (gSeqPlaying && gServos && now >= gSeqNextAt) {
+        if (gSeq.stepCount == 0) {
+            gSeqPlaying = false;
+        } else {
+            if (gSeqIndex >= gSeq.stepCount) {
+                if (gSeq.loop) gSeqIndex = 0;
+                else gSeqPlaying = false;
+            }
+            if (gSeqPlaying) {
+                const SeqStep& st = gSeq.steps[gSeqIndex];
+                const uint32_t seed = (uint32_t)esp_random();
+                AnimPayload p{st.targetId, st.animId, 0, seed};
+                Mesh.send(MSG_ANIM, &p, sizeof(p));
+                if (st.targetId == MESH_TARGET_ALL || st.targetId == Mesh.myId())
+                    anim.play(st.animId, seed);
+                gSeqNextAt = now + st.delayMs;
+                gSeqIndex++;
+            }
+        }
+    }
+
     // Surveillance de présence : signale un B1 qui passe hors-ligne.
     if (now > nextPresenceScan) {
         nextPresenceScan = now + 1000;
@@ -180,7 +251,7 @@ void loop() {
     }
 
     // Le maître choisit une anim au hasard, la joue et la diffuse au groupe.
-    if (gServos && !anim.isPlaying() && now > nextMeshSend) {
+    if (!gSeqPlaying && gServos && !anim.isPlaying() && now > nextMeshSend) {
         nextMeshSend = now + (uint32_t)random(2500, 5000);
         const uint32_t seed = (uint32_t)esp_random();
         const uint8_t animId = AnimationPlayer::randomAnimId(seed);

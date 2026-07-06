@@ -70,6 +70,46 @@ void SerialConsole::pushState() {
     Serial.print('\n');
 }
 
+void SerialConsole::pushSeqList() {
+    JsonDocument doc;
+    doc["evt"] = "seqList";
+    JsonArray arr = doc["list"].to<JsonArray>();
+
+    if (_seqListCb) {
+        StoredSequenceMeta metas[SequenceStore::SLOT_MAX];
+        const uint8_t n = _seqListCb(metas, SequenceStore::SLOT_MAX);
+        for (uint8_t i = 0; i < n; i++) {
+            JsonObject o = arr.add<JsonObject>();
+            o["slot"] = metas[i].slot;
+            o["name"] = metas[i].name;
+            o["loop"] = metas[i].loop;
+            o["stepCount"] = metas[i].stepCount;
+        }
+    }
+
+    serializeJson(doc, Serial);
+    Serial.print('\n');
+}
+
+void SerialConsole::pushSeqData(uint8_t slot, const StoredSequence& seq) {
+    JsonDocument doc;
+    doc["evt"] = "seqData";
+    doc["slot"] = slot;
+    doc["name"] = seq.name;
+    doc["loop"] = seq.loop;
+
+    JsonArray steps = doc["steps"].to<JsonArray>();
+    for (uint8_t i = 0; i < seq.stepCount; i++) {
+        JsonObject s = steps.add<JsonObject>();
+        s["animId"] = seq.steps[i].animId;
+        s["target"] = seq.steps[i].targetId;
+        s["delay"] = seq.steps[i].delayMs;
+    }
+
+    serializeJson(doc, Serial);
+    Serial.print('\n');
+}
+
 void SerialConsole::update() {
     while (Serial.available()) {
         const char c = (char)Serial.read();
@@ -143,5 +183,60 @@ void SerialConsole::handleLine(const char* line) {
         const bool en = doc["enabled"] | false;
         if (_servoCb) _servoCb(target, en);
         log("servos %s -> %04X", en ? "ON" : "OFF", target);
+
+    } else if (!strcmp(cmd, "seqList")) {
+        pushSeqList();
+
+    } else if (!strcmp(cmd, "seqSave")) {
+        const uint8_t slot = doc["slot"] | 0;
+        StoredSequence seq{};
+        const char* name = doc["name"] | "Sequence";
+        strncpy(seq.name, name, sizeof(seq.name) - 1);
+        seq.name[sizeof(seq.name) - 1] = '\0';
+        seq.loop = (doc["loop"] | false) ? 1 : 0;
+
+        JsonArrayConst steps = doc["steps"].as<JsonArrayConst>();
+        uint8_t idx = 0;
+        for (JsonObjectConst s : steps) {
+            if (idx >= StoredSequence::STEP_MAX) break;
+            seq.steps[idx].animId = s["animId"] | 0;
+            seq.steps[idx].targetId = s["target"] | (uint16_t)MESH_TARGET_ALL;
+            seq.steps[idx].delayMs = s["delay"] | 0;
+            idx++;
+        }
+        seq.stepCount = idx;
+
+        bool ok = false;
+        if (_seqSaveCb) ok = _seqSaveCb(slot, seq);
+        log("seq save slot=%u %s", slot, ok ? "OK" : "ERR");
+        pushSeqList();
+
+    } else if (!strcmp(cmd, "seqLoad")) {
+        const uint8_t slot = doc["slot"] | 0;
+        StoredSequence seq{};
+        bool ok = false;
+        if (_seqLoadCb) ok = _seqLoadCb(slot, seq);
+        if (ok) {
+            pushSeqData(slot, seq);
+            log("seq load slot=%u OK", slot);
+        } else {
+            log("seq load slot=%u ERR", slot);
+        }
+
+    } else if (!strcmp(cmd, "seqDelete")) {
+        const uint8_t slot = doc["slot"] | 0;
+        bool ok = false;
+        if (_seqDeleteCb) ok = _seqDeleteCb(slot);
+        log("seq del slot=%u %s", slot, ok ? "OK" : "ERR");
+        pushSeqList();
+
+    } else if (!strcmp(cmd, "seqRun")) {
+        const uint8_t slot = doc["slot"] | 0;
+        if (_seqRunCb) _seqRunCb(slot);
+        log("seq run slot=%u", slot);
+
+    } else if (!strcmp(cmd, "seqStop")) {
+        if (_seqStopCb) _seqStopCb();
+        log("seq stop");
     }
 }

@@ -14,6 +14,7 @@
 // ============================================================================
 
 #include <Arduino.h>
+#include "sequence_store.h"
 
 class SerialConsole {
 public:
@@ -35,6 +36,12 @@ public:
     void onTrack(void (*cb)(uint8_t track)) { _trackCb = cb; }
     void onConfig(void (*cb)(uint8_t freq, uint8_t amp, uint8_t speed)) { _cfgCb = cb; }
     void onServo(void (*cb)(uint16_t target, bool enabled)) { _servoCb = cb; }
+    void onSeqSave(bool (*cb)(uint8_t slot, const StoredSequence& seq)) { _seqSaveCb = cb; }
+    void onSeqList(uint8_t (*cb)(StoredSequenceMeta* out, uint8_t maxOut)) { _seqListCb = cb; }
+    void onSeqLoad(bool (*cb)(uint8_t slot, StoredSequence& out)) { _seqLoadCb = cb; }
+    void onSeqRun(void (*cb)(uint8_t slot)) { _seqRunCb = cb; }
+    void onSeqStop(void (*cb)()) { _seqStopCb = cb; }
+    void onSeqDelete(bool (*cb)(uint8_t slot)) { _seqDeleteCb = cb; }
 
     // État servos du maître (pour l'afficher dans la liste).
     void setMasterServos(bool on) { _masterServos = on; }
@@ -49,8 +56,16 @@ private:
     void (*_trackCb)(uint8_t) = nullptr;
     void (*_cfgCb)(uint8_t, uint8_t, uint8_t) = nullptr;
     void (*_servoCb)(uint16_t, bool) = nullptr;
+    bool (*_seqSaveCb)(uint8_t, const StoredSequence&) = nullptr;
+    uint8_t (*_seqListCb)(StoredSequenceMeta*, uint8_t) = nullptr;
+    bool (*_seqLoadCb)(uint8_t, StoredSequence&) = nullptr;
+    void (*_seqRunCb)(uint8_t) = nullptr;
+    void (*_seqStopCb)() = nullptr;
+    bool (*_seqDeleteCb)(uint8_t) = nullptr;
 
     void handleLine(const char* line);
+    void pushSeqList();
+    void pushSeqData(uint8_t slot, const StoredSequence& seq);
 };
 
 extern SerialConsole Console;

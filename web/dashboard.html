@@ -57,6 +57,16 @@
   .srv { padding: 3px 10px; border-radius: 6px; font-size: 12px; border: 1px solid var(--line); cursor: pointer; }
   .srv.on  { color: var(--ok);  border-color: #24512f; background: var(--panel2); }
   .srv.off { color: var(--bad); border-color: #5a2320; background: var(--panel2); }
+  .mini { padding: 4px 9px; font-size: 12px; border-radius: 6px; }
+  .cal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 4px; }
+  @media (max-width: 620px) { .cal-grid { grid-template-columns: 1fr; } }
+  .cal-title { color: var(--accent); font-size: 12px; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px; }
+  .cal-col .row label { min-width: 60px; }
+  .seq-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .chk { color: var(--muted); font-size: 13px; display: inline-flex; align-items: center; gap: 6px; }
+  #seqTable select, #seqTable input { width: 100%; }
+  #seqTable td { vertical-align: middle; }
+  .seq-del { color: var(--bad); border-color: #5a2320; padding: 2px 8px; border-radius: 6px; cursor: pointer; background: var(--panel2); }
   .row { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
   .row label { min-width: 92px; color: var(--muted); }
   select, input[type=number], input[type=text], input[type=password] {
@@ -166,9 +176,56 @@
     </div>
   </section>
 
+  <section class="card">
+    <h2>Calibration servos <span class="hint" style="text-transform:none;letter-spacing:0;">(par droïde, auto-sauvegardé)</span></h2>
+    <div class="row">
+      <label class="hint-label" tabindex="0">Droïde<span class="tip">Droïde à calibrer. Les limites sont enregistrées dans sa mémoire.</span></label>
+      <select id="calibTarget"></select>
+    </div>
+
+    <div class="cal-grid">
+      <div class="cal-col">
+        <div class="cal-title">Pan (horizontal)</div>
+        <div class="row"><label class="hint-label" tabindex="0">Min<span class="tip">Angle minimal autorisé pour le pan.</span></label><input type="range" id="calPanMin" min="0" max="180" value="20"><span class="val" id="vCalPanMin">20</span></div>
+        <div class="row"><label class="hint-label" tabindex="0">Centre<span class="tip">Position de repos (regard droit devant).</span></label><input type="range" id="calPanCtr" min="0" max="180" value="90"><span class="val" id="vCalPanCtr">90</span></div>
+        <div class="row"><label class="hint-label" tabindex="0">Max<span class="tip">Angle maximal autorisé pour le pan.</span></label><input type="range" id="calPanMax" min="0" max="180" value="160"><span class="val" id="vCalPanMax">160</span></div>
+        <div class="row"><button class="mini" data-goto="panMin">→ Min</button><button class="mini" data-goto="panCtr">→ Centre</button><button class="mini" data-goto="panMax">→ Max</button></div>
+      </div>
+      <div class="cal-col">
+        <div class="cal-title">Tilt (vertical)</div>
+        <div class="row"><label class="hint-label" tabindex="0">Min<span class="tip">Angle minimal autorisé pour le tilt.</span></label><input type="range" id="calTiltMin" min="0" max="180" value="60"><span class="val" id="vCalTiltMin">60</span></div>
+        <div class="row"><label class="hint-label" tabindex="0">Centre<span class="tip">Position de repos (tête droite).</span></label><input type="range" id="calTiltCtr" min="0" max="180" value="90"><span class="val" id="vCalTiltCtr">90</span></div>
+        <div class="row"><label class="hint-label" tabindex="0">Max<span class="tip">Angle maximal autorisé pour le tilt.</span></label><input type="range" id="calTiltMax" min="0" max="180" value="120"><span class="val" id="vCalTiltMax">120</span></div>
+        <div class="row"><button class="mini" data-goto="tiltMin">→ Min</button><button class="mini" data-goto="tiltCtr">→ Centre</button><button class="mini" data-goto="tiltMax">→ Max</button></div>
+      </div>
+    </div>
+    <p class="hint">Bouge un curseur : le servo du droïde va à cette position (aperçu en direct).</p>
+  </section>
+
   <section class="card" style="grid-column: 1 / -1;">
-    <h2>Journal</h2>
-    <div id="log"></div>
+    <h2>Séquenceur d'animation</h2>
+    <div class="seq-head">
+      <input type="number" id="seqSlot" min="0" max="7" value="0" style="width:70px;" title="Emplacement mémoire 0..7">
+      <input type="text" id="seqName" maxlength="23" value="Sequence 0" style="min-width:180px;" placeholder="Nom de séquence">
+      <button class="mini" id="seqSave">Sauver</button>
+      <button class="mini" id="seqLoad">Charger</button>
+      <button class="mini" id="seqList">Liste</button>
+      <button class="mini" id="seqDelete">Suppr.</button>
+      <button class="mini" id="seqAdd">+ Étape</button>
+      <div class="grow"></div>
+      <label class="chk"><input type="checkbox" id="seqLoop"> Boucle</label>
+      <button class="primary" id="seqPlay">Jouer</button>
+      <button id="seqStop">Stop</button>
+    </div>
+    <div class="table-wrap">
+      <table id="seqTable">
+        <thead>
+          <tr><th>#</th><th>Geste</th><th>Cible</th><th>Délai (ms)</th><th></th></tr>
+        </thead>
+        <tbody id="seqRows"></tbody>
+      </table>
+    </div>
+    <p id="seqEmpty" class="hint">Aucune étape. Clique « + Étape » pour composer une séquence.</p>
   </section>
 </main>
 
@@ -196,6 +253,7 @@ $("animId").value = 1;
 // --- Journalisation ---------------------------------------------------------
 function log(msg, cls = "sys") {
   const el = $("log");
+  if (!el) return;   // carte Journal retirée
   const t = new Date().toLocaleTimeString();
   const line = document.createElement("div");
   line.className = cls; line.textContent = `[${t}] ${msg}`;
@@ -255,6 +313,8 @@ function renderDroids() {
   // Met à jour la liste de ciblage.
   const sel = $("animTarget"); const cur = sel.value;
   sel.innerHTML = '<option value="65535">Tous les droïdes</option>';
+  const calSel = $("calibTarget"); const calCur = calSel.value;
+  calSel.innerHTML = "";
 
   for (const id of ids) {
     const d = droids.get(id);
@@ -264,7 +324,7 @@ function renderDroids() {
 
     const rssi = isMaster ? "local" : `${d.rssi} dBm`;
     const etat = isMaster
-      ? '<span class="badge ok">actif</span>'
+      ? '<span class="badge ok">en ligne</span>'
       : `<span class="badge ${stale ? "stale" : "ok"}">${stale ? "perdu" : "en ligne"}</span>`;
     const role = isMaster
       ? '<span class="badge role-master">Maître</span>'
@@ -284,8 +344,14 @@ function renderDroids() {
     const o = document.createElement("option"); o.value = id;
     o.textContent = `${d.name || "B1-" + hex(id)} (${hex(id)})`;
     sel.appendChild(o);
+
+    const oc = document.createElement("option"); oc.value = id;
+    oc.textContent = `${d.name || "B1-" + hex(id)} (${hex(id)})`;
+    calSel.appendChild(oc);
   }
   sel.value = [...sel.options].some(o => o.value === cur) ? cur : "65535";
+  if ([...calSel.options].some(o => o.value === calCur)) calSel.value = calCur;
+  refreshSeqTargets();
 
   tbody.querySelectorAll(".name-input").forEach(inp => {
     inp.addEventListener("change", () => {
@@ -427,6 +493,182 @@ $("pVol").addEventListener("input", () => {
   const el = $(s), out = $(v);
   el.addEventListener("input", () => { out.textContent = el.value; scheduleSave(sendConfig); });
 });
+
+// --- Calibration servos -----------------------------------------------------
+const CAL = {
+  panMin:  ["calPanMin","vCalPanMin"],  panCtr: ["calPanCtr","vCalPanCtr"],  panMax: ["calPanMax","vCalPanMax"],
+  tiltMin: ["calTiltMin","vCalTiltMin"], tiltCtr:["calTiltCtr","vCalTiltCtr"], tiltMax:["calTiltMax","vCalTiltMax"],
+};
+function calVal(k) { return Number($(CAL[k][0]).value); }
+function calTarget() { return $("calibTarget").value ? Number($("calibTarget").value) : null; }
+
+function sendCalib() {
+  const t = calTarget(); if (t === null) return;
+  sendCmd({
+    cmd: "calib", target: t,
+    panMin: calVal("panMin"), panCenter: calVal("panCtr"), panMax: calVal("panMax"),
+    tiltMin: calVal("tiltMin"), tiltCenter: calVal("tiltCtr"), tiltMax: calVal("tiltMax"),
+  });
+}
+function preview(pan, tilt) {
+  const t = calTarget(); if (t === null) return;
+  sendCmd({ cmd: "preview", target: t, pan, tilt });
+}
+
+// Curseurs de calibration : affichage + aperçu en direct + auto-sauvegarde.
+Object.keys(CAL).forEach(k => {
+  const [sId, vId] = CAL[k];
+  $(sId).addEventListener("input", () => {
+    $(vId).textContent = $(sId).value;
+    const isPan = k.startsWith("pan");
+    preview(isPan ? calVal(k) : calVal("panCtr"), isPan ? calVal("tiltCtr") : calVal(k));
+    scheduleSave(sendCalib);
+  });
+});
+// Boutons « → Min/Centre/Max » : déplace le servo à la valeur choisie.
+document.querySelectorAll("[data-goto]").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const k = btn.dataset.goto;
+    const isPan = k.startsWith("pan");
+    preview(isPan ? calVal(k) : calVal("panCtr"), isPan ? calVal("tiltCtr") : calVal(k));
+  });
+});
+
+// --- Séquenceur -------------------------------------------------------------
+let seq = [];
+let seqTimer = null, seqIndex = 0, seqPlaying = false;
+let seqCatalog = [];
+
+function animOptions(sel) {
+  return ANIMS.map((n, i) => `<option value="${i}" ${i === sel ? "selected" : ""}>${i} — ${n}</option>`).join("");
+}
+function targetOptions(sel) {
+  let html = `<option value="65535" ${sel === 65535 ? "selected" : ""}>Tous</option>`;
+  for (const id of [...droids.keys()].sort((a, b) => a - b)) {
+    const d = droids.get(id);
+    html += `<option value="${id}" ${sel === id ? "selected" : ""}>${d.name || "B1-" + hex(id)} (${hex(id)})</option>`;
+  }
+  return html;
+}
+function renderSeq() {
+  const tbody = $("seqRows"); tbody.innerHTML = "";
+  $("seqEmpty").style.display = seq.length ? "none" : "block";
+  seq.forEach((st, i) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${i + 1}</td>
+      <td><select data-i="${i}" data-f="animId">${animOptions(st.animId)}</select></td>
+      <td><select data-i="${i}" data-f="target">${targetOptions(st.target)}</select></td>
+      <td><input type="number" min="0" step="100" data-i="${i}" data-f="delay" value="${st.delay}"></td>
+      <td><button class="seq-del" data-del="${i}">✕</button></td>`;
+    tbody.appendChild(tr);
+  });
+  tbody.querySelectorAll("select,input").forEach(el => {
+    el.addEventListener("change", () => {
+      const i = Number(el.dataset.i), f = el.dataset.f;
+      seq[i][f] = Number(el.value);
+    });
+  });
+  tbody.querySelectorAll("[data-del]").forEach(btn => {
+    btn.addEventListener("click", () => { seq.splice(Number(btn.dataset.del), 1); renderSeq(); });
+  });
+}
+
+function seqSlot() {
+  return Math.max(0, Math.min(7, Number($("seqSlot").value) || 0));
+}
+
+function seqPayload() {
+  return {
+    slot: seqSlot(),
+    name: ($("seqName").value || "Sequence").trim().slice(0, 23),
+    loop: $("seqLoop").checked,
+    steps: seq.map(s => ({ animId: Number(s.animId)||0, target: Number(s.target)||65535, delay: Number(s.delay)||0 })),
+  };
+}
+// Rafraîchit les listes de cibles des étapes quand la liste de droïdes change.
+function refreshSeqTargets() { if (seq.length) renderSeq(); }
+
+$("seqAdd").onclick = () => { seq.push({ animId: 1, target: 65535, delay: 1500 }); renderSeq(); };
+
+function seqStop() { seqPlaying = false; clearTimeout(seqTimer); seqTimer = null; }
+function seqTick() {
+  if (!seqPlaying || seq.length === 0) return;
+  if (seqIndex >= seq.length) {
+    if ($("seqLoop").checked) { seqIndex = 0; }
+    else { seqStop(); log("Séquence terminée.", "sys"); return; }
+  }
+  const st = seq[seqIndex];
+  sendCmd({ cmd: "anim", target: st.target, animId: st.animId, seed: (Math.random()*4294967295)>>>0 });
+  const delay = Math.max(0, st.delay || 0);
+  seqIndex++;
+  seqTimer = setTimeout(seqTick, delay);
+}
+$("seqPlay").onclick = () => {
+  // Lance la séquence sauvegardée dans le slot sélectionné (exécution maître).
+  sendCmd({ cmd: "seqRun", slot: seqSlot() });
+  log(`Lecture slot ${seqSlot()} sur le maître…`, "sys");
+};
+$("seqStop").onclick = () => {
+  seqStop();
+  sendCmd({ cmd: "seqStop" });
+  log("Séquence arrêtée.", "sys");
+};
+
+$("seqSave").onclick = () => {
+  const p = seqPayload();
+  sendCmd({ cmd: "seqSave", ...p });
+  flashSaved();
+};
+
+$("seqLoad").onclick = () => {
+  sendCmd({ cmd: "seqLoad", slot: seqSlot() });
+};
+
+$("seqDelete").onclick = () => {
+  sendCmd({ cmd: "seqDelete", slot: seqSlot() });
+};
+
+$("seqList").onclick = () => {
+  sendCmd({ cmd: "seqList" });
+};
+
+$("seqSlot").addEventListener("input", () => {
+  const slot = seqSlot();
+  $("seqSlot").value = String(slot);
+  if (!$("seqName").value.trim()) $("seqName").value = `Sequence ${slot}`;
+});
+
+const oldHandleEvent = handleEvent;
+handleEvent = function(obj) {
+  if (obj.evt === "seqList" && Array.isArray(obj.list)) {
+    seqCatalog = obj.list.slice();
+    const names = seqCatalog.map(s => `${s.slot}:${s.name}(${s.stepCount})`).join(" | ") || "aucune";
+    log("Slots: " + names, "rx");
+    return;
+  }
+  if (obj.evt === "seqData") {
+    $("seqSlot").value = String(obj.slot ?? seqSlot());
+    $("seqName").value = obj.name || `Sequence ${seqSlot()}`;
+    $("seqLoop").checked = !!obj.loop;
+    seq = Array.isArray(obj.steps) ? obj.steps.map(s => ({
+      animId: Number(s.animId) || 0,
+      target: Number(s.target) || 65535,
+      delay: Number(s.delay) || 0,
+    })) : [];
+    renderSeq();
+    log(`Séquence slot ${seqSlot()} chargée (${seq.length} étapes).`, "rx");
+    return;
+  }
+  oldHandleEvent(obj);
+};
+
+// Au branchement, récupère le catalogue des séquences du maître.
+const oldConnect = connect;
+connect = async function() {
+  await oldConnect();
+  if (writer) sendCmd({ cmd: "seqList" });
+};
 
 log("Console prête. Clique « Connecter (USB) » pour relier le maître.", "sys");
 </script>
