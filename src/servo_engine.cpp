@@ -59,6 +59,20 @@ void ServoEngine::setIdleNoise(bool on, float panAmp, float tiltAmp) {
     _tiltNoiseAmp = tiltAmp;
 }
 
+void ServoEngine::setEnabled(bool en) {
+    if (en == _enabled) return;
+    _enabled = en;
+    if (en) {
+        ledcAttach(PIN_SERVO_PAN, SERVO_LEDC_FREQ, SERVO_LEDC_BITS);
+        ledcAttach(PIN_SERVO_TILT, SERVO_LEDC_FREQ, SERVO_LEDC_BITS);
+        writeServos(_curPan, _curTilt);
+    } else {
+        // Coupe le signal PWM : servos libres, aucun échauffement.
+        ledcDetach(PIN_SERVO_PAN);
+        ledcDetach(PIN_SERVO_TILT);
+    }
+}
+
 // Bruit organique : somme de deux sinusoïdes à fréquences incommensurables
 // -> déambulation lente non répétitive, sans à-coups.
 float ServoEngine::noise(float t, float phase) const {
@@ -78,6 +92,7 @@ void ServoEngine::writeServos(float panDeg, float tiltDeg) {
 }
 
 void ServoEngine::update() {
+    if (!_enabled) return;
     const uint32_t now = millis();
     const uint32_t interval = 1000UL / SERVO_UPDATE_HZ;
     if (now - _lastWrite < interval) return;

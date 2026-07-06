@@ -5,27 +5,64 @@
 #include "mesh_comm.h"
 #include "registry.h"
 #include "config_store.h"
+#include "serial_console.h"
 
-// NOTE: banc de test temporaire (étapes 2-7). Sera remplacé par la machine
+// NOTE: banc de test temporaire (étapes 2-8). Sera remplacé par la machine
 // à états du droïde à l'étape 6.
+
+// Journalisation : JSON via la console sur le maître, texte brut sur l'esclave.
+#if IS_MASTER
+  #define LOGF(fmt, ...) Console.log(fmt, ##__VA_ARGS__)
+#else
+  #define LOGF(fmt, ...) do { Serial.printf(fmt, ##__VA_ARGS__); Serial.print('\n'); } while (0)
+#endif
 
 static ServoEngine head;
 static AnimationPlayer anim;
 static uint32_t nextMove = 0;
 
+// État runtime des servos de CE droïde (pilotable depuis la console web).
+static bool gServos = true;
+
 // LED de vie (témoin d'exécution) — clignotement non bloquant.
 static uint32_t lastBlink = 0;
 static bool ledOn = false;
 
-// Test mesh
+// Test mesh / timers
 static uint32_t nextMeshSend = 0;
 static uint32_t nextHeartbeat = 0;
 static uint32_t nextPresenceScan = 0;
+static uint32_t nextDroidsPush = 0;
 
 // Suivi hors-ligne (maître) : mémorise l'état en ligne pour signaler les pertes.
 static const uint32_t DROID_TIMEOUT_MS = 7000;
 #if IS_MASTER
 static bool wasOnline[Registry::MAX];
+#endif
+
+// Active/coupe les servos de ce droïde (protection matérielle).
+static void applyServos(bool en) {
+    gServos = en;
+    head.setEnabled(en);
+    if (!en) anim.stop();
+#if IS_MASTER
+    Console.setMasterServos(en);
+#endif
+    LOGF("servos %s", en ? "ACTIFS" : "COUPÉS");
+}
+
+// Hook console : jouer une animation localement (maître).
+#if IS_MASTER
+static void playLocalAnim(uint8_t animId, uint32_t seed) {
+    if (gServos) anim.play(animId, seed);
+}
+
+// Hook console : activer/couper les servos d'une cible (maître).
+static void onServoCmd(uint16_t target, bool en) {
+    ServoPayload p{target, (uint8_t)(en ? 1 : 0)};
+    Mesh.send(MSG_SERVO, &p, sizeof(p));
+    if (target == MESH_TARGET_ALL || target == Mesh.myId()) applyServos(en);
+}
 #endif
 
 static void onMeshMessage(uint8_t type, const uint8_t* payload, uint8_t len,
@@ -34,8 +71,8 @@ static void onMeshMessage(uint8_t type, const uint8_t* payload, uint8_t len,
     // Tout message reçu prouve la présence de ce droïde.
     if (Droids.seen(srcId, rssi, millis())) {
         const String name = Config.getName(srcId);
-        Serial.printf("[MESH] nouveau B1 %04X%s%s connecté au mesh (total %u)\n",
-                      srcId, name.length() ? " " : "", name.c_str(), Droids.count());
+        LOGF("nouveau B1 %04X%s%s connecté au mesh (total %u)",
+             srcId, name.length() ? " " : "", name.c_str(), Droids.count());
     }
 #else
     (void)srcId; (void)rssi;
@@ -44,15 +81,23 @@ static void onMeshMessage(uint8_t type, const uint8_t* payload, uint8_t len,
     if (type == MSG_ANIM && len == sizeof(AnimPayload)) {
         AnimPayload p;
         memcpy(&p, payload, sizeof(p));
-        Serial.printf("[MESH] ANIM de %04X (rssi %d) target=%04X anim=%u\n",
-                      srcId, rssi, p.targetId, p.animId);
-        // Joue l'animation reçue (démo).
-        anim.play(p.animId, p.seed);
+        LOGF("ANIM de %04X (rssi %d) target=%04X anim=%u", srcId, rssi, p.targetId, p.animId);
+        if (gServos) anim.play(p.animId, p.seed);
+    } else if (type == MSG_SERVO && len == sizeof(ServoPayload)) {
+        ServoPayload p;
+        memcpy(&p, payload, sizeof(p));
+        if (p.targetId == MESH_TARGET_ALL || p.targetId == Mesh.myId())
+            applyServos(p.enabled != 0);
+    } else if (type == MSG_HEARTBEAT && len == sizeof(HeartbeatPayload)) {
+#if IS_MASTER
+        HeartbeatPayload hb;
+        memcpy(&hb, payload, sizeof(hb));
+        Droids.setServos(srcId, hb.state & 0x01);
+#endif
     } else if (type == MSG_HEARTBEAT) {
-        // Présence : déjà notée dans le registry ci-dessus.
+        // ancienne forme / présence : déjà notée.
     } else {
-        Serial.printf("[MESH] type=%u len=%u de %04X (rssi %d)\n",
-                      type, len, srcId, rssi);
+        LOGF("type=%u len=%u de %04X (rssi %d)", type, len, srcId, rssi);
     }
 }
 
@@ -67,11 +112,26 @@ void setup() {
     head.center();
     anim.begin(&head);
 
+    // État initial des servos : maître en pause si MASTER_ANIM_PAUSED.
+#if IS_MASTER && MASTER_ANIM_PAUSED
+    gServos = false;
+#else
+    gServos = true;
+#endif
+    head.setEnabled(gServos);
+
+#if IS_MASTER
+    Console.begin();
+    Console.onAnim(playLocalAnim);
+    Console.onServo(onServoCmd);
+    Console.setMasterServos(gServos);
+#endif
+
     if (Mesh.begin(GROUP_KEY)) {
         Mesh.onReceive(onMeshMessage);
-        Serial.printf("[MESH] prêt, id=%04X\n", Mesh.myId());
+        LOGF("mesh prêt, id=%04X (servos %s)", Mesh.myId(), gServos ? "ACTIFS" : "COUPÉS");
     } else {
-        Serial.println("[MESH] échec d'initialisation");
+        LOGF("mesh: échec d'initialisation");
     }
 }
 
@@ -79,7 +139,10 @@ void loop() {
     const uint32_t now = millis();
 
     head.update();
-    anim.update();
+    if (gServos) anim.update();
+#if IS_MASTER
+    Console.update();
+#endif
 
     // LED de vie.
     if (now - lastBlink >= LED_BLINK_MS) {
@@ -88,10 +151,10 @@ void loop() {
         digitalWrite(PIN_LED_ONBOARD, ledOn ? HIGH : LOW);
     }
 
-    // Heartbeat : chaque droïde signale sa présence au mesh.
+    // Heartbeat : chaque droïde signale sa présence (et l'état de ses servos).
     if (now > nextHeartbeat) {
         nextHeartbeat = now + HEARTBEAT_MS;
-        HeartbeatPayload hb{now, 0};
+        HeartbeatPayload hb{now, (uint8_t)(gServos ? 1 : 0)};
         Mesh.send(MSG_HEARTBEAT, &hb, sizeof(hb));
     }
 
@@ -103,27 +166,31 @@ void loop() {
             const bool on = Droids.online(i, now, DROID_TIMEOUT_MS);
             if (wasOnline[i] && !on) {
                 const String name = Config.getName(Droids.at(i).id);
-                Serial.printf("[MESH] B1 %04X%s%s hors-ligne\n",
-                              Droids.at(i).id, name.length() ? " " : "",
-                              name.c_str());
+                LOGF("B1 %04X%s%s hors-ligne", Droids.at(i).id,
+                     name.length() ? " " : "", name.c_str());
             }
             wasOnline[i] = on;
         }
     }
 
+    // Envoi périodique de la liste des droïdes à la console web.
+    if (now > nextDroidsPush) {
+        nextDroidsPush = now + 1500;
+        Console.pushDroids();
+    }
+
     // Le maître choisit une anim au hasard, la joue et la diffuse au groupe.
-    if (!anim.isPlaying() && now > nextMeshSend) {
+    if (gServos && !anim.isPlaying() && now > nextMeshSend) {
         nextMeshSend = now + (uint32_t)random(2500, 5000);
         const uint32_t seed = (uint32_t)esp_random();
         const uint8_t animId = AnimationPlayer::randomAnimId(seed);
         AnimPayload p{MESH_TARGET_ALL, animId, 0, seed};
         Mesh.send(MSG_ANIM, &p, sizeof(p));
         anim.play(animId, seed);
-        Serial.printf("[MESH] envoi+play ANIM anim=%u\n", animId);
     }
 #else
     // Un esclave isolé (sans maître) s'anime aussi tout seul.
-    if (!anim.isPlaying() && now > nextMove) {
+    if (gServos && !anim.isPlaying() && now > nextMove) {
         nextMove = now + (uint32_t)random(3000, 7000);
         const uint32_t seed = (uint32_t)esp_random();
         anim.play(AnimationPlayer::randomAnimId(seed), seed);

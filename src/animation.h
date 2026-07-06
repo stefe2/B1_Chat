@@ -38,6 +38,9 @@ public:
     // À appeler régulièrement (dans loop()).
     void update();
 
+    // Arrête l'animation en cours.
+    void stop() { _playing = false; }
+
     bool isPlaying() const { return _playing; }
     uint8_t current() const { return _animId; }
 

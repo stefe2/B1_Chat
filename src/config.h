@@ -12,7 +12,11 @@
 //  1 = MAÎTRE (un seul dans le réseau : coordination + son + console web)
 //  0 = ESCLAVE (valeur par défaut pour tous les autres droïdes)
 // ---------------------------------------------------------------------------
-#define IS_MASTER 0
+#define IS_MASTER 1
+
+// Pause temporaire des servos/animations sur le MAÎTRE (protège les servos
+// pendant la mise au point de la page web). Mettre à 0 pour réactiver.
+#define MASTER_ANIM_PAUSED 1
 
 // ---------------------------------------------------------------------------
 //  Réseau & clé de groupe (définis par les build flags dans platformio.ini)

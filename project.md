@@ -98,8 +98,8 @@ web/
 - Environnement unique **`env:b1`** : toutes les cartes se flashent pareil
   (`pio run -e b1 -t upload`).
 - Build flags communs : `-D MESH_TTL=4`, `-D GROUP_KEY="changeme"`.
-- Dépendances : `DFRobotDFPlayerMini`. Les servos sont pilotés par l'**API LEDC
-  native** du core ESP32 (pas de bibliothèque servo externe).
+- Dépendances : `DFRobotDFPlayerMini`, `ArduinoJson`. Les servos sont pilotés
+  par l'**API LEDC native** du core ESP32 (pas de bibliothèque servo externe).
 
 ### Identité auto (ID dérivé de la MAC)
 - Au boot, chaque ESP32 lit sa **MAC** (`WiFi.macAddress` / `esp_read_mac`) et en
@@ -138,7 +138,8 @@ struct MsgHeader {
 |------|--------------|--------|
 | `MSG_ANIM` | `targetId (0xFFFF=tous), animId, syncDelayMs, seed` | Oui |
 | `MSG_CONFIG` | `targetId, freq, amplitude, vitesse` (params d'anim) | Oui |
-| `MSG_HEARTBEAT` | `uptime, état` (présence/voisinage) | Oui |
+| `MSG_SERVO` | `targetId, enabled` (active/coupe les servos) | Oui |
+| `MSG_HEARTBEAT` | `uptime, état` (présence ; bit0 = servos actifs) | Oui |
 | `MSG_SOUND` | interne maître → DFPlayer | Non (local) |
 
 - `syncDelayMs` permet aux droïdes de **synchroniser** ou **décaler** une anim.
@@ -228,18 +229,24 @@ droïdes (via `MSG_HEARTBEAT`) et relaie les commandes.
 ### Protocole série JSON (une ligne = un message)
 - **PC → maître** : `{cmd:"list"}`, `{cmd:"anim",target,animId}`,
   `{cmd:"config",target,freq,amp,speed}`, `{cmd:"volume",value}`,
-  `{cmd:"name",id,name}`, `{cmd:"playTrack",track}`, `{cmd:"getConfig"}`
+  `{cmd:"name",id,name}`, `{cmd:"playTrack",track}`, `{cmd:"servo",target,enabled}`,
+  `{cmd:"getConfig"}`
 - **Maître → PC** : `{evt:"droids",list:[...]}`, `{evt:"log",msg}`,
   `{evt:"state",...}`
 
 ### Fonctions
-- Lister les droïdes détectés (srcId/MAC, vu il y a X s, RSSI)
+- Lister les droïdes détectés (le **maître en premier**, ID, RSSI, rôle)
 - Déclencher une animation (tous ou un droïde précis)
-- Régler le volume audio
-- Nommer les droïdes (association ID/MAC → nom, persistée)
-- Régler les paramètres d'anim (fréquence, amplitude, vitesse)
+- **Activer/couper les servos** par droïde (bouton par ligne, protège le matériel)
+- Régler le volume audio (**auto-sauvegardé** en NVS)
+- Nommer les droïdes (association ID → nom, persistée)
+- Régler les paramètres d'anim (fréquence, amplitude, vitesse ; auto-sauvegardés)
 - Tester une piste son précise
 - Voir logs / état en temps réel
+- **Info-bulles** au survol des libellés expliquant chaque réglage
+- **Auto-sauvegarde** (debounce ~1,2 s) avec encart d'état dans la barre du haut
+  (« Enregistrement… » → « Sauvegardé ✓ », ou « Hors ligne »)
+- Bouton **Connecter/Déconnecter** (bascule ; libère l'USB)
 
 **Note** : Web Serial requiert **Chrome/Edge** (contexte sécurisé). Non supporté
 par Firefox/Safari. La page est **responsive** (s'adapte à la taille d'écran).
@@ -269,11 +276,15 @@ par Firefox/Safari. La page est **responsive** (s'adapte à la taille d'écran).
       → `src/config_store.{h,cpp}` (volume, params d'anim, noms en NVS) et
       `src/registry.{h,cpp}` (inventaire vivant : srcId, RSSI, lastSeen).
       Intégrés au maître : détection nouveau B1 + passage hors-ligne. Build OK.
-- [ ] 8. `serial_console` : pont JSON USB (maître).
-- [~] 9. `web/dashboard.html` : page de supervision Web Serial.
-      → Page autonome créée (liste droïdes, anim, volume, piste son, params,
-      clé de groupe, journal) avec **mode démo** (données simulées) et client
-      Web Serial déjà câblé au protocole JSON. Fonctionnera dès l'étape 8.
+- [x] 8. `serial_console` : pont JSON USB (maître).
+      → `src/serial_console.{h,cpp}` (ArduinoJson). Commandes list/anim/config/
+      volume/name/playTrack/getConfig ; events droids/log/state. Logs du maître
+      routés en JSON (`LOGF`). Push périodique de la liste des droïdes. Build OK.
+- [x] 9. `web/dashboard.html` : page de supervision Web Serial.
+      → Page autonome responsive reliée au maître (JSON). Maître listé en premier
+      + colonne Rôle, colonne Servos (bouton par droïde), info-bulles au survol,
+      auto-sauvegarde (encart d'état), bouton Connecter/Déconnecter. Colonne MAC
+      retirée. Fonctionnelle (hors volume/son : étape 5 audio).
 
 ---
 

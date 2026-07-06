@@ -19,10 +19,14 @@ public:
         uint16_t id;
         int16_t  rssi;
         uint32_t lastSeen;
+        bool     servos;   // état des servos rapporté par le droïde
     };
 
     // Enregistre/actualise un droïde. Retourne true si nouvellement ajouté.
     bool seen(uint16_t id, int rssi, uint32_t now);
+
+    // Met à jour l'état des servos d'un droïde (via heartbeat).
+    void setServos(uint16_t id, bool on);
 
     uint8_t count() const { return _count; }
     const Entry& at(uint8_t i) const { return _e[i]; }

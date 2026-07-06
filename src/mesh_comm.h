@@ -19,6 +19,7 @@ enum MeshMsgType : uint8_t {
     MSG_ANIM      = 1,
     MSG_CONFIG    = 2,
     MSG_HEARTBEAT = 4,
+    MSG_SERVO     = 5,
 };
 
 // Adresse « tous les droïdes » pour les charges utiles ciblées.
@@ -49,7 +50,12 @@ struct ConfigPayload {
 
 struct HeartbeatPayload {
     uint32_t uptimeMs;
-    uint8_t  state;
+    uint8_t  state;      // bit0 = servos actifs
+};
+
+struct ServoPayload {
+    uint16_t targetId;   // MESH_TARGET_ALL ou un srcId précis
+    uint8_t  enabled;    // 1 = servos actifs, 0 = coupés
 };
 #pragma pack(pop)
 

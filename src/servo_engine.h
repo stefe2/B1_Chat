@@ -34,10 +34,17 @@ public:
     // Active/désactive le bruit d'idle et règle son amplitude (degrés).
     void setIdleNoise(bool on, float panAmp = 3.0f, float tiltAmp = 2.0f);
 
+    // Active/coupe physiquement les sorties PWM (protection des servos).
+    // Désactivé : les broches sont détachées (aucun signal → servos libres).
+    void setEnabled(bool en);
+    bool isEnabled() const { return _enabled; }
+
     float pan() const { return _curPan; }
     float tilt() const { return _curTilt; }
 
 private:
+    bool _enabled = true;
+
     // Interpolation
     float _startPan = 0, _startTilt = 0;
     float _targetPan = 0, _targetTilt = 0;

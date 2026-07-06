@@ -41,6 +41,8 @@ void ConfigStore::nameKey(uint16_t id, char out[8]) {
 String ConfigStore::getName(uint16_t id) {
     char key[8];
     nameKey(id, key);
+    // Teste l'existence pour éviter le log d'erreur NVS « NOT_FOUND ».
+    if (!_p.isKey(key)) return String("");
     return _p.getString(key, "");
 }
 
