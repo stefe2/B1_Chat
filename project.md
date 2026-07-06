@@ -254,7 +254,8 @@ par Firefox/Safari.
 
 - [x] 1. `platformio.ini` : envs master/slave, `lib_deps`, build flags (`GROUP_KEY`).
       → `src/config.h` créé. Build `slave` OK.
-- [ ] 2. `servo_engine` : interpolation + easing + bruit d'idle.
+- [x] 2. `servo_engine` : interpolation + easing + bruit d'idle.
+      → `src/servo_engine.{h,cpp}` + banc de test dans `main.cpp`. Build OK.
 - [ ] 3. `mesh_comm` : ESP-NOW, en-tête, dédup, relais multi-sauts, **HMAC** + `MSG_REKEY`.
 - [ ] 4. `animation` : keyframes + lecteur + RNG.
 - [ ] 5. `audio` : wrapper DFPlayer + mapping (maître).
