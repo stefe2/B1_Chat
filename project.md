@@ -76,12 +76,12 @@ et **son joué par le droïde maître** via un DFPlayer Mini + ampli externe.
 Firmware **unique** ; le rôle et l'identité sont fixés par **build flags**.
 
 ```
-platformio.ini      → envs master / slave, lib_deps, build flags
+platformio.ini      → environnement b1, lib_deps, build flags
 src/
   main.cpp          → setup() / loop(), câblage des modules
-  config.h          → pins, IDs, bornes d'angles, vitesses, params mesh/audio
+  config.h          → rôle (IS_MASTER), pins, bornes d'angles, params mesh/audio
   mesh_comm.{h,cpp} → ESP-NOW, en-tête de message, dédup, relais multi-sauts
-  servo_engine.{h,cpp} → interpolation 50 Hz, easing, bruit d'idle
+  servo_engine.{h,cpp} → PWM LEDC natif, interpolation 50 Hz, easing, bruit d'idle
   animation.{h,cpp} → keyframes, lecteur d'animation, tirage aléatoire
   audio.{h,cpp}     → wrapper DFPlayer (maître), mapping animation → piste
   droid.{h,cpp}     → machine à états haut niveau
@@ -97,8 +97,9 @@ web/
   ou `0` (esclave). Un seul maître dans le réseau.
 - Environnement unique **`env:b1`** : toutes les cartes se flashent pareil
   (`pio run -e b1 -t upload`).
-- Build flags communs : `-D MESH_TTL=4`, `-D GROUP_KEY="changeme"`,
-  `lib_deps = ESP32Servo`, `DFRobotDFPlayerMini`.
+- Build flags communs : `-D MESH_TTL=4`, `-D GROUP_KEY="changeme"`.
+- Dépendances : `DFRobotDFPlayerMini`. Les servos sont pilotés par l'**API LEDC
+  native** du core ESP32 (pas de bibliothèque servo externe).
 
 ### Identité auto (ID dérivé de la MAC)
 - Au boot, chaque ESP32 lit sa **MAC** (`WiFi.macAddress` / `esp_read_mac`) et en
@@ -148,8 +149,10 @@ struct MsgHeader {
 
 ## 6. Mouvement fluide & organique
 
+- **PWM via LEDC natif** (50 Hz, 16 bits) — pas de bibliothèque servo externe.
 - **Moteur servo non bloquant** à **50 Hz** (timestep fixe).
-- **Easing** *ease-in-out* entre keyframes (pas de mouvement linéaire brut).
+- **Easing** *ease-in-out* (smootherstep) entre keyframes (pas de mouvement
+  linéaire brut).
 - **Bruit d'idle** : micro-oscillations superposées (respiration / regard vivant)
   même à l'arrêt.
 - Vitesses/accélérations bornées pour éviter les à-coups.
@@ -253,14 +256,19 @@ par Firefox/Safari.
 
 > Suivi mis à jour après chaque étape.
 
-- [x] 1. `platformio.ini` : envs master/slave, `lib_deps`, build flags (`GROUP_KEY`).
-      → `src/config.h` créé. Build `slave` OK.
+- [x] 1. `platformio.ini` : environnement unique `b1`, `lib_deps`, build flags
+      (`GROUP_KEY`). → `src/config.h` créé (rôle via `IS_MASTER`). Build OK.
 - [x] 2. `servo_engine` : interpolation + easing + bruit d'idle.
-      → `src/servo_engine.{h,cpp}` + banc de test dans `main.cpp`. Build OK.
+      → `src/servo_engine.{h,cpp}` en **PWM LEDC natif** (ESP32Servo abandonné,
+      bug de double-attach). Banc de test dans `main.cpp`. Build OK.
 - [x] 3. `mesh_comm` : ESP-NOW, en-tête, dédup, relais multi-sauts, **HMAC** + `MSG_REKEY`.
       → `src/mesh_comm.{h,cpp}` (ID auto MAC, canal fixe, HMAC-SHA256 tronqué,
-      relais TTL). LED de vie onboard (GPIO2) ajoutée. Build master+slave OK.
-- [ ] 4. `animation` : keyframes + lecteur + RNG.
+      relais TTL). LED de vie onboard (GPIO2) ajoutée. Rôle réglé dans le code
+      (`IS_MASTER`). Build OK.
+- [x] 4. `animation` : keyframes + lecteur + RNG.
+      → `src/animation.{h,cpp}` (8 anims en offsets pan/tilt, lecteur non
+      bloquant, jitter déterministe par seed). Intégré au banc de test
+      (maître diffuse anim+seed, chaque droïde la joue). Build OK.
 - [ ] 5. `audio` : wrapper DFPlayer + mapping (maître).
 - [ ] 6. `droid` + `main.cpp` : machine à états et câblage des modules.
 - [ ] 7. `config_store` (NVS) + `registry` : persistance et inventaire des droïdes.
