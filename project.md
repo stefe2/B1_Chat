@@ -92,20 +92,21 @@ web/
   dashboard.html    → page autonome Web Serial (UI + JS, aucun serveur)
 ```
 
-### Environnements PlatformIO
-- `env:master` : `-D ROLE_MASTER` (un seul maître dans le réseau)
-- `env:slave`  : **aucun ID à définir** — firmware identique flashé tel quel sur
-  chaque esclave.
-- Commun : `-D MESH_TTL=4`, `-D GROUP_KEY="changeme"`,
+### Rôle & environnement PlatformIO
+- **Rôle réglé dans le code** : `src/config.h` → `#define IS_MASTER 1` (maître)
+  ou `0` (esclave). Un seul maître dans le réseau.
+- Environnement unique **`env:b1`** : toutes les cartes se flashent pareil
+  (`pio run -e b1 -t upload`).
+- Build flags communs : `-D MESH_TTL=4`, `-D GROUP_KEY="changeme"`,
   `lib_deps = ESP32Servo`, `DFRobotDFPlayerMini`.
 
 ### Identité auto (ID dérivé de la MAC)
 - Au boot, chaque ESP32 lit sa **MAC** (`WiFi.macAddress` / `esp_read_mac`) et en
   dérive un **`srcId` 16 bits** (les 2 derniers octets de la MAC, unique par carte).
-- **Aucune config par droïde** : brancher → flasher `env:slave` → terminé.
+- **Aucun ID par droïde** : brancher → flasher `env:b1` → terminé.
 - Ajouter un droïde ne nécessite **aucune** modification du maître ni des autres.
-- Le maître garde un `srcId` dérivé de sa MAC lui aussi ; son rôle vient du flag
-  `ROLE_MASTER`, pas de son ID.
+- Le maître garde un `srcId` dérivé de sa MAC lui aussi ; son rôle vient de
+  `IS_MASTER` (dans `config.h`), pas de son ID.
 
 ---
 
@@ -270,7 +271,7 @@ par Firefox/Safari.
 
 ## 12. Vérification
 
-1. `pio run -e master` **et** `pio run -e slave` compilent sans erreur.
+1. `pio run -e b1` compile sans erreur (rôle réglé via `IS_MASTER`).
 2. Sweep servo **fluide** (aucune saccade).
 3. `MSG_ANIM` émis par le maître **relayé sur ≥ 2 sauts** et exécuté par un
    esclave distant (dédup : pas de tempête de broadcast).

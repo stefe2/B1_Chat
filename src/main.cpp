@@ -66,7 +66,7 @@ void loop() {
         nextMove = now + dur + random(1500, 3500);
     }
 
-#ifdef ROLE_MASTER
+#if IS_MASTER
     // Le maître émet périodiquement une anim de test à tout le groupe.
     if (now > nextMeshSend) {
         nextMeshSend = now + 3000;

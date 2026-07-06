@@ -44,13 +44,20 @@ Détails complets (audio DAC → ampli, broches à éviter) dans [`project.md`](
 
 ## Build & flash (PlatformIO)
 
-```bash
-# Maître (coordination + son + console web)
-pio run -e master -t upload
+Le rôle se règle dans [`src/config.h`](src/config.h) :
 
-# Esclave (identique pour chaque droïde, aucune config)
-pio run -e slave -t upload
+```cpp
+#define IS_MASTER 1   // 1 = maître (un seul), 0 = esclave
 ```
+
+Puis on flashe toutes les cartes avec le même environnement :
+
+```bash
+pio run -e b1 -t upload
+```
+
+- **Maître** : mettre `IS_MASTER 1`, flasher **une** carte.
+- **Esclaves** : mettre `IS_MASTER 0`, flasher toutes les autres.
 
 Clé de groupe par défaut définie dans `platformio.ini` (`-D GROUP_KEY`) ;
 modifiable ensuite via la console web.
@@ -58,10 +65,10 @@ modifiable ensuite via la console web.
 ## Structure du projet
 
 ```
-platformio.ini    envs master / slave, dépendances, build flags
+platformio.ini    environnement b1, dépendances, build flags
 project.md        plan détaillé + suivi d'avancement
 src/
-  config.h        pins, bornes d'angles, paramètres mesh/audio
+  config.h        rôle (IS_MASTER), pins, bornes d'angles, params mesh/audio
   main.cpp        point d'entrée
 web/
   dashboard.html  console de supervision Web Serial (à venir)

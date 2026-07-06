@@ -8,7 +8,14 @@
 #include <Arduino.h>
 
 // ---------------------------------------------------------------------------
-//  Rôle & clé de groupe (définis par les build flags dans platformio.ini)
+//  RÔLE DU DROÏDE  —  À RÉGLER ICI AVANT DE FLASHER
+//  1 = MAÎTRE (un seul dans le réseau : coordination + son + console web)
+//  0 = ESCLAVE (valeur par défaut pour tous les autres droïdes)
+// ---------------------------------------------------------------------------
+#define IS_MASTER 0
+
+// ---------------------------------------------------------------------------
+//  Réseau & clé de groupe (définis par les build flags dans platformio.ini)
 // ---------------------------------------------------------------------------
 #ifndef MESH_TTL
 #define MESH_TTL 4              // nombre de sauts max pour le relais mesh
@@ -17,8 +24,6 @@
 #ifndef GROUP_KEY
 #define GROUP_KEY "changeme"    // clé de réseau par défaut (compilée)
 #endif
-
-// ROLE_MASTER est défini uniquement pour l'environnement maître.
 
 // ---------------------------------------------------------------------------
 //  LED de vie (onboard) — témoin d'exécution du programme
