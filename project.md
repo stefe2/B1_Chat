@@ -275,7 +275,11 @@ par Firefox/Safari. La page est **responsive** (s'adapte à la taille d'écran).
       → `src/animation.{h,cpp}` (8 anims en offsets pan/tilt, lecteur non
       bloquant, jitter déterministe par seed). Intégré au banc de test
       (maître diffuse anim+seed, chaque droïde la joue). Build OK.
-- [ ] 5. `audio` : wrapper DFPlayer + mapping (maître).
+- [x] 5. `audio` : wrapper DFPlayer + mapping (maître).
+  → `src/audio.{h,cpp}` (UART2 DFPlayer, volume 0..30, lecture piste),
+  mapping animation→plages de pistes (/mp3/0001..0010) avec variation
+  pseudo-aléatoire par seed. Branché sur le maître (random, commandes
+  directes, séquences), synchronisé avec l'animation locale.
 - [ ] 6. `droid` + `main.cpp` : machine à états et câblage des modules.
 - [x] 7. `config_store` (NVS) + `registry` : persistance et inventaire des droïdes.
       → `src/config_store.{h,cpp}` (volume, params d'anim, noms en NVS) et
@@ -289,7 +293,7 @@ par Firefox/Safari. La page est **responsive** (s'adapte à la taille d'écran).
       → Page autonome responsive reliée au maître (JSON). Maître listé en premier
       + colonne Rôle, colonne Servos (bouton par droïde), info-bulles au survol,
       auto-sauvegarde (encart d'état), bouton Connecter/Déconnecter. Colonne MAC
-      retirée. Fonctionnelle (hors volume/son : étape 5 audio).
+  retirée. Fonctionnelle (volume et lecture piste via maître).
 - [x] 10. Séquences stockées sur le maître (autonomie sans PC).
   → `src/sequence_store.{h,cpp}` (NVS, 8 slots, jusqu'à 32 étapes/slot),
   commandes série `seqSave/seqList/seqLoad/seqRun/seqStop/seqDelete`,

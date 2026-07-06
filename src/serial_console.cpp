@@ -11,9 +11,13 @@ SerialConsole Console;
 
 void SerialConsole::begin() {
     _len = 0;
+    _clientReady = false;
+    _lastHelloMs = 0;
 }
 
 void SerialConsole::log(const char* fmt, ...) {
+    if (!_clientReady) return;
+
     char msg[200];
     va_list ap;
     va_start(ap, fmt);
@@ -28,6 +32,8 @@ void SerialConsole::log(const char* fmt, ...) {
 }
 
 void SerialConsole::pushDroids() {
+    if (!_clientReady) return;
+
     const uint32_t now = millis();
     JsonDocument doc;
     doc["evt"] = "droids";
@@ -58,6 +64,8 @@ void SerialConsole::pushDroids() {
 }
 
 void SerialConsole::pushState() {
+    if (!_clientReady) return;
+
     uint8_t f, a, s;
     Config.animParams(f, a, s);
     JsonDocument doc;
@@ -71,6 +79,8 @@ void SerialConsole::pushState() {
 }
 
 void SerialConsole::pushSeqList() {
+    if (!_clientReady) return;
+
     JsonDocument doc;
     doc["evt"] = "seqList";
     JsonArray arr = doc["list"].to<JsonArray>();
@@ -92,6 +102,8 @@ void SerialConsole::pushSeqList() {
 }
 
 void SerialConsole::pushSeqData(uint8_t slot, const StoredSequence& seq) {
+    if (!_clientReady) return;
+
     JsonDocument doc;
     doc["evt"] = "seqData";
     doc["slot"] = slot;
@@ -125,6 +137,11 @@ void SerialConsole::update() {
             _len = 0;  // ligne trop longue : on jette
         }
     }
+
+    // Perte de session Web Serial si plus de keepalive.
+    if (_clientReady && (millis() - _lastHelloMs > CLIENT_TIMEOUT_MS)) {
+        _clientReady = false;
+    }
 }
 
 void SerialConsole::handleLine(const char* line) {
@@ -132,6 +149,27 @@ void SerialConsole::handleLine(const char* line) {
     if (deserializeJson(doc, line)) return;  // JSON invalide → ignoré
 
     const char* cmd = doc["cmd"] | "";
+
+    if (!strcmp(cmd, "hello")) {
+        _clientReady = true;
+        _lastHelloMs = millis();
+
+        JsonDocument ack;
+        ack["evt"] = "hello";
+        ack["ok"] = true;
+        ack["id"] = Mesh.myId();
+        serializeJson(ack, Serial);
+        Serial.print('\n');
+        return;
+    }
+
+    if (!strcmp(cmd, "ping")) {
+        if (_clientReady) _lastHelloMs = millis();
+        return;
+    }
+
+    if (!_clientReady) return;
+    _lastHelloMs = millis();
 
     if (!strcmp(cmd, "list")) {
         pushDroids();

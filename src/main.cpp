@@ -7,6 +7,7 @@
 #include "config_store.h"
 #include "serial_console.h"
 #include "sequence_store.h"
+#include "audio.h"
 
 // NOTE: banc de test temporaire (étapes 2-8). Sera remplacé par la machine
 // à états du droïde à l'étape 6.
@@ -63,7 +64,10 @@ static void applyServos(bool en) {
 // Hook console : jouer une animation localement (maître).
 #if IS_MASTER
 static void playLocalAnim(uint8_t animId, uint32_t seed) {
-    if (gServos) anim.play(animId, seed);
+    if (gServos) {
+        anim.play(animId, seed);
+        Audio.playForAnim(animId, seed);
+    }
 }
 
 // Hook console : activer/couper les servos d'une cible (maître).
@@ -71,6 +75,14 @@ static void onServoCmd(uint16_t target, bool en) {
     ServoPayload p{target, (uint8_t)(en ? 1 : 0)};
     Mesh.send(MSG_SERVO, &p, sizeof(p));
     if (target == MESH_TARGET_ALL || target == Mesh.myId()) applyServos(en);
+}
+
+static void onVolumeCmd(uint8_t v) {
+    Audio.setVolume(v);
+}
+
+static void onTrackCmd(uint8_t track) {
+    if (!Audio.playTrack(track)) LOGF("audio indisponible (track %u)", track);
 }
 
 static bool onSeqSave(uint8_t slot, const StoredSequence& seq) {
@@ -122,7 +134,12 @@ static void onMeshMessage(uint8_t type, const uint8_t* payload, uint8_t len,
         AnimPayload p;
         memcpy(&p, payload, sizeof(p));
         LOGF("ANIM de %04X (rssi %d) target=%04X anim=%u", srcId, rssi, p.targetId, p.animId);
-        if (gServos) anim.play(p.animId, p.seed);
+        if (p.targetId == MESH_TARGET_ALL || p.targetId == Mesh.myId()) {
+            if (gServos) anim.play(p.animId, p.seed);
+#if IS_MASTER
+            Audio.playForAnim(p.animId, p.seed);
+#endif
+        }
     } else if (type == MSG_SERVO && len == sizeof(ServoPayload)) {
         ServoPayload p;
         memcpy(&p, payload, sizeof(p));
@@ -166,6 +183,8 @@ void setup() {
 #if IS_MASTER
     Console.begin();
     Console.onAnim(playLocalAnim);
+    Console.onVolume(onVolumeCmd);
+    Console.onTrack(onTrackCmd);
     Console.onServo(onServoCmd);
     Console.onSeqSave(onSeqSave);
     Console.onSeqList(onSeqList);
@@ -174,6 +193,10 @@ void setup() {
     Console.onSeqStop(onSeqStop);
     Console.onSeqDelete(onSeqDelete);
     Console.setMasterServos(gServos);
+
+    Audio.begin();
+    Audio.setVolume(Config.volume());
+    LOGF("audio %s (vol %u)", Audio.ready() ? "OK" : "OFF", Audio.volume());
 #endif
 
     if (Mesh.begin(GROUP_KEY)) {
@@ -222,8 +245,10 @@ void loop() {
                 const uint32_t seed = (uint32_t)esp_random();
                 AnimPayload p{st.targetId, st.animId, 0, seed};
                 Mesh.send(MSG_ANIM, &p, sizeof(p));
-                if (st.targetId == MESH_TARGET_ALL || st.targetId == Mesh.myId())
+                if (st.targetId == MESH_TARGET_ALL || st.targetId == Mesh.myId()) {
                     anim.play(st.animId, seed);
+                    Audio.playForAnim(st.animId, seed);
+                }
                 gSeqNextAt = now + st.delayMs;
                 gSeqIndex++;
             }
@@ -258,6 +283,7 @@ void loop() {
         AnimPayload p{MESH_TARGET_ALL, animId, 0, seed};
         Mesh.send(MSG_ANIM, &p, sizeof(p));
         anim.play(animId, seed);
+        Audio.playForAnim(animId, seed);
     }
 #else
     // Un esclave isolé (sans maître) s'anime aussi tout seul.

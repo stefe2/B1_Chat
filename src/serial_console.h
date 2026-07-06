@@ -46,10 +46,16 @@ public:
     // État servos du maître (pour l'afficher dans la liste).
     void setMasterServos(bool on) { _masterServos = on; }
 
+    // Session Web Serial validée par handshake hello/ping.
+    bool isClientReady() const { return _clientReady; }
+
 private:
     char     _buf[256];
     uint16_t _len = 0;
     bool     _masterServos = true;
+    bool     _clientReady = false;
+    uint32_t _lastHelloMs = 0;
+    static const uint32_t CLIENT_TIMEOUT_MS = 5000;
 
     void (*_animCb)(uint8_t, uint32_t) = nullptr;
     void (*_volCb)(uint8_t) = nullptr;
