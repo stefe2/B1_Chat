@@ -31,8 +31,11 @@ void ServoEngine::begin() {
     ledcAttach(PIN_SERVO_PAN, SERVO_LEDC_FREQ, SERVO_LEDC_BITS);
     ledcAttach(PIN_SERVO_TILT, SERVO_LEDC_FREQ, SERVO_LEDC_BITS);
 
-    _curPan = SERVO_PAN_CENTER;
-    _curTilt = SERVO_TILT_CENTER;
+    _panMin = SERVO_PAN_MIN; _panCenter = SERVO_PAN_CENTER; _panMax = SERVO_PAN_MAX;
+    _tiltMin = SERVO_TILT_MIN; _tiltCenter = SERVO_TILT_CENTER; _tiltMax = SERVO_TILT_MAX;
+
+    _curPan = _panCenter;
+    _curTilt = _tiltCenter;
     _targetPan = _curPan;
     _targetTilt = _curTilt;
     _moving = false;
@@ -42,15 +45,25 @@ void ServoEngine::begin() {
 void ServoEngine::setTarget(float panDeg, float tiltDeg, uint32_t durationMs) {
     _startPan = _curPan;
     _startTilt = _curTilt;
-    _targetPan = clampf(panDeg, SERVO_PAN_MIN, SERVO_PAN_MAX);
-    _targetTilt = clampf(tiltDeg, SERVO_TILT_MIN, SERVO_TILT_MAX);
+    _targetPan = clampf(panDeg, _panMin, _panMax);
+    _targetTilt = clampf(tiltDeg, _tiltMin, _tiltMax);
     _moveStart = millis();
     _moveDur = durationMs == 0 ? 1 : durationMs;
     _moving = true;
 }
 
 void ServoEngine::center(uint32_t durationMs) {
-    setTarget(SERVO_PAN_CENTER, SERVO_TILT_CENTER, durationMs);
+    setTarget(_panCenter, _tiltCenter, durationMs);
+}
+
+void ServoEngine::setLimits(uint8_t panMin, uint8_t panCenter, uint8_t panMax,
+                            uint8_t tiltMin, uint8_t tiltCenter, uint8_t tiltMax) {
+    if (panMin > panMax) { const uint8_t t = panMin; panMin = panMax; panMax = t; }
+    if (tiltMin > tiltMax) { const uint8_t t = tiltMin; tiltMin = tiltMax; tiltMax = t; }
+    _panMin = panMin; _panMax = panMax;
+    _tiltMin = tiltMin; _tiltMax = tiltMax;
+    _panCenter = (uint8_t)clampf(panCenter, panMin, panMax);
+    _tiltCenter = (uint8_t)clampf(tiltCenter, tiltMin, tiltMax);
 }
 
 void ServoEngine::setIdleNoise(bool on, float panAmp, float tiltAmp) {
@@ -80,8 +93,8 @@ float ServoEngine::noise(float t, float phase) const {
 }
 
 void ServoEngine::writeServos(float panDeg, float tiltDeg) {
-    panDeg = clampf(panDeg, SERVO_PAN_MIN, SERVO_PAN_MAX);
-    tiltDeg = clampf(tiltDeg, SERVO_TILT_MIN, SERVO_TILT_MAX);
+    panDeg = clampf(panDeg, _panMin, _panMax);
+    tiltDeg = clampf(tiltDeg, _tiltMin, _tiltMax);
 
     // Angle (0..180°) -> largeur d'impulsion (µs) -> rapport cyclique LEDC.
     const float span = SERVO_MAX_US - SERVO_MIN_US;

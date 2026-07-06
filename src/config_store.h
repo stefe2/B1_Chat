@@ -11,6 +11,12 @@
 #include <Arduino.h>
 #include <Preferences.h>
 
+// Bornes mécaniques (degrés) d'un droïde, persistées individuellement.
+struct ServoCalib {
+    uint8_t panMin, panCenter, panMax;
+    uint8_t tiltMin, tiltCenter, tiltMax;
+};
+
 class ConfigStore {
 public:
     void begin();
@@ -27,9 +33,14 @@ public:
     String getName(uint16_t id);
     void   setName(uint16_t id, const String& name);
 
+    // Calibration servo d'un droïde (bornes de config.h si jamais réglée).
+    ServoCalib getCalib(uint16_t id);
+    void       setCalib(uint16_t id, const ServoCalib& c);
+
 private:
     Preferences _p;
     static void nameKey(uint16_t id, char out[8]);
+    static void calibKey(uint16_t id, char out[8]);
 };
 
 extern ConfigStore Config;

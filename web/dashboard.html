@@ -304,6 +304,8 @@ function handleEvent(obj) {
     log("⟵ " + obj.msg, "rx");
   } else if (obj.evt === "state") {
     log("⟵ state " + JSON.stringify(obj), "rx");
+  } else if (obj.evt === "calibData") {
+    applyCalibData(obj);
   } else {
     log("⟵ " + JSON.stringify(obj), "rx");
   }
@@ -378,6 +380,14 @@ function renderDroids() {
   sel.value = [...sel.options].some(o => o.value === cur) ? cur : "65535";
   if ([...calSel.options].some(o => o.value === calCur)) calSel.value = calCur;
   refreshSeqTargets();
+
+  // Première apparition d'un droïde à calibrer, ou bascule automatique
+  // (droïde précédent disparu) : va chercher sa calibration réelle.
+  const calNow = calSel.value ? Number(calSel.value) : null;
+  if (calNow !== null && calNow !== calibLoadedFor) {
+    calibLoadedFor = calNow;
+    requestCalib(calNow);
+  }
 
   function commitName(inp) {
     const id = Number(inp.dataset.id);
@@ -604,6 +614,33 @@ const CAL = {
 function calVal(k) { return Number($(CAL[k][0]).value); }
 function calTarget() { return $("calibTarget").value ? Number($("calibTarget").value) : null; }
 
+// Récupère la calibration réellement enregistrée sur le droïde ciblé et
+// synchronise les curseurs (au lieu de garder les valeurs par défaut ou
+// celles laissées par le droïde précédemment sélectionné).
+let calibLoadedFor = null;
+function requestCalib(target) {
+  if (target === null || target === undefined) return;
+  sendCmd({ cmd: "getCalib", target });
+}
+function applyCalibData(obj) {
+  const t = calTarget();
+  if (t === null || Number(obj.target) !== t) return; // la sélection a changé entre-temps
+  const vals = {
+    panMin: obj.panMin, panCtr: obj.panCenter, panMax: obj.panMax,
+    tiltMin: obj.tiltMin, tiltCtr: obj.tiltCenter, tiltMax: obj.tiltMax,
+  };
+  Object.keys(CAL).forEach(k => {
+    const [sId, vId] = CAL[k];
+    $(sId).value = vals[k];
+    $(vId).textContent = vals[k];
+  });
+}
+$("calibTarget").addEventListener("change", () => {
+  const t = calTarget();
+  calibLoadedFor = t;
+  requestCalib(t);
+});
+
 function sendCalib() {
   const t = calTarget(); if (t === null) return;
   sendCmd({
@@ -637,8 +674,10 @@ document.querySelectorAll("[data-goto]").forEach(btn => {
 });
 
 // --- Séquenceur -------------------------------------------------------------
+// Exécution 100% côté maître (seqRun/seqStop) ; le client ne fait qu'éditer
+// et sauvegarder les slots, voir src/sequence_store.h.
+const SEQ_STEP_MAX = 32;
 let seq = [];
-let seqTimer = null, seqIndex = 0, seqPlaying = false;
 let seqCatalog = [];
 
 function animOptions(sel) {
@@ -648,7 +687,7 @@ function targetOptions(sel) {
   let html = `<option value="65535" ${sel === 65535 ? "selected" : ""}>Tous</option>`;
   for (const id of [...droids.keys()].sort((a, b) => a - b)) {
     const d = droids.get(id);
-    html += `<option value="${id}" ${sel === id ? "selected" : ""}>${d.name || "B1-" + hex(id)} (${hex(id)})</option>`;
+    html += `<option value="${id}" ${sel === id ? "selected" : ""}>${escapeHtml(d.name || "B1-" + hex(id))} (${hex(id)})</option>`;
   }
   return html;
 }
@@ -691,28 +730,21 @@ function seqPayload() {
 // Rafraîchit les listes de cibles des étapes quand la liste de droïdes change.
 function refreshSeqTargets() { if (seq.length) renderSeq(); }
 
-$("seqAdd").onclick = () => { seq.push({ animId: 1, target: 65535, delay: 1500 }); renderSeq(); };
-
-function seqStop() { seqPlaying = false; clearTimeout(seqTimer); seqTimer = null; }
-function seqTick() {
-  if (!seqPlaying || seq.length === 0) return;
-  if (seqIndex >= seq.length) {
-    if ($("seqLoop").checked) { seqIndex = 0; }
-    else { seqStop(); log("Séquence terminée.", "sys"); return; }
+$("seqAdd").onclick = () => {
+  if (seq.length >= SEQ_STEP_MAX) {
+    log(`Limite de ${SEQ_STEP_MAX} étapes atteinte pour un slot.`, "sys");
+    return;
   }
-  const st = seq[seqIndex];
-  sendCmd({ cmd: "anim", target: st.target, animId: st.animId, seed: (Math.random()*4294967295)>>>0 });
-  const delay = Math.max(0, st.delay || 0);
-  seqIndex++;
-  seqTimer = setTimeout(seqTick, delay);
-}
+  seq.push({ animId: 1, target: 65535, delay: 1500 });
+  renderSeq();
+};
+
 $("seqPlay").onclick = () => {
   // Lance la séquence sauvegardée dans le slot sélectionné (exécution maître).
   sendCmd({ cmd: "seqRun", slot: seqSlot() });
   log(`Lecture slot ${seqSlot()} sur le maître…`, "sys");
 };
 $("seqStop").onclick = () => {
-  seqStop();
   sendCmd({ cmd: "seqStop" });
   log("Séquence arrêtée.", "sys");
 };

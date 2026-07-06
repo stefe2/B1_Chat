@@ -34,6 +34,12 @@ public:
     // Active/désactive le bruit d'idle et règle son amplitude (degrés).
     void setIdleNoise(bool on, float panAmp = 3.0f, float tiltAmp = 2.0f);
 
+    // Redéfinit les bornes mécaniques pan/tilt (calibration par droïde).
+    // Les valeurs invalides (min > max) sont corrigées ; le centre est
+    // ramené dans l'intervalle [min, max].
+    void setLimits(uint8_t panMin, uint8_t panCenter, uint8_t panMax,
+                   uint8_t tiltMin, uint8_t tiltCenter, uint8_t tiltMax);
+
     // Active/coupe physiquement les sorties PWM (protection des servos).
     // Désactivé : les broches sont détachées (aucun signal → servos libres).
     void setEnabled(bool en);
@@ -44,6 +50,11 @@ public:
 
 private:
     bool _enabled = true;
+
+    // Bornes mécaniques courantes (degrés) ; défauts posés dans begin(),
+    // remplaçables par setLimits() (calibration persistée par droïde).
+    uint8_t _panMin = 0, _panCenter = 90, _panMax = 180;
+    uint8_t _tiltMin = 0, _tiltCenter = 90, _tiltMax = 180;
 
     // Interpolation
     float _startPan = 0, _startTilt = 0;

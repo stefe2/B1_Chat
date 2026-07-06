@@ -101,6 +101,25 @@ void SerialConsole::pushSeqList() {
     Serial.print('\n');
 }
 
+void SerialConsole::pushCalibData(uint16_t target) {
+    if (!_clientReady) return;
+
+    const uint16_t t = target == MESH_TARGET_ALL ? Mesh.myId() : target;
+    const ServoCalib c = Config.getCalib(t);
+
+    JsonDocument doc;
+    doc["evt"] = "calibData";
+    doc["target"] = t;
+    doc["panMin"] = c.panMin;
+    doc["panCenter"] = c.panCenter;
+    doc["panMax"] = c.panMax;
+    doc["tiltMin"] = c.tiltMin;
+    doc["tiltCenter"] = c.tiltCenter;
+    doc["tiltMax"] = c.tiltMax;
+    serializeJson(doc, Serial);
+    Serial.print('\n');
+}
+
 void SerialConsole::pushSeqData(uint8_t slot, const StoredSequence& seq) {
     if (!_clientReady) return;
 
@@ -276,5 +295,38 @@ void SerialConsole::handleLine(const char* line) {
     } else if (!strcmp(cmd, "seqStop")) {
         if (_seqStopCb) _seqStopCb();
         log("seq stop");
+
+    } else if (!strcmp(cmd, "calib")) {
+        const uint16_t target = doc["target"] | (uint16_t)MESH_TARGET_ALL;
+        const uint8_t panMin     = doc["panMin"]     | SERVO_PAN_MIN;
+        const uint8_t panCenter  = doc["panCenter"]  | SERVO_PAN_CENTER;
+        const uint8_t panMax     = doc["panMax"]     | SERVO_PAN_MAX;
+        const uint8_t tiltMin    = doc["tiltMin"]    | SERVO_TILT_MIN;
+        const uint8_t tiltCenter = doc["tiltCenter"] | SERVO_TILT_CENTER;
+        const uint8_t tiltMax    = doc["tiltMax"]    | SERVO_TILT_MAX;
+
+        // Cache central (comme les noms) : permet à getCalib de répondre sans
+        // dépendre d'un aller-retour mesh vers un esclave distant.
+        const uint16_t cacheId = target == MESH_TARGET_ALL ? Mesh.myId() : target;
+        Config.setCalib(cacheId, ServoCalib{panMin, panCenter, panMax, tiltMin, tiltCenter, tiltMax});
+
+        CalibPayload p{target, panMin, panCenter, panMax, tiltMin, tiltCenter, tiltMax};
+        Mesh.send(MSG_CALIB, &p, sizeof(p));
+        if ((target == MESH_TARGET_ALL || target == Mesh.myId()) && _calibCb)
+            _calibCb(target, panMin, panCenter, panMax, tiltMin, tiltCenter, tiltMax);
+        log("calib -> %04X", target);
+
+    } else if (!strcmp(cmd, "getCalib")) {
+        const uint16_t target = doc["target"] | (uint16_t)MESH_TARGET_ALL;
+        pushCalibData(target);
+
+    } else if (!strcmp(cmd, "preview")) {
+        const uint16_t target = doc["target"] | (uint16_t)MESH_TARGET_ALL;
+        const uint8_t pan  = doc["pan"]  | SERVO_PAN_CENTER;
+        const uint8_t tilt = doc["tilt"] | SERVO_TILT_CENTER;
+        PreviewPayload p{target, pan, tilt};
+        Mesh.send(MSG_PREVIEW, &p, sizeof(p));
+        if ((target == MESH_TARGET_ALL || target == Mesh.myId()) && _previewCb)
+            _previewCb(target, pan, tilt);
     }
 }

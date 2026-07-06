@@ -48,6 +48,9 @@ et **son joué par le droïde maître** via un DFPlayer Mini + ampli externe.
 - Servos alimentés en **5 V externe** (BEC/UBEC), **jamais** sur le 3V3 de l'ESP32.
 - **Masse commune** obligatoire entre alimentation servos et ESP32.
 - Condensateur de découplage (≥ 470 µF) conseillé sur le rail 5 V des servos.
+- Bornes mécaniques (min/centre/max) définies par défaut dans `config.h`, mais
+  **calibrables à distance et persistées par droïde** (NVS) via la page web
+  (voir §10, commandes `calib`/`preview`).
 
 ### DFPlayer Mini + audio (maître uniquement)
 | Signal | Connexion |
@@ -141,6 +144,8 @@ struct MsgHeader {
 | `MSG_CONFIG` | `targetId, freq, amplitude, vitesse` (params d'anim) | Oui |
 | `MSG_SERVO` | `targetId, enabled` (active/coupe les servos) | Oui |
 | `MSG_HEARTBEAT` | `uptime, état` (présence ; bit0 = servos actifs) | Oui |
+| `MSG_CALIB` | `targetId, panMin/Center/Max, tiltMin/Center/Max` (bornes servo) | Oui |
+| `MSG_PREVIEW` | `targetId, pan, tilt` (positionnement transitoire, non persisté) | Oui |
 | `MSG_SOUND` | interne maître → DFPlayer | Non (local) |
 
 - `syncDelayMs` permet aux droïdes de **synchroniser** ou **décaler** une anim.
@@ -233,14 +238,21 @@ droïdes (via `MSG_HEARTBEAT`) et relaie les commandes.
   `{cmd:"name",id,name}`, `{cmd:"playTrack",track}`, `{cmd:"servo",target,enabled}`,
   `{cmd:"getConfig"}`, `{cmd:"seqList"}`, `{cmd:"seqSave",slot,name,loop,steps[]}`,
   `{cmd:"seqLoad",slot}`, `{cmd:"seqRun",slot}`, `{cmd:"seqStop"}`,
-  `{cmd:"seqDelete",slot}`
+  `{cmd:"seqDelete",slot}`,
+  `{cmd:"calib",target,panMin,panCenter,panMax,tiltMin,tiltCenter,tiltMax}`
+  (persisté sur le droïde ciblé), `{cmd:"preview",target,pan,tilt}`
+  (déplacement transitoire, non persisté), `{cmd:"getCalib",target}`
 - **Maître → PC** : `{evt:"droids",list:[...]}`, `{evt:"log",msg}`,
-  `{evt:"state",...}`, `{evt:"seqList",list:[...]}`, `{evt:"seqData",...}`
+  `{evt:"state",...}`, `{evt:"seqList",list:[...]}`, `{evt:"seqData",...}`,
+  `{evt:"calibData",target,panMin,panCenter,panMax,tiltMin,tiltCenter,tiltMax}`
+  (calibration réelle du droïde, servie depuis le cache du maître)
 
 ### Fonctions
 - Lister les droïdes détectés (le **maître en premier**, ID, RSSI, rôle)
 - Déclencher une animation (tous ou un droïde précis)
 - **Activer/couper les servos** par droïde (bouton par ligne, protège le matériel)
+- **Calibrer les servos** par droïde (bornes pan/tilt min/centre/max), avec
+  aperçu en direct et persistance sur le droïde ciblé
 - Régler le volume audio (**auto-sauvegardé** en NVS)
 - Nommer les droïdes (association ID → nom, persistée)
 - Régler les paramètres d'anim (fréquence, amplitude, vitesse ; auto-sauvegardés)

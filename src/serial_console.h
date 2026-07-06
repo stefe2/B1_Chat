@@ -5,7 +5,7 @@
 //
 //  Protocole : une ligne = un message JSON (voir project.md §10).
 //  - PC → maître : {cmd:"list"|"anim"|"config"|"volume"|"name"|"playTrack"|
-//                   "getConfig", ...}
+//                   "getConfig"|"calib"|"preview"|"getCalib", ...}
 //  - maître → PC : {evt:"droids"|"log"|"state", ...}
 //
 //  Les logs applicatifs passent par log() pour rester au format JSON et ne pas
@@ -42,6 +42,9 @@ public:
     void onSeqRun(void (*cb)(uint8_t slot)) { _seqRunCb = cb; }
     void onSeqStop(void (*cb)()) { _seqStopCb = cb; }
     void onSeqDelete(bool (*cb)(uint8_t slot)) { _seqDeleteCb = cb; }
+    void onCalib(void (*cb)(uint16_t target, uint8_t panMin, uint8_t panCenter, uint8_t panMax,
+                            uint8_t tiltMin, uint8_t tiltCenter, uint8_t tiltMax)) { _calibCb = cb; }
+    void onPreview(void (*cb)(uint16_t target, uint8_t pan, uint8_t tilt)) { _previewCb = cb; }
 
     // État servos du maître (pour l'afficher dans la liste).
     void setMasterServos(bool on) { _masterServos = on; }
@@ -68,10 +71,13 @@ private:
     void (*_seqRunCb)(uint8_t) = nullptr;
     void (*_seqStopCb)() = nullptr;
     bool (*_seqDeleteCb)(uint8_t) = nullptr;
+    void (*_calibCb)(uint16_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t) = nullptr;
+    void (*_previewCb)(uint16_t, uint8_t, uint8_t) = nullptr;
 
     void handleLine(const char* line);
     void pushSeqList();
     void pushSeqData(uint8_t slot, const StoredSequence& seq);
+    void pushCalibData(uint16_t target);
 };
 
 extern SerialConsole Console;

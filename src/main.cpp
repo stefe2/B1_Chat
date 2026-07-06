@@ -61,6 +61,16 @@ static void applyServos(bool en) {
     LOGF("servos %s", en ? "ACTIFS" : "COUPÉS");
 }
 
+// Persiste et applique une calibration reçue pour CE droïde (maître ou esclave).
+static void applyCalib(const CalibPayload& p) {
+    const ServoCalib c{p.panMin, p.panCenter, p.panMax, p.tiltMin, p.tiltCenter, p.tiltMax};
+    Config.setCalib(Mesh.myId(), c);
+    head.setLimits(c.panMin, c.panCenter, c.panMax, c.tiltMin, c.tiltCenter, c.tiltMax);
+    head.center();
+    LOGF("calibration appliquee (pan %u/%u/%u, tilt %u/%u/%u)",
+         p.panMin, p.panCenter, p.panMax, p.tiltMin, p.tiltCenter, p.tiltMax);
+}
+
 // Hook console : jouer une animation localement (maître).
 #if IS_MASTER
 static void playLocalAnim(uint8_t animId, uint32_t seed) {
@@ -115,6 +125,20 @@ static void onSeqRun(uint8_t slot) {
 static void onSeqStop() {
     gSeqPlaying = false;
 }
+
+// Hook console : calibration reçue (déjà filtrée sur target == ce droïde).
+static void onCalibCmd(uint16_t target, uint8_t panMin, uint8_t panCenter, uint8_t panMax,
+                        uint8_t tiltMin, uint8_t tiltCenter, uint8_t tiltMax) {
+    (void)target;
+    const CalibPayload p{target, panMin, panCenter, panMax, tiltMin, tiltCenter, tiltMax};
+    applyCalib(p);
+}
+
+// Hook console : aperçu transitoire (non persisté), déjà filtré sur target.
+static void onPreviewCmd(uint16_t target, uint8_t pan, uint8_t tilt) {
+    (void)target;
+    head.setTarget(pan, tilt, 150);
+}
 #endif
 
 static void onMeshMessage(uint8_t type, const uint8_t* payload, uint8_t len,
@@ -145,6 +169,16 @@ static void onMeshMessage(uint8_t type, const uint8_t* payload, uint8_t len,
         memcpy(&p, payload, sizeof(p));
         if (p.targetId == MESH_TARGET_ALL || p.targetId == Mesh.myId())
             applyServos(p.enabled != 0);
+    } else if (type == MSG_CALIB && len == sizeof(CalibPayload)) {
+        CalibPayload p;
+        memcpy(&p, payload, sizeof(p));
+        if (p.targetId == MESH_TARGET_ALL || p.targetId == Mesh.myId())
+            applyCalib(p);
+    } else if (type == MSG_PREVIEW && len == sizeof(PreviewPayload)) {
+        PreviewPayload p;
+        memcpy(&p, payload, sizeof(p));
+        if (p.targetId == MESH_TARGET_ALL || p.targetId == Mesh.myId())
+            head.setTarget(p.pan, p.tilt, 150);
     } else if (type == MSG_HEARTBEAT && len == sizeof(HeartbeatPayload)) {
 #if IS_MASTER
         HeartbeatPayload hb;
@@ -169,7 +203,6 @@ void setup() {
 
     head.begin();
     head.setIdleNoise(true);
-    head.center();
     anim.begin(&head);
 
     // État initial des servos : maître en pause si MASTER_ANIM_PAUSED.
@@ -192,6 +225,8 @@ void setup() {
     Console.onSeqRun(onSeqRun);
     Console.onSeqStop(onSeqStop);
     Console.onSeqDelete(onSeqDelete);
+    Console.onCalib(onCalibCmd);
+    Console.onPreview(onPreviewCmd);
     Console.setMasterServos(gServos);
 
     Audio.begin();
@@ -201,10 +236,14 @@ void setup() {
 
     if (Mesh.begin(GROUP_KEY)) {
         Mesh.onReceive(onMeshMessage);
+        // Calibration persistée de CE droïde (bornes par défaut si jamais réglée).
+        const ServoCalib c = Config.getCalib(Mesh.myId());
+        head.setLimits(c.panMin, c.panCenter, c.panMax, c.tiltMin, c.tiltCenter, c.tiltMax);
         LOGF("mesh prêt, id=%04X (servos %s)", Mesh.myId(), gServos ? "ACTIFS" : "COUPÉS");
     } else {
         LOGF("mesh: échec d'initialisation");
     }
+    head.center();
 }
 
 void loop() {

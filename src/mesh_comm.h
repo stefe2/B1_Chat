@@ -20,6 +20,8 @@ enum MeshMsgType : uint8_t {
     MSG_CONFIG    = 2,
     MSG_HEARTBEAT = 4,
     MSG_SERVO     = 5,
+    MSG_CALIB     = 6,
+    MSG_PREVIEW   = 7,
 };
 
 // Adresse « tous les droïdes » pour les charges utiles ciblées.
@@ -56,6 +58,20 @@ struct HeartbeatPayload {
 struct ServoPayload {
     uint16_t targetId;   // MESH_TARGET_ALL ou un srcId précis
     uint8_t  enabled;    // 1 = servos actifs, 0 = coupés
+};
+
+// Bornes mécaniques (degrés) persistées par le droïde ciblé.
+struct CalibPayload {
+    uint16_t targetId;
+    uint8_t  panMin, panCenter, panMax;
+    uint8_t  tiltMin, tiltCenter, tiltMax;
+};
+
+// Positionnement transitoire (aperçu), non persisté.
+struct PreviewPayload {
+    uint16_t targetId;
+    uint8_t  pan;
+    uint8_t  tilt;
 };
 #pragma pack(pop)
 

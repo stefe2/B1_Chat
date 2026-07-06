@@ -51,3 +51,23 @@ void ConfigStore::setName(uint16_t id, const String& name) {
     nameKey(id, key);
     _p.putString(key, name);
 }
+
+void ConfigStore::calibKey(uint16_t id, char out[8]) {
+    // Clé NVS courte : "c" + hex de l'id, ex. "c3A7C".
+    snprintf(out, 8, "c%04X", id);
+}
+
+ServoCalib ConfigStore::getCalib(uint16_t id) {
+    ServoCalib c{SERVO_PAN_MIN, SERVO_PAN_CENTER, SERVO_PAN_MAX,
+                 SERVO_TILT_MIN, SERVO_TILT_CENTER, SERVO_TILT_MAX};
+    char key[8];
+    calibKey(id, key);
+    if (_p.isKey(key)) _p.getBytes(key, &c, sizeof(c));
+    return c;
+}
+
+void ConfigStore::setCalib(uint16_t id, const ServoCalib& c) {
+    char key[8];
+    calibKey(id, key);
+    _p.putBytes(key, &c, sizeof(c));
+}
