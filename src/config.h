@@ -21,6 +21,12 @@
 // ROLE_MASTER est défini uniquement pour l'environnement maître.
 
 // ---------------------------------------------------------------------------
+//  LED de vie (onboard) — témoin d'exécution du programme
+// ---------------------------------------------------------------------------
+static const uint8_t PIN_LED_ONBOARD = 2;   // LED bleue intégrée DOIT DevKit V1
+static const uint16_t LED_BLINK_MS   = 500; // période de clignotement
+
+// ---------------------------------------------------------------------------
 //  Servos (tous les droïdes) — signal PWM
 // ---------------------------------------------------------------------------
 static const uint8_t PIN_SERVO_PAN  = 25;   // GPIO25 -> servo pan

@@ -256,7 +256,9 @@ par Firefox/Safari.
       → `src/config.h` créé. Build `slave` OK.
 - [x] 2. `servo_engine` : interpolation + easing + bruit d'idle.
       → `src/servo_engine.{h,cpp}` + banc de test dans `main.cpp`. Build OK.
-- [ ] 3. `mesh_comm` : ESP-NOW, en-tête, dédup, relais multi-sauts, **HMAC** + `MSG_REKEY`.
+- [x] 3. `mesh_comm` : ESP-NOW, en-tête, dédup, relais multi-sauts, **HMAC** + `MSG_REKEY`.
+      → `src/mesh_comm.{h,cpp}` (ID auto MAC, canal fixe, HMAC-SHA256 tronqué,
+      relais TTL). LED de vie onboard (GPIO2) ajoutée. Build master+slave OK.
 - [ ] 4. `animation` : keyframes + lecteur + RNG.
 - [ ] 5. `audio` : wrapper DFPlayer + mapping (maître).
 - [ ] 6. `droid` + `main.cpp` : machine à états et câblage des modules.
