@@ -5,7 +5,8 @@
 //
 //  Protocole : une ligne = un message JSON (voir project.md §10).
 //  - PC → maître : {cmd:"list"|"anim"|"config"|"volume"|"name"|"playTrack"|
-//                   "getConfig"|"calib"|"preview"|"getCalib", ...}
+//                   "getConfig"|"calib"|"preview"|"getCalib"|"getAnimDurations"|
+//                   "seqState", ...}
 //  - maître → PC : {evt:"droids"|"log"|"state", ...}
 //
 //  Les logs applicatifs passent par log() pour rester au format JSON et ne pas
@@ -30,6 +31,12 @@ public:
     void pushDroids();
     void pushState();
 
+    // Émet la durée indicative (ms) de chaque geste ({evt:"animDurations",...}).
+    void pushAnimDurations();
+
+    // Émet l'état de lecture d'une séquence ({evt:"seqState",...}).
+    void pushSeqState(bool playing, uint8_t slot, uint8_t index, uint8_t total);
+
     // Hooks optionnels déclenchés par les commandes reçues.
     void onAnim(void (*cb)(uint8_t animId, uint32_t seed)) { _animCb = cb; }
     void onVolume(void (*cb)(uint8_t volume)) { _volCb = cb; }
@@ -45,6 +52,7 @@ public:
     void onCalib(void (*cb)(uint16_t target, uint8_t panMin, uint8_t panCenter, uint8_t panMax,
                             uint8_t tiltMin, uint8_t tiltCenter, uint8_t tiltMax)) { _calibCb = cb; }
     void onPreview(void (*cb)(uint16_t target, uint8_t pan, uint8_t tilt)) { _previewCb = cb; }
+    void onSeqQuery(void (*cb)()) { _seqQueryCb = cb; }
 
     // État servos du maître (pour l'afficher dans la liste).
     void setMasterServos(bool on) { _masterServos = on; }
@@ -73,11 +81,14 @@ private:
     bool (*_seqDeleteCb)(uint8_t) = nullptr;
     void (*_calibCb)(uint16_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t) = nullptr;
     void (*_previewCb)(uint16_t, uint8_t, uint8_t) = nullptr;
+    void (*_seqQueryCb)() = nullptr;
 
     void handleLine(const char* line);
     void pushSeqList();
     void pushSeqData(uint8_t slot, const StoredSequence& seq);
     void pushCalibData(uint16_t target);
+    void pushSeqSaved(bool ok, uint8_t slot, const char* name);
+    void pushSeqDeleted(bool ok, uint8_t slot);
 };
 
 extern SerialConsole Console;

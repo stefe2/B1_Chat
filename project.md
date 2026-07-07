@@ -174,6 +174,16 @@ struct MsgHeader {
 | 5 | SCAN_SLOW | scan panoramique lent |
 | 6 | ALERT_SNAP | redressement brusque (alerte) |
 | 7 | TRACK | suivi d'une cible imaginaire |
+| 8 | GLITCH_STUTTER | à-coups erratiques (malfonction comique) |
+| 9 | CONFUSED_TILT | balayage lent et hésitant (« il n'a rien compris ») |
+| 10 | DOUBLE_TAKE | regard vif suivi d'un retour brusque |
+| 11 | SLEEPY_DROOP | s'endort puis sursaute |
+| 12 | TARGET_LOCK | snap puis immobilité rigide |
+| 13 | WHIRR_SEARCH | recherche nerveuse (plus rapide que SCAN_SLOW) |
+| 14 | SIGNAL_GLITCH | rafale d'interférence radio |
+| 15 | GREETING_NOD | salut ample et doux (public/conventions) |
+| 16 | POWER_DOWN | affaissement complet, **boucle** jusqu'à interruption |
+| 17 | TALK | oscillation tilt rapide façon bouche qui parle, **boucle** ; pensé pour accompagner une piste audio |
 
 ---
 

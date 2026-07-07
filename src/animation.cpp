@@ -40,6 +40,40 @@ const KeyFrame TRACK[] = {
     { 20,  10, 500, 300}, { 35,  -5, 450, 400}, {  5,  12, 550, 300},
     {-15,  -8, 500, 400}, {  0,   0, 500, 200},
 };
+const KeyFrame GLITCH_STUTTER[] = {
+    { -8,   3,  80,  60}, {  6,  -4,  70,  60}, { -5,   5,  60,  50},
+    {  4,  -2,  70,  60}, {  0,   0,  90, 100},
+};
+const KeyFrame CONFUSED_TILT[] = {
+    {-20,  10, 900, 900}, { 20,   8, 1000, 900}, {  0,   0, 800, 400},
+};
+const KeyFrame DOUBLE_TAKE[] = {
+    { 25,   0, 150, 150}, {-30,   0, 120, 250}, {  5,   0, 200, 150},
+    {  0,   0, 200, 100},
+};
+const KeyFrame SLEEPY_DROOP[] = {
+    {  0, -25, 1400, 1200}, {  0,   5, 150, 150}, {  0,   0, 400, 200},
+};
+const KeyFrame TARGET_LOCK[] = {
+    { 45,  -5, 180, 1400}, {  0,   0, 400, 200},
+};
+const KeyFrame WHIRR_SEARCH[] = {
+    {-50,   5, 500, 150}, { 30,  -5, 450, 150}, {-40,   8, 500, 150},
+    { 50,   0, 550, 150}, {  0,   0, 500, 200},
+};
+const KeyFrame SIGNAL_GLITCH[] = {
+    {-10,   6,  50,  40}, {  8,  -6,  50,  40}, { -6,   4,  50,  40},
+    {  5,  -3,  50,  40}, { -3,   2,  50,  40}, {  0,   0, 150, 150},
+};
+const KeyFrame GREETING_NOD[] = {
+    {  0,  20, 700, 500}, {  0,   0, 700, 300},
+};
+const KeyFrame POWER_DOWN[] = {
+    {  0, -30, 1600, 2000},
+};
+const KeyFrame TALK[] = {
+    {  0, -10,  90,  60}, {  0,   6,  90,  60},
+};
 
 struct AnimDef {
     const KeyFrame* frames;
@@ -49,15 +83,29 @@ struct AnimDef {
 
 // L'ordre doit suivre l'enum AnimId. IDLE = pas de keyframes (bruit d'idle seul).
 const AnimDef ANIMS[ANIM_COUNT] = {
-    {nullptr,       0,                              false},  // ANIM_IDLE
-    {LOOK_AROUND,   sizeof(LOOK_AROUND) / sizeof(KeyFrame),  false},
-    {NOD_YES,       sizeof(NOD_YES) / sizeof(KeyFrame),      false},
-    {SHAKE_NO,      sizeof(SHAKE_NO) / sizeof(KeyFrame),     false},
-    {CURIOUS_TILT,  sizeof(CURIOUS_TILT) / sizeof(KeyFrame), false},
-    {SCAN_SLOW,     sizeof(SCAN_SLOW) / sizeof(KeyFrame),    false},
-    {ALERT_SNAP,    sizeof(ALERT_SNAP) / sizeof(KeyFrame),   false},
-    {TRACK,         sizeof(TRACK) / sizeof(KeyFrame),        false},
+    {nullptr,          0,                                     false},  // ANIM_IDLE
+    {LOOK_AROUND,      sizeof(LOOK_AROUND) / sizeof(KeyFrame),      false},
+    {NOD_YES,          sizeof(NOD_YES) / sizeof(KeyFrame),          false},
+    {SHAKE_NO,         sizeof(SHAKE_NO) / sizeof(KeyFrame),         false},
+    {CURIOUS_TILT,     sizeof(CURIOUS_TILT) / sizeof(KeyFrame),     false},
+    {SCAN_SLOW,        sizeof(SCAN_SLOW) / sizeof(KeyFrame),        false},
+    {ALERT_SNAP,       sizeof(ALERT_SNAP) / sizeof(KeyFrame),       false},
+    {TRACK,            sizeof(TRACK) / sizeof(KeyFrame),            false},
+    {GLITCH_STUTTER,   sizeof(GLITCH_STUTTER) / sizeof(KeyFrame),   false},
+    {CONFUSED_TILT,    sizeof(CONFUSED_TILT) / sizeof(KeyFrame),    false},
+    {DOUBLE_TAKE,      sizeof(DOUBLE_TAKE) / sizeof(KeyFrame),      false},
+    {SLEEPY_DROOP,     sizeof(SLEEPY_DROOP) / sizeof(KeyFrame),     false},
+    {TARGET_LOCK,      sizeof(TARGET_LOCK) / sizeof(KeyFrame),      false},
+    {WHIRR_SEARCH,     sizeof(WHIRR_SEARCH) / sizeof(KeyFrame),     false},
+    {SIGNAL_GLITCH,    sizeof(SIGNAL_GLITCH) / sizeof(KeyFrame),    false},
+    {GREETING_NOD,     sizeof(GREETING_NOD) / sizeof(KeyFrame),     false},
+    {POWER_DOWN,       sizeof(POWER_DOWN) / sizeof(KeyFrame),       true},   // boucle
+    {TALK,             sizeof(TALK) / sizeof(KeyFrame),             true},   // boucle
 };
+
+// Valeur indicative (ms) utilisée pour les gestes sans durée finie naturelle
+// (IDLE : pas de keyframes ; POWER_DOWN/TALK : bouclent indéfiniment).
+const uint32_t LOOPING_ANIM_DEFAULT_MS = 2000;
 
 }  // namespace
 
@@ -77,9 +125,21 @@ int AnimationPlayer::jitter(uint8_t amp) {
 }
 
 uint8_t AnimationPlayer::randomAnimId(uint32_t seed) {
-    // Anims « actives » : 1..ANIM_COUNT-1 (on exclut IDLE).
+    // Anims « actives » tirables au hasard : 1..ANIM_POWER_DOWN-1 (exclut IDLE, et
+    // exclut POWER_DOWN/TALK qui sont des gestes à déclenchement manuel uniquement).
     uint32_t r = seed * 1103515245u + 12345u;
-    return 1 + (uint8_t)((r >> 16) % (ANIM_COUNT - 1));
+    return 1 + (uint8_t)((r >> 16) % (ANIM_POWER_DOWN - 1));
+}
+
+uint32_t AnimationPlayer::totalDurationMs(uint8_t animId) {
+    if (animId >= ANIM_COUNT) return 0;
+    const AnimDef& a = ANIMS[animId];
+    if (a.count == 0 || a.loop) return LOOPING_ANIM_DEFAULT_MS;
+    uint32_t total = 0;
+    for (uint8_t i = 0; i < a.count; i++) {
+        total += a.frames[i].moveMs + a.frames[i].holdMs;
+    }
+    return total;
 }
 
 void AnimationPlayer::play(uint8_t animId, uint32_t seed) {

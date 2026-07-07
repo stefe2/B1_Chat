@@ -17,15 +17,25 @@
 
 // Identifiants d'animation (doivent rester alignés avec project.md §6).
 enum AnimId : uint8_t {
-    ANIM_IDLE        = 0,
-    ANIM_LOOK_AROUND = 1,
-    ANIM_NOD_YES     = 2,
-    ANIM_SHAKE_NO    = 3,
-    ANIM_CURIOUS_TILT= 4,
-    ANIM_SCAN_SLOW   = 5,
-    ANIM_ALERT_SNAP  = 6,
-    ANIM_TRACK       = 7,
-    ANIM_COUNT       = 8,
+    ANIM_IDLE           = 0,
+    ANIM_LOOK_AROUND    = 1,
+    ANIM_NOD_YES        = 2,
+    ANIM_SHAKE_NO       = 3,
+    ANIM_CURIOUS_TILT   = 4,
+    ANIM_SCAN_SLOW      = 5,
+    ANIM_ALERT_SNAP     = 6,
+    ANIM_TRACK          = 7,
+    ANIM_GLITCH_STUTTER = 8,
+    ANIM_CONFUSED_TILT  = 9,
+    ANIM_DOUBLE_TAKE    = 10,
+    ANIM_SLEEPY_DROOP   = 11,
+    ANIM_TARGET_LOCK    = 12,
+    ANIM_WHIRR_SEARCH   = 13,
+    ANIM_SIGNAL_GLITCH  = 14,
+    ANIM_GREETING_NOD   = 15,
+    ANIM_POWER_DOWN     = 16,  // boucle jusqu'à interruption par un autre geste
+    ANIM_TALK           = 17,  // boucle ; pensé pour accompagner une piste audio
+    ANIM_COUNT          = 18,
 };
 
 class AnimationPlayer {
@@ -44,8 +54,14 @@ public:
     bool isPlaying() const { return _playing; }
     uint8_t current() const { return _animId; }
 
-    // Tire un identifiant d'animation « active » au hasard (hors IDLE).
+    // Tire un identifiant d'animation « active » au hasard (hors IDLE, hors gestes
+    // déclenchés manuellement uniquement comme POWER_DOWN/TALK).
     static uint8_t randomAnimId(uint32_t seed);
+
+    // Durée totale indicative (ms) d'un geste (somme des keyframes). Pour un geste en
+    // boucle (POWER_DOWN, TALK) ou IDLE, retourne une valeur par défaut indicative
+    // puisqu'il n'y a pas de durée finie naturelle.
+    static uint32_t totalDurationMs(uint8_t animId);
 
 private:
     ServoEngine* _engine = nullptr;

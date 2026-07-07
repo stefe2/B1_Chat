@@ -3,6 +3,7 @@
 #include "mesh_comm.h"
 #include "registry.h"
 #include "config_store.h"
+#include "animation.h"
 
 #include <ArduinoJson.h>
 #include <stdarg.h>
@@ -74,6 +75,57 @@ void SerialConsole::pushState() {
     doc["freq"] = f;
     doc["amp"] = a;
     doc["speed"] = s;
+    serializeJson(doc, Serial);
+    Serial.print('\n');
+}
+
+void SerialConsole::pushAnimDurations() {
+    if (!_clientReady) return;
+
+    JsonDocument doc;
+    doc["evt"] = "animDurations";
+    JsonArray arr = doc["list"].to<JsonArray>();
+    for (uint8_t i = 0; i < ANIM_COUNT; i++) {
+        JsonObject o = arr.add<JsonObject>();
+        o["animId"] = i;
+        o["ms"] = AnimationPlayer::totalDurationMs(i);
+    }
+    serializeJson(doc, Serial);
+    Serial.print('\n');
+}
+
+void SerialConsole::pushSeqState(bool playing, uint8_t slot, uint8_t index, uint8_t total) {
+    if (!_clientReady) return;
+
+    JsonDocument doc;
+    doc["evt"] = "seqState";
+    doc["playing"] = playing;
+    doc["slot"] = slot;
+    doc["index"] = index;
+    doc["total"] = total;
+    serializeJson(doc, Serial);
+    Serial.print('\n');
+}
+
+void SerialConsole::pushSeqSaved(bool ok, uint8_t slot, const char* name) {
+    if (!_clientReady) return;
+
+    JsonDocument doc;
+    doc["evt"] = "seqSaved";
+    doc["ok"] = ok;
+    doc["slot"] = slot;
+    doc["name"] = name;
+    serializeJson(doc, Serial);
+    Serial.print('\n');
+}
+
+void SerialConsole::pushSeqDeleted(bool ok, uint8_t slot) {
+    if (!_clientReady) return;
+
+    JsonDocument doc;
+    doc["evt"] = "seqDeleted";
+    doc["ok"] = ok;
+    doc["slot"] = slot;
     serializeJson(doc, Serial);
     Serial.print('\n');
 }
@@ -196,6 +248,9 @@ void SerialConsole::handleLine(const char* line) {
     } else if (!strcmp(cmd, "getConfig")) {
         pushState();
 
+    } else if (!strcmp(cmd, "getAnimDurations")) {
+        pushAnimDurations();
+
     } else if (!strcmp(cmd, "anim")) {
         const uint16_t target = doc["target"] | (uint16_t)MESH_TARGET_ALL;
         const uint8_t  animId = doc["animId"] | 0;
@@ -266,6 +321,7 @@ void SerialConsole::handleLine(const char* line) {
         bool ok = false;
         if (_seqSaveCb) ok = _seqSaveCb(slot, seq);
         log("seq save slot=%u %s", slot, ok ? "OK" : "ERR");
+        pushSeqSaved(ok, slot, seq.name);
         pushSeqList();
 
     } else if (!strcmp(cmd, "seqLoad")) {
@@ -285,6 +341,7 @@ void SerialConsole::handleLine(const char* line) {
         bool ok = false;
         if (_seqDeleteCb) ok = _seqDeleteCb(slot);
         log("seq del slot=%u %s", slot, ok ? "OK" : "ERR");
+        pushSeqDeleted(ok, slot);
         pushSeqList();
 
     } else if (!strcmp(cmd, "seqRun")) {
@@ -295,6 +352,9 @@ void SerialConsole::handleLine(const char* line) {
     } else if (!strcmp(cmd, "seqStop")) {
         if (_seqStopCb) _seqStopCb();
         log("seq stop");
+
+    } else if (!strcmp(cmd, "seqState")) {
+        if (_seqQueryCb) _seqQueryCb();
 
     } else if (!strcmp(cmd, "calib")) {
         const uint16_t target = doc["target"] | (uint16_t)MESH_TARGET_ALL;

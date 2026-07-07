@@ -42,6 +42,12 @@ static StoredSequence gSeq;
 static bool gSeqPlaying = false;
 static uint8_t gSeqIndex = 0;
 static uint32_t gSeqNextAt = 0;
+static uint8_t gSeqSlot = 0;
+// Vrai si l'étape en cours cible ce maître : on attend alors la fin réelle de
+// l'animation locale (anim.isPlaying()) en plus du délai avant d'avancer. Pour
+// une étape ciblant uniquement un esclave distant, cette donnée n'existe pas
+// côté maître (pas d'accusé de réception mesh) : on reste sur le délai seul.
+static bool gSeqWaitLocal = false;
 #endif
 
 // Suivi hors-ligne (maître) : mémorise l'état en ligne pour signaler les pertes.
@@ -115,15 +121,26 @@ static void onSeqRun(uint8_t slot) {
     if (!Sequences.load(slot, gSeq) || gSeq.stepCount == 0) {
         gSeqPlaying = false;
         LOGF("sequence slot=%u introuvable/vide", slot);
+        Console.pushSeqState(false, slot, 0, 0);
         return;
     }
+    gSeqSlot = slot;
     gSeqPlaying = true;
     gSeqIndex = 0;
+    gSeqWaitLocal = false;
     gSeqNextAt = millis();
+    Console.pushSeqState(true, gSeqSlot, gSeqIndex, gSeq.stepCount);
 }
 
 static void onSeqStop() {
     gSeqPlaying = false;
+    Console.pushSeqState(false, gSeqSlot, gSeqIndex, gSeq.stepCount);
+}
+
+// Répond à une demande ponctuelle d'état (ex. dashboard qui se connecte en
+// cours de lecture, sans attendre la prochaine transition d'étape).
+static void onSeqQueryCmd() {
+    Console.pushSeqState(gSeqPlaying, gSeqSlot, gSeqIndex, gSeq.stepCount);
 }
 
 // Hook console : calibration reçue (déjà filtrée sur target == ce droïde).
@@ -225,6 +242,7 @@ void setup() {
     Console.onSeqRun(onSeqRun);
     Console.onSeqStop(onSeqStop);
     Console.onSeqDelete(onSeqDelete);
+    Console.onSeqQuery(onSeqQueryCmd);
     Console.onCalib(onCalibCmd);
     Console.onPreview(onPreviewCmd);
     Console.setMasterServos(gServos);
@@ -270,26 +288,37 @@ void loop() {
     }
 
 #if IS_MASTER
-    // Séquence persistée en cours (prioritaire sur le random maître).
-    if (gSeqPlaying && gServos && now >= gSeqNextAt) {
+    // Séquence persistée en cours (prioritaire sur le random maître). Si l'étape en
+    // cours cible ce maître, on attend aussi la fin réelle de l'animation locale
+    // (gSeqWaitLocal && anim.isPlaying()) en plus du délai, pour ne pas couper un
+    // mouvement en cours — impossible à garantir pour les esclaves distants (pas
+    // d'accusé de réception mesh), qui restent sur le délai seul.
+    if (gSeqPlaying && gServos && now >= gSeqNextAt && !(gSeqWaitLocal && anim.isPlaying())) {
         if (gSeq.stepCount == 0) {
             gSeqPlaying = false;
+            Console.pushSeqState(false, gSeqSlot, gSeqIndex, gSeq.stepCount);
         } else {
             if (gSeqIndex >= gSeq.stepCount) {
-                if (gSeq.loop) gSeqIndex = 0;
-                else gSeqPlaying = false;
+                if (gSeq.loop) {
+                    gSeqIndex = 0;
+                } else {
+                    gSeqPlaying = false;
+                    Console.pushSeqState(false, gSeqSlot, gSeqIndex, gSeq.stepCount);
+                }
             }
             if (gSeqPlaying) {
                 const SeqStep& st = gSeq.steps[gSeqIndex];
                 const uint32_t seed = (uint32_t)esp_random();
                 AnimPayload p{st.targetId, st.animId, 0, seed};
                 Mesh.send(MSG_ANIM, &p, sizeof(p));
-                if (st.targetId == MESH_TARGET_ALL || st.targetId == Mesh.myId()) {
+                gSeqWaitLocal = (st.targetId == MESH_TARGET_ALL || st.targetId == Mesh.myId());
+                if (gSeqWaitLocal) {
                     anim.play(st.animId, seed);
                     Audio.playForAnim(st.animId, seed);
                 }
                 gSeqNextAt = now + st.delayMs;
                 gSeqIndex++;
+                Console.pushSeqState(true, gSeqSlot, gSeqIndex, gSeq.stepCount);
             }
         }
     }
