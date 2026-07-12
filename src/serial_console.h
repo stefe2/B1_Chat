@@ -7,7 +7,7 @@
 //  - PC → maître : {cmd:"list"|"anim"|"config"|"volume"|"name"|"playTrack"|
 //                   "getConfig"|"calib"|"preview"|"getCalib"|"getAnimDurations"|
 //                   "seqState"|"servo"|"autoAnim"|"getMeshTopology"|"getAll", ...}
-//  - maître → PC : {evt:"droids"|"log"|"state"|"meshTopology"|"err"|"allDone", ...}
+//  - maître → PC : {evt:"droids"|"log"|"config"|"meshTopology"|"err"|"allDone", ...}
 //
 //  Les logs applicatifs passent par log() pour rester au format JSON et ne pas
 //  polluer le protocole. Des hooks permettent au firmware d'agir sur les

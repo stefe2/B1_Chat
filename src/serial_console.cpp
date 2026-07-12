@@ -89,7 +89,9 @@ void SerialConsole::pushState() {
     uint8_t f, a, s;
     Config.animParams(f, a, s);
     JsonDocument doc;
-    doc["evt"] = "state";
+    // "config" (contrat §3) : la console peuple ses curseurs volume/freq/amp/
+    // speed a la connexion. (Anciennement evt:"state", jamais interprete.)
+    doc["evt"] = "config";
     doc["volume"] = Config.volume();
     doc["freq"] = f;
     doc["amp"] = a;
@@ -290,6 +292,7 @@ void SerialConsole::handleLine(const char* line) {
         JsonArray caps = ack["caps"].to<JsonArray>();
         caps.add("err");
         caps.add("getAll");
+        caps.add("config");
         serializeJson(ack, Serial);
         Serial.print('\n');
         return;
