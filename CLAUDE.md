@@ -1,248 +1,217 @@
-# CLAUDE.md
+# CLAUDE.md — Projet B1 Chat (contrôle multi-droïdes B1 Battle Droid)
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Fichier de suivi unique du projet (fusion de l'ancien `project.md` et du CLAUDE.md
+de la console — **à maintenir à jour à chaque étape terminée**, demande explicite
+de l'utilisateur).
 
-## What this project is
+## Vue d'ensemble
 
-**B1 Chat — Console de supervision** (v0.8.0): a WPF (net8.0-windows) desktop app supervising a
-mesh network of ESP32-based "B1" droids (animated droid heads: pan/tilt servos, gesture
-animations, audio on the master) over a USB serial connection to a "master" ESP32. A
-`Microsoft.Web.WebView2.Wpf.WebView2` control renders `wwwroot/index.html`, which contains the
-entire dashboard UI (single file: HTML + CSS + JS, all in French). Originally a browser-only app
-using the Web Serial API; this project replaced that with a real `System.IO.Ports.SerialPort` on
-the C# side. Verified end-to-end against real ESP32 hardware.
+Deux moitiés :
 
-The user does **not** have the firmware source code (it references `src/sequence_store.h` in a
-repo we don't have). Everything here is console-side; proposed firmware protocol extensions are
-specified in [FIRMWARE-CONTRACT.md](FIRMWARE-CONTRACT.md) (audio track in `seqSave`,
-`getTrackDurations`, documented `getConfig` reply, atomic `setMulti`, play-from-step).
+1. **Firmware ESP32** (ce dépôt, PlatformIO/Arduino) : pilote plusieurs têtes de
+   droïdes B1 (2 servos pan/tilt chacune) en réseau **ESP-NOW mesh multi-sauts**,
+   avec animations fluides/organiques coordonnées par un **maître** qui joue aussi
+   le son (DFPlayer Mini + ampli). Réglages persistés en NVS.
+2. **Console de supervision** (dépôt séparé, WPF net8.0-windows + WebView2, v0.8.x) :
+   application de bureau qui possède le port série (`System.IO.Ports`) et rend
+   **`index.html`** — la page unique de l'UI (HTML+CSS+JS inline, tout en français).
+   **`index.html` à la racine de ce dépôt est la copie de travail de cette page**
+   (remplaçant direct de l'ancien `web/dashboard_V7.html`) ; le C# la charge depuis
+   son `wwwroot/`. `FIRMWARE-CONTRACT.md` (copié du dépôt console) liste les
+   extensions de protocole que la console attend du firmware.
 
-Design inspiration: **KyberEditor** (`C:\Program Files\KyberEditor`), a WPF+WebView2 companion
-app for an ESP32 droid controller from the droid-builder community — mined for UX patterns
-(commit/revert sync, field-by-field reconcile, bundled espflash, markdown help viewer). For the
-general WPF+WebView2 bridge pattern, see the sibling project `../csharp-webview2-test`.
+## Commandes
 
-## Commands
+- `pio run -e b1` — compile le firmware (pio.exe : `%USERPROFILE%\.platformio\penv\Scripts\pio.exe`)
+- `pio run -e b1 -t upload` — flash une carte (rôle choisi par `IS_MASTER` dans `src/config.h` **avant** de flasher : 1 = maître, un seul par réseau ; 0 = esclave)
+- `tools\espflash.exe write-bin --port COMx -B 460800 0x10000 .pio\build\b1\firmware.bin` — flash sans PlatformIO (espflash 4.4.0, aussi utilisé par la carte Firmware de la console)
 
-- `dotnet build` — compile (auto-increments `build.number`)
-- `dotnet run` — build and launch
-- `bin/Debug/net8.0-windows/b1-chat-console.exe` — run the already-built exe
-- `dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true` — standalone single-file exe (~154 MB) in `bin/Release/net8.0-windows/win-x64/publish/`
-- `makensis installer\b1-chat-console.nsi` — build the Windows installer from the publish output → `installer/b1-chat-console-setup-<version>.exe` (~46 MB). Requires NSIS (`winget install NSIS.NSIS` or portable zip). Per-user install (no admin), WebView2 runtime check, French/English UI.
+## Matériel (DOIT ESP32 DevKit V1)
 
-There are no configured test scripts — see "How UI changes were verified" below.
-
-## Versioning
-
-- `<VersionPrefix>` in the csproj = semantic version; **bump the minor when a roadmap phase completes** (0.8.0 = phases 1–9 done).
-- `build.number` (repo root) auto-increments on **every** build via the `IncrementBuildNumber` MSBuild target → `FileVersion 0.8.0.N`, `InformationalVersion "0.8.0+build.N"`. Never edit by hand.
-- Shown in the window title, the header sub-line, and a startup log line (page sends `{type:"getAppInfo"}` → host replies `{type:"appInfo", version}`).
-- The NSIS script's `APPVERSION` default must be kept in sync when bumping (or override: `makensis /DAPPVERSION=x.y.z …`).
-
-## Architecture
-
-### Files
-
-| Path | Role |
+| Signal | GPIO |
 | --- | --- |
-| `MainWindow.xaml.cs` | All C#: serial port, JS bridge, settings, file dialogs, sequence library storage, espflash runner |
-| `wwwroot/index.html` | Entire dashboard (~2000 lines, copied to output on build; editable without recompiling — relaunch the exe) |
-| `b1-chat-console.csproj` | net8.0-windows, WPF, WebView2 + System.IO.Ports; version system; copies `wwwroot\**` and `tools\**` |
-| `installer/b1-chat-console.nsi` | NSIS installer script (**must stay UTF-8 with BOM** or accents get mangled) |
-| `FIRMWARE-CONTRACT.md` | Proposed firmware protocol extensions (phase 8, docs-only) |
-| `build.number` | Auto-incremented build counter |
-| `tools/espflash.exe` | **Not committed/bundled yet** — see Flashing below |
+| Servo PAN | GPIO25 |
+| Servo TILT | GPIO26 |
+| DFPlayer RX (maître) | GPIO17 (TX2), via 1 kΩ |
+| DFPlayer TX (maître) | GPIO16 (RX2) |
+| DFPlayer BUSY (maître) | GPIO4 (câblé, **pas encore exploité**) |
+| LED de vie | GPIO2 (onboard) |
 
-### Two message vocabularies (do not conflate)
+- Servos en 5 V externe (BEC), masse commune, condo ≥ 470 µF conseillé.
+- Audio : DAC_L/DAC_R du DFPlayer → ampli externe (PAM8403) → 1 haut-parleur (maître).
+- Broches à éviter : strapping GPIO0/2/5/12/15 ; input-only GPIO34-39.
+- 4-6 droïdes prévus (extensible), servos SG90/MG996R.
 
-**1. Transport-control** — envelope between page and C# host via
-`window.chrome.webview.postMessage` / `PostWebMessageAsJson`. Discriminated by `type`:
+## Architecture firmware (`src/`)
 
-Page → host: `listPorts` · `open {port}` · `close` · `write {data}` · `getAppInfo` ·
-`saveFile {suggestedName, content}` · `openFile {purpose}` · `pickBin` ·
-`flash {path, address, port}` · `libList` · `libSave {id, item}` · `libDelete {id}`
+Firmware **unique** ; rôle par build (`IS_MASTER`), identité auto (srcId 16 bits =
+2 derniers octets de la MAC — brancher → flasher → terminé, aucun ID à gérer).
 
-Host → page: `ports {list, lastPort}` · `opened {ok, port, error?}` · `closed {unexpected?}` ·
-`line {data}` · `error {message}` · `appInfo {version}` · `fileSaved {ok, path?, error?, cancelled?}` ·
-`fileOpened {ok, purpose, name?, content?, cancelled?}` · `binPicked {ok, path?, name?, size?}` ·
-`flashLog {line}` · `flashDone {ok, exitCode?, error?}` · `libList {list}` ·
-`libSaved {ok, id?, error?}` · `libDeleted {ok, id?, error?}`
-
-`openFile.purpose` routes the reply in the page: `"sequence"` → `importSequence()`, `"backup"` → `startRestore()`.
-
-**2. Firmware protocol** — JSON-lines spoken with the ESP32 master (115200 baud, `\n`-terminated,
-UTF-8). Travels *inside* transport messages (outbound `{type:"write", data: json+"\n"}`, inbound
-`{type:"line", data}` parsed → `handleEvent()`). Discriminated by `cmd` (outbound) / `evt` (inbound):
-
-Commands: `hello` · `ping` · `list` · `getConfig` · `config {target,freq,amp,speed}` ·
-`name {id,name}` · `servo {target,enabled}` · `autoAnim {target,enabled}` ·
-`anim {target,animId,seed}` · `playTrack {track}` · `volume {value}` ·
-`preview {target,pan,tilt}` · `calib {target,panMin,panCenter,panMax,tiltMin,tiltCenter,tiltMax}` ·
-`getCalib {target}` · `getAnimDurations` · `getMeshTopology` · `seqList` · `seqLoad {slot}` ·
-`seqSave {slot,name,loop,steps}` · `seqDelete {slot}` · `seqRun {slot}` · `seqStop` · `seqState`
-
-Events: `hello {ok}` · `droids {list:[{id,mac,name,age,rssi,state,role,servos,autoAnim}]}` ·
-`log {msg}` · `state` · `calibData {target + 6 fields}` · `meshTopology {links:[{from,to,rssi}]}` ·
-`animDurations {list:[{animId,ms}]}` · `seqList {list:[{slot,name,stepCount,loop}]}` ·
-`seqData {slot,name,loop,steps}` · `seqSaved {ok,slot,name}` · `seqDeleted {ok,slot}` ·
-`seqState {playing,slot,index,total}`
-
-**Note**: the `getConfig` reply shape is unknown (falls through to the generic log) — the sliders
-(volume/freq/amp/speed) are never populated from the device. See FIRMWARE-CONTRACT.md §3.
-
-### Key constants (page script)
-
-`ANIMS` (18 gestures, ids 0–17, aligned with firmware `animation.h`: IDLE, LOOK_AROUND, NOD_YES,
-SHAKE_NO, CURIOUS_TILT, SCAN_SLOW, ALERT_SNAP, TRACK, GLITCH_STUTTER, CONFUSED_TILT, DOUBLE_TAKE,
-SLEEPY_DROOP, TARGET_LOCK, WHIRR_SEARCH, SIGNAL_GLITCH, GREETING_NOD, POWER_DOWN, TALK) ·
-`SEQ_STEP_MAX = 32` · `SEQ_SLOT_MAX = 8` · `TRACK_COUNT = 10` · target `65535` = "Tous" (broadcast) ·
-droid considered "perdu" after ~6 s without signal (master is always "local"/online).
-
-### C# host (`MainWindow.xaml.cs`)
-
-- `CoreWebView2_WebMessageReceived` — one `switch` over transport `type`.
-- `OpenPort` (115200, `NewLine="\n"`, UTF-8, 500 ms read timeout) + background `ReadLoop` posting each line via `Dispatcher.Invoke`. On loop death **without** cancellation (USB unplugged) it closes the port and sends `{type:"closed", unexpected:true}`.
-- Settings: `%LOCALAPPDATA%\B1ChatConsole\settings.json` (`lastPort`), loaded at startup, saved on each successful open; `lastPort` rides on every `ports` reply.
-- File dialogs (`Microsoft.Win32`): saveFile/openFile (JSON filter), pickBin (`*.bin`).
-- Sequence library: `%LOCALAPPDATA%\B1ChatConsole\library\<id>.json`; `SendLibrary()` returns full parsed items; ids are sanitized (`SafeLibId`).
-- Flashing: `FindEspflash()` probes `tools\espflash.exe` (next to exe) → `C:\Program Files\KyberEditor\Tools\espflash.exe` → `PATH`. `StartFlash` closes the port, tells the page, runs `espflash write-bin --port <p> -B 460800 <addr> <bin>` streaming stdout+stderr as `flashLog` lines, then `flashDone {ok, exitCode}`.
-
-### Page subsystems (`wwwroot/index.html`, one `<script>` block)
-
-Cards: Droïdes (+ Sauvegarder…/Restaurer… buttons) · Calibration servos (live preview + debounced
-auto-save) · Animation (play gesture + config sliders) · Audio (volume, test track) · Firmware
-(flash card) · Topologie du mesh (SVG neighbor graph, worst-of-both-directions RSSI) ·
-Séquenceur (catalog + local library + editor + timeline) · Activité (log, 300 lines max).
-
-Key global state: `droids` (Map id→droid) · `portOpen` / `sessionReady` (handshake `hello` gates
-all commands except hello/ping — `sendCmd()` is the single outbound choke point) · keepalive every
-1.5 s (`ping`, or `hello` until session ready) · `markUiBusy`/`pendingDroidsRender` defer droid
-table re-renders while the user interacts (`UI_INTERACTION_SELECTOR`).
-
-**Auto-reconnect**: one-shot auto-connect to `lastPort` on the first `ports` reply
-(`autoConnectTried` guard — a later manual Rescan never auto-connects); on
-`closed {unexpected:true}` (and not `manualClose`), status "Reconnexion…" + rescan every 3 s
-(`startReconnect`/`stopReconnect`), reopening the port when it reappears. Manual
-Connect/Disconnect always cancels reconnection.
-
-**Sequencer editor**: `seq` (array of `{animId,target,delay}`), `currentSlot` (NVS slot being
-edited, `null` = new/unsaved; highlighted "· en édition" in the catalog), `seqDirty` +
-`setSeqDirty()` ("● non sauvegardé" pill; gates confirmations on Charger / + Nouvelle / Importer /
-Jouer; **any dirty=true also stops rehearsal**), `animDurationMs` (from `getAnimDurations`; drives
-suggested delays, total duration, conflict warnings). `stepConflict(i)`: warns (orange delay
-input + timeline outline) when a step's delay < its gesture duration AND the next step (or step 0
-when looping) targets the same droid or "Tous" — different targets = intentional parallel
-choreography, never warned. Per-row actions: ▶ test gesture now · ▶▶ rehearse from this step ·
-⧉ duplicate · ✕ delete · ≡ drag-handle reorder. After `seqSaved`/`seqDeleted` ok the page
-re-requests `seqList`.
-
-**Undo/redo**: snapshot stack (`seqHistory`/`seqFuture`, 50 deep) of `{seq, name, loop}`, pushed
-*before* each mutation; name field captures its snapshot on focus (so it holds the old name);
-loop checkbox reconstructs the previous state. Ctrl+Z/Ctrl+Y (skipped when a text input has
-focus, native undo wins) + ↶/↷ buttons. History cleared on load/new/import.
-
-**Timeline** (`renderTimeline()`, called from `renderSeq()`): audio base lane + one lane per
-distinct target ("Tous" first, then by id). Block left = cumulative delays (`stepStartMs`), width
-= real gesture duration; clicking a block flashes the matching table row. Ruler ticks 1 s (5 s
-beyond 30 s). Playhead (`updatePlaybackUi()`) follows `lastSeqState` **only when the played slot
-=== `currentSlot`** (works for rehearsal too since it synthesizes `slot: currentSlot`, including
-`null === null`); slides via CSS `left` transition lasting the current step's delay; also
-highlights the current table row + block.
-
-**Audio metadata is console-side only** (until firmware phase 8): localStorage keys
-`b1.trackDurations` (track № → ms, measured with the "Mesurer la durée" stopwatch button — the
-firmware can't report track lengths) and `b1.audioBySlot` (NVS slot → track №, kept in sync on
-load/save/push). `lsGet`/`lsSet` wrap localStorage in try/catch.
-
-**Rehearsal** (`startRehearsal(from)`/`stopRehearsal()`): console plays the in-editor sequence —
-`playTrack` at step 0 (audio can't start mid-file; from>0 = gestures only, logged) then `anim`
-per step via setTimeout at cumulative delays; loops if "Boucle" and from===0. Synthesizes
-`lastSeqState` (with `rehearsal:true`) for the playhead; while rehearsing, master `seqState`
-events are ignored (`renderSeqPlayState` early-returns). Stopped by: any edit, load/new/import,
-Stop button (also sends `seqStop`), disconnect, flash start.
-
-**Sequence export/import**: `.b1seq.json` = `{type:"b1-sequence", version:1, name, loop,
-audioTrack, audioDurationMs, steps}`. Import loads as an unsaved draft (`currentSlot=null`,
-dirty), merges the file's audio duration only if none measured locally.
-
-**Local library** (phase 9): `seqLibrary` mirrors the host's `library/` dir (items = b1-sequence
-payload + `id` slug + `savedAt`). Flows: "+ Depuis l'éditeur" → `saveToLibrary` (slug by name,
-confirm overwrite) · "Charger" → `importSequence` · "→ ESP32" → `pushToMaster` (same-name slot
-overwritten after confirm, else first free slot; sets `pushingLib` so the `seqSaved` ack skips
-the editor-state update and just refreshes the catalog) · catalog "→ Biblio" → background
-`requestSeqSlot` then `saveToLibrary`.
-
-**Backup/restore** (phase 6): `backupConfig()` collects names + per-droid `getCalib` + per-slot
-`seqLoad` **in background** — `seqCollector`/`calibCollector` intercept the next
-`seqData`/`calibData` (checked at the top of the `seqData` branch and `applyCalibData`) so the
-editor and sliders don't move; promise + 2.5 s timeout per request. Backup file =
-`{type:"b1-backup", version:1, savedAt, names, calib, sequences (with audioTrack), trackDurations,
-uiParams}`. Restore re-reads the device, diffs field-by-field, and shows a checkbox modal
-(`#modalOverlay`); uiParams can't be read from the device so they're listed **unchecked**;
-applies with 200 ms spacing to avoid flooding the master's serial buffer, then refreshes
-`list` + `seqList`.
-
-**Flashing card**: pick `.bin` → address (0x0 merged image / 0x10000 app-only) → confirm →
-page sets `manualClose=true`, stops rehearsal/reconnect, sends `flash`; host closes port and
-streams the log; on success the page reopens the port after 2.5 s (board reboot). Address
-validated as `/^0x[0-9a-fA-F]+$/`. **espflash.exe is not in the repo**: a permission gate blocked
-committing/executing the downloaded binary without user review. `FindEspflash()`'s KyberEditor
-fallback makes flashing work on this PC today; for distribution, drop an official
-espflash 4.x exe (esp-rs GitHub releases, `espflash-x86_64-pc-windows-msvc.zip`) into `tools\`.
-
-## Storage locations
-
-| What | Where |
+| Fichier | Rôle |
 | --- | --- |
-| Last serial port | `%LOCALAPPDATA%\B1ChatConsole\settings.json` |
-| Sequence library | `%LOCALAPPDATA%\B1ChatConsole\library\*.json` |
-| Track durations + slot→track mapping | page `localStorage` (`b1.trackDurations`, `b1.audioBySlot`) — lives in the WebView2 user-data folder |
-| Backups / sequence exports | wherever the user saves them (native dialogs) |
+| `main.cpp` | setup()/loop(), câblage des modules, timers non bloquants |
+| `config.h` | rôle, pins, bornes servo par défaut, constantes mesh/audio/topologie |
+| `mesh_comm.{h,cpp}` | ESP-NOW : en-tête {srcId,seq,ttl,type}, dédup (srcId,seq), relais TTL, HMAC-SHA256 tronqué 8 o, **voisinage radio direct** (MAC émetteur physique + RSSI) |
+| `mesh_topology.{h,cpp}` | (maître) agrégateur d'arêtes dirigées {from,to,rssi} du graphe de voisinage |
+| `servo_engine.{h,cpp}` | PWM LEDC natif 50 Hz, easing smootherstep, bruit d'idle, limites calibrables |
+| `animation.{h,cpp}` | 18 keyframes-anims, lecteur non bloquant, seed de variation, `totalDurationMs()` |
+| `audio.{h,cpp}` | (maître) wrapper DFPlayer, mapping anim → plage de pistes (10 pistes `/mp3/0001..0010.mp3`) |
+| `registry.{h,cpp}` | (maître) inventaire vivant : srcId, RSSI, lastSeen, servos, autoAnim |
+| `config_store.{h,cpp}` | NVS : noms, volume, params d'anim, calibration servo par droïde |
+| `sequence_store.{h,cpp}` | (maître) NVS : 8 slots de séquences nommées, ≤ 32 étapes {targetId,animId,delayMs} |
+| `serial_console.{h,cpp}` | (maître) pont JSON USB ↔ mesh pour la console |
+| `droid.{h,cpp}` | machine à états haut niveau (étape 6, **pas encore fait**) |
 
-## How UI changes were verified (no test framework)
+Dépendances : `DFRobotDFPlayerMini`, `ArduinoJson`. Build flags : `-D MESH_TTL=4`,
+`-D GROUP_KEY="changeme"` (clé **compilée uniquement**, pas de re-clé à l'exécution).
 
-Throwaway jsdom harnesses (session scratchpad, not committed): a PowerShell script copies
-`index.html`, injects **before** the main script a `window.chrome.webview` shim (records
-`postMessage` calls in `window.__sent`; `dispatch(data)` fires the page's message listener), and
-appends a test `<script>` that drives `handleEvent()` with fake firmware events / dispatches
-transport messages / clicks buttons, then writes results into `document.title`
-(`TESTRESULT:{json}`). A Node runner loads it with
-`new JSDOM(html, {runScripts:"dangerously", pretendToBeVisual:true, url:"https://localhost/x"})`
-(https URL so localStorage works) and asserts. Patterns that matter: override `window.confirm`
-before clicking anything guarded; an "auto-responder" interval that answers each
-`getCalib`/`seqLoad` write **per request index** (not per target — restore re-asks the same
-targets); top-level `let`/`function` in the page script are reachable from the appended test
-script (same global lexical scope). Final state: 97 checks across 7 harnesses, all green.
-`node --check` on the extracted script is the quick syntax gate. (Edge `--headless --dump-dom`
-produced no output in this sandbox; jsdom is the way.)
+## Protocole mesh (ESP-NOW broadcast, canal fixe)
 
-## Gotchas
+Trame = header + payload + HMAC(8 o, TTL exclu de la signature). Relais : dédup
+(srcId,seq) en ring buffer, puis si ttl>0 → ttl-- et re-broadcast. Deux séries de
+B1 avec des `GROUP_KEY` différents s'ignorent ; messages falsifiés rejetés.
+Anti-rejeu : dédup + seq monotone (suffisant pour un prop, pas une garantie
+cryptographique absolue).
 
-- The `.nsi` must be **UTF-8 with BOM** (makensis reads ANSI otherwise → mangled accents; bit us once).
-- `Directory.Build`-style version injection: `IncrementBuildNumber` runs before `GetAssemblyVersion;GenerateAssemblyInfo` — keep that ordering if touching the csproj.
-- Stop the running app before `dotnet build` (file lock): `Stop-Process -Name b1-chat-console`.
-- `handleEvent` is **wrapped** (`oldHandleEvent` pattern) — sequencer events are handled in the wrapper, the rest falls through to the original. Add new `evt` handling in the wrapper.
-- Interceptors (`seqCollector`/`calibCollector`/`pushingLib`) must stay at the **top** of their respective handlers or background collection corrupts the editor.
-- Many top-level `let` declarations live *after* functions that reference them — safe because everything user-triggered runs post-load, but code executed during initial script evaluation must not call those functions (TDZ).
-- WebView2 page is `file://` — no fetch/CDN; everything inline. Native dialogs/files must go through the host bridge.
-- French UI throughout; code comments in French (page) and French (C#). Keep it consistent.
+| Type | Charge utile |
+| --- | --- |
+| `MSG_ANIM` = 1 | targetId (0xFFFF = tous), animId, syncDelayMs, seed |
+| `MSG_CONFIG` = 2 | targetId, freq, amplitude, speed |
+| `MSG_HEARTBEAT` = 4 | uptime, état (bit0 = servos, bit1 = anims auto) |
+| `MSG_SERVO` = 5 | targetId, enabled |
+| `MSG_CALIB` = 6 | targetId, 6 bornes pan/tilt (persisté par le droïde ciblé) |
+| `MSG_PREVIEW` = 7 | targetId, pan, tilt (transitoire, non persisté) |
+| `MSG_AUTOANIM` = 8 | targetId, enabled (pause des anims spontanées au repos) |
+| `MSG_NEIGHBORS` = 9 | count + [{id, rssi}] : rapport périodique du voisinage radio **direct** de l'émetteur (3 s + gigue anti-collision ; le RSSI est mesuré par l'émetteur du rapport même si le rapport est ensuite relayé) |
 
-## Roadmap (agreed with the user, 2026-07-12)
+## Animations (18, alignées firmware ↔ tableau `ANIMS` dans index.html)
 
-1. ✅ Sequencer quick wins (per-step ▶, total duration, dirty flag + confirmations, "en édition" highlight, delay-conflict warnings)
-2. ✅ Auto-reconnect (last port remembered, startup auto-connect, rescan loop on unexpected close)
-3. ✅ Multi-track timeline with the audio track as base layer + `seqState` playhead
-4. ✅ Console-side rehearsal mode (play in-editor sequence, audio + gestures, from any step)
-5. ✅ Advanced editing: drag & drop, duplicate, undo/redo, `.b1seq.json` export/import (+ host file bridge)
-6. ✅ Full droid backup/restore with field-by-field reconcile modal
-7. ✅ Integrated firmware flashing (espflash runner + Firmware card; binary not bundled — see Gotchas/Flashing)
-8. ✅ (docs only — no firmware source) FIRMWARE-CONTRACT.md: `track` in seqSave, getTrackDurations, documented getConfig, atomic setMulti, richer playback
-9. ✅ Local sequence library (unlimited, file-per-sequence) with two-way ESP32 sync
+0 IDLE · 1 LOOK_AROUND · 2 NOD_YES · 3 SHAKE_NO · 4 CURIOUS_TILT · 5 SCAN_SLOW ·
+6 ALERT_SNAP · 7 TRACK · 8 GLITCH_STUTTER · 9 CONFUSED_TILT · 10 DOUBLE_TAKE ·
+11 SLEEPY_DROOP · 12 TARGET_LOCK · 13 WHIRR_SEARCH · 14 SIGNAL_GLITCH ·
+15 GREETING_NOD · 16 POWER_DOWN (**boucle**) · 17 TALK (**boucle**, tilt rapide
+façon bouche qui parle, pensé pour accompagner une piste audio).
 
-Cross-cutting (done): version system (see Versioning). Possible next steps discussed but not
-committed: splitting index.html into modules, auto-reconcile on connect (KyberEditor-style linked
-files), bundling espflash + firmware manifest with SHA-256 once the user's `.bin`s exist,
-implementing FIRMWARE-CONTRACT.md when firmware source becomes available.
+Les deux gestes en boucle sont exclus du tirage aléatoire d'idle et comptent pour
+`LOOPING_ANIM_DEFAULT_MS` (2 s, indicatif) dans `totalDurationMs()`.
+Comportement au repos : le maître tire un geste au hasard toutes les 2,5-5 s et le
+diffuse à tous (esclave isolé : 3-7 s, local) — suspendable par droïde (« Anims
+auto »), sans couper les servos ni bloquer Jouer/Séquenceur.
 
-**Keep this file updated at the end of every phase (explicit user request).** Bump
-`<VersionPrefix>` minor + NSIS `APPVERSION` at each completed phase.
+## Protocole série JSON (console ↔ maître, 115200 bauds, 1 ligne = 1 message)
+
+Session gardée par handshake : `hello` → `{evt:"hello",ok,id}`, puis keepalive
+`ping` (timeout 5 s côté firmware, `_clientReady`).
+
+- **Console → maître** (`cmd`) : `hello` · `ping` · `list` · `getConfig` ·
+  `config {target,freq,amp,speed}` · `volume {value}` · `name {id,name}` ·
+  `playTrack {track}` · `servo {target,enabled}` · `autoAnim {target,enabled}` ·
+  `anim {target,animId,seed}` · `preview {target,pan,tilt}` ·
+  `calib {target,+6 bornes}` · `getCalib {target}` · `getAnimDurations` ·
+  `getMeshTopology` · `seqList` · `seqLoad {slot}` · `seqSave {slot,name,loop,steps}` ·
+  `seqDelete {slot}` · `seqRun {slot}` · `seqStop` · `seqState`
+- **Maître → console** (`evt`) : `hello {ok,id}` · `droids {list:[{id,name,rssi,age,role,servos,autoAnim}]}` ·
+  `log {msg}` · `state {volume,freq,amp,speed}` · `calibData {target,+6}` ·
+  `meshTopology {links:[{from,to,rssi}]}` · `animDurations {list:[{animId,ms}]}` ·
+  `seqList {list:[{slot,name,stepCount,loop}]}` · `seqData {slot,name,loop,steps}` ·
+  `seqSaved {ok,slot,name}` · `seqDeleted {ok,slot}` · `seqState {playing,slot,index,total}`
+
+Champs inconnus dans une commande : ignorés (la console peut être plus récente que
+le firmware). Réponses routées exclusivement sur `evt`.
+
+**Extensions demandées par la console** : voir [FIRMWARE-CONTRACT.md](FIRMWARE-CONTRACT.md)
+(`track` dans seqSave, `getTrackDurations`, `evt:"config"`, `setMulti` atomique,
+`seqRun from` + pause/resume). **En attente — décision utilisateur 2026-07-07.**
+⚠️ Bug latent identifié : le tampon de ligne série (`_buf[256]` dans
+`serial_console.h`) **jette silencieusement** toute ligne > 255 caractères — un
+`seqSave` dépasse ça dès ~4 étapes. À corriger (4 Ko) avant/avec le contrat.
+
+## index.html (page UI de la console — maintenue ici)
+
+Page WebView2 (pas Web Serial : c'est le C# qui tient le port). Elle parle à
+l'hôte via `window.chrome.webview.postMessage` — **deux vocabulaires à ne pas
+confondre** :
+
+1. **Transport** (page ↔ hôte C#, champ `type`) : `listPorts`/`ports` ·
+   `open`/`opened` · `close`/`closed {unexpected?}` · `write` · `line {data}` ·
+   `getAppInfo`/`appInfo` · `saveFile`/`fileSaved` · `openFile`/`fileOpened` ·
+   `pickBin`/`binPicked` · `flash`/`flashLog`/`flashDone` ·
+   `libList`/`libSave`/`libDelete` (bibliothèque locale de séquences).
+2. **Protocole firmware** (ci-dessus), transporté dans `write` (sortant) et
+   `line` (entrant, parsé → `handleEvent()`).
+
+Cartes : Droïdes (noms, servos, anims auto, sauvegarde/restauration) · Calibration
+servos (aperçu direct + auto-save) · Animation · Audio · Firmware (flash espflash) ·
+Topologie du mesh (graphe SVG des liens directs, fusion bidirectionnelle au RSSI
+le plus faible) · Séquenceur (catalogue 8 slots + bibliothèque locale illimitée +
+éditeur + timeline multi-pistes + trame audio + mode Répéter console-side +
+undo/redo + export/import `.b1seq.json`) · Activité.
+
+Particularités : page `file://` auto-suffisante (aucun CDN/fetch) ; `sendCmd()` =
+point de passage unique (gate handshake) ; re-rendus du tableau différés pendant
+interaction (`UI_INTERACTION_SELECTOR`) ; durées de pistes audio et mapping
+slot→piste en `localStorage` (`b1.trackDurations`, `b1.audioBySlot`) tant que le
+firmware ne les connaît pas ; l'éditeur de séquences a un `handleEvent` **wrapper**
+(les events séquenceur sont traités dans le wrapper, le reste retombe sur
+l'original — ajouter les nouveaux `evt` dans le wrapper) ; interceptors
+(`seqCollector`/`calibCollector`/`pushingLib`) à garder au **début** de leurs
+handlers, sinon la collecte de fond (sauvegarde/restauration) corrompt l'éditeur.
+
+Détails d'implémentation côté C# (MainWindow.xaml.cs, versioning, NSIS,
+vérification jsdom) : voir le CLAUDE.md du dépôt console.
+
+## Stockage
+
+| Quoi | Où |
+| --- | --- |
+| Noms, volume, params anim, calibrations | NVS du maître (`config_store`) |
+| Séquences (8 slots, ≤ 32 étapes) | NVS du maître (`sequence_store`) |
+| Durées de pistes + slot→piste audio | `localStorage` de la page (temporaire, cf. contrat §1-2) |
+| Bibliothèque de séquences, dernier port | `%LOCALAPPDATA%\B1ChatConsole\` (côté console) |
+
+## État d'avancement
+
+- [x] Étapes 1-5, 7-10 : servo_engine, mesh_comm (HMAC, relais), animation (18
+      gestes), audio, config_store + registry, serial_console, dashboard,
+      sequence_store + exécution autonome.
+- [x] Refonte séquenceur : catalogue par nom (slots cachés), durées réelles
+      (`getAnimDurations`), progression live (`seqState`), acks seqSaved/seqDeleted,
+      garde `anim.isPlaying()` pour les étapes ciblant le maître.
+- [x] Pause « Anims auto » par droïde (MSG_AUTOANIM, heartbeat bit1, colonne UI).
+- [x] Topologie du mesh (MSG_NEIGHBORS, module mesh_topology, carte graphe SVG).
+- [x] Console WPF v0.8.0 (dépôt séparé) : port série natif, auto-reconnexion,
+      flash intégré, bibliothèque locale, sauvegarde/restauration, timeline,
+      Répéter, export/import. `index.html` remplace `web/dashboard_V7.html`.
+- [ ] Étape 6 : machine à états `droid.{h,cpp}`.
+- [ ] FIRMWARE-CONTRACT.md (en attente de GO utilisateur) — ordre proposé :
+      tampon série 4 Ko (bug) → §3 evt:config → §1 track séquences → §5
+      from/pause/resume → §4 setMulti → §2 durées via broche BUSY.
+- [ ] Params d'anim freq/amp/speed : reçus + persistés mais **aucun effet**
+      (hook `onConfig` jamais branché dans main.cpp ; curseurs marqués « bientôt
+      actif » dans l'UI).
+
+## Pièges connus
+
+- `serial_console` : tampon de ligne 256 o (voir bug ci-dessus).
+- `IS_MASTER` vit dans `config.h` : vérifier sa valeur avant chaque flash (il
+  part dans les commits avec la dernière valeur utilisée).
+- `handleRaw()` : l'enregistrement du voisinage doit rester **avant** le
+  early-return `srcId==_myId` et la dédup (même un écho relayé de notre propre
+  message prouve un lien radio direct avec le relais).
+- La page est en français partout ; commentaires code en français (firmware et page).
+- ESP32Servo abandonné (bug double-attach) → LEDC natif uniquement.
+- DFPlayer : ne sait pas rapporter la durée d'une piste ; la broche BUSY (GPIO4)
+  est le seul moyen d'observer la fin de lecture.
+- KyberEditor (`C:\Program Files\KyberEditor`) : source d'inspiration UX de la
+  console et origine de `tools\espflash.exe` ; ses firmwares/bootloaders ne nous
+  servent pas (PlatformIO génère les nôtres).
+
+## Vérification (rappels)
+
+1. `pio run -e b1` compile (tester aussi `IS_MASTER 0`).
+2. Sweep servo fluide ; `MSG_ANIM` relayé ≥ 2 sauts sans tempête de broadcast.
+3. Anim maître → piste son associée ; 2 clés de groupe différentes s'ignorent.
+4. Console connectée : liste des droïdes, anim/volume/nom, persistance après reboot.
+5. Séquence sauvée → reboot maître → `Jouer` fonctionne sans PC.
+6. Topologie : éloigner un esclave hors de portée directe du maître → son lien
+   direct disparaît du graphe, les liens via relais restent.
