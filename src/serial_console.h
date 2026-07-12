@@ -42,7 +42,7 @@ public:
     // Émet l'état de lecture d'une séquence ({evt:"seqState",...}).
     // track = trame audio de la séquence en cours (0 = aucune).
     void pushSeqState(bool playing, uint8_t slot, uint8_t index, uint8_t total,
-                      uint8_t track = 0);
+                      uint8_t track = 0, bool paused = false);
 
     // Émet les liens directs du mesh détectés ({evt:"meshTopology",...}).
     void pushMeshTopology();
@@ -57,8 +57,9 @@ public:
     void onSeqSave(bool (*cb)(uint8_t slot, const StoredSequence& seq)) { _seqSaveCb = cb; }
     void onSeqList(uint8_t (*cb)(StoredSequenceMeta* out, uint8_t maxOut)) { _seqListCb = cb; }
     void onSeqLoad(bool (*cb)(uint8_t slot, StoredSequence& out)) { _seqLoadCb = cb; }
-    void onSeqRun(void (*cb)(uint8_t slot)) { _seqRunCb = cb; }
+    void onSeqRun(void (*cb)(uint8_t slot, uint8_t from)) { _seqRunCb = cb; }
     void onSeqStop(void (*cb)()) { _seqStopCb = cb; }
+    void onSeqPause(void (*cb)(bool paused)) { _seqPauseCb = cb; }
     void onSeqDelete(bool (*cb)(uint8_t slot)) { _seqDeleteCb = cb; }
     void onCalib(void (*cb)(uint16_t target, uint8_t panMin, uint8_t panCenter, uint8_t panMax,
                             uint8_t tiltMin, uint8_t tiltCenter, uint8_t tiltMax)) { _calibCb = cb; }
@@ -96,8 +97,9 @@ private:
     bool (*_seqSaveCb)(uint8_t, const StoredSequence&) = nullptr;
     uint8_t (*_seqListCb)(StoredSequenceMeta*, uint8_t) = nullptr;
     bool (*_seqLoadCb)(uint8_t, StoredSequence&) = nullptr;
-    void (*_seqRunCb)(uint8_t) = nullptr;
+    void (*_seqRunCb)(uint8_t, uint8_t) = nullptr;
     void (*_seqStopCb)() = nullptr;
+    void (*_seqPauseCb)(bool) = nullptr;
     bool (*_seqDeleteCb)(uint8_t) = nullptr;
     void (*_calibCb)(uint16_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t) = nullptr;
     void (*_previewCb)(uint16_t, uint8_t, uint8_t) = nullptr;

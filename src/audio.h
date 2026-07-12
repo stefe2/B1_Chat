@@ -25,6 +25,10 @@ public:
     bool playTrack(uint8_t track);
     bool playForAnim(uint8_t animId, uint32_t seed);
 
+    // Pause/reprise de la piste en cours (trame audio d'une séquence).
+    void pause();
+    void resume();
+
 private:
     HardwareSerial _serial{2};
     DFRobotDFPlayerMini* _df = nullptr;

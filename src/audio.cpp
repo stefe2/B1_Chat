@@ -87,3 +87,11 @@ bool AudioPlayer::playForAnim(uint8_t animId, uint32_t seed) {
     const uint8_t track = pickTrackForAnim(animId, seed);
     return playTrack(track);
 }
+
+void AudioPlayer::pause() {
+    if (_ready) _df->pause();
+}
+
+void AudioPlayer::resume() {
+    if (_ready) _df->start();
+}

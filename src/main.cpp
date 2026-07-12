@@ -49,6 +49,10 @@ static bool gSeqPlaying = false;
 static uint8_t gSeqIndex = 0;
 static uint32_t gSeqNextAt = 0;
 static uint8_t gSeqSlot = 0;
+// Pause : fige le compte à rebours de l'étape en cours (délai restant mémorisé)
+// et la trame audio ; la reprise repart exactement où on était.
+static bool gSeqPaused = false;
+static uint32_t gSeqPauseRemainMs = 0;
 // Vrai si l'étape en cours cible ce maître : on attend alors la fin réelle de
 // l'animation locale (anim.isPlaying()) en plus du délai avant d'avancer. Pour
 // une étape ciblant uniquement un esclave distant, cette donnée n'existe pas
@@ -139,16 +143,25 @@ static bool onSeqDelete(uint8_t slot) {
     return Sequences.remove(slot);
 }
 
-static void onSeqRun(uint8_t slot) {
+static void onSeqRun(uint8_t slot, uint8_t from) {
     if (!Sequences.load(slot, gSeq) || gSeq.stepCount == 0) {
         gSeqPlaying = false;
-        LOGF("sequence slot=%u introuvable/vide", slot);
+        Console.pushErr("sequence slot=%u introuvable/vide", slot);
         Console.pushSeqState(false, slot, 0, 0);
+        return;
+    }
+    if (from >= gSeq.stepCount) {
+        gSeqPlaying = false;
+        Console.pushErr("etape de depart %u >= %u etapes (slot %u)", from, gSeq.stepCount, slot);
+        Console.pushSeqState(false, slot, 0, gSeq.stepCount, gSeq.track);
         return;
     }
     gSeqSlot = slot;
     gSeqPlaying = true;
-    gSeqIndex = 0;
+    gSeqPaused = false;
+    // from > 0 : gestes seulement — la trame audio ne peut pas démarrer en
+    // cours de fichier (elle partira au prochain passage par l'étape 0 en boucle).
+    gSeqIndex = from;
     gSeqWaitLocal = false;
     gSeqNextAt = millis();
     Console.pushSeqState(true, gSeqSlot, gSeqIndex, gSeq.stepCount, gSeq.track);
@@ -156,13 +169,29 @@ static void onSeqRun(uint8_t slot) {
 
 static void onSeqStop() {
     gSeqPlaying = false;
+    gSeqPaused = false;
     Console.pushSeqState(false, gSeqSlot, gSeqIndex, gSeq.stepCount, gSeq.track);
+}
+
+// Pause/reprise : fige le délai restant de l'étape en cours et la trame audio.
+static void onSeqPauseCmd(bool paused) {
+    if (!gSeqPlaying || paused == gSeqPaused) return;
+    const uint32_t now = millis();
+    gSeqPaused = paused;
+    if (paused) {
+        gSeqPauseRemainMs = gSeqNextAt > now ? gSeqNextAt - now : 0;
+        if (gSeq.track) Audio.pause();
+    } else {
+        gSeqNextAt = now + gSeqPauseRemainMs;
+        if (gSeq.track) Audio.resume();
+    }
+    Console.pushSeqState(true, gSeqSlot, gSeqIndex, gSeq.stepCount, gSeq.track, gSeqPaused);
 }
 
 // Répond à une demande ponctuelle d'état (ex. dashboard qui se connecte en
 // cours de lecture, sans attendre la prochaine transition d'étape).
 static void onSeqQueryCmd() {
-    Console.pushSeqState(gSeqPlaying, gSeqSlot, gSeqIndex, gSeq.stepCount, gSeq.track);
+    Console.pushSeqState(gSeqPlaying, gSeqSlot, gSeqIndex, gSeq.stepCount, gSeq.track, gSeqPaused);
 }
 
 // Hook console : calibration reçue (déjà filtrée sur target == ce droïde).
@@ -279,6 +308,7 @@ void setup() {
     Console.onSeqLoad(onSeqLoad);
     Console.onSeqRun(onSeqRun);
     Console.onSeqStop(onSeqStop);
+    Console.onSeqPause(onSeqPauseCmd);
     Console.onSeqDelete(onSeqDelete);
     Console.onSeqQuery(onSeqQueryCmd);
     Console.onCalib(onCalibCmd);
@@ -351,7 +381,7 @@ void loop() {
     // (gSeqWaitLocal && anim.isPlaying()) en plus du délai, pour ne pas couper un
     // mouvement en cours — impossible à garantir pour les esclaves distants (pas
     // d'accusé de réception mesh), qui restent sur le délai seul.
-    if (gSeqPlaying && gServos && now >= gSeqNextAt && !(gSeqWaitLocal && anim.isPlaying())) {
+    if (gSeqPlaying && !gSeqPaused && gServos && now >= gSeqNextAt && !(gSeqWaitLocal && anim.isPlaying())) {
         if (gSeq.stepCount == 0) {
             gSeqPlaying = false;
             Console.pushSeqState(false, gSeqSlot, gSeqIndex, gSeq.stepCount, gSeq.track);

@@ -116,7 +116,7 @@ void SerialConsole::pushAnimDurations() {
 }
 
 void SerialConsole::pushSeqState(bool playing, uint8_t slot, uint8_t index, uint8_t total,
-                                 uint8_t track) {
+                                 uint8_t track, bool paused) {
     if (!_clientReady) return;
 
     JsonDocument doc;
@@ -126,6 +126,7 @@ void SerialConsole::pushSeqState(bool playing, uint8_t slot, uint8_t index, uint
     doc["index"] = index;
     doc["total"] = total;
     if (track) doc["track"] = track; else doc["track"] = nullptr;
+    doc["paused"] = paused;
     serializeJson(doc, Serial);
     Serial.print('\n');
 }
@@ -298,6 +299,8 @@ void SerialConsole::handleLine(const char* line) {
         caps.add("getAll");
         caps.add("config");
         caps.add("seqTrack");
+        caps.add("seqFrom");
+        caps.add("seqPause");
         serializeJson(ack, Serial);
         Serial.print('\n');
         return;
@@ -467,16 +470,27 @@ void SerialConsole::handleLine(const char* line) {
 
     } else if (!strcmp(cmd, "seqRun")) {
         const uint8_t slot = doc["slot"] | 0;
+        const uint8_t from = doc["from"] | 0;   // étape de départ (0 = début)
         if (slot >= SequenceStore::SLOT_MAX) {
             pushErr("slot invalide: %u (0-%u)", slot, SequenceStore::SLOT_MAX - 1);
             return;
         }
-        if (_seqRunCb) _seqRunCb(slot);
-        log("seq run slot=%u", slot);
+        if (from >= StoredSequence::STEP_MAX) {
+            pushErr("etape de depart invalide: %u (0-%u)", from, StoredSequence::STEP_MAX - 1);
+            return;
+        }
+        if (_seqRunCb) _seqRunCb(slot, from);
+        log("seq run slot=%u from=%u", slot, from);
 
     } else if (!strcmp(cmd, "seqStop")) {
         if (_seqStopCb) _seqStopCb();
         log("seq stop");
+
+    } else if (!strcmp(cmd, "seqPause")) {
+        if (_seqPauseCb) _seqPauseCb(true);
+
+    } else if (!strcmp(cmd, "seqResume")) {
+        if (_seqPauseCb) _seqPauseCb(false);
 
     } else if (!strcmp(cmd, "seqState")) {
         if (_seqQueryCb) _seqQueryCb();
