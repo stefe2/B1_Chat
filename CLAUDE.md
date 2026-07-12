@@ -104,28 +104,34 @@ auto »), sans couper les servos ni bloquer Jouer/Séquenceur.
 Session gardée par handshake : `hello` → `{evt:"hello",ok,id}`, puis keepalive
 `ping` (timeout 5 s côté firmware, `_clientReady`).
 
-- **Console → maître** (`cmd`) : `hello` · `ping` · `list` · `getConfig` ·
+- **Console → maître** (`cmd`) : `hello` · `ping` · `list` · `getConfig` · `getAll` ·
   `config {target,freq,amp,speed}` · `volume {value}` · `name {id,name}` ·
   `playTrack {track}` · `servo {target,enabled}` · `autoAnim {target,enabled}` ·
   `anim {target,animId,seed}` · `preview {target,pan,tilt}` ·
   `calib {target,+6 bornes}` · `getCalib {target}` · `getAnimDurations` ·
-  `getMeshTopology` · `seqList` · `seqLoad {slot}` · `seqSave {slot,name,loop,steps}` ·
-  `seqDelete {slot}` · `seqRun {slot}` · `seqStop` · `seqState`
-- **Maître → console** (`evt`) : `hello {ok,id}` · `droids {list:[{id,name,rssi,age,role,servos,autoAnim}]}` ·
-  `log {msg}` · `state {volume,freq,amp,speed}` · `calibData {target,+6}` ·
+  `getMeshTopology` · `seqList` · `seqLoad {slot}` ·
+  `seqSave {slot,name,loop,track,steps}` · `seqDelete {slot}` ·
+  `seqRun {slot,from?}` · `seqStop` · `seqPause` · `seqResume` · `seqState` ·
+  `setMulti {ops:[...]}` · `commit` · `revert`
+- **Maître → console** (`evt`) : `hello {ok,id,fw,proto,lineMax,anims,seqSlots,trackCount,caps[],dirty}` ·
+  `droids {list:[{id,name,rssi,age,role,servos,autoAnim}]}` ·
+  `log {msg}` · `err {msg}` · `config {volume,freq,amp,speed}` · `calibData {target,+6}` ·
   `meshTopology {links:[{from,to,rssi}]}` · `animDurations {list:[{animId,ms}]}` ·
-  `seqList {list:[{slot,name,stepCount,loop}]}` · `seqData {slot,name,loop,steps}` ·
-  `seqSaved {ok,slot,name}` · `seqDeleted {ok,slot}` · `seqState {playing,slot,index,total}`
+  `seqList {list:[{slot,name,stepCount,loop,track}]}` · `seqData {slot,name,loop,track,steps}` ·
+  `seqSaved {ok,slot,name}` · `seqDeleted {ok,slot}` ·
+  `seqState {playing,slot,index,total,track,paused}` ·
+  `setMultiDone {ok,applied,failedAt?,error?}` · `dirty {dirty}` · `allDone`
 
 Champs inconnus dans une commande : ignorés (la console peut être plus récente que
-le firmware). Réponses routées exclusivement sur `evt`.
+le firmware). Réponses routées exclusivement sur `evt`. Tampon de ligne : 4 Ko
+(`lineMax` annoncé au handshake ; toute ligne plus longue → `err`).
 
-**Extensions demandées par la console** : voir [FIRMWARE-CONTRACT.md](FIRMWARE-CONTRACT.md)
-(`track` dans seqSave, `getTrackDurations`, `evt:"config"`, `setMulti` atomique,
-`seqRun from` + pause/resume). **En attente — décision utilisateur 2026-07-07.**
-⚠️ Bug latent identifié : le tampon de ligne série (`_buf[256]` dans
-`serial_console.h`) **jette silencieusement** toute ligne > 255 caractères — un
-`seqSave` dépasse ça dès ~4 étapes. À corriger (4 Ko) avant/avec le contrat.
+**Commit/revert** (volume, params d'anim, noms — pas la calibration ni les
+séquences) : les setters sont « live » (surcouche RAM), la NVS n'est écrite qu'au
+`commit` ; `revert` recharge l'état persisté. La console doit envoyer `commit`
+après un `setMulti` de restauration. [FIRMWARE-CONTRACT.md](FIRMWARE-CONTRACT.md)
+tient l'état d'implémentation (§1/§3/§4/§5 faits ; §2 durées de pistes reporté —
+approche broche BUSY).
 
 ## index.html (page UI de la console — `b1-chat-console/wwwroot/index.html`)
 
@@ -183,13 +189,21 @@ vérification jsdom) : voir le CLAUDE.md du dépôt console.
 - [x] Console WPF v0.8.0 (dépôt séparé) : port série natif, auto-reconnexion,
       flash intégré, bibliothèque locale, sauvegarde/restauration, timeline,
       Répéter, export/import. `index.html` remplace `web/dashboard_V7.html`.
+- [x] Phase « écosystème » (2026-07-07), firmware 1.0.0 : tampon série 4 Ko +
+      `err` explicites, handshake enrichi (fw/proto/lineMax/caps/dirty), `getAll`
+      + `allDone`, contrat §3 (`evt:config`), §1 (trame audio par séquence, jouée
+      en autonome, sons par geste supprimés quand une trame existe), §5 (`seqRun
+      from`, pause/reprise avec pause DFPlayer), §4 (`setMulti` atomique),
+      commit/revert KyberEditor (volume/params/noms). Dépôt console sous git
+      (`C:\Users\stefe\source\repos\b1-chat-console`), gh CLI installé.
 - [ ] Étape 6 : machine à états `droid.{h,cpp}`.
-- [ ] FIRMWARE-CONTRACT.md (en attente de GO utilisateur) — ordre proposé :
-      tampon série 4 Ko (bug) → §3 evt:config → §1 track séquences → §5
-      from/pause/resume → §4 setMulti → §2 durées via broche BUSY.
+- [ ] Contrat §2 : durées de pistes mesurées via la broche BUSY (GPIO4) — reporté.
 - [ ] Params d'anim freq/amp/speed : reçus + persistés mais **aucun effet**
       (hook `onConfig` jamais branché dans main.cpp ; curseurs marqués « bientôt
       actif » dans l'UI).
+- [ ] Phase C/D/E en cours : page (err/caps/config/commit-revert/pause/track/carte
+      Mises à jour), C# (checkUpdates GitHub, download+install), scripts de release.
+- [ ] GitHub console : dépôt à créer (bloqué sur `gh auth login`, interactif).
 
 ## Pièges connus
 
