@@ -8,6 +8,18 @@
 #include <Arduino.h>
 
 // ---------------------------------------------------------------------------
+//  VERSION DU FIRMWARE — source de vérité pour les releases GitHub.
+//  Annoncée à la console dans la réponse hello (champ "fw"); la console la
+//  compare à la derniere release de stefe2/B1_Chat pour proposer une mise a
+//  jour. Bump a chaque release (tools/release.ps1 s'appuie dessus).
+// ---------------------------------------------------------------------------
+#define FW_VERSION "1.0.0"
+
+// Version du protocole série console<->maître (incrementée quand un changement
+// n'est pas retro-compatible; les ajouts de champs/commandes n'en ont pas besoin).
+#define FW_PROTO 2
+
+// ---------------------------------------------------------------------------
 //  RÔLE DU DROÏDE  —  À RÉGLER ICI AVANT DE FLASHER
 //  1 = MAÎTRE (un seul dans le réseau : coordination + son + console web)
 //  0 = ESCLAVE (valeur par défaut pour tous les autres droïdes)

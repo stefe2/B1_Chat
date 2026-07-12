@@ -275,10 +275,20 @@ void SerialConsole::handleLine(const char* line) {
         _clientReady = true;
         _lastHelloMs = millis();
 
+        // Handshake enrichi : version + capacités, pour que la console
+        // s'adapte au firmware connecté (et propose les mises à jour GitHub).
         JsonDocument ack;
         ack["evt"] = "hello";
         ack["ok"] = true;
         ack["id"] = Mesh.myId();
+        ack["fw"] = FW_VERSION;
+        ack["proto"] = FW_PROTO;
+        ack["lineMax"] = SERIAL_LINE_MAX;
+        ack["anims"] = ANIM_COUNT;
+        ack["seqSlots"] = SequenceStore::SLOT_MAX;
+        ack["trackCount"] = AUDIO_TRACK_COUNT;
+        JsonArray caps = ack["caps"].to<JsonArray>();
+        caps.add("err");
         serializeJson(ack, Serial);
         Serial.print('\n');
         return;
