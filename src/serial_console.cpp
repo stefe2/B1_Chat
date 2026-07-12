@@ -289,6 +289,7 @@ void SerialConsole::handleLine(const char* line) {
         ack["trackCount"] = AUDIO_TRACK_COUNT;
         JsonArray caps = ack["caps"].to<JsonArray>();
         caps.add("err");
+        caps.add("getAll");
         serializeJson(ack, Serial);
         Serial.print('\n');
         return;
@@ -313,6 +314,31 @@ void SerialConsole::handleLine(const char* line) {
 
     } else if (!strcmp(cmd, "getMeshTopology")) {
         pushMeshTopology();
+
+    } else if (!strcmp(cmd, "getAll")) {
+        // Dump complet : rafale d'évènements existants terminée par allDone.
+        // Remplace la quinzaine de requêtes interceptées (getCalib/seqLoad par
+        // cible) que la console faisait pour la sauvegarde/restauration.
+        pushState();
+        pushDroids();
+        pushCalibData(Mesh.myId());
+        for (uint8_t i = 0; i < Droids.count(); i++)
+            pushCalibData(Droids.at(i).id);
+        if (_seqListCb && _seqLoadCb) {
+            StoredSequenceMeta metas[SequenceStore::SLOT_MAX];
+            const uint8_t n = _seqListCb(metas, SequenceStore::SLOT_MAX);
+            for (uint8_t i = 0; i < n; i++) {
+                StoredSequence seq{};
+                if (_seqLoadCb(metas[i].slot, seq)) pushSeqData(metas[i].slot, seq);
+            }
+        }
+        pushSeqList();
+        if (_seqQueryCb) _seqQueryCb();
+        pushMeshTopology();
+        JsonDocument done;
+        done["evt"] = "allDone";
+        serializeJson(done, Serial);
+        Serial.print('\n');
 
     } else if (!strcmp(cmd, "anim")) {
         const uint16_t target = doc["target"] | (uint16_t)MESH_TARGET_ALL;
