@@ -15,6 +15,7 @@
 // ============================================================================
 
 #include <Arduino.h>
+#include <ArduinoJson.h>
 #include "sequence_store.h"
 
 class SerialConsole {
@@ -106,6 +107,12 @@ private:
     void (*_seqQueryCb)() = nullptr;
 
     void handleLine(const char* line);
+
+    // setMulti : validation puis application d'une op du lot (name/calib/
+    // volume/config/seqSave/seqDelete). validateOp remplit `why` en cas de refus.
+    bool validateOp(JsonObjectConst op, char* why, size_t whyLen);
+    bool applyOp(JsonObjectConst op);
+
     void pushSeqList();
     void pushSeqData(uint8_t slot, const StoredSequence& seq);
     void pushCalibData(uint16_t target);

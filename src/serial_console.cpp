@@ -269,6 +269,107 @@ void SerialConsole::update() {
     }
 }
 
+// --- setMulti ----------------------------------------------------------------
+// Périmètre : les ops d'état persisté utilisées par la restauration de
+// sauvegarde. L'atomicité est obtenue par validation complète AVANT toute
+// application : un lot refusé ne modifie rien. (Un échec d'écriture NVS en
+// cours d'application — rarissime — est signalé par failedAt sans rollback.)
+
+bool SerialConsole::validateOp(JsonObjectConst op, char* why, size_t whyLen) {
+    const char* c = op["cmd"] | "";
+    if (!strcmp(c, "name") || !strcmp(c, "calib") || !strcmp(c, "volume") ||
+        !strcmp(c, "config")) {
+        return true;   // champs bornés par nature (uint8/clamp)
+    }
+    if (!strcmp(c, "seqSave")) {
+        const uint8_t slot = op["slot"] | 0;
+        const uint8_t track = op["track"] | 0;
+        if (slot >= SequenceStore::SLOT_MAX) {
+            snprintf(why, whyLen, "seqSave: slot invalide %u", slot);
+            return false;
+        }
+        if (track > AUDIO_TRACK_COUNT) {
+            snprintf(why, whyLen, "seqSave: piste invalide %u", track);
+            return false;
+        }
+        return true;
+    }
+    if (!strcmp(c, "seqDelete")) {
+        const uint8_t slot = op["slot"] | 0;
+        if (slot >= SequenceStore::SLOT_MAX) {
+            snprintf(why, whyLen, "seqDelete: slot invalide %u", slot);
+            return false;
+        }
+        return true;
+    }
+    snprintf(why, whyLen, "op non supportee: %s", c[0] ? c : "(sans cmd)");
+    return false;
+}
+
+bool SerialConsole::applyOp(JsonObjectConst op) {
+    const char* c = op["cmd"] | "";
+
+    if (!strcmp(c, "name")) {
+        Config.setName(op["id"] | 0, op["name"] | "");
+        return true;
+    }
+    if (!strcmp(c, "volume")) {
+        const uint8_t v = op["value"] | AUDIO_VOLUME_DEFAULT;
+        Config.setVolume(v);
+        if (_volCb) _volCb(v);
+        return true;
+    }
+    if (!strcmp(c, "config")) {
+        const uint16_t target = op["target"] | (uint16_t)MESH_TARGET_ALL;
+        const uint8_t freq  = op["freq"] | 50;
+        const uint8_t amp   = op["amp"]  | 60;
+        const uint8_t speed = op["speed"] | 50;
+        Config.setAnimParams(freq, amp, speed);
+        ConfigPayload p{target, (float)freq, (float)amp, (float)speed};
+        Mesh.send(MSG_CONFIG, &p, sizeof(p));
+        if (_cfgCb) _cfgCb(freq, amp, speed);
+        return true;
+    }
+    if (!strcmp(c, "calib")) {
+        const uint16_t target = op["target"] | (uint16_t)MESH_TARGET_ALL;
+        const uint8_t panMin     = op["panMin"]     | SERVO_PAN_MIN;
+        const uint8_t panCenter  = op["panCenter"]  | SERVO_PAN_CENTER;
+        const uint8_t panMax     = op["panMax"]     | SERVO_PAN_MAX;
+        const uint8_t tiltMin    = op["tiltMin"]    | SERVO_TILT_MIN;
+        const uint8_t tiltCenter = op["tiltCenter"] | SERVO_TILT_CENTER;
+        const uint8_t tiltMax    = op["tiltMax"]    | SERVO_TILT_MAX;
+        const uint16_t cacheId = target == MESH_TARGET_ALL ? Mesh.myId() : target;
+        Config.setCalib(cacheId, ServoCalib{panMin, panCenter, panMax, tiltMin, tiltCenter, tiltMax});
+        CalibPayload p{target, panMin, panCenter, panMax, tiltMin, tiltCenter, tiltMax};
+        Mesh.send(MSG_CALIB, &p, sizeof(p));
+        if ((target == MESH_TARGET_ALL || target == Mesh.myId()) && _calibCb)
+            _calibCb(target, panMin, panCenter, panMax, tiltMin, tiltCenter, tiltMax);
+        return true;
+    }
+    if (!strcmp(c, "seqSave")) {
+        StoredSequence seq{};
+        strncpy(seq.name, op["name"] | "Sequence", sizeof(seq.name) - 1);
+        seq.name[sizeof(seq.name) - 1] = '\0';
+        seq.loop = (op["loop"] | false) ? 1 : 0;
+        seq.track = op["track"] | 0;
+        JsonArrayConst steps = op["steps"].as<JsonArrayConst>();
+        uint8_t idx = 0;
+        for (JsonObjectConst s : steps) {
+            if (idx >= StoredSequence::STEP_MAX) break;
+            seq.steps[idx].animId = s["animId"] | 0;
+            seq.steps[idx].targetId = s["target"] | (uint16_t)MESH_TARGET_ALL;
+            seq.steps[idx].delayMs = s["delay"] | 0;
+            idx++;
+        }
+        seq.stepCount = idx;
+        return _seqSaveCb ? _seqSaveCb(op["slot"] | 0, seq) : false;
+    }
+    if (!strcmp(c, "seqDelete")) {
+        return _seqDeleteCb ? _seqDeleteCb(op["slot"] | 0) : false;
+    }
+    return false;   // impossible après validateOp
+}
+
 void SerialConsole::handleLine(const char* line) {
     JsonDocument doc;
     if (deserializeJson(doc, line)) {
@@ -301,6 +402,7 @@ void SerialConsole::handleLine(const char* line) {
         caps.add("seqTrack");
         caps.add("seqFrom");
         caps.add("seqPause");
+        caps.add("setMulti");
         serializeJson(ack, Serial);
         Serial.print('\n');
         return;
@@ -527,6 +629,53 @@ void SerialConsole::handleLine(const char* line) {
         Mesh.send(MSG_PREVIEW, &p, sizeof(p));
         if ((target == MESH_TARGET_ALL || target == Mesh.myId()) && _previewCb)
             _previewCb(target, pan, tilt);
+
+    } else if (!strcmp(cmd, "setMulti")) {
+        JsonArrayConst ops = doc["ops"].as<JsonArrayConst>();
+        JsonDocument res;
+        res["evt"] = "setMultiDone";
+        if (ops.isNull()) {
+            res["ok"] = false;
+            res["failedAt"] = 0;
+            res["error"] = "ops manquant ou pas un tableau";
+            serializeJson(res, Serial);
+            Serial.print('\n');
+            return;
+        }
+
+        // Passe 1 : validation complète — un lot refusé ne modifie rien.
+        char why[96];
+        uint16_t idx = 0;
+        for (JsonObjectConst op : ops) {
+            if (!validateOp(op, why, sizeof(why))) {
+                res["ok"] = false;
+                res["failedAt"] = idx;
+                res["error"] = why;
+                serializeJson(res, Serial);
+                Serial.print('\n');
+                return;
+            }
+            idx++;
+        }
+
+        // Passe 2 : application.
+        uint16_t applied = 0;
+        bool ok = true;
+        for (JsonObjectConst op : ops) {
+            if (!applyOp(op)) { ok = false; break; }
+            applied++;
+        }
+        res["ok"] = ok;
+        res["applied"] = applied;
+        if (!ok) {
+            res["failedAt"] = applied;
+            res["error"] = "echec d'application (ecriture NVS?)";
+        }
+        serializeJson(res, Serial);
+        Serial.print('\n');
+        log("setMulti: %u/%u ops", applied, idx);
+        pushDroids();
+        pushSeqList();
 
     } else if (cmd[0] == '\0') {
         pushErr("commande sans champ cmd");
