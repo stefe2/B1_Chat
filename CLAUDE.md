@@ -12,13 +12,14 @@ Deux moitiés :
    droïdes B1 (2 servos pan/tilt chacune) en réseau **ESP-NOW mesh multi-sauts**,
    avec animations fluides/organiques coordonnées par un **maître** qui joue aussi
    le son (DFPlayer Mini + ampli). Réglages persistés en NVS.
-2. **Console de supervision** (dépôt séparé, WPF net8.0-windows + WebView2, v0.8.x) :
-   application de bureau qui possède le port série (`System.IO.Ports`) et rend
-   **`index.html`** — la page unique de l'UI (HTML+CSS+JS inline, tout en français).
-   **`index.html` à la racine de ce dépôt est la copie de travail de cette page**
-   (remplaçant direct de l'ancien `web/dashboard_V7.html`) ; le C# la charge depuis
-   son `wwwroot/`. `FIRMWARE-CONTRACT.md` (copié du dépôt console) liste les
-   extensions de protocole que la console attend du firmware.
+2. **Console de supervision** (`C:\Users\stefe\source\repos\b1-chat-console`,
+   WPF net8.0-windows + WebView2, v0.8.x, dépôt git séparé) : application de
+   bureau qui possède le port série (`System.IO.Ports`) et rend
+   **`wwwroot/index.html`** — la page unique de l'UI (HTML+CSS+JS inline, tout en
+   français), **copie canonique** (remplaçant direct de l'ancien
+   `web/dashboard_V7.html` ; il n'y a plus de copie dans ce dépôt-ci — éditer
+   directement celle du dépôt console). `FIRMWARE-CONTRACT.md` (copié du dépôt
+   console) liste les extensions de protocole que la console attend du firmware.
 
 ## Commandes
 
@@ -126,7 +127,7 @@ le firmware). Réponses routées exclusivement sur `evt`.
 `serial_console.h`) **jette silencieusement** toute ligne > 255 caractères — un
 `seqSave` dépasse ça dès ~4 étapes. À corriger (4 Ko) avant/avec le contrat.
 
-## index.html (page UI de la console — maintenue ici)
+## index.html (page UI de la console — `b1-chat-console/wwwroot/index.html`)
 
 Page WebView2 (pas Web Serial : c'est le C# qui tient le port). Elle parle à
 l'hôte via `window.chrome.webview.postMessage` — **deux vocabulaires à ne pas
