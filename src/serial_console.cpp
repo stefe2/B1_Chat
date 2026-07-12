@@ -33,6 +33,19 @@ void SerialConsole::log(const char* fmt, ...) {
     Serial.print('\n');
 }
 
+void SerialConsole::syncDirty() {
+    if (!_clientReady) return;
+    const bool d = Config.dirty();
+    if (d == _lastDirtySent) return;
+    _lastDirtySent = d;
+
+    JsonDocument doc;
+    doc["evt"] = "dirty";
+    doc["dirty"] = d;
+    serializeJson(doc, Serial);
+    Serial.print('\n');
+}
+
 void SerialConsole::pushErr(const char* fmt, ...) {
     if (!_clientReady) return;
 
@@ -403,6 +416,9 @@ void SerialConsole::handleLine(const char* line) {
         caps.add("seqFrom");
         caps.add("seqPause");
         caps.add("setMulti");
+        caps.add("commit");
+        ack["dirty"] = Config.dirty();
+        _lastDirtySent = Config.dirty();
         serializeJson(ack, Serial);
         Serial.print('\n');
         return;
@@ -473,12 +489,14 @@ void SerialConsole::handleLine(const char* line) {
         Mesh.send(MSG_CONFIG, &p, sizeof(p));
         if (_cfgCb) _cfgCb(freq, amp, speed);
         log("params freq=%u amp=%u speed=%u", freq, amp, speed);
+        syncDirty();
 
     } else if (!strcmp(cmd, "volume")) {
         const uint8_t v = doc["value"] | AUDIO_VOLUME_DEFAULT;
         Config.setVolume(v);
         if (_volCb) _volCb(v);
         log("volume=%u", v);
+        syncDirty();
 
     } else if (!strcmp(cmd, "name")) {
         const uint16_t id = doc["id"] | 0;
@@ -486,6 +504,7 @@ void SerialConsole::handleLine(const char* line) {
         Config.setName(id, name);
         log("nom %04X = %s", id, name);
         pushDroids();
+        syncDirty();
 
     } else if (!strcmp(cmd, "playTrack")) {
         const uint8_t track = doc["track"] | 1;
@@ -676,6 +695,22 @@ void SerialConsole::handleLine(const char* line) {
         log("setMulti: %u/%u ops", applied, idx);
         pushDroids();
         pushSeqList();
+        syncDirty();
+
+    } else if (!strcmp(cmd, "commit")) {
+        // Engage la surcouche RAM (volume/params/noms) en NVS.
+        Config.commitPending();
+        log("configuration engagee (NVS)");
+        syncDirty();
+
+    } else if (!strcmp(cmd, "revert")) {
+        // Jette les modifications non engagées et ré-applique l'état persisté.
+        Config.revertPending();
+        if (_volCb) _volCb(Config.volume());
+        log("modifications annulees");
+        pushState();
+        pushDroids();
+        syncDirty();
 
     } else if (cmd[0] == '\0') {
         pushErr("commande sans champ cmd");

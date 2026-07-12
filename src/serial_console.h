@@ -6,8 +6,10 @@
 //  Protocole : une ligne = un message JSON (voir project.md §10).
 //  - PC → maître : {cmd:"list"|"anim"|"config"|"volume"|"name"|"playTrack"|
 //                   "getConfig"|"calib"|"preview"|"getCalib"|"getAnimDurations"|
-//                   "seqState"|"servo"|"autoAnim"|"getMeshTopology"|"getAll", ...}
-//  - maître → PC : {evt:"droids"|"log"|"config"|"meshTopology"|"err"|"allDone", ...}
+//                   "seqState"|"servo"|"autoAnim"|"getMeshTopology"|"getAll"|
+//                   "setMulti"|"commit"|"revert"|"seqPause"|"seqResume", ...}
+//  - maître → PC : {evt:"droids"|"log"|"config"|"meshTopology"|"err"|"allDone"|
+//                   "setMultiDone"|"dirty", ...}
 //
 //  Les logs applicatifs passent par log() pour rester au format JSON et ne pas
 //  polluer le protocole. Des hooks permettent au firmware d'agir sur les
@@ -112,6 +114,10 @@ private:
     // volume/config/seqSave/seqDelete). validateOp remplit `why` en cas de refus.
     bool validateOp(JsonObjectConst op, char* why, size_t whyLen);
     bool applyOp(JsonObjectConst op);
+
+    // Pousse {evt:"dirty"} quand l'état « modifications non engagées » change.
+    void syncDirty();
+    bool _lastDirtySent = false;
 
     void pushSeqList();
     void pushSeqData(uint8_t slot, const StoredSequence& seq);
