@@ -24,6 +24,7 @@ struct StoredSequence {
     uint8_t loop;
     uint8_t stepCount;
     SeqStep steps[STEP_MAX];
+    uint8_t track;   // trame audio du maître (1-10), 0 = aucune
 };
 
 struct StoredSequenceMeta {
@@ -31,6 +32,7 @@ struct StoredSequenceMeta {
     char    name[StoredSequence::NAME_LEN];
     uint8_t loop;
     uint8_t stepCount;
+    uint8_t track;   // 0 = aucune
 };
 
 class SequenceStore {

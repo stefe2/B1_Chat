@@ -151,18 +151,18 @@ static void onSeqRun(uint8_t slot) {
     gSeqIndex = 0;
     gSeqWaitLocal = false;
     gSeqNextAt = millis();
-    Console.pushSeqState(true, gSeqSlot, gSeqIndex, gSeq.stepCount);
+    Console.pushSeqState(true, gSeqSlot, gSeqIndex, gSeq.stepCount, gSeq.track);
 }
 
 static void onSeqStop() {
     gSeqPlaying = false;
-    Console.pushSeqState(false, gSeqSlot, gSeqIndex, gSeq.stepCount);
+    Console.pushSeqState(false, gSeqSlot, gSeqIndex, gSeq.stepCount, gSeq.track);
 }
 
 // Répond à une demande ponctuelle d'état (ex. dashboard qui se connecte en
 // cours de lecture, sans attendre la prochaine transition d'étape).
 static void onSeqQueryCmd() {
-    Console.pushSeqState(gSeqPlaying, gSeqSlot, gSeqIndex, gSeq.stepCount);
+    Console.pushSeqState(gSeqPlaying, gSeqSlot, gSeqIndex, gSeq.stepCount, gSeq.track);
 }
 
 // Hook console : calibration reçue (déjà filtrée sur target == ce droïde).
@@ -354,17 +354,20 @@ void loop() {
     if (gSeqPlaying && gServos && now >= gSeqNextAt && !(gSeqWaitLocal && anim.isPlaying())) {
         if (gSeq.stepCount == 0) {
             gSeqPlaying = false;
-            Console.pushSeqState(false, gSeqSlot, gSeqIndex, gSeq.stepCount);
+            Console.pushSeqState(false, gSeqSlot, gSeqIndex, gSeq.stepCount, gSeq.track);
         } else {
             if (gSeqIndex >= gSeq.stepCount) {
                 if (gSeq.loop) {
                     gSeqIndex = 0;
                 } else {
                     gSeqPlaying = false;
-                    Console.pushSeqState(false, gSeqSlot, gSeqIndex, gSeq.stepCount);
+                    Console.pushSeqState(false, gSeqSlot, gSeqIndex, gSeq.stepCount, gSeq.track);
                 }
             }
             if (gSeqPlaying) {
+                // Trame audio de la séquence : lancée à la première étape (et à
+                // chaque retour à l'étape 0 en boucle, comme la répétition console).
+                if (gSeqIndex == 0 && gSeq.track) Audio.playTrack(gSeq.track);
                 const SeqStep& st = gSeq.steps[gSeqIndex];
                 const uint32_t seed = (uint32_t)esp_random();
                 AnimPayload p{st.targetId, st.animId, 0, seed};
@@ -372,11 +375,13 @@ void loop() {
                 gSeqWaitLocal = (st.targetId == MESH_TARGET_ALL || st.targetId == Mesh.myId());
                 if (gSeqWaitLocal) {
                     anim.play(st.animId, seed);
-                    Audio.playForAnim(st.animId, seed);
+                    // Le DFPlayer ne joue qu'une piste à la fois : avec une trame
+                    // audio, les sons par geste la couperaient — on les supprime.
+                    if (!gSeq.track) Audio.playForAnim(st.animId, seed);
                 }
                 gSeqNextAt = now + st.delayMs;
                 gSeqIndex++;
-                Console.pushSeqState(true, gSeqSlot, gSeqIndex, gSeq.stepCount);
+                Console.pushSeqState(true, gSeqSlot, gSeqIndex, gSeq.stepCount, gSeq.track);
             }
         }
     }

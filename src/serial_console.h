@@ -40,7 +40,9 @@ public:
     void pushAnimDurations();
 
     // Émet l'état de lecture d'une séquence ({evt:"seqState",...}).
-    void pushSeqState(bool playing, uint8_t slot, uint8_t index, uint8_t total);
+    // track = trame audio de la séquence en cours (0 = aucune).
+    void pushSeqState(bool playing, uint8_t slot, uint8_t index, uint8_t total,
+                      uint8_t track = 0);
 
     // Émet les liens directs du mesh détectés ({evt:"meshTopology",...}).
     void pushMeshTopology();

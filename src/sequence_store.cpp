@@ -10,7 +10,19 @@ struct SequenceBlob {
     uint8_t loop;
     uint8_t stepCount;
     SeqStep steps[StoredSequence::STEP_MAX];
+    uint8_t track;   // ajouté en fin de blob : les anciens blobs (sans ce
+                     // champ) restent lisibles, track vaut alors 0 (aucune)
 };
+
+// Taille du blob avant l'ajout de `track` (accepté en lecture, jamais écrit).
+const size_t BLOB_LEN_V1 = sizeof(SequenceBlob) - sizeof(uint8_t);
+
+// Lit un blob en acceptant l'ancienne et la nouvelle taille. blob doit être
+// zéro-initialisé par l'appelant (track=0 pour un ancien blob).
+bool readBlob(Preferences& p, const char* key, SequenceBlob& blob) {
+    const size_t got = p.getBytes(key, &blob, sizeof(blob));
+    return got == sizeof(blob) || got == BLOB_LEN_V1;
+}
 }
 
 void SequenceStore::begin() {
@@ -29,6 +41,7 @@ bool SequenceStore::save(uint8_t slot, const StoredSequence& seq) {
     blob.name[sizeof(blob.name) - 1] = '\0';
     blob.loop = seq.loop ? 1 : 0;
     blob.stepCount = seq.stepCount > StoredSequence::STEP_MAX ? StoredSequence::STEP_MAX : seq.stepCount;
+    blob.track = seq.track;
 
     for (uint8_t i = 0; i < blob.stepCount; i++) {
         blob.steps[i] = seq.steps[i];
@@ -47,13 +60,13 @@ bool SequenceStore::load(uint8_t slot, StoredSequence& out) {
     if (!_p.isKey(key)) return false;
 
     SequenceBlob blob{};
-    const size_t got = _p.getBytes(key, &blob, sizeof(blob));
-    if (got != sizeof(blob)) return false;
+    if (!readBlob(_p, key, blob)) return false;
 
     memset(&out, 0, sizeof(out));
     strncpy(out.name, blob.name, sizeof(out.name) - 1);
     out.loop = blob.loop ? 1 : 0;
     out.stepCount = blob.stepCount > StoredSequence::STEP_MAX ? StoredSequence::STEP_MAX : blob.stepCount;
+    out.track = blob.track;
     for (uint8_t i = 0; i < out.stepCount; i++) {
         out.steps[i] = blob.steps[i];
     }
@@ -79,8 +92,7 @@ uint8_t SequenceStore::list(StoredSequenceMeta* out, uint8_t maxOut) {
         if (!_p.isKey(key)) continue;
 
         SequenceBlob blob{};
-        const size_t got = _p.getBytes(key, &blob, sizeof(blob));
-        if (got != sizeof(blob)) continue;
+        if (!readBlob(_p, key, blob)) continue;
 
         StoredSequenceMeta& m = out[n++];
         m.slot = slot;
@@ -88,6 +100,7 @@ uint8_t SequenceStore::list(StoredSequenceMeta* out, uint8_t maxOut) {
         m.name[sizeof(m.name) - 1] = '\0';
         m.loop = blob.loop ? 1 : 0;
         m.stepCount = blob.stepCount > StoredSequence::STEP_MAX ? StoredSequence::STEP_MAX : blob.stepCount;
+        m.track = blob.track;
     }
 
     return n;

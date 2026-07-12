@@ -115,7 +115,8 @@ void SerialConsole::pushAnimDurations() {
     Serial.print('\n');
 }
 
-void SerialConsole::pushSeqState(bool playing, uint8_t slot, uint8_t index, uint8_t total) {
+void SerialConsole::pushSeqState(bool playing, uint8_t slot, uint8_t index, uint8_t total,
+                                 uint8_t track) {
     if (!_clientReady) return;
 
     JsonDocument doc;
@@ -124,6 +125,7 @@ void SerialConsole::pushSeqState(bool playing, uint8_t slot, uint8_t index, uint
     doc["slot"] = slot;
     doc["index"] = index;
     doc["total"] = total;
+    if (track) doc["track"] = track; else doc["track"] = nullptr;
     serializeJson(doc, Serial);
     Serial.print('\n');
 }
@@ -186,6 +188,7 @@ void SerialConsole::pushSeqList() {
             o["name"] = metas[i].name;
             o["loop"] = metas[i].loop;
             o["stepCount"] = metas[i].stepCount;
+            if (metas[i].track) o["track"] = metas[i].track; else o["track"] = nullptr;
         }
     }
 
@@ -220,6 +223,7 @@ void SerialConsole::pushSeqData(uint8_t slot, const StoredSequence& seq) {
     doc["slot"] = slot;
     doc["name"] = seq.name;
     doc["loop"] = seq.loop;
+    if (seq.track) doc["track"] = seq.track; else doc["track"] = nullptr;
 
     JsonArray steps = doc["steps"].to<JsonArray>();
     for (uint8_t i = 0; i < seq.stepCount; i++) {
@@ -293,6 +297,7 @@ void SerialConsole::handleLine(const char* line) {
         caps.add("err");
         caps.add("getAll");
         caps.add("config");
+        caps.add("seqTrack");
         serializeJson(ack, Serial);
         Serial.print('\n');
         return;
@@ -412,6 +417,12 @@ void SerialConsole::handleLine(const char* line) {
         strncpy(seq.name, name, sizeof(seq.name) - 1);
         seq.name[sizeof(seq.name) - 1] = '\0';
         seq.loop = (doc["loop"] | false) ? 1 : 0;
+        const uint8_t track = doc["track"] | 0;   // absent/null = 0 = aucune
+        if (track > AUDIO_TRACK_COUNT) {
+            pushErr("piste invalide: %u (1-%u, ou null)", track, AUDIO_TRACK_COUNT);
+            return;
+        }
+        seq.track = track;
 
         JsonArrayConst steps = doc["steps"].as<JsonArrayConst>();
         uint8_t idx = 0;
