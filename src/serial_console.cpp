@@ -33,6 +33,22 @@ void SerialConsole::log(const char* fmt, ...) {
     Serial.print('\n');
 }
 
+void SerialConsole::pushErr(const char* fmt, ...) {
+    if (!_clientReady) return;
+
+    char msg[200];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(msg, sizeof(msg), fmt, ap);
+    va_end(ap);
+
+    JsonDocument doc;
+    doc["evt"] = "err";
+    doc["msg"] = msg;
+    serializeJson(doc, Serial);
+    Serial.print('\n');
+}
+
 void SerialConsole::pushDroids() {
     if (!_clientReady) return;
 
@@ -219,15 +235,24 @@ void SerialConsole::update() {
     while (Serial.available()) {
         const char c = (char)Serial.read();
         if (c == '\n' || c == '\r') {
-            if (_len > 0) {
+            if (_overflow) {
+                // Ligne trop longue : jetée en entier, mais signalée (avant,
+                // l'échec était silencieux et la fin de ligne parasitait la
+                // ligne suivante).
+                pushErr("ligne trop longue (max %u), commande ignoree", SERIAL_LINE_MAX - 1);
+                _overflow = false;
+                _len = 0;
+            } else if (_len > 0) {
                 _buf[_len] = '\0';
                 handleLine(_buf);
                 _len = 0;
             }
+        } else if (_overflow) {
+            // on avale le reste de la ligne fautive
         } else if (_len < sizeof(_buf) - 1) {
             _buf[_len++] = c;
         } else {
-            _len = 0;  // ligne trop longue : on jette
+            _overflow = true;
         }
     }
 
@@ -239,7 +264,10 @@ void SerialConsole::update() {
 
 void SerialConsole::handleLine(const char* line) {
     JsonDocument doc;
-    if (deserializeJson(doc, line)) return;  // JSON invalide → ignoré
+    if (deserializeJson(doc, line)) {
+        pushErr("JSON invalide");
+        return;
+    }
 
     const char* cmd = doc["cmd"] | "";
 
@@ -312,6 +340,10 @@ void SerialConsole::handleLine(const char* line) {
 
     } else if (!strcmp(cmd, "playTrack")) {
         const uint8_t track = doc["track"] | 1;
+        if (track < 1 || track > AUDIO_TRACK_COUNT) {
+            pushErr("piste invalide: %u (1-%u)", track, AUDIO_TRACK_COUNT);
+            return;
+        }
         if (_trackCb) _trackCb(track);
         log("piste %u", track);
 
@@ -332,6 +364,10 @@ void SerialConsole::handleLine(const char* line) {
 
     } else if (!strcmp(cmd, "seqSave")) {
         const uint8_t slot = doc["slot"] | 0;
+        if (slot >= SequenceStore::SLOT_MAX) {
+            pushErr("slot invalide: %u (0-%u)", slot, SequenceStore::SLOT_MAX - 1);
+            return;
+        }
         StoredSequence seq{};
         const char* name = doc["name"] | "Sequence";
         strncpy(seq.name, name, sizeof(seq.name) - 1);
@@ -364,11 +400,15 @@ void SerialConsole::handleLine(const char* line) {
             pushSeqData(slot, seq);
             log("seq load slot=%u OK", slot);
         } else {
-            log("seq load slot=%u ERR", slot);
+            pushErr("seq load slot=%u: vide ou introuvable", slot);
         }
 
     } else if (!strcmp(cmd, "seqDelete")) {
         const uint8_t slot = doc["slot"] | 0;
+        if (slot >= SequenceStore::SLOT_MAX) {
+            pushErr("slot invalide: %u (0-%u)", slot, SequenceStore::SLOT_MAX - 1);
+            return;
+        }
         bool ok = false;
         if (_seqDeleteCb) ok = _seqDeleteCb(slot);
         log("seq del slot=%u %s", slot, ok ? "OK" : "ERR");
@@ -377,6 +417,10 @@ void SerialConsole::handleLine(const char* line) {
 
     } else if (!strcmp(cmd, "seqRun")) {
         const uint8_t slot = doc["slot"] | 0;
+        if (slot >= SequenceStore::SLOT_MAX) {
+            pushErr("slot invalide: %u (0-%u)", slot, SequenceStore::SLOT_MAX - 1);
+            return;
+        }
         if (_seqRunCb) _seqRunCb(slot);
         log("seq run slot=%u", slot);
 
@@ -419,5 +463,10 @@ void SerialConsole::handleLine(const char* line) {
         Mesh.send(MSG_PREVIEW, &p, sizeof(p));
         if ((target == MESH_TARGET_ALL || target == Mesh.myId()) && _previewCb)
             _previewCb(target, pan, tilt);
+
+    } else if (cmd[0] == '\0') {
+        pushErr("commande sans champ cmd");
+    } else {
+        pushErr("commande inconnue: %s", cmd);
     }
 }

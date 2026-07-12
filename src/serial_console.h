@@ -7,7 +7,7 @@
 //  - PC → maître : {cmd:"list"|"anim"|"config"|"volume"|"name"|"playTrack"|
 //                   "getConfig"|"calib"|"preview"|"getCalib"|"getAnimDurations"|
 //                   "seqState"|"servo"|"autoAnim"|"getMeshTopology", ...}
-//  - maître → PC : {evt:"droids"|"log"|"state"|"meshTopology", ...}
+//  - maître → PC : {evt:"droids"|"log"|"state"|"meshTopology"|"err", ...}
 //
 //  Les logs applicatifs passent par log() pour rester au format JSON et ne pas
 //  polluer le protocole. Des hooks permettent au firmware d'agir sur les
@@ -26,6 +26,11 @@ public:
 
     // Émet un log au format {evt:"log","msg":...}.
     void log(const char* fmt, ...);
+
+    // Émet une erreur explicite au format {evt:"err","msg":...} — commande
+    // inconnue/invalide, ligne tronquée, JSON invalide. La console l'affiche
+    // en rouge au lieu que l'échec soit silencieux.
+    void pushErr(const char* fmt, ...);
 
     // Émet la liste des droïdes ({evt:"droids",...}) et l'état ({evt:"state"}).
     void pushDroids();
@@ -68,8 +73,12 @@ public:
     bool isClientReady() const { return _clientReady; }
 
 private:
-    char     _buf[256];
+    // Tampon de ligne : 4 Ko pour accepter seqSave 32 étapes et setMulti.
+    // (256 o auparavant : toute ligne plus longue était jetée en silence.)
+    static const uint16_t SERIAL_LINE_MAX = 4096;
+    char     _buf[SERIAL_LINE_MAX];
     uint16_t _len = 0;
+    bool     _overflow = false;
     bool     _masterServos = true;
     bool     _masterAutoAnim = true;
     bool     _clientReady = false;
