@@ -3,3 +3,5 @@
 .vscode/c_cpp_properties.json
 .vscode/launch.json
 .vscode/ipch
+# Journal du serveur MCP Proxmox (outil externe, ecrit dans le cwd)
+proxmox_mcp.log
