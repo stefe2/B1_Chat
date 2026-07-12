@@ -12,7 +12,7 @@
 //  1 = MAÎTRE (un seul dans le réseau : coordination + son + console web)
 //  0 = ESCLAVE (valeur par défaut pour tous les autres droïdes)
 // ---------------------------------------------------------------------------
-#define IS_MASTER 1
+#define IS_MASTER 0
 
 // Pause temporaire des servos/animations sur le MAÎTRE (protège les servos
 // pendant la mise au point de la page web). Mettre à 0 pour réactiver.
@@ -72,6 +72,11 @@ static const uint8_t  AUDIO_VOLUME_DEFAULT = 20;  // 0..30
 // ---------------------------------------------------------------------------
 static const uint8_t MESH_WIFI_CHANNEL = 1;   // canal radio commun à tout le groupe
 static const uint8_t MESH_DEDUP_CACHE  = 32;  // taille du cache anti-doublon
+
+// Topologie du mesh (voisinage radio direct, indépendant des relais).
+static const uint8_t  MAX_NEIGHBORS      = 12;   // voisins directs max par rapport
+static const uint32_t NEIGHBOR_REPORT_MS = 3000; // période de diffusion du voisinage
+static const uint32_t NEIGHBOR_STALE_MS  = 9000; // péremption d'un lien radio (~3x la période)
 
 // ---------------------------------------------------------------------------
 //  Timing des animations (ms)

@@ -1,6 +1,7 @@
 #include "serial_console.h"
 #include "config.h"
 #include "mesh_comm.h"
+#include "mesh_topology.h"
 #include "registry.h"
 #include "config_store.h"
 #include "animation.h"
@@ -48,6 +49,7 @@ void SerialConsole::pushDroids() {
     me["age"] = 0;
     me["role"] = "master";
     me["servos"] = _masterServos;
+    me["autoAnim"] = _masterAutoAnim;
 
     // Les autres droïdes (esclaves).
     for (uint8_t i = 0; i < Droids.count(); i++) {
@@ -59,6 +61,7 @@ void SerialConsole::pushDroids() {
         o["age"] = now - e.lastSeen;   // ms depuis la dernière vue
         o["role"] = "slave";
         o["servos"] = e.servos;
+        o["autoAnim"] = e.autoAnim;
     }
     serializeJson(doc, Serial);
     Serial.print('\n');
@@ -103,6 +106,25 @@ void SerialConsole::pushSeqState(bool playing, uint8_t slot, uint8_t index, uint
     doc["slot"] = slot;
     doc["index"] = index;
     doc["total"] = total;
+    serializeJson(doc, Serial);
+    Serial.print('\n');
+}
+
+void SerialConsole::pushMeshTopology() {
+    if (!_clientReady) return;
+
+    const uint32_t now = millis();
+    JsonDocument doc;
+    doc["evt"] = "meshTopology";
+    JsonArray arr = doc["links"].to<JsonArray>();
+    for (uint8_t i = 0; i < MeshTopo.count(); i++) {
+        if (!MeshTopo.fresh(i, now, NEIGHBOR_STALE_MS)) continue;
+        const MeshTopology::Edge& e = MeshTopo.at(i);
+        JsonObject o = arr.add<JsonObject>();
+        o["from"] = e.from;
+        o["to"] = e.to;
+        o["rssi"] = e.rssi;
+    }
     serializeJson(doc, Serial);
     Serial.print('\n');
 }
@@ -251,6 +273,9 @@ void SerialConsole::handleLine(const char* line) {
     } else if (!strcmp(cmd, "getAnimDurations")) {
         pushAnimDurations();
 
+    } else if (!strcmp(cmd, "getMeshTopology")) {
+        pushMeshTopology();
+
     } else if (!strcmp(cmd, "anim")) {
         const uint16_t target = doc["target"] | (uint16_t)MESH_TARGET_ALL;
         const uint8_t  animId = doc["animId"] | 0;
@@ -295,6 +320,12 @@ void SerialConsole::handleLine(const char* line) {
         const bool en = doc["enabled"] | false;
         if (_servoCb) _servoCb(target, en);
         log("servos %s -> %04X", en ? "ON" : "OFF", target);
+
+    } else if (!strcmp(cmd, "autoAnim")) {
+        const uint16_t target = doc["target"] | (uint16_t)MESH_TARGET_ALL;
+        const bool en = doc["enabled"] | false;
+        if (_autoAnimCb) _autoAnimCb(target, en);
+        log("anims auto %s -> %04X", en ? "ON" : "OFF", target);
 
     } else if (!strcmp(cmd, "seqList")) {
         pushSeqList();

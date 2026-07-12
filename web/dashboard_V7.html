@@ -127,16 +127,18 @@
       "droids  calib"
       "droids  anim"
       "droids  audio"
+      "topo    topo"
       "seq     seq"
       "log     log";
   }
   @media (max-width: 1024px) {
-    main { grid-template-columns: 1fr; grid-template-areas: "droids" "calib" "anim" "audio" "seq" "log"; }
+    main { grid-template-columns: 1fr; grid-template-areas: "droids" "calib" "anim" "audio" "topo" "seq" "log"; }
   }
   #card-droids { grid-area: droids; }
   #card-calib  { grid-area: calib; }
   #card-anim   { grid-area: anim; }
   #card-audio  { grid-area: audio; }
+  #card-topo   { grid-area: topo; }
   #card-seq    { grid-area: seq; }
   #card-log    { grid-area: log; }
 
@@ -195,9 +197,10 @@
     content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor;
     box-shadow: 0 0 3px currentColor;
   }
-  .badge.ok { color: var(--ok); }
-  .badge.stale { color: var(--bad); }
-  .badge.role-master { color: var(--accent); }
+  .badge.ok { color: var(--ok); box-shadow: inset 1px 1px 3px rgba(0,0,0,.5), 0 0 6px rgba(61,220,132,.3); }
+  .badge.stale { color: var(--bad); box-shadow: inset 1px 1px 3px rgba(0,0,0,.5), 0 0 6px rgba(255,91,82,.3); }
+  .badge.role-master { color: var(--ok); box-shadow: inset 1px 1px 3px rgba(0,0,0,.5), 0 0 6px rgba(61,220,132,.3); }
+  .badge.role-slave { color: var(--warn); box-shadow: inset 1px 1px 3px rgba(0,0,0,.5), 0 0 6px rgba(255,204,77,.3); }
 
   .srv {
     padding: 6px 14px; font-size: 11px; font-weight: 700; border-radius: 999px; border: none;
@@ -331,6 +334,7 @@
             <th class="hint-label" tabindex="0">État<span class="tip">« En ligne » si vu récemment, « perdu » après ~6 s sans signal.</span></th>
             <th class="hint-label" tabindex="0">Rôle<span class="tip">Maître (coordonne + son + console) ou esclave.</span></th>
             <th class="hint-label" tabindex="0">Servos<span class="tip">Active ou coupe les servos de ce droïde (protège le matériel).</span></th>
+            <th class="hint-label" tabindex="0">Anims auto<span class="tip">Active ou met en pause l'animation spontanée au repos de ce droïde. N'affecte pas « Jouer » ni le Séquenceur.</span></th>
           </tr>
         </thead>
         <tbody id="droidRows"></tbody>
@@ -408,6 +412,17 @@
     </div>
   </section>
 
+  <section class="card" id="card-topo">
+    <div class="card-head">
+      <span class="icn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.3"/><circle cx="5" cy="18" r="2.3"/><circle cx="19" cy="18" r="2.3"/><line x1="12" y1="7.3" x2="6.3" y2="16.2"/><line x1="12" y1="7.3" x2="17.7" y2="16.2"/><line x1="7.3" y1="18" x2="16.7" y2="18"/></svg></span>
+      <h2>Topologie du mesh</h2>
+      <span class="meta"><span id="topoLinkCount">0</span> liens directs</span>
+    </div>
+    <p class="hint" style="margin-bottom:12px;">Qui entend qui en direct sur le mesh radio (pas une position physique) — épaisseur/opacité selon la force du signal.</p>
+    <svg id="topoGraph" viewBox="0 0 320 320" width="100%" height="320" style="display:block;"></svg>
+    <p id="topoEmpty" class="hint">En attente de rapports de voisinage…</p>
+  </section>
+
   <section class="card" id="card-seq">
     <div class="card-head">
       <span class="icn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="4" rx="1"/><rect x="3" y="10" width="18" height="4" rx="1"/><rect x="3" y="16" width="12" height="4" rx="1"/></svg></span>
@@ -481,6 +496,7 @@ let sessionReady = false;
 let keepaliveTimer = null;
 let uiBusyUntil = 0;
 let pendingDroidsRender = false;
+let meshLinks = [];   // dernier {from,to,rssi}[] brut reçu (evt:"meshTopology")
 const UI_INTERACTION_SELECTOR = ".name-input, #animTarget, #animId, #calibTarget, #seqName, #seqTable select, #seqTable input";
 
 // --- UI refs ---------------------------------------------------------------
@@ -532,6 +548,7 @@ function handleEvent(obj) {
       sendCmd({ cmd: "seqList" });
       sendCmd({ cmd: "getAnimDurations" });
       sendCmd({ cmd: "seqState" });
+      sendCmd({ cmd: "getMeshTopology" });
     }
   } else if (obj.evt === "droids" && Array.isArray(obj.list)) {
     obj.list.forEach(upsertDroid);
@@ -540,12 +557,16 @@ function handleEvent(obj) {
     } else {
       renderDroids();
     }
+    renderTopology();
   } else if (obj.evt === "log") {
     log("⟵ " + obj.msg, "rx");
   } else if (obj.evt === "state") {
     log("⟵ state " + JSON.stringify(obj), "rx");
   } else if (obj.evt === "calibData") {
     applyCalibData(obj);
+  } else if (obj.evt === "meshTopology" && Array.isArray(obj.links)) {
+    meshLinks = obj.links;
+    renderTopology();
   } else {
     log("⟵ " + JSON.stringify(obj), "rx");
   }
@@ -560,6 +581,7 @@ function upsertDroid(d) {
     lastSeen: Date.now() - (d.age || 0), rssi: (d.rssi ?? (prev && prev.rssi) ?? 0),
     state: d.state ?? 0, role: d.role || (prev && prev.role) || "slave",
     servos: (d.servos ?? (prev && prev.servos) ?? true),
+    autoAnim: (d.autoAnim ?? (prev && prev.autoAnim) ?? true),
   });
 }
 
@@ -596,8 +618,9 @@ function renderDroids() {
       : `<span class="badge ${stale ? "stale" : "ok"}">${stale ? "perdu" : "en ligne"}</span>`;
     const role = isMaster
       ? '<span class="badge role-master">Maître</span>'
-      : '<span class="badge">Esclave</span>';
+      : '<span class="badge role-slave">Esclave</span>';
     const servoBtn = `<button class="srv ${d.servos ? "on" : "off"}" data-servo="${id}">${d.servos ? "Actifs" : "Coupés"}</button>`;
+    const autoBtn = `<button class="srv ${d.autoAnim ? "on" : "off"}" data-autoanim="${id}">${d.autoAnim ? "Actives" : "En pause"}</button>`;
 
     const tr = document.createElement("tr");
     tr.innerHTML = `
@@ -606,7 +629,8 @@ function renderDroids() {
       <td class="rssi">${rssi}</td>
       <td>${etat}</td>
       <td>${role}</td>
-      <td>${servoBtn}</td>`;
+      <td>${servoBtn}</td>
+      <td>${autoBtn}</td>`;
     tbody.appendChild(tr);
 
     const o = document.createElement("option"); o.value = id;
@@ -658,7 +682,7 @@ function renderDroids() {
     });
   });
 
-  tbody.querySelectorAll(".srv").forEach(btn => {
+  tbody.querySelectorAll("[data-servo]").forEach(btn => {
     btn.addEventListener("click", () => {
       const id = Number(btn.dataset.servo);
       const d = droids.get(id); if (!d) return;
@@ -668,9 +692,86 @@ function renderDroids() {
       sendCmd({ cmd: "servo", target: id, enabled: next });
     });
   });
+  tbody.querySelectorAll("[data-autoanim]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const id = Number(btn.dataset.autoanim);
+      const d = droids.get(id); if (!d) return;
+      const next = !d.autoAnim;
+      d.autoAnim = next;                // reflet optimiste
+      renderDroids();
+      sendCmd({ cmd: "autoAnim", target: id, enabled: next });
+    });
+  });
 }
 
 function escapeHtml(s) { return (s || "").replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;" }[c])); }
+
+// --- Topologie du mesh (graphe de voisinage radio direct) -------------------
+// RSSI typique ESP32 : ~-30 dBm (fort) à ~-90 dBm (faible) -> 0..1.
+function rssiToStrength(rssi) {
+  return Math.max(0, Math.min(1, (rssi + 90) / 60));
+}
+
+function renderTopology() {
+  const svg = $("topoGraph");
+  svg.innerHTML = "";
+  const nodes = Array.from(droids.values())
+    .sort((a, b) => (a.role === "master" ? -1 : b.role === "master" ? 1 : a.id - b.id));
+  $("topoEmpty").style.display = nodes.length ? "none" : "block";
+  if (!nodes.length) { $("topoLinkCount").textContent = 0; return; }
+
+  const cx = 160, cy = 160, r = 120;
+  const pos = new Map();
+  nodes.forEach((n, i) => {
+    const a = (2 * Math.PI * i) / nodes.length - Math.PI / 2;
+    pos.set(n.id, { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a), n });
+  });
+
+  // Fusionne a<->b en une seule ligne (RSSI le plus faible des deux sens = le plus prudent).
+  const pairs = new Map();
+  meshLinks.forEach(l => {
+    if (!pos.has(l.from) || !pos.has(l.to) || l.from === l.to) return;
+    const key = l.from < l.to ? `${l.from}-${l.to}` : `${l.to}-${l.from}`;
+    const p = pairs.get(key) || { a: Math.min(l.from, l.to), b: Math.max(l.from, l.to) };
+    if (l.from < l.to) p.rssiAB = l.rssi; else p.rssiBA = l.rssi;
+    pairs.set(key, p);
+  });
+
+  const NS = "http://www.w3.org/2000/svg";
+  pairs.forEach(p => {
+    const rssis = [p.rssiAB, p.rssiBA].filter(v => v !== undefined);
+    const worst = Math.min(...rssis);
+    const pa = pos.get(p.a), pb = pos.get(p.b);
+    const line = document.createElementNS(NS, "line");
+    line.setAttribute("x1", pa.x); line.setAttribute("y1", pa.y);
+    line.setAttribute("x2", pb.x); line.setAttribute("y2", pb.y);
+    line.setAttribute("stroke", "var(--accent)");
+    line.setAttribute("stroke-width", 1 + 3 * rssiToStrength(worst));
+    line.setAttribute("opacity", 0.15 + 0.75 * rssiToStrength(worst));
+    const title = document.createElementNS(NS, "title");
+    title.textContent = rssis.length === 2
+      ? `${worst} dBm (${pa.n.name || hex(pa.n.id)}→${pb.n.name || hex(pb.n.id)}: ${p.rssiAB ?? "?"} · retour: ${p.rssiBA ?? "?"})`
+      : `${worst} dBm`;
+    line.appendChild(title);
+    svg.appendChild(line);
+  });
+
+  pos.forEach(({ x, y, n }) => {
+    const c = document.createElementNS(NS, "circle");
+    c.setAttribute("cx", x); c.setAttribute("cy", y); c.setAttribute("r", 10);
+    c.setAttribute("fill", n.role === "master" ? "var(--accent)" : "var(--panel-hi)");
+    c.setAttribute("stroke", "var(--border-hi)"); c.setAttribute("stroke-width", 1);
+    svg.appendChild(c);
+    const label = document.createElementNS(NS, "text");
+    label.setAttribute("x", x); label.setAttribute("y", y + 22);
+    label.setAttribute("text-anchor", "middle");
+    label.setAttribute("fill", "var(--text)"); label.setAttribute("font-size", "10");
+    label.textContent = n.name || hex(n.id);
+    svg.appendChild(label);
+  });
+
+  $("topoLinkCount").textContent = pairs.size;
+}
 
 // --- Web Serial -------------------------------------------------------------
 let manualClose = false;

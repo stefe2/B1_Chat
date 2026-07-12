@@ -13,6 +13,7 @@
 // ============================================================================
 
 #include <Arduino.h>
+#include "config.h"
 
 // ------- Types de messages (champ `type` de l'en-tête) ---------------------
 enum MeshMsgType : uint8_t {
@@ -22,6 +23,8 @@ enum MeshMsgType : uint8_t {
     MSG_SERVO     = 5,
     MSG_CALIB     = 6,
     MSG_PREVIEW   = 7,
+    MSG_AUTOANIM  = 8,
+    MSG_NEIGHBORS = 9,
 };
 
 // Adresse « tous les droïdes » pour les charges utiles ciblées.
@@ -60,6 +63,12 @@ struct ServoPayload {
     uint8_t  enabled;    // 1 = servos actifs, 0 = coupés
 };
 
+// Pause/reprise de l'animation spontanée au repos (n'affecte pas Jouer/Séquenceur).
+struct AutoAnimPayload {
+    uint16_t targetId;   // MESH_TARGET_ALL ou un srcId précis
+    uint8_t  enabled;    // 1 = anims auto actives, 0 = en pause
+};
+
 // Bornes mécaniques (degrés) persistées par le droïde ciblé.
 struct CalibPayload {
     uint16_t targetId;
@@ -72,6 +81,22 @@ struct PreviewPayload {
     uint16_t targetId;
     uint8_t  pan;
     uint8_t  tilt;
+};
+
+// Un voisin radio direct entendu par l'émetteur de CE rapport.
+struct NeighborEntry {
+    uint16_t id;     // srcId du voisin entendu directement
+    int8_t   rssi;   // RSSI mesuré par l'émetteur du rapport (pas par un relais)
+};
+
+// Rapport périodique de voisinage direct (topologie). Diffusé par le maître
+// ET les esclaves. hdr.srcId identifie qui a mesuré ces RSSI, même si ce
+// message est ensuite relayé par d'autres nœuds pour atteindre le maître —
+// seul le TRANSPORT du rapport est multi-sauts, les mesures qu'il contient
+// restent des mesures directes de l'émetteur d'origine.
+struct NeighborReportPayload {
+    uint8_t       count;
+    NeighborEntry entries[MAX_NEIGHBORS];
 };
 #pragma pack(pop)
 
@@ -99,6 +124,11 @@ public:
     // À appeler depuis le callback statique ESP-NOW (usage interne).
     void handleRaw(const uint8_t* mac, const uint8_t* data, int len, int rssi);
 
+    // Copie jusqu'à `maxOut` voisins radio directs "frais" (< staleMs) dans
+    // `out`. Retourne le nombre copié. Sert à construire le rapport périodique
+    // de voisinage (topologie), voir project.md §5.
+    uint8_t copyNeighbors(NeighborEntry* out, uint8_t maxOut, uint32_t staleMs) const;
+
 private:
     static MeshComm* _instance;
 
@@ -110,6 +140,14 @@ private:
     // Cache anti-doublon : clés (srcId<<16 | seq).
     uint32_t _seen[32];
     uint8_t  _seenIdx = 0;
+
+    // Voisinage radio direct (indépendant des relais applicatifs) : qui nous
+    // a physiquement transmis une trame authentifiée, et à quel RSSI.
+    struct Neighbor { uint16_t id; int8_t rssi; uint32_t lastSeenMs; };
+    Neighbor _neighbors[MAX_NEIGHBORS];
+    uint8_t  _neighborCount = 0;
+    void recordNeighbor(uint16_t id, int rssi, uint32_t now);
+    static uint16_t idFromMac(const uint8_t* mac);
 
     bool alreadySeen(uint16_t srcId, uint16_t seq);
     void remember(uint16_t srcId, uint16_t seq);

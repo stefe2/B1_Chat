@@ -3,6 +3,7 @@
 #include "servo_engine.h"
 #include "animation.h"
 #include "mesh_comm.h"
+#include "mesh_topology.h"
 #include "registry.h"
 #include "config_store.h"
 #include "serial_console.h"
@@ -26,6 +27,10 @@ static uint32_t nextMove = 0;
 // État runtime des servos de CE droïde (pilotable depuis la console web).
 static bool gServos = true;
 
+// Anims spontanées au repos de CE droïde (pilotable depuis la console web).
+// N'affecte pas Jouer (anim) ni le Séquenceur : uniquement le tirage aléatoire au repos.
+static bool gAutoAnim = true;
+
 // LED de vie (témoin d'exécution) — clignotement non bloquant.
 static uint32_t lastBlink = 0;
 static bool ledOn = false;
@@ -35,6 +40,7 @@ static uint32_t nextMeshSend = 0;
 static uint32_t nextHeartbeat = 0;
 static uint32_t nextPresenceScan = 0;
 static uint32_t nextDroidsPush = 0;
+static uint32_t nextNeighborReport = 0;
 
 // Lecteur de séquence stockée (maître) : exécution autonome sans PC.
 #if IS_MASTER
@@ -67,6 +73,15 @@ static void applyServos(bool en) {
     LOGF("servos %s", en ? "ACTIFS" : "COUPÉS");
 }
 
+// Met en pause/reprend l'animation spontanée au repos de CE droïde.
+static void applyAutoAnim(bool en) {
+    gAutoAnim = en;
+#if IS_MASTER
+    Console.setMasterAutoAnim(en);
+#endif
+    LOGF("anims auto %s", en ? "ACTIVES" : "EN PAUSE");
+}
+
 // Persiste et applique une calibration reçue pour CE droïde (maître ou esclave).
 static void applyCalib(const CalibPayload& p) {
     const ServoCalib c{p.panMin, p.panCenter, p.panMax, p.tiltMin, p.tiltCenter, p.tiltMax};
@@ -91,6 +106,13 @@ static void onServoCmd(uint16_t target, bool en) {
     ServoPayload p{target, (uint8_t)(en ? 1 : 0)};
     Mesh.send(MSG_SERVO, &p, sizeof(p));
     if (target == MESH_TARGET_ALL || target == Mesh.myId()) applyServos(en);
+}
+
+// Hook console : mettre en pause/reprendre l'animation spontanée d'une cible (maître).
+static void onAutoAnimCmd(uint16_t target, bool en) {
+    AutoAnimPayload p{target, (uint8_t)(en ? 1 : 0)};
+    Mesh.send(MSG_AUTOANIM, &p, sizeof(p));
+    if (target == MESH_TARGET_ALL || target == Mesh.myId()) applyAutoAnim(en);
 }
 
 static void onVolumeCmd(uint8_t v) {
@@ -186,6 +208,11 @@ static void onMeshMessage(uint8_t type, const uint8_t* payload, uint8_t len,
         memcpy(&p, payload, sizeof(p));
         if (p.targetId == MESH_TARGET_ALL || p.targetId == Mesh.myId())
             applyServos(p.enabled != 0);
+    } else if (type == MSG_AUTOANIM && len == sizeof(AutoAnimPayload)) {
+        AutoAnimPayload p;
+        memcpy(&p, payload, sizeof(p));
+        if (p.targetId == MESH_TARGET_ALL || p.targetId == Mesh.myId())
+            applyAutoAnim(p.enabled != 0);
     } else if (type == MSG_CALIB && len == sizeof(CalibPayload)) {
         CalibPayload p;
         memcpy(&p, payload, sizeof(p));
@@ -201,9 +228,19 @@ static void onMeshMessage(uint8_t type, const uint8_t* payload, uint8_t len,
         HeartbeatPayload hb;
         memcpy(&hb, payload, sizeof(hb));
         Droids.setServos(srcId, hb.state & 0x01);
+        Droids.setAutoAnim(srcId, hb.state & 0x02);
 #endif
     } else if (type == MSG_HEARTBEAT) {
         // ancienne forme / présence : déjà notée.
+    } else if (type == MSG_NEIGHBORS && len == sizeof(NeighborReportPayload)) {
+#if IS_MASTER
+        NeighborReportPayload rep;
+        memcpy(&rep, payload, sizeof(rep));
+        const uint32_t now2 = millis();
+        const uint8_t n = rep.count > MAX_NEIGHBORS ? MAX_NEIGHBORS : rep.count;
+        for (uint8_t i = 0; i < n; i++)
+            MeshTopo.seen(srcId, rep.entries[i].id, rep.entries[i].rssi, now2);
+#endif
     } else {
         LOGF("type=%u len=%u de %04X (rssi %d)", type, len, srcId, rssi);
     }
@@ -236,6 +273,7 @@ void setup() {
     Console.onVolume(onVolumeCmd);
     Console.onTrack(onTrackCmd);
     Console.onServo(onServoCmd);
+    Console.onAutoAnim(onAutoAnimCmd);
     Console.onSeqSave(onSeqSave);
     Console.onSeqList(onSeqList);
     Console.onSeqLoad(onSeqLoad);
@@ -246,6 +284,7 @@ void setup() {
     Console.onCalib(onCalibCmd);
     Console.onPreview(onPreviewCmd);
     Console.setMasterServos(gServos);
+    Console.setMasterAutoAnim(gAutoAnim);
 
     Audio.begin();
     Audio.setVolume(Config.volume());
@@ -283,8 +322,27 @@ void loop() {
     // Heartbeat : chaque droïde signale sa présence (et l'état de ses servos).
     if (now > nextHeartbeat) {
         nextHeartbeat = now + HEARTBEAT_MS;
-        HeartbeatPayload hb{now, (uint8_t)(gServos ? 1 : 0)};
+        HeartbeatPayload hb{now, (uint8_t)((gServos ? 1 : 0) | (gAutoAnim ? 2 : 0))};
         Mesh.send(MSG_HEARTBEAT, &hb, sizeof(hb));
+    }
+
+    // Rapport de voisinage direct (topologie) : chaque droïde diffuse
+    // périodiquement les nœuds qu'il entend en direct, avec le RSSI mesuré.
+    // Gigue aléatoire pour éviter que tous les droïdes n'émettent en lockstep
+    // (l'ESP-NOW broadcast n'a pas d'accusé de réception : des collisions
+    // répétées feraient perdre systématiquement ces rapports).
+    if (now > nextNeighborReport) {
+        nextNeighborReport = now + NEIGHBOR_REPORT_MS + (uint32_t)random(0, 500);
+        NeighborReportPayload rep{};
+        rep.count = Mesh.copyNeighbors(rep.entries, MAX_NEIGHBORS, NEIGHBOR_STALE_MS);
+        Mesh.send(MSG_NEIGHBORS, &rep, sizeof(rep));
+#if IS_MASTER
+        // Son propre voisinage direct est déjà connu localement, pas besoin
+        // d'attendre un aller-retour réseau pour l'intégrer à la topologie.
+        const uint32_t now2 = millis();
+        for (uint8_t i = 0; i < rep.count; i++)
+            MeshTopo.seen(Mesh.myId(), rep.entries[i].id, rep.entries[i].rssi, now2);
+#endif
     }
 
 #if IS_MASTER
@@ -341,10 +399,11 @@ void loop() {
     if (now > nextDroidsPush) {
         nextDroidsPush = now + 1500;
         Console.pushDroids();
+        Console.pushMeshTopology();
     }
 
     // Le maître choisit une anim au hasard, la joue et la diffuse au groupe.
-    if (!gSeqPlaying && gServos && !anim.isPlaying() && now > nextMeshSend) {
+    if (!gSeqPlaying && gServos && gAutoAnim && !anim.isPlaying() && now > nextMeshSend) {
         nextMeshSend = now + (uint32_t)random(2500, 5000);
         const uint32_t seed = (uint32_t)esp_random();
         const uint8_t animId = AnimationPlayer::randomAnimId(seed);
@@ -355,7 +414,7 @@ void loop() {
     }
 #else
     // Un esclave isolé (sans maître) s'anime aussi tout seul.
-    if (gServos && !anim.isPlaying() && now > nextMove) {
+    if (gServos && gAutoAnim && !anim.isPlaying() && now > nextMove) {
         nextMove = now + (uint32_t)random(3000, 7000);
         const uint32_t seed = (uint32_t)esp_random();
         anim.play(AnimationPlayer::randomAnimId(seed), seed);
