@@ -32,7 +32,7 @@ public class FlashService
         return null;
     }
 
-    public void Start(string binPath, string address, string portName)
+    public void Start(string binPath, string address, string portName, bool eraseFirst = false)
     {
         var tool = FindEspflash();
         if (tool == null)
@@ -51,6 +51,55 @@ public class FlashService
             return;
         }
 
+        if (eraseFirst) RunErase(tool, portName, () => RunWrite(tool, binPath, address, portName));
+        else RunWrite(tool, binPath, address, portName);
+    }
+
+    private void RunErase(string tool, string portName, Action onSuccess)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = tool,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+        };
+        psi.ArgumentList.Add("erase-flash");
+        psi.ArgumentList.Add("--port"); psi.ArgumentList.Add(portName);
+
+        try
+        {
+            var proc = new Process { StartInfo = psi, EnableRaisingEvents = true };
+            void Line(string? s) { if (s != null) LogLine?.Invoke(s); }
+            proc.OutputDataReceived += (_, a) => Line(a.Data);
+            proc.ErrorDataReceived += (_, a) => Line(a.Data);
+            proc.Exited += (_, _) =>
+            {
+                if (proc.ExitCode == 0)
+                {
+                    LogLine?.Invoke("— Puce effacée —");
+                    onSuccess();
+                }
+                else
+                {
+                    Completed?.Invoke(false, proc.ExitCode, "échec de l'effacement complet");
+                }
+                proc.Dispose();
+            };
+            proc.Start();
+            proc.BeginOutputReadLine();
+            proc.BeginErrorReadLine();
+            LogLine?.Invoke($"» espflash erase-flash --port {portName}");
+        }
+        catch (Exception ex)
+        {
+            Completed?.Invoke(false, null, ex.Message);
+        }
+    }
+
+    private void RunWrite(string tool, string binPath, string address, string portName)
+    {
         var psi = new ProcessStartInfo
         {
             FileName = tool,

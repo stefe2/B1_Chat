@@ -13,10 +13,18 @@
                               IsChecked="{Binding IsSlaveRole, Mode=OneWay}" Command="{Binding SelectSlaveRoleCommand}" Margin="4,0,0,0" />
             </UniformGrid>
 
+            <TextBlock Text="PORT DE FLASH" Style="{StaticResource FieldLabelStyle}" Margin="0,0,0,4" />
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                <ComboBox Width="120" Style="{StaticResource DarkComboBoxStyle}" ItemsSource="{Binding AvailablePorts}"
+                          SelectedItem="{Binding SelectedFlashPort}" Margin="0,0,6,0" />
+                <Button Content="Rescan" Style="{StaticResource MiniButtonStyle}" Command="{Binding RefreshFlashPortsCommand}"
+                        ToolTip="Indépendant du port connecté dans la fenêtre principale — choisis n'importe quelle carte ESP32 branchée, même jamais connectée." />
+            </StackPanel>
+
             <TextBlock Text="SOURCE DU BINAIRE" Style="{StaticResource FieldLabelStyle}" Margin="0,0,0,4" />
             <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                 <Button Content="Depuis GitHub" Style="{StaticResource MiniButtonStyle}" Command="{Binding PrepareFromGithubCommand}" Margin="0,0,8,0"
-                        ToolTip="Télécharge et vérifie (SHA-256) la dernière version publiée pour le rôle sélectionné ci-dessus. Lance d'abord « Vérifier » ci-dessous si aucune version n'est encore connue." />
+                        ToolTip="Télécharge et vérifie (SHA-256) la dernière version publiée pour le rôle sélectionné ci-dessus." />
                 <Button Content="Fichier local…" Style="{StaticResource MiniButtonStyle}" Command="{Binding PickBinCommand}"
                         ToolTip="Choisir un .bin quelconque (ex. build local pio run) — non vérifié." />
             </StackPanel>
@@ -33,11 +41,21 @@
                 <TextBox Width="90" Style="{StaticResource RecessedTextBoxStyle}" Text="{Binding Address}" Margin="4,0,0,0" />
             </StackPanel>
 
+            <Border Background="{StaticResource RecessBrush}" CornerRadius="4" Padding="10,8" Margin="0,0,0,10"
+                    BorderBrush="{StaticResource WarnBrush}" BorderThickness="1">
+                <StackPanel>
+                    <CheckBox Content="Effacer complètement la puce avant de flasher" Style="{StaticResource DangerCheckBoxStyle}"
+                              IsChecked="{Binding EraseChipFirst}" />
+                    <TextBlock Style="{StaticResource HintTextStyle}" TextWrapping="Wrap" Margin="24,4,0,0"
+                               Text="Efface aussi tous les réglages sauvegardés (NVS) — irréversible. Un flash normal n'y touche jamais." />
+                </StackPanel>
+            </Border>
+
             <Button Content="{Binding FlashLabel}" Style="{StaticResource PrimaryButtonStyle}" Command="{Binding FlashCommand}"
                     IsEnabled="{Binding CanFlash}" HorizontalAlignment="Left" Margin="0,0,0,10" />
 
             <Border Background="{StaticResource RecessBrush}" CornerRadius="4" Padding="6" Margin="0,0,0,12">
-                <ScrollViewer Height="100" VerticalScrollBarVisibility="Auto">
+                <ScrollViewer x:Name="FlashLogScroll" Height="150" VerticalScrollBarVisibility="Auto" ScrollChanged="FlashLogScroll_ScrollChanged">
                     <ItemsControl ItemsSource="{Binding FlashLog}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
@@ -50,10 +68,7 @@
 
             <Separator Margin="0,0,0,8" />
             <TextBlock Text="MISES À JOUR (GITHUB)" Style="{StaticResource SectionSubtitleStyle}" FontSize="13" />
-            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                <Button Content="Vérifier" Style="{StaticResource MiniButtonStyle}" Command="{Binding CheckUpdatesCommand}" Margin="0,0,8,0" />
-                <TextBlock Text="{Binding UpdateStatus}" Foreground="{StaticResource MutedBrush}" FontSize="11" VerticalAlignment="Center" />
-            </StackPanel>
+            <TextBlock Text="{Binding UpdateStatus}" Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="0,0,0,6" />
             <StackPanel Orientation="Horizontal" Margin="0,0,0,4" Visibility="{Binding HasAppUpdate, Converter={StaticResource BoolToVisConv}}">
                 <TextBlock Text="Application : " FontSize="11" />
                 <TextBlock Text="{Binding AppLatest, StringFormat='v{0} disponible'}" FontSize="11" Foreground="{StaticResource OkBrush}" Margin="0,0,8,0" />

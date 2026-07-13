@@ -134,6 +134,7 @@ Session gardée par handshake : `hello` → `{evt:"hello",ok,id}`, puis keepaliv
 - **Console → maître** (`cmd`) : `hello` · `ping` · `list` · `getConfig` · `getAll` ·
   `config {target,freq,amp,speed}` · `volume {value}` · `name {id,name}` ·
   `playTrack {track}` · `servo {target,enabled}` · `autoAnim {target,enabled}` ·
+  `adopt {target}` · `forget {target}` ·
   `anim {target,animId,seed}` · `preview {target,pan,tilt}` ·
   `calib {target,+6 bornes}` · `getCalib {target}` · `getAnimDurations` ·
   `getMeshTopology` · `seqList` · `seqLoad {slot}` ·
@@ -141,7 +142,7 @@ Session gardée par handshake : `hello` → `{evt:"hello",ok,id}`, puis keepaliv
   `seqRun {slot,from?}` · `seqStop` · `seqPause` · `seqResume` · `seqState` ·
   `setMulti {ops:[...]}` · `commit` · `revert`
 - **Maître → console** (`evt`) : `hello {ok,id,fw,proto,lineMax,anims,seqSlots,trackCount,caps[],dirty}` ·
-  `droids {list:[{id,name,rssi,age,role,servos,autoAnim}]}` ·
+  `droids {list:[{id,name,rssi,age,role,servos,autoAnim,adopted}]}` ·
   `log {msg}` · `err {msg}` · `config {volume,freq,amp,speed}` · `calibData {target,+6}` ·
   `meshTopology {links:[{from,to,rssi}]}` · `animDurations {list:[{animId,ms}]}` ·
   `seqList {list:[{slot,name,stepCount,loop,track}]}` · `seqData {slot,name,loop,track,steps}` ·
@@ -159,6 +160,15 @@ séquences) : les setters sont « live » (surcouche RAM), la NVS n'est écrite 
 après un `setMulti` de restauration. [FIRMWARE-CONTRACT.md](FIRMWARE-CONTRACT.md)
 tient l'état d'implémentation (§1/§3/§4/§5 faits ; §2 durées de pistes reporté —
 approche broche BUSY).
+
+**Adoption des droïdes** (`registry`/`config_store`) : un droïde jamais vu
+(`adopted:false` dans `evt:droids`) reste dans le mesh (anims broadcast reçues
+normalement) mais absent des contrôles individuels tant que la console n'a pas
+envoyé `adopt`. `adopt` persiste le statut en NVS (survit aux redémarrages du
+maître) ; `forget` retire l'entrée du registre **et** efface son statut NVS — un
+droïde ainsi « oublié » ou dont l'adoption est refusée redemande donc dès qu'il
+reparle. Le badge « perdu » (7 s de silence, `DROID_TIMEOUT_MS`) ne redéclenche
+jamais cette question à lui seul.
 
 ## Ancienne page web de référence (`console/wwwroot/index.html`)
 

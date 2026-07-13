@@ -27,6 +27,7 @@ public class SerialLinkService : IDisposable
 
     private SerialPort? _port;
     private CancellationTokenSource? _readCts;
+    private Task? _readTask;
     private System.Threading.Timer? _reconnectTimer;
     private bool _manualClose;
 
@@ -56,7 +57,7 @@ public class SerialLinkService : IDisposable
             PortName = portName;
             _readCts = new CancellationTokenSource();
             var token = _readCts.Token;
-            Task.Run(() => ReadLoop(port, token), token);
+            _readTask = Task.Run(() => ReadLoop(port, token), token);
             RunOnUi(() => Opened?.Invoke());
         }
         catch (Exception ex)
@@ -73,6 +74,7 @@ public class SerialLinkService : IDisposable
         _manualClose = true;
         StopReconnectLoop();
         var wasOpen = _port != null;
+        CancelAndWaitReadLoop();
         ClosePortOnly();
         if (wasOpen) RunOnUi(() => Closed?.Invoke(false));
     }
@@ -81,12 +83,24 @@ public class SerialLinkService : IDisposable
     /// Fermeture volontaire pour un besoin externe (flash espflash) : ferme sans lever d'evenement
     /// "closed" ni tenter de reconnecter — l'appelant sait deja pourquoi le port se ferme et
     /// rouvrira lui-meme le port apres coup si besoin (meme contrat que l'ancien StartFlash).
+    /// Attend (borne a 1s) que le thread de lecture arriere-plan ait vraiment fini avant de
+    /// fermer/disposer le SerialPort : sans cette attente, un process externe (espflash) qui
+    /// tente d'ouvrir le meme port juste apres peut se heurter a une course avec la liberation
+    /// du handle Windows encore en cours cote thread de lecture — echec "Error while connecting
+    /// to device" cote espflash, meme si Close()/Dispose() ont deja ete appeles ici.
     /// </summary>
     public void PrepareForExternalClose()
     {
         _manualClose = true;
         StopReconnectLoop();
+        CancelAndWaitReadLoop();
         ClosePortOnly();
+    }
+
+    private void CancelAndWaitReadLoop()
+    {
+        _readCts?.Cancel();
+        try { _readTask?.Wait(1000); } catch { /* thread deja termine/exception attendue, sans importance ici */ }
     }
 
     public void Write(string data)
@@ -141,6 +155,7 @@ public class SerialLinkService : IDisposable
     {
         _readCts?.Cancel();
         _readCts = null;
+        _readTask = null;
         if (_port != null)
         {
             try { _port.Close(); } catch { /* deja ferme/deconnecte */ }

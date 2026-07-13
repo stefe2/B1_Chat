@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -77,6 +78,19 @@ public partial class ProtocolClient : ObservableObject
         PortOpen = false;
         SessionReady = false;
         StopKeepalive();
+        // Deconnexion volontaire (pas une coupure en cours de reconnexion auto) : la console ne
+        // peut plus garantir que ces donnees (en ligne/RSSI/liens mesh) sont encore a jour, on les
+        // vide plutot que de laisser un etat fige et potentiellement trompeur a l'ecran.
+        if (!unexpected) ClearLiveState();
+    }
+
+    private void ClearLiveState()
+    {
+        Droids.Clear();
+        _droidsById.Clear();
+        MeshLinks.Clear();
+        DroidsChanged?.Invoke();
+        MeshTopologyChanged?.Invoke();
     }
 
     private void StartKeepalive()
@@ -127,6 +141,8 @@ public partial class ProtocolClient : ObservableObject
     public void SetName(ushort id, string name) => SendCmd(new JsonObject { ["cmd"] = "name", ["id"] = id, ["name"] = name });
     public void SetServo(ushort target, bool enabled) => SendCmd(new JsonObject { ["cmd"] = "servo", ["target"] = target, ["enabled"] = enabled });
     public void SetAutoAnim(ushort target, bool enabled) => SendCmd(new JsonObject { ["cmd"] = "autoAnim", ["target"] = target, ["enabled"] = enabled });
+    public void Adopt(ushort target) => SendCmd(new JsonObject { ["cmd"] = "adopt", ["target"] = target });
+    public void Forget(ushort target) => SendCmd(new JsonObject { ["cmd"] = "forget", ["target"] = target });
     public void PlayAnim(ushort target, int animId, uint seed) => SendCmd(new JsonObject { ["cmd"] = "anim", ["target"] = target, ["animId"] = animId, ["seed"] = seed });
     public void Preview(ushort target, int pan, int tilt) => SendCmd(new JsonObject { ["cmd"] = "preview", ["target"] = target, ["pan"] = pan, ["tilt"] = tilt });
     public void SetCalib(ushort target, int panMin, int panCenter, int panMax, int tiltMin, int tiltCenter, int tiltMax) =>
@@ -252,10 +268,18 @@ public partial class ProtocolClient : ObservableObject
             if (item.TryGetProperty("role", out var role)) droid.IsMaster = role.GetString() == "master";
             if (item.TryGetProperty("servos", out var sv)) droid.ServosOn = sv.GetBoolean();
             if (item.TryGetProperty("autoAnim", out var aa)) droid.AutoAnimOn = aa.GetBoolean();
+            if (item.TryGetProperty("adopted", out var ad)) droid.Adopted = ad.GetBoolean();
             var age = item.TryGetProperty("age", out var a) ? a.GetInt32() : 0;
             droid.Online = droid.IsMaster || age <= 6000;
             droid.LastSeen = DateTime.UtcNow;
         }
+
+        foreach (var staleId in _droidsById.Keys.Where(id => !seen.Contains(id)).ToList())
+        {
+            Droids.Remove(_droidsById[staleId]);
+            _droidsById.Remove(staleId);
+        }
+
         DroidsChanged?.Invoke();
     }
 

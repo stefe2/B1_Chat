@@ -48,6 +48,20 @@ public partial class DroidsViewModel : ObservableObject
         _protocol.SetAutoAnim(droid.Id, droid.AutoAnimOn);
     }
 
+    [RelayCommand]
+    private void AdoptDroid(Droid? droid)
+    {
+        if (droid == null) return;
+        _protocol.Adopt(droid.Id);
+    }
+
+    [RelayCommand]
+    private void ForgetDroid(Droid? droid)
+    {
+        if (droid == null) return;
+        _protocol.Forget(droid.Id);
+    }
+
     // --- Sauvegarde / restauration --------------------------------------------
     // Simplifie par rapport a index.html : pas de fenetre de diff dediee, une
     // confirmation MessageBox avant restauration (le contenu du plan met l'accent

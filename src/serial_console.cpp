@@ -79,6 +79,7 @@ void SerialConsole::pushDroids() {
     me["role"] = "master";
     me["servos"] = _masterServos;
     me["autoAnim"] = _masterAutoAnim;
+    me["adopted"] = true;
 
     // Les autres droïdes (esclaves).
     for (uint8_t i = 0; i < Droids.count(); i++) {
@@ -91,6 +92,7 @@ void SerialConsole::pushDroids() {
         o["role"] = "slave";
         o["servos"] = e.servos;
         o["autoAnim"] = e.autoAnim;
+        o["adopted"] = e.adopted;
     }
     serializeJson(doc, Serial);
     Serial.print('\n');
@@ -526,6 +528,20 @@ void SerialConsole::handleLine(const char* line) {
         const bool en = doc["enabled"] | false;
         if (_autoAnimCb) _autoAnimCb(target, en);
         log("anims auto %s -> %04X", en ? "ON" : "OFF", target);
+
+    } else if (!strcmp(cmd, "adopt")) {
+        const uint16_t target = doc["target"] | 0;
+        Droids.setAdopted(target, true);
+        Config.setAdopted(target, true);
+        log("droïde %04X adopté", target);
+        pushDroids();
+
+    } else if (!strcmp(cmd, "forget")) {
+        const uint16_t target = doc["target"] | 0;
+        Config.setAdopted(target, false);
+        if (Droids.forget(target)) log("droïde %04X oublié/ignoré", target);
+        else pushErr("droïde inconnu: %04X", target);
+        pushDroids();
 
     } else if (!strcmp(cmd, "seqList")) {
         pushSeqList();

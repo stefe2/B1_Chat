@@ -13,7 +13,7 @@
 //  compare à la derniere release de stefe2/B1_Chat pour proposer une mise a
 //  jour. Bump a chaque release (tools/release.ps1 s'appuie dessus).
 // ---------------------------------------------------------------------------
-#define FW_VERSION "1.0.0"
+#define FW_VERSION "1.1.0"
 
 // Version du protocole série console<->maître (incrementée quand un changement
 // n'est pas retro-compatible; les ajouts de champs/commandes n'en ont pas besoin).

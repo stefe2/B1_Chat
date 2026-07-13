@@ -44,6 +44,12 @@ public:
     ServoCalib getCalib(uint16_t id);
     void       setCalib(uint16_t id, const ServoCalib& c);
 
+    // Statut d'adoption d'un droïde (false = jamais adopté). Persistance
+    // immédiate, hors du modèle commit/revert : setAdopted(id, false) efface
+    // la clé plutôt que d'écrire false, pour repartir de zéro proprement.
+    bool isAdopted(uint16_t id);
+    void setAdopted(uint16_t id, bool adopted);
+
     // Modèle commit/revert (volume, params d'anim, noms).
     bool dirty() const { return _dirty; }
     void commitPending();   // écrit la surcouche RAM en NVS puis la vide
@@ -53,6 +59,7 @@ private:
     Preferences _p;
     static void nameKey(uint16_t id, char out[8]);
     static void calibKey(uint16_t id, char out[8]);
+    static void adoptKey(uint16_t id, char out[8]);
 
     // Surcouche RAM des modifications non engagées.
     bool    _dirty = false;

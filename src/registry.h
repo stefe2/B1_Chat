@@ -21,6 +21,7 @@ public:
         uint32_t lastSeen;
         bool     servos;    // état des servos rapporté par le droïde
         bool     autoAnim;  // anims spontanées au repos actives, rapporté par le droïde
+        bool     adopted;   // false = en attente d'adoption (voir config_store)
     };
 
     // Enregistre/actualise un droïde. Retourne true si nouvellement ajouté.
@@ -31,6 +32,13 @@ public:
 
     // Met à jour l'état des anims auto d'un droïde (via heartbeat).
     void setAutoAnim(uint16_t id, bool on);
+
+    // Marque un droïde comme adopté/non adopté (statut RAM, cf. config_store pour la NVS).
+    void setAdopted(uint16_t id, bool v);
+
+    // Retire un droïde du registre (Oublier / adoption refusée). Retourne
+    // true s'il a été trouvé et retiré.
+    bool forget(uint16_t id);
 
     uint8_t count() const { return _count; }
     const Entry& at(uint8_t i) const { return _e[i]; }

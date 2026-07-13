@@ -24,6 +24,8 @@ public partial class MainWindow : Window
         }
 
         var vm = (MainViewModel)DataContext;
+        vm.Firmware.RefreshFlashPortsCommand.Execute(null);
+        vm.Firmware.CheckUpdatesCommand.Execute(null);
         _firmwareWindow = new FirmwareWindow { Owner = this, DataContext = vm.Firmware };
         _firmwareWindow.Show();
     }

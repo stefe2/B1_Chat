@@ -134,3 +134,22 @@ void ConfigStore::setCalib(uint16_t id, const ServoCalib& c) {
     calibKey(id, key);
     _p.putBytes(key, &c, sizeof(c));
 }
+
+void ConfigStore::adoptKey(uint16_t id, char out[8]) {
+    // Clé NVS courte : "a" + hex de l'id, ex. "a3A7C".
+    snprintf(out, 8, "a%04X", id);
+}
+
+bool ConfigStore::isAdopted(uint16_t id) {
+    char key[8];
+    adoptKey(id, key);
+    if (!_p.isKey(key)) return false;
+    return _p.getBool(key, false);
+}
+
+void ConfigStore::setAdopted(uint16_t id, bool adopted) {
+    char key[8];
+    adoptKey(id, key);
+    if (adopted) _p.putBool(key, true);
+    else _p.remove(key);
+}

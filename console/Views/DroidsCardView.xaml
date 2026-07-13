@@ -38,6 +38,7 @@
                             <ColumnDefinition Width="70" />
                             <ColumnDefinition Width="90" />
                             <ColumnDefinition Width="90" />
+                            <ColumnDefinition Width="70" />
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0" Text="NOM" Style="{StaticResource TableHeaderTextStyle}" />
                         <TextBlock Grid.Column="1" Text="ID" Style="{StaticResource TableHeaderTextStyle}" />
@@ -46,6 +47,7 @@
                         <TextBlock Grid.Column="4" Text="RÔLE" Style="{StaticResource TableHeaderTextStyle}" />
                         <TextBlock Grid.Column="5" Text="SERVOS" Style="{StaticResource TableHeaderTextStyle}" />
                         <TextBlock Grid.Column="6" Text="ANIMS AUTO" Style="{StaticResource TableHeaderTextStyle}" />
+                        <TextBlock Grid.Column="7" Text="" Style="{StaticResource TableHeaderTextStyle}" />
                     </Grid>
                     <Border BorderBrush="#5C000000" BorderThickness="0,0,0,1" Margin="0,0,0,2" />
 
@@ -62,6 +64,7 @@
                                             <ColumnDefinition Width="70" />
                                             <ColumnDefinition Width="90" />
                                             <ColumnDefinition Width="90" />
+                                            <ColumnDefinition Width="70" />
                                         </Grid.ColumnDefinitions>
 
                                         <TextBox Grid.Column="0" Style="{StaticResource RecessedTextBoxStyle}" Margin="0,0,6,0"
@@ -81,23 +84,51 @@
                                             <TextBlock Text="{Binding Online, Converter={StaticResource BoolToTextConv}, ConverterParameter='en ligne|perdu'}" FontSize="11" />
                                         </Border>
 
-                                        <Border Grid.Column="4" Style="{Binding IsMaster, Converter={StaticResource BoolToStyleConv}, ConverterParameter='HaloBadgeOkStyle|HaloBadgeWarnStyle'}" VerticalAlignment="Center" HorizontalAlignment="Left">
+                                        <Border Grid.Column="4" Style="{Binding IsMaster, Converter={StaticResource BoolToStyleConv}, ConverterParameter='HaloBadgeOkStyle|HaloBadgeWarnStyle'}"
+                                                VerticalAlignment="Center" HorizontalAlignment="Left"
+                                                Visibility="{Binding IsPending, Converter={StaticResource BoolToVisConv}, ConverterParameter=Invert}">
                                             <TextBlock Text="{Binding IsMaster, Converter={StaticResource BoolToTextConv}, ConverterParameter='maître|esclave'}" FontSize="11" />
+                                        </Border>
+                                        <Border Grid.Column="4" Style="{StaticResource HaloBadgeWarnStyle}" VerticalAlignment="Center" HorizontalAlignment="Left"
+                                                Visibility="{Binding IsPending, Converter={StaticResource BoolToVisConv}}">
+                                            <TextBlock Text="nouveau" FontSize="11" />
                                         </Border>
 
                                         <ToggleButton Grid.Column="5" Style="{StaticResource HaloToggleButtonStyle}"
                                                       IsChecked="{Binding ServosOn, Mode=OneWay}"
                                                       Command="{Binding DataContext.ToggleServosCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                      CommandParameter="{Binding}">
+                                                      CommandParameter="{Binding}"
+                                                      Visibility="{Binding IsPending, Converter={StaticResource BoolToVisConv}, ConverterParameter=Invert}">
                                             <TextBlock Text="Servos" FontSize="11" />
                                         </ToggleButton>
+                                        <Button Grid.Column="5" Style="{StaticResource MiniButtonStyle}"
+                                                Command="{Binding DataContext.AdoptDroidCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                CommandParameter="{Binding}"
+                                                Visibility="{Binding IsPending, Converter={StaticResource BoolToVisConv}}">
+                                            <TextBlock Text="Adopter" FontSize="11" />
+                                        </Button>
 
                                         <ToggleButton Grid.Column="6" Style="{StaticResource HaloToggleButtonStyle}"
                                                       IsChecked="{Binding AutoAnimOn, Mode=OneWay}"
                                                       Command="{Binding DataContext.ToggleAutoAnimCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                      CommandParameter="{Binding}">
+                                                      CommandParameter="{Binding}"
+                                                      Visibility="{Binding IsPending, Converter={StaticResource BoolToVisConv}, ConverterParameter=Invert}">
                                             <TextBlock Text="Anims auto" FontSize="11" />
                                         </ToggleButton>
+                                        <Button Grid.Column="6" Style="{StaticResource MiniButtonStyle}"
+                                                Command="{Binding DataContext.ForgetDroidCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                CommandParameter="{Binding}"
+                                                Visibility="{Binding IsPending, Converter={StaticResource BoolToVisConv}}">
+                                            <TextBlock Text="Ignorer" FontSize="11" />
+                                        </Button>
+
+                                        <Button Grid.Column="7" Style="{StaticResource MiniButtonStyle}"
+                                                Command="{Binding DataContext.ForgetDroidCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                CommandParameter="{Binding}"
+                                                ToolTip="Retirer ce droïde de la liste — il redemandera à être adopté s'il reparle."
+                                                Visibility="{Binding CanForget, Converter={StaticResource BoolToVisConv}}">
+                                            <TextBlock Text="Oublier" FontSize="11" />
+                                        </Button>
                                     </Grid>
                                 </Border>
                             </DataTemplate>
