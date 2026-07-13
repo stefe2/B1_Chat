@@ -1,0 +1,46 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RootNamespace>b1_chat_console</RootNamespace>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <!-- Version sémantique : bumpée à la main à chaque phase de la roadmap (voir CLAUDE.md). -->
+    <VersionPrefix>0.8.0</VersionPrefix>
+  </PropertyGroup>
+
+  <!-- Numéro de build auto-incrémenté à chaque compilation (fichier build.number).
+       Donne FileVersion 0.3.0.N et InformationalVersion "0.3.0+build.N",
+       affichées dans le titre de la fenêtre et l'en-tête du dashboard. -->
+  <PropertyGroup>
+    <BuildNumberFile>$(MSBuildProjectDirectory)\build.number</BuildNumberFile>
+    <BuildNumber Condition="Exists('$(BuildNumberFile)')">$([System.IO.File]::ReadAllText('$(BuildNumberFile)').Trim())</BuildNumber>
+    <BuildNumber Condition="'$(BuildNumber)' == ''">0</BuildNumber>
+  </PropertyGroup>
+  <Target Name="IncrementBuildNumber" BeforeTargets="GetAssemblyVersion;GenerateAssemblyInfo">
+    <PropertyGroup>
+      <NewBuildNumber>$([MSBuild]::Add($(BuildNumber), 1))</NewBuildNumber>
+    </PropertyGroup>
+    <WriteLinesToFile File="$(BuildNumberFile)" Lines="$(NewBuildNumber)" Overwrite="true" />
+    <CreateProperty Value="$(VersionPrefix).$(NewBuildNumber)">
+      <Output TaskParameter="Value" PropertyName="FileVersion" />
+    </CreateProperty>
+    <CreateProperty Value="$(VersionPrefix)+build.$(NewBuildNumber)">
+      <Output TaskParameter="Value" PropertyName="InformationalVersion" />
+    </CreateProperty>
+  </Target>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4078.44" />
+    <PackageReference Include="System.IO.Ports" Version="10.0.9" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="wwwroot\**" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Outil de flash ESP32 (espflash.exe, non versionné) : déposé par l'utilisateur, voir CLAUDE.md. -->
+    <None Include="tools\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

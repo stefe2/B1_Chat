@@ -6,26 +6,35 @@ de l'utilisateur).
 
 ## Vue d'ensemble
 
-Deux moitiés :
+Un seul dépôt git (`stefe2/B1_Chat`), deux moitiés :
 
-1. **Firmware ESP32** (ce dépôt, PlatformIO/Arduino) : pilote plusieurs têtes de
-   droïdes B1 (2 servos pan/tilt chacune) en réseau **ESP-NOW mesh multi-sauts**,
-   avec animations fluides/organiques coordonnées par un **maître** qui joue aussi
-   le son (DFPlayer Mini + ampli). Réglages persistés en NVS.
-2. **Console de supervision** (`C:\Users\stefe\source\repos\b1-chat-console`,
-   WPF net8.0-windows + WebView2, v0.8.x, dépôt git séparé) : application de
-   bureau qui possède le port série (`System.IO.Ports`) et rend
-   **`wwwroot/index.html`** — la page unique de l'UI (HTML+CSS+JS inline, tout en
-   français), **copie canonique** (remplaçant direct de l'ancien
-   `web/dashboard_V7.html` ; il n'y a plus de copie dans ce dépôt-ci — éditer
-   directement celle du dépôt console). `FIRMWARE-CONTRACT.md` (copié du dépôt
-   console) liste les extensions de protocole que la console attend du firmware.
+1. **Firmware ESP32** (racine du dépôt, PlatformIO/Arduino) : pilote plusieurs
+   têtes de droïdes B1 (2 servos pan/tilt chacune) en réseau **ESP-NOW mesh
+   multi-sauts**, avec animations fluides/organiques coordonnées par un
+   **maître** qui joue aussi le son (DFPlayer Mini + ampli). Réglages persistés
+   en NVS.
+2. **Console de supervision** (`console/`, WPF net8.0-windows + WebView2,
+   v0.8.x) : application de bureau qui possède le port série
+   (`System.IO.Ports`) et rend **`console/wwwroot/index.html`** — la page
+   unique de l'UI (HTML+CSS+JS inline, tout en français), **copie canonique**
+   (remplaçant direct de l'ancien `web/dashboard_V7.html`, supprimé). Fusionnée
+   dans ce dépôt (elle vivait avant dans `b1-chat-console`, dépôt séparé sans
+   remote — jamais publié ; historique perdu au passage, aucune perte réelle).
+   `FIRMWARE-CONTRACT.md` liste les extensions de protocole que la console
+   attend du firmware.
+
+Deux trains de release GitHub distincts au sein du **même** dépôt, distingués
+par le préfixe du tag : `vX.Y.Z` pour l'app console, `fw-vX.Y.Z` pour le
+firmware (voir `tools/release.ps1` et `console/installer/release.ps1`).
 
 ## Commandes
 
 - `pio run -e b1` — compile le firmware (pio.exe : `%USERPROFILE%\.platformio\penv\Scripts\pio.exe`)
 - `pio run -e b1 -t upload` — flash une carte (rôle choisi par `IS_MASTER` dans `src/config.h` **avant** de flasher : 1 = maître, un seul par réseau ; 0 = esclave)
 - `tools\espflash.exe write-bin --port COMx -B 460800 0x10000 .pio\build\b1\firmware.bin` — flash sans PlatformIO (espflash 4.4.0, aussi utilisé par la carte Firmware de la console)
+- `dotnet build` (depuis `console/`) — compile la console WPF
+- `.\tools\release.ps1 [-Publish]` — release firmware (2 rôles + manifeste SHA-256, tag `fw-vX.Y.Z`)
+- `.\console\installer\release.ps1 [-Publish]` — release console (publish + installeur NSIS, tag `vX.Y.Z`)
 
 ## Matériel (DOIT ESP32 DevKit V1)
 
@@ -133,7 +142,7 @@ après un `setMulti` de restauration. [FIRMWARE-CONTRACT.md](FIRMWARE-CONTRACT.m
 tient l'état d'implémentation (§1/§3/§4/§5 faits ; §2 durées de pistes reporté —
 approche broche BUSY).
 
-## index.html (page UI de la console — `b1-chat-console/wwwroot/index.html`)
+## index.html (page UI de la console — `console/wwwroot/index.html`)
 
 Page WebView2 (pas Web Serial : c'est le C# qui tient le port). Elle parle à
 l'hôte via `window.chrome.webview.postMessage` — **deux vocabulaires à ne pas
@@ -164,8 +173,17 @@ l'original — ajouter les nouveaux `evt` dans le wrapper) ; interceptors
 (`seqCollector`/`calibCollector`/`pushingLib`) à garder au **début** de leurs
 handlers, sinon la collecte de fond (sauvegarde/restauration) corrompt l'éditeur.
 
-Détails d'implémentation côté C# (MainWindow.xaml.cs, versioning, NSIS,
-vérification jsdom) : voir le CLAUDE.md du dépôt console.
+Détails d'implémentation côté C# (`console/MainWindow.xaml.cs`, versioning,
+NSIS, vérification jsdom) : voir le CLAUDE.md ci-dessous (§ Architecture console).
+
+### Architecture console (`console/`)
+
+| Fichier | Rôle |
+| --- | --- |
+| `MainWindow.xaml.cs` | port série (`System.IO.Ports`), pont transport ↔ WebView2, flash espflash, vérification/téléchargement des mises à jour GitHub |
+| `wwwroot/index.html` | page UI unique (voir ci-dessus) |
+| `b1-chat-console.csproj` | build number auto-incrémenté, version depuis `VersionPrefix`, embarque `wwwroot/` et `tools/` (espflash) dans le publish |
+| `installer/b1-chat-console.nsi` + `release.ps1` | installeur NSIS + script de release GitHub (tag `vX.Y.Z`) |
 
 ## Stockage
 
@@ -186,24 +204,30 @@ vérification jsdom) : voir le CLAUDE.md du dépôt console.
       garde `anim.isPlaying()` pour les étapes ciblant le maître.
 - [x] Pause « Anims auto » par droïde (MSG_AUTOANIM, heartbeat bit1, colonne UI).
 - [x] Topologie du mesh (MSG_NEIGHBORS, module mesh_topology, carte graphe SVG).
-- [x] Console WPF v0.8.0 (dépôt séparé) : port série natif, auto-reconnexion,
-      flash intégré, bibliothèque locale, sauvegarde/restauration, timeline,
-      Répéter, export/import. `index.html` remplace `web/dashboard_V7.html`.
+- [x] Console WPF v0.8.0 : port série natif, auto-reconnexion, flash intégré,
+      bibliothèque locale, sauvegarde/restauration, timeline, Répéter,
+      export/import. `index.html` remplace `web/dashboard_V7.html`.
 - [x] Phase « écosystème » (2026-07-07), firmware 1.0.0 : tampon série 4 Ko +
       `err` explicites, handshake enrichi (fw/proto/lineMax/caps/dirty), `getAll`
       + `allDone`, contrat §3 (`evt:config`), §1 (trame audio par séquence, jouée
       en autonome, sons par geste supprimés quand une trame existe), §5 (`seqRun
       from`, pause/reprise avec pause DFPlayer), §4 (`setMulti` atomique),
-      commit/revert KyberEditor (volume/params/noms). Dépôt console sous git
-      (`C:\Users\stefe\source\repos\b1-chat-console`), gh CLI installé.
+      commit/revert KyberEditor (volume/params/noms). Page + C# (checkUpdates
+      GitHub, download+install, scripts de release firmware et console) livrés.
+- [x] Fusion des dépôts (2026-07-13) : la console (`b1-chat-console`, dépôt
+      local jamais poussé) est rapatriée dans `console/` de ce dépôt (copie
+      simple, un commit, historique des 6 commits console non conservé — rien
+      n'était publié). Un seul dépôt GitHub désormais (`stefe2/B1_Chat`), deux
+      trains de tags (`vX.Y.Z` app, `fw-vX.Y.Z` firmware) ; `MainWindow.xaml.cs`
+      adapté (liste les releases du dépôt et filtre par préfixe de tag au lieu
+      de `/releases/latest`, qui aurait mélangé les deux trains).
 - [ ] Étape 6 : machine à états `droid.{h,cpp}`.
 - [ ] Contrat §2 : durées de pistes mesurées via la broche BUSY (GPIO4) — reporté.
 - [ ] Params d'anim freq/amp/speed : reçus + persistés mais **aucun effet**
       (hook `onConfig` jamais branché dans main.cpp ; curseurs marqués « bientôt
       actif » dans l'UI).
-- [ ] Phase C/D/E en cours : page (err/caps/config/commit-revert/pause/track/carte
-      Mises à jour), C# (checkUpdates GitHub, download+install), scripts de release.
-- [ ] GitHub console : dépôt à créer (bloqué sur `gh auth login`, interactif).
+- [ ] GitHub : `gh auth login` (interactif, à faire par l'utilisateur) puis
+      premier push de ce dépôt fusionné + première release de chaque train.
 
 ## Pièges connus
 
@@ -220,6 +244,11 @@ vérification jsdom) : voir le CLAUDE.md du dépôt console.
 - KyberEditor (`C:\Program Files\KyberEditor`) : source d'inspiration UX de la
   console et origine de `tools\espflash.exe` ; ses firmwares/bootloaders ne nous
   servent pas (PlatformIO génère les nôtres).
+- Un seul dépôt GitHub pour l'app et le firmware : ne jamais utiliser l'API
+  `/releases/latest` (elle ignore le préfixe de tag et mélangerait les deux
+  trains) — toujours lister `/releases` et filtrer par préfixe (`v` hors `fw-`
+  pour l'app, `fw-` pour le firmware), voir `GetLatestReleaseAsync` dans
+  `console/MainWindow.xaml.cs`.
 
 ## Vérification (rappels)
 

@@ -7,3 +7,9 @@
 proxmox_mcp.log
 # Binaires generes par tools/release.ps1 (regeneres a chaque release)
 dist/
+
+# Console WPF (console/) : artefacts de build .NET et installeur genere
+console/bin/
+console/obj/
+console/installer/*.exe
+console/tools/
