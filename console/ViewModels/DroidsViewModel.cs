@@ -106,15 +106,15 @@ public partial class DroidsViewModel : ObservableObject
         if (backup["names"] is JsonObject names)
             foreach (var (idStr, nameNode) in names)
                 if (ushort.TryParse(idStr, out var id) && nameNode != null)
-                    ops.Add(new JsonObject { ["type"] = "name", ["id"] = id, ["name"] = nameNode.GetValue<string>() });
+                    ops.Add(new JsonObject { ["cmd"] = "name", ["id"] = id, ["name"] = nameNode.GetValue<string>() });
 
         if (backup.TryGetPropertyValue("volume", out var vol) && vol != null)
-            ops.Add(new JsonObject { ["type"] = "volume", ["value"] = vol.GetValue<int>() });
+            ops.Add(new JsonObject { ["cmd"] = "volume", ["value"] = vol.GetValue<int>() });
 
         if (backup.TryGetPropertyValue("freq", out var freq) && backup.TryGetPropertyValue("amp", out var amp) && backup.TryGetPropertyValue("speed", out var speed))
             ops.Add(new JsonObject
             {
-                ["type"] = "config", ["target"] = 0xFFFF,
+                ["cmd"] = "config", ["target"] = 0xFFFF,
                 ["freq"] = freq!.GetValue<int>(), ["amp"] = amp!.GetValue<int>(), ["speed"] = speed!.GetValue<int>(),
             });
 
@@ -128,7 +128,7 @@ public partial class DroidsViewModel : ObservableObject
             foreach (var op in ops)
             {
                 if (op is not JsonObject o) continue;
-                switch (o["type"]?.GetValue<string>())
+                switch (o["cmd"]?.GetValue<string>())
                 {
                     case "name": _protocol.SetName((ushort)o["id"]!.GetValue<int>(), o["name"]!.GetValue<string>()); break;
                     case "volume": _protocol.SetVolume(o["value"]!.GetValue<int>()); break;

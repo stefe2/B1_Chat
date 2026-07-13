@@ -188,8 +188,8 @@ public partial class SequencerViewModel : ObservableObject
                 Steps.Add(new SequenceStep
                 {
                     AnimId = st.GetProperty("animId").GetInt32(),
-                    Target = (ushort)st.GetProperty("targetId").GetInt32(),
-                    DelayMs = st.GetProperty("delayMs").GetInt32(),
+                    Target = (ushort)st.GetProperty("target").GetInt32(),
+                    DelayMs = st.GetProperty("delay").GetInt32(),
                 });
         ClearHistory();
         Dirty = false;

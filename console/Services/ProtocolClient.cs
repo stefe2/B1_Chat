@@ -159,7 +159,7 @@ public partial class ProtocolClient : ObservableObject
     {
         var stepsArr = new JsonArray();
         foreach (var s in steps)
-            stepsArr.Add(new JsonObject { ["targetId"] = s.Target, ["animId"] = s.AnimId, ["delayMs"] = s.DelayMs });
+            stepsArr.Add(new JsonObject { ["target"] = s.Target, ["animId"] = s.AnimId, ["delay"] = s.DelayMs });
         SendCmd(new JsonObject
         {
             ["cmd"] = "seqSave", ["slot"] = slot, ["name"] = name, ["loop"] = loop, ["track"] = track, ["steps"] = stepsArr,
