@@ -5,3 +5,5 @@
 .vscode/ipch
 # Journal du serveur MCP Proxmox (outil externe, ecrit dans le cwd)
 proxmox_mcp.log
+# Binaires generes par tools/release.ps1 (regeneres a chaque release)
+dist/
