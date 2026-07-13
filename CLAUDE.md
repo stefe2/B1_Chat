@@ -35,8 +35,17 @@ firmware (voir `tools/release.ps1` et `console/installer/release.ps1`).
 - `pio run -e b1 -t upload` — flash une carte (rôle choisi par `IS_MASTER` dans `src/config.h` **avant** de flasher : 1 = maître, un seul par réseau ; 0 = esclave)
 - `tools\espflash.exe write-bin --port COMx -B 460800 0x10000 .pio\build\b1\firmware.bin` — flash sans PlatformIO (espflash 4.4.0, aussi utilisé par la carte Firmware de la console)
 - `dotnet build` (depuis `console/`) — compile la console WPF
-- `.\tools\release.ps1 [-Publish]` — release firmware (2 rôles + manifeste SHA-256, tag `fw-vX.Y.Z`)
+- `.\tools\release.ps1 [-Publish]` — release firmware manuelle (2 rôles + manifeste SHA-256, tag `fw-vX.Y.Z`) ; en usage normal, préférer bumper `FW_VERSION` (`src/config.h`) et pousser sur `main` — la CI publie toute seule (voir ci-dessous)
 - `.\console\installer\release.ps1 [-Publish]` — release console (publish + installeur NSIS, tag `vX.Y.Z`)
+
+**Release firmware automatique** (`.github/workflows/firmware-release.yml`) : se déclenche
+sur push vers `main` touchant `src/config.h`, ou manuellement (`workflow_dispatch`). Lit
+`FW_VERSION`, saute si le tag `fw-vX.Y.Z` existe déjà (idempotent), sinon compile
+`b1_master`/`b1_slave` (PlatformIO sur runner GitHub), calcule le manifeste SHA-256, tague
+et publie la release — aucun `gh auth login` local nécessaire (jeton `GITHUB_TOKEN`
+fourni par Actions). Flux normal : bumper `FW_VERSION`, commit, push sur `main`, attendre
+la CI. `tools/release.ps1 -Publish` reste un repli manuel (éviter de l'utiliser en plus de
+la CI pour la même version — double tag/release).
 
 ## Matériel (DOIT ESP32 DevKit V1)
 
@@ -76,6 +85,13 @@ Firmware **unique** ; rôle par build (`IS_MASTER`), identité auto (srcId 16 bi
 
 Dépendances : `DFRobotDFPlayerMini`, `ArduinoJson`. Build flags : `-D MESH_TTL=4`,
 `-D GROUP_KEY="changeme"` (clé **compilée uniquement**, pas de re-clé à l'exécution).
+
+Environnements PlatformIO (`platformio.ini`) : `[env:b1]` — rôle décidé par `#define
+IS_MASTER` dans `config.h`, pour le flash/dev local (`pio run -e b1 -t upload`).
+`[env:b1_master]`/`[env:b1_slave]` — dédiés à la release CI, forcent le rôle via
+`-D IS_MASTER=1|0` sans toucher à `config.h` (celui-ci guarde `IS_MASTER` avec un
+`#ifndef`, comme `MESH_TTL`/`GROUP_KEY`, pour que la surcharge en ligne de commande
+fonctionne) ; n'affectent pas `[env:b1]`.
 
 ## Protocole mesh (ESP-NOW broadcast, canal fixe)
 
@@ -246,13 +262,21 @@ largeur en bas. Carte Firmware sortie de la grille (fenêtre séparée).
       Animation ; carte Activité supprimée ; carte Firmware sortie de la grille
       vers une fenêtre séparée (`FirmwareWindow`, bouton dédié en en-tête) ;
       Animation et Audio placées côte à côte au-dessus du Séquenceur.
+- [x] Refonte du flux firmware console (rôle Maître/Esclave choisi explicitement
+      avant la source, source GitHub auto-suffisante avec vérification, adresse
+      reléguée en options avancées) + release firmware automatique par CI
+      (`.github/workflows/firmware-release.yml`, déclenchée par bump de
+      `FW_VERSION` ; `IS_MASTER` rendu surchargeable via `#ifndef` pour les
+      nouveaux environnements PlatformIO `b1_master`/`b1_slave`).
 - [ ] Étape 6 : machine à états `droid.{h,cpp}`.
 - [ ] Contrat §2 : durées de pistes mesurées via la broche BUSY (GPIO4) — reporté.
 - [ ] Params d'anim freq/amp/speed : reçus + persistés mais **aucun effet**
       (hook `onConfig` jamais branché dans main.cpp ; curseurs marqués « bientôt
       actif » dans l'UI).
-- [ ] GitHub : `gh auth login` (interactif, à faire par l'utilisateur) puis
-      premier push de ce dépôt fusionné + première release de chaque train.
+- [ ] Première release de chaque train : premier push déjà fait (`origin/main` à
+      jour) ; firmware — bumper `FW_VERSION` et pousser déclenchera la CI ;
+      console — encore manuel (`gh auth login` une fois, puis
+      `console\installer\release.ps1 -Publish`).
 
 ## Pièges connus
 
@@ -283,6 +307,10 @@ largeur en bas. Carte Firmware sortie de la grille (fenêtre séparée).
   pour un groupe censé rester collé à un bord (ex. les contrôles de connexion de
   l'en-tête) ; mettre `LastChildFill="False"` si tous les enfants doivent
   respecter leur `Dock`.
+- `IS_MASTER` a deux mécanismes de réglage distincts, ne pas les confondre :
+  `[env:b1]` (flash/dev local) lit la valeur écrite en dur dans `config.h` ;
+  `[env:b1_master]`/`[env:b1_slave]` (release CI) l'ignorent et forcent le rôle
+  via `-D IS_MASTER=1|0`. Modifier `config.h` n'affecte jamais les deux derniers.
 
 ## Vérification (rappels)
 

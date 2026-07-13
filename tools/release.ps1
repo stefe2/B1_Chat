@@ -1,6 +1,14 @@
 # ============================================================================
 #  release.ps1 — release firmware B1 sur GitHub (stefe2/B1_Chat)
 #
+#  NOTE : depuis .github/workflows/firmware-release.yml, la publication est
+#  automatique — bump FW_VERSION dans src/config.h, commit, push sur main, et
+#  la CI compile les deux rôles + publie la release GitHub toute seule (aucun
+#  gh auth login ni exécution locale requis). Ce script reste utile pour un
+#  build/manifeste local de vérification, ou comme repli manuel si la CI est
+#  indisponible — éviter de lancer -Publish en plus de la CI pour la même
+#  version (double tag/release).
+#
 #  Compile les DEUX rôles (IS_MASTER 1 puis 0), produit dist/ avec les .bin
 #  nommés par version + firmware_manifest.json (SHA-256, modèle KyberEditor),
 #  puis (avec -Publish) tag git fw-vX.Y.Z + release GitHub avec les assets.

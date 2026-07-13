@@ -20,11 +20,16 @@
 #define FW_PROTO 2
 
 // ---------------------------------------------------------------------------
-//  RÔLE DU DROÏDE  —  À RÉGLER ICI AVANT DE FLASHER
+//  RÔLE DU DROÏDE  —  À RÉGLER ICI AVANT DE FLASHER (pio run -e b1 -t upload)
 //  1 = MAÎTRE (un seul dans le réseau : coordination + son + console web)
 //  0 = ESCLAVE (valeur par défaut pour tous les autres droïdes)
+//  Surchargeable via build_flags (-D IS_MASTER=0|1) — utilisé par les
+//  environnements b1_master/b1_slave (platformio.ini) pour la release CI,
+//  qui compilent les deux rôles sans toucher à ce fichier.
 // ---------------------------------------------------------------------------
+#ifndef IS_MASTER
 #define IS_MASTER 1
+#endif
 
 // Pause temporaire des servos/animations sur le MAÎTRE (protège les servos
 // pendant la mise au point de la page web). Mettre à 0 pour réactiver.

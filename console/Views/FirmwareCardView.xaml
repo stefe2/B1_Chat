@@ -4,15 +4,38 @@
     <Border Style="{StaticResource CardBorderStyle}">
         <StackPanel>
             <TextBlock Text="FIRMWARE (MAÎTRE)" Style="{StaticResource CardTitleStyle}" />
-            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                <Button Content="Choisir .bin…" Style="{StaticResource MiniButtonStyle}" Command="{Binding PickBinCommand}" Margin="0,0,8,0" />
-                <TextBlock Text="{Binding BinPath}" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" FontSize="11" />
-            </StackPanel>
+
+            <TextBlock Text="RÔLE À FLASHER" Style="{StaticResource FieldLabelStyle}" Margin="0,0,0,4" />
+            <UniformGrid Rows="1" Columns="2" Margin="0,0,0,10">
+                <ToggleButton Content="Maître" Style="{StaticResource HaloToggleButtonStyle}"
+                              IsChecked="{Binding IsMasterRole, Mode=OneWay}" Command="{Binding SelectMasterRoleCommand}" Margin="0,0,4,0" />
+                <ToggleButton Content="Esclave" Style="{StaticResource HaloToggleButtonStyle}"
+                              IsChecked="{Binding IsSlaveRole, Mode=OneWay}" Command="{Binding SelectSlaveRoleCommand}" Margin="4,0,0,0" />
+            </UniformGrid>
+
+            <TextBlock Text="SOURCE DU BINAIRE" Style="{StaticResource FieldLabelStyle}" Margin="0,0,0,4" />
             <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                <TextBlock Text="Adresse " VerticalAlignment="Center" FontSize="11" />
-                <TextBox Width="90" Style="{StaticResource RecessedTextBoxStyle}" Text="{Binding Address}" Margin="4,0,8,0" />
-                <Button Content="Flasher" Style="{StaticResource PrimaryButtonStyle}" Command="{Binding FlashCommand}" IsEnabled="{Binding CanFlash}" />
+                <Button Content="Depuis GitHub" Style="{StaticResource MiniButtonStyle}" Command="{Binding PrepareFromGithubCommand}" Margin="0,0,8,0"
+                        ToolTip="Télécharge et vérifie (SHA-256) la dernière version publiée pour le rôle sélectionné ci-dessus. Lance d'abord « Vérifier » ci-dessous si aucune version n'est encore connue." />
+                <Button Content="Fichier local…" Style="{StaticResource MiniButtonStyle}" Command="{Binding PickBinCommand}"
+                        ToolTip="Choisir un .bin quelconque (ex. build local pio run) — non vérifié." />
             </StackPanel>
+
+            <Border Background="{StaticResource RecessBrush}" CornerRadius="4" Padding="8,6" Margin="0,0,0,8">
+                <TextBlock Text="{Binding ReadyStatus}" FontSize="11" TextWrapping="Wrap"
+                           Foreground="{Binding BinVerified, Converter={StaticResource BoolToBrushConv}, ConverterParameter='OkBrush|MutedBrush'}" />
+            </Border>
+
+            <Button Content="Options avancées" Style="{StaticResource MiniButtonStyle}" Command="{Binding ToggleAdvancedCommand}"
+                    HorizontalAlignment="Left" Margin="0,0,0,6" />
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,8" Visibility="{Binding ShowAdvanced, Converter={StaticResource BoolToVisConv}}">
+                <TextBlock Text="Adresse " VerticalAlignment="Center" FontSize="11" />
+                <TextBox Width="90" Style="{StaticResource RecessedTextBoxStyle}" Text="{Binding Address}" Margin="4,0,0,0" />
+            </StackPanel>
+
+            <Button Content="{Binding FlashLabel}" Style="{StaticResource PrimaryButtonStyle}" Command="{Binding FlashCommand}"
+                    IsEnabled="{Binding CanFlash}" HorizontalAlignment="Left" Margin="0,0,0,10" />
+
             <Border Background="{StaticResource RecessBrush}" CornerRadius="4" Padding="6" Margin="0,0,0,12">
                 <ScrollViewer Height="100" VerticalScrollBarVisibility="Auto">
                     <ItemsControl ItemsSource="{Binding FlashLog}">
@@ -31,16 +54,14 @@
                 <Button Content="Vérifier" Style="{StaticResource MiniButtonStyle}" Command="{Binding CheckUpdatesCommand}" Margin="0,0,8,0" />
                 <TextBlock Text="{Binding UpdateStatus}" Foreground="{StaticResource MutedBrush}" FontSize="11" VerticalAlignment="Center" />
             </StackPanel>
-            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,4" Visibility="{Binding HasAppUpdate, Converter={StaticResource BoolToVisConv}}">
                 <TextBlock Text="Application : " FontSize="11" />
                 <TextBlock Text="{Binding AppLatest, StringFormat='v{0} disponible'}" FontSize="11" Foreground="{StaticResource OkBrush}" Margin="0,0,8,0" />
                 <Button Content="Installer" Style="{StaticResource MiniButtonStyle}" Command="{Binding InstallAppUpdateCommand}" />
             </StackPanel>
-            <StackPanel Orientation="Horizontal">
+            <StackPanel Orientation="Horizontal" Visibility="{Binding HasFwUpdate, Converter={StaticResource BoolToVisConv}}">
                 <TextBlock Text="Firmware : " FontSize="11" />
-                <TextBlock Text="{Binding FwLatest, StringFormat='v{0} disponible'}" FontSize="11" Foreground="{StaticResource OkBrush}" Margin="0,0,8,0" />
-                <Button Content="Préparer (maître)" Style="{StaticResource MiniButtonStyle}" Command="{Binding PrepareFirmwareMasterCommand}" Margin="0,0,4,0" />
-                <Button Content="Préparer (esclave)" Style="{StaticResource MiniButtonStyle}" Command="{Binding PrepareFirmwareSlaveCommand}" />
+                <TextBlock Text="{Binding FwLatest, StringFormat='v{0} disponible (maître + esclave)'}" FontSize="11" Foreground="{StaticResource OkBrush}" />
             </StackPanel>
         </StackPanel>
     </Border>

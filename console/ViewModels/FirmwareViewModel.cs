@@ -16,9 +16,29 @@ public partial class FirmwareViewModel : ObservableObject
     public ObservableCollection<string> FlashLog { get; } = new();
 
     [ObservableProperty] private string? _binPath;
+    [ObservableProperty] private bool _binVerified;
     [ObservableProperty] private string _address = "0x10000";
     [ObservableProperty] private bool _flashing;
     [ObservableProperty] private bool _canFlash;
+    [ObservableProperty] private bool _isMasterRole = true;
+    [ObservableProperty] private bool _showAdvanced;
+
+    public bool IsSlaveRole => !IsMasterRole;
+    public string RoleLabel => IsMasterRole ? "MAÎTRE" : "ESCLAVE";
+    public string FlashLabel => $"Flasher {RoleLabel}";
+    public string ReadyStatus => BinPath == null
+        ? "Aucun binaire chargé."
+        : System.IO.Path.GetFileName(BinPath) + (BinVerified ? " — SHA-256 vérifié ✓" : " — non vérifié (fichier local)");
+
+    partial void OnIsMasterRoleChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsSlaveRole));
+        OnPropertyChanged(nameof(RoleLabel));
+        OnPropertyChanged(nameof(FlashLabel));
+    }
+
+    partial void OnBinPathChanged(string? value) => OnPropertyChanged(nameof(ReadyStatus));
+    partial void OnBinVerifiedChanged(bool value) => OnPropertyChanged(nameof(ReadyStatus));
 
     [ObservableProperty] private string _updateStatus = "";
     [ObservableProperty] private string? _appLatest;
@@ -28,6 +48,11 @@ public partial class FirmwareViewModel : ObservableObject
     [ObservableProperty] private string? _fwUrlSlave;
     [ObservableProperty] private string? _fwShaMaster;
     [ObservableProperty] private string? _fwShaSlave;
+
+    public bool HasAppUpdate => !string.IsNullOrEmpty(AppLatest);
+    public bool HasFwUpdate => !string.IsNullOrEmpty(FwLatest);
+    partial void OnAppLatestChanged(string? value) => OnPropertyChanged(nameof(HasAppUpdate));
+    partial void OnFwLatestChanged(string? value) => OnPropertyChanged(nameof(HasFwUpdate));
 
     private static void RunOnUi(Action a)
     {
@@ -45,12 +70,17 @@ public partial class FirmwareViewModel : ObservableObject
         _flash.Completed += (ok, code, err) => RunOnUi(() => OnFlashCompleted(ok, code, err));
     }
 
+    [RelayCommand] private void SelectMasterRole() => IsMasterRole = true;
+    [RelayCommand] private void SelectSlaveRole() => IsMasterRole = false;
+    [RelayCommand] private void ToggleAdvanced() => ShowAdvanced = !ShowAdvanced;
+
     [RelayCommand]
     private void PickBin()
     {
         var dlg = new OpenFileDialog { Filter = "Image firmware (*.bin)|*.bin|Tous les fichiers (*.*)|*.*" };
         if (dlg.ShowDialog() != true) return;
         BinPath = dlg.FileName;
+        BinVerified = false;
         CanFlash = true;
     }
 
@@ -59,7 +89,7 @@ public partial class FirmwareViewModel : ObservableObject
     {
         if (string.IsNullOrEmpty(BinPath) || _link.PortName == null || Flashing) return;
         if (System.Windows.MessageBox.Show(
-                $"Écrire « {System.IO.Path.GetFileName(BinPath)} » à {Address} sur {_link.PortName} ?\n\nLe firmware actuel sera remplacé. Ne débranche rien pendant l'opération.",
+                $"Écrire le firmware {RoleLabel} « {System.IO.Path.GetFileName(BinPath)} » à {Address} sur {_link.PortName} ?\n\nLe firmware actuel sera remplacé. Ne débranche rien pendant l'opération.",
                 "Confirmer le flash", System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxImage.Warning) != System.Windows.MessageBoxResult.Yes)
             return;
 
@@ -82,13 +112,14 @@ public partial class FirmwareViewModel : ObservableObject
     private async Task CheckUpdates()
     {
         UpdateStatus = "Vérification en cours…";
+        var (ok, error) = await RunCheckUpdatesAsync();
+        UpdateStatus = ok ? "Vérifié." : "Erreur : " + error;
+    }
+
+    private async Task<(bool Ok, string? Error)> RunCheckUpdatesAsync()
+    {
         var result = await _update.CheckUpdatesAsync();
-        if (!result.Ok)
-        {
-            UpdateStatus = "Erreur : " + result.Error;
-            return;
-        }
-        UpdateStatus = "Vérifié.";
+        if (!result.Ok) return (false, result.Error);
         AppLatest = result.App.Latest;
         AppDownloadUrl = result.App.Url;
         FwLatest = result.Fw.Latest;
@@ -96,6 +127,7 @@ public partial class FirmwareViewModel : ObservableObject
         FwUrlSlave = result.Fw.UrlSlave;
         FwShaMaster = result.Fw.Sha256Master;
         FwShaSlave = result.Fw.Sha256Slave;
+        return (true, null);
     }
 
     [RelayCommand]
@@ -123,11 +155,30 @@ public partial class FirmwareViewModel : ObservableObject
             return;
         }
         BinPath = path;
+        BinVerified = true;
         Address = "0x10000";
         CanFlash = true;
         UpdateStatus = $"{name} téléchargé, SHA-256 vérifié — prêt à flasher.";
     }
 
-    [RelayCommand] private Task PrepareFirmwareMaster() => PrepareFirmwareAsync(FwUrlMaster, FwShaMaster);
-    [RelayCommand] private Task PrepareFirmwareSlave() => PrepareFirmwareAsync(FwUrlSlave, FwShaSlave);
+    [RelayCommand]
+    private async Task PrepareFromGithub()
+    {
+        UpdateStatus = "Vérification des mises à jour…";
+        var (ok, error) = await RunCheckUpdatesAsync();
+        if (!ok)
+        {
+            UpdateStatus = "Erreur : " + error;
+            return;
+        }
+
+        var url = IsMasterRole ? FwUrlMaster : FwUrlSlave;
+        var sha = IsMasterRole ? FwShaMaster : FwShaSlave;
+        if (string.IsNullOrEmpty(url))
+        {
+            UpdateStatus = $"Aucun firmware {RoleLabel} trouvé dans la dernière release GitHub.";
+            return;
+        }
+        await PrepareFirmwareAsync(url, sha);
+    }
 }
