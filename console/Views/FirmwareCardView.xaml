@@ -1,0 +1,47 @@
+<UserControl x:Class="b1_chat_console.Views.FirmwareCardView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Border Style="{StaticResource CardBorderStyle}">
+        <StackPanel>
+            <TextBlock Text="FIRMWARE (MAÎTRE)" Style="{StaticResource CardTitleStyle}" />
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                <Button Content="Choisir .bin…" Style="{StaticResource MiniButtonStyle}" Command="{Binding PickBinCommand}" Margin="0,0,8,0" />
+                <TextBlock Text="{Binding BinPath}" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" FontSize="11" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                <TextBlock Text="Adresse " VerticalAlignment="Center" FontSize="11" />
+                <TextBox Width="90" Style="{StaticResource RecessedTextBoxStyle}" Text="{Binding Address}" Margin="4,0,8,0" />
+                <Button Content="Flasher" Style="{StaticResource PrimaryButtonStyle}" Command="{Binding FlashCommand}" IsEnabled="{Binding CanFlash}" />
+            </StackPanel>
+            <Border Background="{StaticResource RecessBrush}" CornerRadius="4" Padding="6" Margin="0,0,0,12">
+                <ScrollViewer Height="100" VerticalScrollBarVisibility="Auto">
+                    <ItemsControl ItemsSource="{Binding FlashLog}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding}" FontFamily="{StaticResource MonoFont}" FontSize="10" Foreground="{StaticResource TextBrush}" TextWrapping="Wrap" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Border>
+
+            <Separator Margin="0,0,0,8" />
+            <TextBlock Text="MISES À JOUR (GITHUB)" Style="{StaticResource SectionSubtitleStyle}" FontSize="13" />
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                <Button Content="Vérifier" Style="{StaticResource MiniButtonStyle}" Command="{Binding CheckUpdatesCommand}" Margin="0,0,8,0" />
+                <TextBlock Text="{Binding UpdateStatus}" Foreground="{StaticResource MutedBrush}" FontSize="11" VerticalAlignment="Center" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                <TextBlock Text="Application : " FontSize="11" />
+                <TextBlock Text="{Binding AppLatest, StringFormat='v{0} disponible'}" FontSize="11" Foreground="{StaticResource OkBrush}" Margin="0,0,8,0" />
+                <Button Content="Installer" Style="{StaticResource MiniButtonStyle}" Command="{Binding InstallAppUpdateCommand}" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="Firmware : " FontSize="11" />
+                <TextBlock Text="{Binding FwLatest, StringFormat='v{0} disponible'}" FontSize="11" Foreground="{StaticResource OkBrush}" Margin="0,0,8,0" />
+                <Button Content="Préparer (maître)" Style="{StaticResource MiniButtonStyle}" Command="{Binding PrepareFirmwareMasterCommand}" Margin="0,0,4,0" />
+                <Button Content="Préparer (esclave)" Style="{StaticResource MiniButtonStyle}" Command="{Binding PrepareFirmwareSlaveCommand}" />
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</UserControl>

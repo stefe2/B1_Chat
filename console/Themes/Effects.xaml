@@ -1,0 +1,480 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+        Styles partages : reproduisent le "halo" de index.html (bevel + lueur externe de la
+        couleur de statut) et le bouton biseaute (degrade + press-down). Passe de polish : bevel
+        diagonal a deux tons (BevelBorderBrush), degrades de bouton plus contrastes, halos plus
+        marques (BlurRadius/Opacity releves) pour se rapprocher du rendu CSS d'origine.
+    -->
+
+    <!-- Carte (section) : fond panel + bevel diagonal + ombre portee plus prononcee. -->
+    <Style x:Key="CardBorderStyle" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource PanelBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource BevelBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1.5" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Padding" Value="16" />
+        <Setter Property="Effect">
+            <Setter.Value>
+                <DropShadowEffect Color="Black" Direction="270" ShadowDepth="4" BlurRadius="14" Opacity="0.45" />
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Bouton biseaute de base : degrade contraste + hover eclairci + press translate/invert. -->
+    <Style x:Key="BeveledButtonStyle" TargetType="Button">
+        <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+        <Setter Property="Padding" Value="12,7" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bd" CornerRadius="5" BorderThickness="{TemplateBinding BorderThickness}"
+                            BorderBrush="{StaticResource BevelBorderBrush}"
+                            Background="{StaticResource ButtonBrush}">
+                        <Border.Effect>
+                            <DropShadowEffect Color="Black" Direction="270" ShadowDepth="1" BlurRadius="3" Opacity="0.4" />
+                        </Border.Effect>
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          Margin="{TemplateBinding Padding}" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource ButtonHoverBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Bd" Property="RenderTransform">
+                                <Setter.Value>
+                                    <TranslateTransform Y="1" />
+                                </Setter.Value>
+                            </Setter>
+                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource ButtonPressedBrush}" />
+                            <Setter TargetName="Bd" Property="Effect">
+                                <Setter.Value>
+                                    <DropShadowEffect Color="Black" Direction="270" ShadowDepth="0" BlurRadius="1" Opacity="0.3" />
+                                </Setter.Value>
+                            </Setter>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="Bd" Property="Opacity" Value="0.45" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="MiniButtonStyle" TargetType="Button" BasedOn="{StaticResource BeveledButtonStyle}">
+        <Setter Property="Padding" Value="8,4" />
+        <Setter Property="FontSize" Value="11" />
+    </Style>
+
+    <Style x:Key="PrimaryButtonStyle" TargetType="Button" BasedOn="{StaticResource BeveledButtonStyle}">
+        <Setter Property="Foreground" Value="{StaticResource TextStrongBrush}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
+    <!-- Bouton CTA accent (Connecter/Deconnecter) : meme gabarit biseaute, degrade orange. -->
+    <Style x:Key="AccentButtonStyle" TargetType="Button">
+        <Setter Property="Foreground" Value="#2A1B0A" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="Padding" Value="14,8" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bd" CornerRadius="5" BorderThickness="{TemplateBinding BorderThickness}"
+                            BorderBrush="#B9691A" Background="{StaticResource AccentButtonBrush}">
+                        <Border.Effect>
+                            <DropShadowEffect Color="#FF9D2E" Direction="270" ShadowDepth="0" BlurRadius="8" Opacity="0.45" />
+                        </Border.Effect>
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          Margin="{TemplateBinding Padding}" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource AccentButtonHoverBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Bd" Property="RenderTransform">
+                                <Setter.Value>
+                                    <TranslateTransform Y="1" />
+                                </Setter.Value>
+                            </Setter>
+                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource AccentButtonPressedBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="Bd" Property="Opacity" Value="0.45" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Pastille de statut d'en-tete (LED + texte groupes), façon .pill CSS. -->
+    <Style x:Key="HeaderPillStyle" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource RecessBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource BevelBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="14" />
+        <Setter Property="Padding" Value="10,6" />
+    </Style>
+
+    <!-- Icone/logo de l'app : carre accent arrondi avec un glyphe simplifie de tete de droide. -->
+    <Style x:Key="AppLogoStyle" TargetType="Border">
+        <Setter Property="Width" Value="36" />
+        <Setter Property="Height" Value="36" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Background" Value="{StaticResource AccentButtonBrush}" />
+    </Style>
+
+    <!--
+        Halo de statut : bevel + lueur externe accentuee. La couleur (Ok/Warn/Bad) est fixee par
+        variante plutot que parametree dynamiquement (Style.Triggers ne peut pas lire une
+        DependencyProperty arbitraire sans DataTrigger sur une propriete de VM bindee au niveau de
+        l'appelant) ; chaque vue choisit la variante via BoolToStyleConverter.
+    -->
+    <Style x:Key="HaloBadgeBaseStyle" TargetType="Border">
+        <Setter Property="CornerRadius" Value="10" />
+        <Setter Property="Padding" Value="9,4" />
+        <Setter Property="BorderThickness" Value="1.5" />
+        <Setter Property="Background" Value="{StaticResource RecessBrush}" />
+    </Style>
+
+    <Style x:Key="HaloBadgeOkStyle" TargetType="Border" BasedOn="{StaticResource HaloBadgeBaseStyle}">
+        <Setter Property="BorderBrush" Value="{StaticResource OkBrush}" />
+        <Setter Property="Effect">
+            <Setter.Value>
+                <DropShadowEffect Color="#3DDC84" ShadowDepth="0" BlurRadius="14" Opacity="0.85" />
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="HaloBadgeWarnStyle" TargetType="Border" BasedOn="{StaticResource HaloBadgeBaseStyle}">
+        <Setter Property="BorderBrush" Value="{StaticResource WarnBrush}" />
+        <Setter Property="Effect">
+            <Setter.Value>
+                <DropShadowEffect Color="#FFCC4D" ShadowDepth="0" BlurRadius="14" Opacity="0.85" />
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="HaloBadgeBadStyle" TargetType="Border" BasedOn="{StaticResource HaloBadgeBaseStyle}">
+        <Setter Property="BorderBrush" Value="{StaticResource BadBrush}" />
+        <Setter Property="Effect">
+            <Setter.Value>
+                <DropShadowEffect Color="#FF5B52" ShadowDepth="0" BlurRadius="14" Opacity="0.85" />
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Bouton bascule (Servos / Anims auto) : meme halo accentue, coche = Ok, decoche = Bad. -->
+    <Style x:Key="HaloToggleButtonStyle" TargetType="ToggleButton">
+        <Setter Property="Padding" Value="9,5" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Border x:Name="Bd" CornerRadius="10" BorderThickness="1.5"
+                            Background="{StaticResource RecessBrush}"
+                            BorderBrush="{StaticResource BadBrush}">
+                        <Border.Effect>
+                            <DropShadowEffect Color="#FF5B52" ShadowDepth="0" BlurRadius="12" Opacity="0.75" />
+                        </Border.Effect>
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          Margin="{TemplateBinding Padding}" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource OkBrush}" />
+                            <Setter TargetName="Bd" Property="Effect">
+                                <Setter.Value>
+                                    <DropShadowEffect Color="#3DDC84" ShadowDepth="0" BlurRadius="12" Opacity="0.75" />
+                                </Setter.Value>
+                            </Setter>
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource PanelBrush}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- LED de statut (point de connexion en-tete) : degrade radial + lueur, façon index.html .pill .dot. -->
+    <Style x:Key="LedDotOffStyle" TargetType="Ellipse">
+        <Setter Property="Width" Value="10" />
+        <Setter Property="Height" Value="10" />
+        <Setter Property="Fill" Value="{StaticResource LedOffBrush}" />
+        <Setter Property="Effect">
+            <Setter.Value>
+                <DropShadowEffect Color="#FF3C32" ShadowDepth="0" BlurRadius="6" Opacity="0.6" />
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style x:Key="LedDotOnStyle" TargetType="Ellipse" BasedOn="{StaticResource LedDotOffStyle}">
+        <Setter Property="Fill" Value="{StaticResource LedOnBrush}" />
+        <Setter Property="Effect">
+            <Setter.Value>
+                <DropShadowEffect Color="#3DDC84" ShadowDepth="0" BlurRadius="9" Opacity="0.9" />
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Champs de saisie / sliders : surface encastree. -->
+    <Style x:Key="RecessedTextBoxStyle" TargetType="TextBox">
+        <Setter Property="Background" Value="{StaticResource RecessBrush}" />
+        <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource BorderLoBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="6,4" />
+        <Setter Property="CaretBrush" Value="{StaticResource AccentBrush}" />
+    </Style>
+
+    <Style x:Key="CardTitleStyle" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource TextStrongBrush}" />
+        <Setter Property="FontSize" Value="17" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Margin" Value="0,0,0,10" />
+    </Style>
+
+    <Style x:Key="MetaTextStyle" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+        <Setter Property="FontSize" Value="11" />
+    </Style>
+
+    <!-- Boite d'icone d'en-tete de carte (27x27, recessee, glyphe accent) - equivalent .card-head .icn en CSS. -->
+    <Style x:Key="CardIconBoxStyle" TargetType="Border">
+        <Setter Property="Width" Value="27" />
+        <Setter Property="Height" Value="27" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="Background" Value="{StaticResource RecessBrush}" />
+        <Setter Property="Effect">
+            <Setter.Value>
+                <DropShadowEffect Color="Black" Direction="270" ShadowDepth="1" BlurRadius="4" Opacity="0.55" />
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Libelle d'en-tete de colonne de tableau (ex. "NOM", "RSSI") - equivalent thead th en CSS. -->
+    <Style x:Key="TableHeaderTextStyle" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+        <Setter Property="FontSize" Value="10.5" />
+        <Setter Property="FontWeight" Value="Bold" />
+    </Style>
+
+    <!-- Noeud du graphe de topologie du mesh : sphere glossy, halo accent si maitre. -->
+    <Style x:Key="MeshNodeEllipseStyle" TargetType="Ellipse">
+        <Setter Property="Width" Value="20" />
+        <Setter Property="Height" Value="20" />
+        <Setter Property="Fill" Value="{StaticResource MeshSlaveNodeBrush}" />
+        <Setter Property="Stroke" Value="{StaticResource BorderLoBrush}" />
+        <Setter Property="StrokeThickness" Value="1" />
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding IsMaster}" Value="True">
+                <Setter Property="Fill" Value="{StaticResource MeshMasterNodeBrush}" />
+                <Setter Property="Stroke" Value="{StaticResource AccentBrush}" />
+                <Setter Property="Effect">
+                    <Setter.Value>
+                        <DropShadowEffect Color="#FF9D2E" ShadowDepth="0" BlurRadius="16" Opacity="0.85" />
+                    </Setter.Value>
+                </Setter>
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- Anneau de fond façon radar, purement decoratif, derriere le graphe du mesh. -->
+    <Style x:Key="MeshRadarRingStyle" TargetType="Ellipse">
+        <Setter Property="Stroke" Value="#20FFFFFF" />
+        <Setter Property="StrokeThickness" Value="1" />
+        <Setter Property="StrokeDashArray" Value="1,3" />
+    </Style>
+
+    <Style x:Key="PageTitleStyle" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource TextStrongBrush}" />
+        <Setter Property="FontSize" Value="18" />
+        <Setter Property="FontWeight" Value="Bold" />
+    </Style>
+
+    <!-- Sous-titre de section coloré accent, tout en capitales (ex. "PAN · HORIZONTAL"). -->
+    <Style x:Key="SectionSubtitleStyle" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="Margin" Value="0,0,0,8" />
+    </Style>
+
+    <!-- Libelle de champ court, discret, capitales (ex. "MIN"/"CENTRE"/"MAX"). -->
+    <Style x:Key="FieldLabelStyle" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+        <Setter Property="FontSize" Value="10" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <Style x:Key="HintTextStyle" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource Muted2Brush}" />
+        <Setter Property="FontSize" Value="10" />
+        <Setter Property="FontStyle" Value="Italic" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="Margin" Value="0,8,0,0" />
+    </Style>
+
+    <!-- Pastille de valeur (accent), a droite d'un slider. -->
+    <Style x:Key="ValuePillStyle" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource RecessBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource AccentDimBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="Padding" Value="6,3" />
+        <Setter Property="MinWidth" Value="34" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+    </Style>
+    <Style x:Key="ValuePillTextStyle" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+        <Setter Property="FontFamily" Value="{StaticResource MonoFont}" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+    </Style>
+
+    <!-- Thumb sphere glossy (façon molette KyberEditor) sur une piste fine encastree. -->
+    <Style x:Key="MetalSliderThumbStyle" TargetType="Thumb">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Thumb">
+                    <Ellipse Width="16" Height="16">
+                        <Ellipse.Fill>
+                            <RadialGradientBrush Center="0.35,0.3" GradientOrigin="0.35,0.3" RadiusX="0.75" RadiusY="0.75">
+                                <GradientStop Color="#FFFFFF" Offset="0" />
+                                <GradientStop Color="#C7CBD2" Offset="0.6" />
+                                <GradientStop Color="#9AA0A8" Offset="1" />
+                            </RadialGradientBrush>
+                        </Ellipse.Fill>
+                        <Ellipse.Effect>
+                            <DropShadowEffect Color="Black" Direction="270" ShadowDepth="1.5" BlurRadius="3" Opacity="0.55" />
+                        </Ellipse.Effect>
+                    </Ellipse>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="SliderTrackButtonStyle" TargetType="RepeatButton">
+        <Setter Property="OverridesDefaultStyle" Value="True" />
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RepeatButton">
+                    <Rectangle Fill="Transparent" Height="16" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="MetalSliderStyle" TargetType="Slider">
+        <Setter Property="Height" Value="22" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Slider">
+                    <Grid VerticalAlignment="Center">
+                        <Border Height="4" CornerRadius="2" VerticalAlignment="Center"
+                                Background="{StaticResource RecessBrush}" BorderBrush="{StaticResource BorderLoBrush}" BorderThickness="1" />
+                        <Track x:Name="PART_Track">
+                            <Track.DecreaseRepeatButton>
+                                <RepeatButton Style="{StaticResource SliderTrackButtonStyle}" Command="Slider.DecreaseLarge" />
+                            </Track.DecreaseRepeatButton>
+                            <Track.IncreaseRepeatButton>
+                                <RepeatButton Style="{StaticResource SliderTrackButtonStyle}" Command="Slider.IncreaseLarge" />
+                            </Track.IncreaseRepeatButton>
+                            <Track.Thumb>
+                                <Thumb Style="{StaticResource MetalSliderThumbStyle}" />
+                            </Track.Thumb>
+                        </Track>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ComboBox sombre (remplace le chrome Windows par defaut, blanc). -->
+    <Style x:Key="DarkComboBoxItemStyle" TargetType="ComboBoxItem">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+        <Setter Property="Padding" Value="10,6" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ComboBoxItem">
+                    <Border x:Name="Bd" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsHighlighted" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource PanelHiBrush}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="DarkComboBoxStyle" TargetType="ComboBox">
+        <Setter Property="Background" Value="{StaticResource RecessBrush}" />
+        <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource BevelBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="10,6" />
+        <Setter Property="ItemContainerStyle" Value="{StaticResource DarkComboBoxItemStyle}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ComboBox">
+                    <Grid>
+                        <ToggleButton x:Name="Toggle" Focusable="False" ClickMode="Press"
+                                      IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
+                            <ToggleButton.Template>
+                                <ControlTemplate TargetType="ToggleButton">
+                                    <Border Background="{StaticResource RecessBrush}" BorderBrush="{StaticResource BevelBorderBrush}" BorderThickness="1" CornerRadius="4">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="22" />
+                                            </Grid.ColumnDefinitions>
+                                            <Path Grid.Column="1" Data="M0,0 L5,5 L10,0 Z" Fill="{StaticResource MutedBrush}"
+                                                  HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Grid>
+                                    </Border>
+                                </ControlTemplate>
+                            </ToggleButton.Template>
+                        </ToggleButton>
+                        <ContentPresenter x:Name="ContentSite" IsHitTestVisible="False"
+                                          Content="{TemplateBinding SelectionBoxItem}"
+                                          ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                          Margin="{TemplateBinding Padding}"
+                                          VerticalAlignment="Center" HorizontalAlignment="Left" />
+                        <Popup x:Name="Popup" Placement="Bottom" IsOpen="{TemplateBinding IsDropDownOpen}"
+                               AllowsTransparency="True" Focusable="False" PopupAnimation="Slide">
+                            <Border Background="{StaticResource PanelBrush}" BorderBrush="{StaticResource BevelBorderBrush}" BorderThickness="1" CornerRadius="4"
+                                    MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}" Margin="0,2,0,0">
+                                <Border.Effect>
+                                    <DropShadowEffect Color="Black" Direction="270" ShadowDepth="3" BlurRadius="8" Opacity="0.4" />
+                                </Border.Effect>
+                                <ScrollViewer SnapsToDevicePixels="True">
+                                    <ItemsPresenter />
+                                </ScrollViewer>
+                            </Border>
+                        </Popup>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>

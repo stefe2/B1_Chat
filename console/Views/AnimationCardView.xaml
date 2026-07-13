@@ -1,0 +1,50 @@
+<UserControl x:Class="b1_chat_console.Views.AnimationCardView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Border Style="{StaticResource CardBorderStyle}">
+        <StackPanel>
+            <TextBlock Text="ANIMATION" Style="{StaticResource CardTitleStyle}" />
+
+            <TextBlock Text="CIBLE" Style="{StaticResource FieldLabelStyle}" Margin="0,0,0,4" />
+            <ComboBox Style="{StaticResource DarkComboBoxStyle}" ItemsSource="{Binding Targets}" SelectedItem="{Binding SelectedTarget}"
+                      DisplayMemberPath="DisplayLabel" Margin="0,0,0,8" />
+            <TextBlock Text="GESTE" Style="{StaticResource FieldLabelStyle}" Margin="0,0,0,4" />
+            <ComboBox Style="{StaticResource DarkComboBoxStyle}" ItemsSource="{Binding Anims}" SelectedIndex="{Binding SelectedAnimIndex}" Margin="0,0,0,10" />
+            <Button Content="Jouer" Style="{StaticResource PrimaryButtonStyle}" Command="{Binding PlayAnimCommand}" HorizontalAlignment="Left" Margin="0,0,0,14" />
+
+            <TextBlock Text="PARAMÈTRES D'ANIMATION (BIENTÔT ACTIF)" Style="{StaticResource SectionSubtitleStyle}"
+                       Foreground="{StaticResource MutedBrush}" />
+
+            <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="65" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="FRÉQ." Style="{StaticResource FieldLabelStyle}" />
+                <Slider Grid.Column="1" Style="{StaticResource MetalSliderStyle}" Minimum="0" Maximum="100" Value="{Binding Freq}" Margin="6,0" />
+                <Border Grid.Column="2" Style="{StaticResource ValuePillStyle}"><TextBlock Text="{Binding Freq}" Style="{StaticResource ValuePillTextStyle}" /></Border>
+            </Grid>
+            <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="65" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="AMPLI." Style="{StaticResource FieldLabelStyle}" />
+                <Slider Grid.Column="1" Style="{StaticResource MetalSliderStyle}" Minimum="0" Maximum="100" Value="{Binding Amp}" Margin="6,0" />
+                <Border Grid.Column="2" Style="{StaticResource ValuePillStyle}"><TextBlock Text="{Binding Amp}" Style="{StaticResource ValuePillTextStyle}" /></Border>
+            </Grid>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="65" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="VITESSE" Style="{StaticResource FieldLabelStyle}" />
+                <Slider Grid.Column="1" Style="{StaticResource MetalSliderStyle}" Minimum="0" Maximum="100" Value="{Binding Speed}" Margin="6,0" />
+                <Border Grid.Column="2" Style="{StaticResource ValuePillStyle}"><TextBlock Text="{Binding Speed}" Style="{StaticResource ValuePillTextStyle}" /></Border>
+            </Grid>
+        </StackPanel>
+    </Border>
+</UserControl>

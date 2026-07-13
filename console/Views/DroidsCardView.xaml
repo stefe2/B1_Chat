@@ -1,0 +1,110 @@
+<UserControl x:Class="b1_chat_console.Views.DroidsCardView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:b1_chat_console.ViewModels"
+             d:DataContext="{d:DesignInstance vm:DroidsViewModel}"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008/design"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" mc:Ignorable="d">
+    <Border Style="{StaticResource CardBorderStyle}">
+        <DockPanel>
+            <DockPanel DockPanel.Dock="Top" LastChildFill="False" Margin="0,0,0,12">
+                <Border Style="{StaticResource CardIconBoxStyle}" DockPanel.Dock="Left" Margin="0,0,10,0">
+                    <Canvas Width="15" Height="15">
+                        <Rectangle Canvas.Left="0" Canvas.Top="0" Width="6" Height="6" RadiusX="1.3" RadiusY="1.3" Stroke="{StaticResource AccentBrush}" StrokeThickness="1.4" />
+                        <Rectangle Canvas.Left="9" Canvas.Top="0" Width="6" Height="6" RadiusX="1.3" RadiusY="1.3" Stroke="{StaticResource AccentBrush}" StrokeThickness="1.4" />
+                        <Rectangle Canvas.Left="0" Canvas.Top="9" Width="6" Height="6" RadiusX="1.3" RadiusY="1.3" Stroke="{StaticResource AccentBrush}" StrokeThickness="1.4" />
+                        <Rectangle Canvas.Left="9" Canvas.Top="9" Width="6" Height="6" RadiusX="1.3" RadiusY="1.3" Stroke="{StaticResource AccentBrush}" StrokeThickness="1.4" />
+                    </Canvas>
+                </Border>
+                <TextBlock Text="DROÏDES DÉTECTÉS" Style="{StaticResource CardTitleStyle}" FontSize="13" Margin="0" DockPanel.Dock="Left" VerticalAlignment="Center" />
+                <Button Content="Sauvegarder…" Style="{StaticResource MiniButtonStyle}" DockPanel.Dock="Left" Margin="12,0,0,0" VerticalAlignment="Center" Command="{Binding BackupCommand}" />
+                <Button Content="Restaurer…" Style="{StaticResource MiniButtonStyle}" DockPanel.Dock="Left" Margin="6,0,0,0" VerticalAlignment="Center" Command="{Binding RestoreCommand}" />
+                <TextBlock DockPanel.Dock="Right" VerticalAlignment="Center" Foreground="{StaticResource Muted2Brush}" FontSize="10.5">
+                    <Run Text="{Binding Droids.Count, Mode=OneWay}" /><Run Text=" en réseau" />
+                </TextBlock>
+            </DockPanel>
+
+            <Border Background="{StaticResource RecessBrush}" CornerRadius="8" VerticalAlignment="Top">
+                <Border.Effect>
+                    <DropShadowEffect Color="Black" Direction="270" ShadowDepth="1" BlurRadius="5" Opacity="0.55" />
+                </Border.Effect>
+                <StackPanel>
+                    <Grid Margin="12,10,12,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" MinWidth="120" />
+                            <ColumnDefinition Width="60" />
+                            <ColumnDefinition Width="70" />
+                            <ColumnDefinition Width="80" />
+                            <ColumnDefinition Width="70" />
+                            <ColumnDefinition Width="90" />
+                            <ColumnDefinition Width="90" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="NOM" Style="{StaticResource TableHeaderTextStyle}" />
+                        <TextBlock Grid.Column="1" Text="ID" Style="{StaticResource TableHeaderTextStyle}" />
+                        <TextBlock Grid.Column="2" Text="RSSI" Style="{StaticResource TableHeaderTextStyle}" />
+                        <TextBlock Grid.Column="3" Text="ÉTAT" Style="{StaticResource TableHeaderTextStyle}" />
+                        <TextBlock Grid.Column="4" Text="RÔLE" Style="{StaticResource TableHeaderTextStyle}" />
+                        <TextBlock Grid.Column="5" Text="SERVOS" Style="{StaticResource TableHeaderTextStyle}" />
+                        <TextBlock Grid.Column="6" Text="ANIMS AUTO" Style="{StaticResource TableHeaderTextStyle}" />
+                    </Grid>
+                    <Border BorderBrush="#5C000000" BorderThickness="0,0,0,1" Margin="0,0,0,2" />
+
+                    <ItemsControl ItemsSource="{Binding Droids}" Margin="12,0,12,2">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border BorderBrush="{StaticResource BorderLoBrush}" BorderThickness="0,0,0,1" Padding="0,9">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" MinWidth="120" />
+                                            <ColumnDefinition Width="60" />
+                                            <ColumnDefinition Width="70" />
+                                            <ColumnDefinition Width="80" />
+                                            <ColumnDefinition Width="70" />
+                                            <ColumnDefinition Width="90" />
+                                            <ColumnDefinition Width="90" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <TextBox Grid.Column="0" Style="{StaticResource RecessedTextBoxStyle}" Margin="0,0,6,0"
+                                                 Text="{Binding EditingName, UpdateSourceTrigger=PropertyChanged}"
+                                                 LostFocus="NameBox_LostFocus">
+                                            <TextBox.InputBindings>
+                                                <KeyBinding Key="Enter" Command="{Binding DataContext.CommitNameCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}" />
+                                            </TextBox.InputBindings>
+                                        </TextBox>
+
+                                        <TextBlock Grid.Column="1" Text="{Binding IdHex}" Foreground="{StaticResource AccentBrush}"
+                                                   FontFamily="{StaticResource MonoFont}" FontSize="11.5" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="2" Text="{Binding RssiLabel}" Foreground="{StaticResource MutedBrush}"
+                                                   FontFamily="{StaticResource MonoFont}" FontSize="11" VerticalAlignment="Center" />
+
+                                        <Border Grid.Column="3" Style="{Binding Online, Converter={StaticResource BoolToStyleConv}, ConverterParameter='HaloBadgeOkStyle|HaloBadgeBadStyle'}" VerticalAlignment="Center" HorizontalAlignment="Left">
+                                            <TextBlock Text="{Binding Online, Converter={StaticResource BoolToTextConv}, ConverterParameter='en ligne|perdu'}" FontSize="11" />
+                                        </Border>
+
+                                        <Border Grid.Column="4" Style="{Binding IsMaster, Converter={StaticResource BoolToStyleConv}, ConverterParameter='HaloBadgeOkStyle|HaloBadgeWarnStyle'}" VerticalAlignment="Center" HorizontalAlignment="Left">
+                                            <TextBlock Text="{Binding IsMaster, Converter={StaticResource BoolToTextConv}, ConverterParameter='maître|esclave'}" FontSize="11" />
+                                        </Border>
+
+                                        <ToggleButton Grid.Column="5" Style="{StaticResource HaloToggleButtonStyle}"
+                                                      IsChecked="{Binding ServosOn, Mode=OneWay}"
+                                                      Command="{Binding DataContext.ToggleServosCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                      CommandParameter="{Binding}">
+                                            <TextBlock Text="Servos" FontSize="11" />
+                                        </ToggleButton>
+
+                                        <ToggleButton Grid.Column="6" Style="{StaticResource HaloToggleButtonStyle}"
+                                                      IsChecked="{Binding AutoAnimOn, Mode=OneWay}"
+                                                      Command="{Binding DataContext.ToggleAutoAnimCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                      CommandParameter="{Binding}">
+                                            <TextBlock Text="Anims auto" FontSize="11" />
+                                        </ToggleButton>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+        </DockPanel>
+    </Border>
+</UserControl>

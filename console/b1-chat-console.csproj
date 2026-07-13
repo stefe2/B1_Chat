@@ -13,6 +13,9 @@
          (WPF, System.IO.Ports) dans le .exe au lieu de les laisser à côté dans le dossier
          d'installation ; auto-extraites dans un cache temporaire au lancement. -->
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <!-- Sans ça, le SDK ajoute automatiquement "+<hash-git>" à la suite de notre propre
+         "+build.N" (InformationalVersion ci-dessous) : version illisible dans le titre/l'en-tête. -->
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
 
   <!-- Numéro de build auto-incrémenté à chaque compilation (fichier build.number).
@@ -37,7 +40,7 @@
   </Target>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4078.44" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
     <PackageReference Include="System.IO.Ports" Version="10.0.9" />
   </ItemGroup>
 

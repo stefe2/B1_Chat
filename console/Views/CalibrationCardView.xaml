@@ -1,0 +1,112 @@
+<UserControl x:Class="b1_chat_console.Views.CalibrationCardView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Border Style="{StaticResource CardBorderStyle}">
+        <StackPanel>
+            <DockPanel LastChildFill="False" Margin="0,0,0,12">
+                <TextBlock Text="CALIBRATION SERVOS" Style="{StaticResource CardTitleStyle}" Margin="0" DockPanel.Dock="Left" />
+                <TextBlock Text="auto-save" Style="{StaticResource MetaTextStyle}" DockPanel.Dock="Right" VerticalAlignment="Center" />
+            </DockPanel>
+
+            <TextBlock Text="DROÏDE" Style="{StaticResource FieldLabelStyle}" Margin="0,0,0,4" />
+            <ComboBox Style="{StaticResource DarkComboBoxStyle}" ItemsSource="{Binding Targets}" SelectedItem="{Binding SelectedTarget}"
+                      DisplayMemberPath="DisplayLabel" Margin="0,0,0,14" />
+
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                    <TextBlock Text="PAN · HORIZONTAL" Style="{StaticResource SectionSubtitleStyle}" />
+
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="55" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="MIN" Style="{StaticResource FieldLabelStyle}" />
+                        <Slider Grid.Column="1" Style="{StaticResource MetalSliderStyle}" Minimum="0" Maximum="180" Value="{Binding PanMin}" Margin="6,0" />
+                        <Border Grid.Column="2" Style="{StaticResource ValuePillStyle}"><TextBlock Text="{Binding PanMin}" Style="{StaticResource ValuePillTextStyle}" /></Border>
+                    </Grid>
+
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="55" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="CENTRE" Style="{StaticResource FieldLabelStyle}" />
+                        <Slider Grid.Column="1" Style="{StaticResource MetalSliderStyle}" Minimum="0" Maximum="180" Value="{Binding PanCenter}" Margin="6,0" />
+                        <Border Grid.Column="2" Style="{StaticResource ValuePillStyle}"><TextBlock Text="{Binding PanCenter}" Style="{StaticResource ValuePillTextStyle}" /></Border>
+                    </Grid>
+
+                    <Grid Margin="0,0,0,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="55" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="MAX" Style="{StaticResource FieldLabelStyle}" />
+                        <Slider Grid.Column="1" Style="{StaticResource MetalSliderStyle}" Minimum="0" Maximum="180" Value="{Binding PanMax}" Margin="6,0" />
+                        <Border Grid.Column="2" Style="{StaticResource ValuePillStyle}"><TextBlock Text="{Binding PanMax}" Style="{StaticResource ValuePillTextStyle}" /></Border>
+                    </Grid>
+
+                    <UniformGrid Rows="1" Columns="3">
+                        <Button Content="→ Min" Style="{StaticResource MiniButtonStyle}" Command="{Binding GotoPanMinCommand}" Margin="0,0,4,0" />
+                        <Button Content="→ Centre" Style="{StaticResource MiniButtonStyle}" Command="{Binding GotoPanCenterCommand}" Margin="0,0,4,0" />
+                        <Button Content="→ Max" Style="{StaticResource MiniButtonStyle}" Command="{Binding GotoPanMaxCommand}" />
+                    </UniformGrid>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Margin="10,0,0,0">
+                    <TextBlock Text="TILT · VERTICAL" Style="{StaticResource SectionSubtitleStyle}" />
+
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="55" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="MIN" Style="{StaticResource FieldLabelStyle}" />
+                        <Slider Grid.Column="1" Style="{StaticResource MetalSliderStyle}" Minimum="0" Maximum="180" Value="{Binding TiltMin}" Margin="6,0" />
+                        <Border Grid.Column="2" Style="{StaticResource ValuePillStyle}"><TextBlock Text="{Binding TiltMin}" Style="{StaticResource ValuePillTextStyle}" /></Border>
+                    </Grid>
+
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="55" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="CENTRE" Style="{StaticResource FieldLabelStyle}" />
+                        <Slider Grid.Column="1" Style="{StaticResource MetalSliderStyle}" Minimum="0" Maximum="180" Value="{Binding TiltCenter}" Margin="6,0" />
+                        <Border Grid.Column="2" Style="{StaticResource ValuePillStyle}"><TextBlock Text="{Binding TiltCenter}" Style="{StaticResource ValuePillTextStyle}" /></Border>
+                    </Grid>
+
+                    <Grid Margin="0,0,0,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="55" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="MAX" Style="{StaticResource FieldLabelStyle}" />
+                        <Slider Grid.Column="1" Style="{StaticResource MetalSliderStyle}" Minimum="0" Maximum="180" Value="{Binding TiltMax}" Margin="6,0" />
+                        <Border Grid.Column="2" Style="{StaticResource ValuePillStyle}"><TextBlock Text="{Binding TiltMax}" Style="{StaticResource ValuePillTextStyle}" /></Border>
+                    </Grid>
+
+                    <UniformGrid Rows="1" Columns="3">
+                        <Button Content="→ Min" Style="{StaticResource MiniButtonStyle}" Command="{Binding GotoTiltMinCommand}" Margin="0,0,4,0" />
+                        <Button Content="→ Centre" Style="{StaticResource MiniButtonStyle}" Command="{Binding GotoTiltCenterCommand}" Margin="0,0,4,0" />
+                        <Button Content="→ Max" Style="{StaticResource MiniButtonStyle}" Command="{Binding GotoTiltMaxCommand}" />
+                    </UniformGrid>
+                </StackPanel>
+            </Grid>
+
+            <TextBlock Text="Bouge un curseur : le servo du droïde va à cette position (aperçu en direct)."
+                       Style="{StaticResource HintTextStyle}" />
+        </StackPanel>
+    </Border>
+</UserControl>

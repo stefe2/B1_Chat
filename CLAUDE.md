@@ -13,15 +13,17 @@ Un seul dépôt git (`stefe2/B1_Chat`), deux moitiés :
    multi-sauts**, avec animations fluides/organiques coordonnées par un
    **maître** qui joue aussi le son (DFPlayer Mini + ampli). Réglages persistés
    en NVS.
-2. **Console de supervision** (`console/`, WPF net8.0-windows + WebView2,
-   v0.8.x) : application de bureau qui possède le port série
-   (`System.IO.Ports`) et rend **`console/wwwroot/index.html`** — la page
-   unique de l'UI (HTML+CSS+JS inline, tout en français), **copie canonique**
-   (remplaçant direct de l'ancien `web/dashboard_V7.html`, supprimé). Fusionnée
-   dans ce dépôt (elle vivait avant dans `b1-chat-console`, dépôt séparé sans
-   remote — jamais publié ; historique perdu au passage, aucune perte réelle).
-   `FIRMWARE-CONTRACT.md` liste les extensions de protocole que la console
-   attend du firmware.
+2. **Console de supervision** (`console/`, WPF net8.0-windows, v0.8.x) :
+   application de bureau **100 % WPF native** (XAML/MVVM,
+   `CommunityToolkit.Mvvm`) qui possède le port série (`System.IO.Ports`) et
+   reproduit le design de l'ancienne page web carte par carte.
+   `console/wwwroot/index.html` (HTML+CSS+JS inline, tout en français) est
+   **conservée intacte** comme référence de comportement/design, mais n'est
+   plus rendue à l'exécution (l'ancienne coquille WebView2 a été retirée).
+   Fusionnée dans ce dépôt (elle vivait avant dans `b1-chat-console`, dépôt
+   séparé sans remote — jamais publié ; historique perdu au passage, aucune
+   perte réelle). `FIRMWARE-CONTRACT.md` liste les extensions de protocole que
+   la console attend du firmware.
 
 Deux trains de release GitHub distincts au sein du **même** dépôt, distingués
 par le préfixe du tag : `vX.Y.Z` pour l'app console, `fw-vX.Y.Z` pour le
@@ -142,48 +144,57 @@ après un `setMulti` de restauration. [FIRMWARE-CONTRACT.md](FIRMWARE-CONTRACT.m
 tient l'état d'implémentation (§1/§3/§4/§5 faits ; §2 durées de pistes reporté —
 approche broche BUSY).
 
-## index.html (page UI de la console — `console/wwwroot/index.html`)
+## Ancienne page web de référence (`console/wwwroot/index.html`)
 
-Page WebView2 (pas Web Serial : c'est le C# qui tient le port). Elle parle à
-l'hôte via `window.chrome.webview.postMessage` — **deux vocabulaires à ne pas
-confondre** :
+Page HTML+CSS+JS inline conservée **intacte** (non modifiée depuis la réécriture
+WPF) — sert uniquement de spec comportementale/visuelle (texte français exact,
+palette, comportement carte par carte) pour l'implémentation native ci-dessous.
+N'est **plus rendue** par l'application (l'ancienne coquille WebView2, qui la
+chargeait via `window.chrome.webview.postMessage`, a été retirée).
 
-1. **Transport** (page ↔ hôte C#, champ `type`) : `listPorts`/`ports` ·
-   `open`/`opened` · `close`/`closed {unexpected?}` · `write` · `line {data}` ·
-   `getAppInfo`/`appInfo` · `saveFile`/`fileSaved` · `openFile`/`fileOpened` ·
-   `pickBin`/`binPicked` · `flash`/`flashLog`/`flashDone` ·
-   `libList`/`libSave`/`libDelete` (bibliothèque locale de séquences).
-2. **Protocole firmware** (ci-dessus), transporté dans `write` (sortant) et
-   `line` (entrant, parsé → `handleEvent()`).
+Cartes qu'elle documente : Droïdes (noms, servos, anims auto, sauvegarde/
+restauration) · Calibration servos (aperçu direct + auto-save) · Animation ·
+Audio · Firmware (flash espflash) · Topologie du mesh (graphe SVG des liens
+directs, fusion bidirectionnelle au RSSI le plus faible) · Séquenceur (catalogue
+8 slots + bibliothèque locale illimitée + éditeur + timeline multi-pistes + trame
+audio + mode Répéter console-side + undo/redo + export/import `.b1seq.json`) ·
+Activité (carte retirée côté WPF, voir État d'avancement).
 
-Cartes : Droïdes (noms, servos, anims auto, sauvegarde/restauration) · Calibration
-servos (aperçu direct + auto-save) · Animation · Audio · Firmware (flash espflash) ·
-Topologie du mesh (graphe SVG des liens directs, fusion bidirectionnelle au RSSI
-le plus faible) · Séquenceur (catalogue 8 slots + bibliothèque locale illimitée +
-éditeur + timeline multi-pistes + trame audio + mode Répéter console-side +
-undo/redo + export/import `.b1seq.json`) · Activité.
+Le protocole firmware (`cmd`/`evt`, ci-dessus) y est transporté dans `write`
+(sortant) et `line` (entrant, parsé → `handleEvent()`) ; le vocabulaire transport
+WebView2 (`listPorts`/`open`/`write`/`flash`/`libList`/...) n'a plus cours côté
+WPF, remplacé par un appel direct à `Services/SerialLinkService.cs` +
+`Services/ProtocolClient.cs` (pas de pont postMessage).
 
-Particularités : page `file://` auto-suffisante (aucun CDN/fetch) ; `sendCmd()` =
-point de passage unique (gate handshake) ; re-rendus du tableau différés pendant
-interaction (`UI_INTERACTION_SELECTOR`) ; durées de pistes audio et mapping
-slot→piste en `localStorage` (`b1.trackDurations`, `b1.audioBySlot`) tant que le
-firmware ne les connaît pas ; l'éditeur de séquences a un `handleEvent` **wrapper**
-(les events séquenceur sont traités dans le wrapper, le reste retombe sur
-l'original — ajouter les nouveaux `evt` dans le wrapper) ; interceptors
-(`seqCollector`/`calibCollector`/`pushingLib`) à garder au **début** de leurs
-handlers, sinon la collecte de fond (sauvegarde/restauration) corrompt l'éditeur.
+### Architecture console (`console/`) — WPF natif (XAML/MVVM)
 
-Détails d'implémentation côté C# (`console/MainWindow.xaml.cs`, versioning,
-NSIS, vérification jsdom) : voir le CLAUDE.md ci-dessous (§ Architecture console).
+Réécriture complète (2026-07-13) : l'ancienne coquille WebView2 est remplacée par
+une UI **100 % XAML**, carte par carte, pilotée par `CommunityToolkit.Mvvm`
+(`[ObservableProperty]`/`[RelayCommand]`). `index.html` reste sur disque, intacte,
+comme référence de design/comportement (section ci-dessus) mais n'est plus
+chargée par l'application.
 
-### Architecture console (`console/`)
-
-| Fichier | Rôle |
+| Dossier/fichier | Rôle |
 | --- | --- |
-| `MainWindow.xaml.cs` | port série (`System.IO.Ports`), pont transport ↔ WebView2, flash espflash, vérification/téléchargement des mises à jour GitHub |
-| `wwwroot/index.html` | page UI unique (voir ci-dessus) |
-| `b1-chat-console.csproj` | build number auto-incrémenté, version depuis `VersionPrefix`, embarque `wwwroot/` et `tools/` (espflash) dans le publish |
+| `MainWindow.xaml(.cs)` | en-tête (logo, statut connexion, commit/revert, bouton « Firmware… ») + grille des cartes |
+| `FirmwareWindow.xaml(.cs)` | fenêtre séparée hébergeant `Views/FirmwareCardView` (flash espflash + MAJ GitHub), ouverte depuis le bouton d'en-tête |
+| `App.xaml(.cs)` | composition root : convertisseurs + dictionnaires de ressources fusionnés |
+| `Themes/Theme.xaml` | palette (brushes), dégradés boutons/LED/nœuds du mesh — portée depuis les custom properties CSS de `index.html` |
+| `Themes/Effects.xaml` | styles partagés : `CardBorderStyle`, `BeveledButtonStyle`, `HaloBadge*Style`, `MetalSliderStyle`, `DarkComboBoxStyle`, `CardIconBoxStyle`, `MeshNodeEllipseStyle`, etc. |
+| `Models/` | `Droid`, `MeshNodeVisual`/`MeshEdgeVisual`, séquences, calibration — objets liés aux vues |
+| `ViewModels/` | `MainViewModel` + un par carte (`DroidsViewModel`, `CalibrationViewModel`, `AnimationViewModel`, `AudioViewModel`, `FirmwareViewModel`, `MeshTopologyViewModel`, `SequencerViewModel`) |
+| `Views/` | un `UserControl` XAML par carte (plus de carte Activité) |
+| `Services/SerialLinkService.cs` | port série natif (`System.IO.Ports`), auto-reconnexion (3 s) |
+| `Services/ProtocolClient.cs` | état central : parse les `evt` JSON entrants, construit les `cmd` sortants (équivalent C# du `sendCmd()`/`handleEvent()` JS) |
+| `Services/UpdateService.cs` / `FlashService.cs` / `LibraryService.cs` / `SettingsService.cs` | MAJ GitHub, flash espflash, bibliothèque locale de séquences, `settings.json` |
+| `Converters/` | `BoolToStyleConverter`, `BoolToTextConverter`, `BoolToVisibilityConverter`, `BoolToBrushConverter`, `StrengthToBrushConverter` (couleur des liens du mesh selon le RSSI) |
+| `b1-chat-console.csproj` | build number auto-incrémenté, version depuis `VersionPrefix`, `IncludeNativeLibrariesForSelfExtract`, `tools/` (espflash) exclu du single-file mais copié au publish |
 | `installer/b1-chat-console.nsi` + `release.ps1` | installeur NSIS + script de release GitHub (tag `vX.Y.Z`) |
+
+Disposition de la grille principale (`MainWindow.xaml`) : Droïdes (colonne gauche,
+pleine hauteur) · colonne droite empilée Calibration → Topologie du mesh →
+(rangée Animation + Audio côte à côte, largeur égale) · Séquenceur en pleine
+largeur en bas. Carte Firmware sortie de la grille (fenêtre séparée).
 
 ## Stockage
 
@@ -221,6 +232,20 @@ NSIS, vérification jsdom) : voir le CLAUDE.md ci-dessous (§ Architecture conso
       trains de tags (`vX.Y.Z` app, `fw-vX.Y.Z` firmware) ; `MainWindow.xaml.cs`
       adapté (liste les releases du dépôt et filtre par préfixe de tag au lieu
       de `/releases/latest`, qui aurait mélangé les deux trains).
+- [x] Réécriture complète de la console en WPF natif (2026-07-13, `index.html`
+      conservée intacte comme référence, plus rendue à l'exécution) : 8 cartes
+      portées en XAML/MVVM (`CommunityToolkit.Mvvm`), `ProtocolClient` C# comme
+      nouvel état central (équivalent natif du `sendCmd()`/`handleEvent()` JS),
+      auto-reconnexion série, undo/redo séquenceur, topologie du mesh (Canvas +
+      layout circulaire porté tel quel).
+- [x] Polish visuel + réagencement (2026-07-13) : carte Calibration servos prise
+      comme modèle de référence (slider métal, pastilles de valeur, ComboBox
+      sombre) puis propagée aux autres cartes ; en-tête redessiné (logo, statut,
+      CTA accent) ; carte Topologie du mesh redessinée (nœuds glossy, anneaux
+      radar, liens colorés par force de signal) et déplacée entre Calibration et
+      Animation ; carte Activité supprimée ; carte Firmware sortie de la grille
+      vers une fenêtre séparée (`FirmwareWindow`, bouton dédié en en-tête) ;
+      Animation et Audio placées côte à côte au-dessus du Séquenceur.
 - [ ] Étape 6 : machine à états `droid.{h,cpp}`.
 - [ ] Contrat §2 : durées de pistes mesurées via la broche BUSY (GPIO4) — reporté.
 - [ ] Params d'anim freq/amp/speed : reçus + persistés mais **aucun effet**
@@ -249,6 +274,15 @@ NSIS, vérification jsdom) : voir le CLAUDE.md ci-dessous (§ Architecture conso
   trains) — toujours lister `/releases` et filtrer par préfixe (`v` hors `fw-`
   pour l'app, `fw-` pour le firmware), voir `GetLatestReleaseAsync` dans
   `console/MainWindow.xaml.cs`.
+- WPF `Setter.TargetName` ne peut pas cibler un `Freezable` nommé imbriqué dans
+  une propriété (ex. un `TranslateTransform` dans `Border.RenderTransform`, un
+  `DropShadowEffect` dans `Border.Effect`) : le `Trigger` doit remplacer toute la
+  propriété du parent par un nouvel objet plutôt que nommer l'enfant.
+- `DockPanel.LastChildFill` vaut `True` par défaut : le **dernier** enfant ignore
+  son propre `Dock` et s'étire pour remplir l'espace restant — piège classique
+  pour un groupe censé rester collé à un bord (ex. les contrôles de connexion de
+  l'en-tête) ; mettre `LastChildFill="False"` si tous les enfants doivent
+  respecter leur `Dock`.
 
 ## Vérification (rappels)
 

@@ -1,0 +1,71 @@
+<UserControl x:Class="b1_chat_console.Views.MeshTopologyCardView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Border Style="{StaticResource CardBorderStyle}">
+        <StackPanel>
+            <DockPanel LastChildFill="False" Margin="0,0,0,4">
+                <Border Style="{StaticResource CardIconBoxStyle}" DockPanel.Dock="Left" Margin="0,0,10,0">
+                    <Canvas Width="15" Height="15">
+                        <Ellipse Canvas.Left="5.5" Canvas.Top="0" Width="4" Height="4" Stroke="{StaticResource AccentBrush}" StrokeThickness="1.3" />
+                        <Ellipse Canvas.Left="0" Canvas.Top="10.5" Width="4" Height="4" Stroke="{StaticResource AccentBrush}" StrokeThickness="1.3" />
+                        <Ellipse Canvas.Left="11" Canvas.Top="10.5" Width="4" Height="4" Stroke="{StaticResource AccentBrush}" StrokeThickness="1.3" />
+                        <Line X1="7" Y1="4" X2="3" Y2="10.7" Stroke="{StaticResource AccentBrush}" StrokeThickness="1.2" />
+                        <Line X1="8" Y1="4" X2="12" Y2="10.7" Stroke="{StaticResource AccentBrush}" StrokeThickness="1.2" />
+                        <Line X1="4.5" Y1="12.5" X2="10.5" Y2="12.5" Stroke="{StaticResource AccentBrush}" StrokeThickness="1.2" />
+                    </Canvas>
+                </Border>
+                <TextBlock Text="TOPOLOGIE DU MESH" Style="{StaticResource CardTitleStyle}" FontSize="13" Margin="0" DockPanel.Dock="Left" VerticalAlignment="Center" />
+                <TextBlock DockPanel.Dock="Right" VerticalAlignment="Center" Foreground="{StaticResource Muted2Brush}" FontSize="10.5">
+                    <Run Text="{Binding LinkCount, Mode=OneWay}" /><Run Text=" liens directs" />
+                </TextBlock>
+            </DockPanel>
+
+            <TextBlock Text="Qui entend qui en direct sur le mesh radio — épaisseur/opacité selon la force du signal."
+                       Style="{StaticResource HintTextStyle}" Margin="0,0,0,10" TextWrapping="Wrap" />
+
+            <TextBlock Text="Aucun droïde détecté." Foreground="{StaticResource MutedBrush}" FontSize="12"
+                       Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisConv}}" Margin="0,30" HorizontalAlignment="Center" />
+
+            <Border Background="{StaticResource RecessBrush}" CornerRadius="10" Width="260" Height="260" HorizontalAlignment="Center"
+                    Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisConv}, ConverterParameter=Invert}">
+                <Border.Effect>
+                    <DropShadowEffect Color="Black" Direction="270" ShadowDepth="1" BlurRadius="6" Opacity="0.6" />
+                </Border.Effect>
+                <Canvas Width="260" Height="260">
+                    <Ellipse Style="{StaticResource MeshRadarRingStyle}" Canvas.Left="40" Canvas.Top="40" Width="180" Height="180" />
+                    <Ellipse Style="{StaticResource MeshRadarRingStyle}" Canvas.Left="80" Canvas.Top="80" Width="100" Height="100" />
+
+                    <ItemsControl ItemsSource="{Binding Edges}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><Canvas /></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Line X1="{Binding X1}" Y1="{Binding Y1}" X2="{Binding X2}" Y2="{Binding Y2}"
+                                      Stroke="{Binding Strength, Converter={StaticResource StrengthToBrushConv}}"
+                                      StrokeThickness="{Binding Thickness}" Opacity="{Binding Opacity}"
+                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                      ToolTip="{Binding Tooltip}" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <ItemsControl ItemsSource="{Binding Nodes}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><Canvas /></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Canvas>
+                                    <Ellipse Style="{StaticResource MeshNodeEllipseStyle}" Canvas.Left="{Binding Left}" Canvas.Top="{Binding Top}" />
+                                    <TextBlock Canvas.Left="{Binding LabelLeft}" Canvas.Top="{Binding LabelTop}" Width="60"
+                                               TextAlignment="Center" Text="{Binding Label}" FontSize="10" Foreground="{StaticResource TextBrush}" />
+                                </Canvas>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Canvas>
+            </Border>
+        </StackPanel>
+    </Border>
+</UserControl>

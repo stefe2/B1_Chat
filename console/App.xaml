@@ -2,8 +2,19 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:b1_chat_console"
+             xmlns:conv="clr-namespace:b1_chat_console.Converters"
              StartupUri="MainWindow.xaml">
     <Application.Resources>
-         
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Themes/Theme.xaml" />
+                <ResourceDictionary Source="Themes/Effects.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+            <conv:BoolToStyleConverter x:Key="BoolToStyleConv" />
+            <conv:BoolToTextConverter x:Key="BoolToTextConv" />
+            <conv:BoolToVisibilityConverter x:Key="BoolToVisConv" />
+            <conv:BoolToBrushConverter x:Key="BoolToBrushConv" />
+            <conv:StrengthToBrushConverter x:Key="StrengthToBrushConv" />
+        </ResourceDictionary>
     </Application.Resources>
 </Application>
