@@ -394,6 +394,30 @@ largeur en bas. Carte Firmware sortie de la grille (fenêtre séparée).
       Restent à faire (Vérification pt 7) : `.bin` corrompu, rollback forcé,
       abandon console en cours de transfert, garde anti-double-session,
       multi-sauts.
+- [x] Robustesse OTA validée au banc (2026-07-14 nuit, fw 1.3.12) via
+      `tools/ota-test.ps1` (banc de test série scriptable : rejoue le
+      protocole console et injecte des fautes — chunk corrompu, abandon,
+      double otaStart) :
+      · chunk corrompu en vol → `ERR_MD5` (err 7) au END, **aucun reboot**,
+        l'esclave reste sur son image ;
+      · double `otaStart` → `otaError « occupé »`, la session en cours
+        continue sans perturbation ;
+      · abandon console au chunk 1200 → abort maître à 45 s pile (raison 11),
+        l'esclave purge la session, la suivante repart proprement ;
+      · rollback anti-brick (build `-D OTA_TEST_FORCE_CRASH`, hook inerte
+        gardé dans main.cpp) : 3 panics au boot → bascule automatique de
+        partition au 4ᵉ boot → ancienne image récupérée en **3,6 s**, verdict
+        `rolledBack` authentique côté maître ;
+      · régression nominale 1.3.11 → 1.3.12 (avec le Registry synchronisé
+        des deux côtés) → `otaResult{ok:true}` en ~1 s post-reboot.
+      Reste : multi-sauts (3ᵉ carte requise) et premier OTA sur un vrai
+      droïde du parc.
+- [x] Console v0.9.0 (2026-07-14) : cycle de durcissement OTA (trace série
+      permanente, chien de garde de chunk, verdict fiabilisé, max sémantique
+      des releases, colonne FW colorée, OTA depuis GitHub). Installeur NSIS
+      construit (`installer\b1-chat-console-setup-0.9.0.exe`) — **publication
+      GitHub en attente** : lancer `.\console\installer\release.ps1 -Publish`
+      (les jetons/tags ne peuvent pas être poussés en session non supervisée).
 
 ## Pièges connus
 
@@ -477,10 +501,14 @@ largeur en bas. Carte Firmware sortie de la grille (fenêtre séparée).
 5. Séquence sauvée → reboot maître → `Jouer` fonctionne sans PC.
 6. Topologie : éloigner un esclave hors de portée directe du maître → son lien
    direct disparaît du graphe, les liens via relais restent.
-7. OTA — **uniquement sur une carte de rechange, jamais un droïde en service** :
+7. OTA — **uniquement sur une carte de rechange, jamais un droïde en service** —
+   tous ces points sont ✅ validés au banc (2026-07-14, fw 1.3.12, via
+   `tools/ota-test.ps1`, voir État d'avancement) :
    transfert nominal (progression, `otaResult{ok:true}`, `evt:droids.fw` à
-   jour) ; `.bin` corrompu → `ERR_MD5` à la fin, pas de reboot ; abandon série
-   (fermer la console en cours de transfert) → auto-abort côté maître, session
-   suivante propre ; rollback — build de test qui plante juste après
-   `earlyCheck()`, poussé par OTA, doit revenir seul sur l'ancienne image après
-   `OTA_MAX_BOOT_ATTEMPTS` boots ratés.
+   jour) ✅ ; `.bin` corrompu → `ERR_MD5` à la fin, pas de reboot ✅ ; abandon
+   série (fermer la console en cours de transfert) → auto-abort côté maître,
+   session suivante propre ✅ ; rollback — build de test qui plante juste après
+   `earlyCheck()` (`-D OTA_TEST_FORCE_CRASH`), poussé par OTA, doit revenir
+   seul sur l'ancienne image après `OTA_MAX_BOOT_ATTEMPTS` boots ratés ✅ ;
+   garde anti-double-session (`otaError « occupé »`) ✅.
+   Restent : multi-sauts (3ᵉ carte) et premier OTA sur un vrai droïde.
