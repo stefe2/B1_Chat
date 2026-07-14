@@ -9,6 +9,10 @@
 #include "serial_console.h"
 #include "sequence_store.h"
 #include "audio.h"
+#include "ota_guard.h"
+#include "ota_master.h"
+#include "ota_slave.h"
+#include "esp_task_wdt.h"
 
 // NOTE: banc de test temporaire (étapes 2-8). Sera remplacé par la machine
 // à états du droïde à l'étape 6.
@@ -275,12 +279,92 @@ static void onMeshMessage(uint8_t type, const uint8_t* payload, uint8_t len,
         for (uint8_t i = 0; i < n; i++)
             MeshTopo.seen(srcId, rep.entries[i].id, rep.entries[i].rssi, now2);
 #endif
+    } else if (type == MSG_OTA_ACK && len == sizeof(OtaAckPayload)) {
+#if IS_MASTER
+        OtaAckPayload p;
+        memcpy(&p, payload, sizeof(p));
+        OtaM.onAck(srcId, p);
+#endif
+    } else if (type == MSG_OTA_START && len == sizeof(OtaStartPayload)) {
+#if !IS_MASTER
+        OtaStartPayload p;
+        memcpy(&p, payload, sizeof(p));
+        OtaS.onStart(srcId, p);
+#endif
+    } else if (type == MSG_OTA_CHUNK && len == sizeof(OtaChunkPayload)) {
+#if !IS_MASTER
+        OtaChunkPayload p;
+        memcpy(&p, payload, sizeof(p));
+        OtaS.onChunk(srcId, p);
+#endif
+    } else if (type == MSG_OTA_END && len == sizeof(OtaEndPayload)) {
+#if !IS_MASTER
+        OtaEndPayload p;
+        memcpy(&p, payload, sizeof(p));
+        OtaS.onEnd(srcId, p);
+#endif
+    } else if (type == MSG_OTA_ABORT && len == sizeof(OtaAbortPayload)) {
+#if !IS_MASTER
+        OtaAbortPayload p;
+        memcpy(&p, payload, sizeof(p));
+        OtaS.onAbort(srcId, p);
+#endif
     } else {
         LOGF("type=%u len=%u de %04X (rssi %d)", type, len, srcId, rssi);
     }
 }
 
+#if IS_MASTER
+// Relais entre les commandes série (SerialConsole) et OtaMaster — main.cpp
+// est le seul point de câblage entre le mesh/registre et le protocole JSON.
+static bool onOtaStartCmd(uint16_t target, uint32_t size, const char* md5Hex32) {
+    return OtaM.begin(target, size, md5Hex32);
+}
+static void onOtaChunkCmd(uint16_t seq, const uint8_t* data, uint8_t len) {
+    OtaM.onSerialChunk(seq, data, len);
+}
+static void onOtaAbortCmd() {
+    OtaM.abort();
+}
+
+// Traduit l'événement OTA en attente (s'il y en a un) en evt JSON console.
+static void pumpOtaEvents() {
+    const OtaMaster::Event ev = OtaM.pollEvent();
+    switch (ev.type) {
+    case OtaMaster::EV_READY:
+        Console.pushOtaReady(ev.target, ev.sessionId, ev.chunkSize, ev.total);
+        break;
+    case OtaMaster::EV_CHUNK_ACK:
+        Console.pushOtaChunkAck(ev.chunkIndex, ev.sent, ev.total);
+        break;
+    case OtaMaster::EV_DONE:
+        Console.pushOtaDone(ev.target, ev.sessionId);
+        break;
+    case OtaMaster::EV_RESULT:
+        Console.pushOtaResult(ev.target, ev.ok, ev.fw, ev.reason);
+        break;
+    case OtaMaster::EV_ERROR:
+        Console.pushOtaError(ev.target, ev.sessionId, ev.reason);
+        break;
+    default:
+        break;
+    }
+}
+#endif
+
 void setup() {
+    // Doit rester la toute première ligne : un crash survenant avant cet
+    // appel ne serait jamais compté par le mécanisme anti-brick (voir
+    // CLAUDE.md, pièges connus).
+    if (Guard.earlyCheck()) return;
+
+    // Filet de sécurité : un nouveau firmware qui plante/boucle sans céder la
+    // main après le passage d'OtaGuard doit quand même finir par redémarrer
+    // (sans compter uniquement sur le watchdog par défaut d'Arduino).
+    esp_task_wdt_config_t wdtConfig = {10000, 0, true};
+    esp_task_wdt_init(&wdtConfig);
+    esp_task_wdt_add(nullptr);
+
     Serial.begin(115200);
     pinMode(PIN_LED_ONBOARD, OUTPUT);
 
@@ -320,6 +404,9 @@ void setup() {
     Console.onSeqQuery(onSeqQueryCmd);
     Console.onCalib(onCalibCmd);
     Console.onPreview(onPreviewCmd);
+    Console.onOtaStart(onOtaStartCmd);
+    Console.onOtaChunk(onOtaChunkCmd);
+    Console.onOtaAbort(onOtaAbortCmd);
     Console.setMasterServos(gServos);
     Console.setMasterAutoAnim(gAutoAnim);
 
@@ -342,11 +429,17 @@ void setup() {
 
 void loop() {
     const uint32_t now = millis();
+    esp_task_wdt_reset();
+    Guard.confirmIfPending(now);
 
     head.update();
     if (gServos) anim.update();
 #if IS_MASTER
     Console.update();
+    OtaM.update(now);
+    pumpOtaEvents();
+#else
+    OtaS.update(now);
 #endif
 
     // LED de vie.

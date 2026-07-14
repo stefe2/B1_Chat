@@ -17,6 +17,9 @@ public partial class Droid : ObservableObject
     [ObservableProperty] private string? _portName;
     [ObservableProperty] private string _fwVersion = "";
     [ObservableProperty] private DateTime _lastSeen = DateTime.MinValue;
+    [ObservableProperty] private bool _otaInProgress;
+    [ObservableProperty] private int _otaProgressPct;
+    [ObservableProperty] private string _otaStatusText = "";
 
     public string RssiLabel => IsMaster ? (PortName ?? "local") : (Online ? $"{Rssi} dBm" : "-");
     public string IdHex => Id.ToString("X4");
@@ -28,6 +31,10 @@ public partial class Droid : ObservableObject
     // Droïde adopté (esclave) : peut être retiré manuellement du registre à tout moment.
     public bool CanForget => !IsMaster && Adopted;
 
+    // Idem, mais masqué pendant qu'une mise à jour OTA est en cours sur ce droïde
+    // (remplacé par la barre de progression).
+    public bool CanFlashOta => CanForget && !OtaInProgress;
+
     partial void OnRssiChanged(int value) => OnPropertyChanged(nameof(RssiLabel));
     partial void OnPortNameChanged(string? value) => OnPropertyChanged(nameof(RssiLabel));
     partial void OnOnlineChanged(bool value) => OnPropertyChanged(nameof(RssiLabel));
@@ -36,11 +43,14 @@ public partial class Droid : ObservableObject
         OnPropertyChanged(nameof(RssiLabel));
         OnPropertyChanged(nameof(IsPending));
         OnPropertyChanged(nameof(CanForget));
+        OnPropertyChanged(nameof(CanFlashOta));
     }
     partial void OnNameChanged(string value) => OnPropertyChanged(nameof(DisplayLabel));
     partial void OnAdoptedChanged(bool value)
     {
         OnPropertyChanged(nameof(IsPending));
         OnPropertyChanged(nameof(CanForget));
+        OnPropertyChanged(nameof(CanFlashOta));
     }
+    partial void OnOtaInProgressChanged(bool value) => OnPropertyChanged(nameof(CanFlashOta));
 }

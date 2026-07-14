@@ -13,7 +13,7 @@
 //  compare à la derniere release de stefe2/B1_Chat pour proposer une mise a
 //  jour. Bump a chaque release (tools/release.ps1 s'appuie dessus).
 // ---------------------------------------------------------------------------
-#define FW_VERSION "1.2.0"
+#define FW_VERSION "1.3.0"
 
 // Version du protocole série console<->maître (incrementée quand un changement
 // n'est pas retro-compatible; les ajouts de champs/commandes n'en ont pas besoin).
@@ -101,3 +101,16 @@ static const uint32_t NEIGHBOR_STALE_MS  = 9000; // péremption d'un lien radio 
 static const uint32_t IDLE_ANIM_MIN_MS = 3000;   // délai mini avant une anim locale
 static const uint32_t IDLE_ANIM_MAX_MS = 9000;   // délai maxi avant une anim locale
 static const uint32_t HEARTBEAT_MS     = 2000;   // période d'émission heartbeat
+
+// ---------------------------------------------------------------------------
+//  OTA firmware (esclaves, relayé par le mesh) — voir CLAUDE.md
+// ---------------------------------------------------------------------------
+static const uint8_t  OTA_MESH_TTL          = 2;        // TTL réduit dédié aux paquets OTA
+static const uint32_t OTA_MAX_IMAGE_SIZE    = 1200000UL; // marge sous les 1.25 Mo d'une partition app
+static const uint32_t OTA_ACK_TIMEOUT_MS    = 400;      // délai avant retransmission d'un chunk/start/end
+static const uint8_t  OTA_MAX_RETRIES       = 5;        // tentatives avant échec de session (maître)
+static const uint32_t OTA_SESSION_TIMEOUT_MS = 20000;   // inactivité max côté esclave avant auto-abort
+static const uint32_t OTA_SERIAL_IDLE_TIMEOUT_MS = 45000; // inactivité max côté maître (console disparue)
+static const uint8_t  OTA_MAX_BOOT_ATTEMPTS = 3;        // tentatives de boot avant rollback (OtaGuard)
+static const uint32_t OTA_VERIFY_UPTIME_MS  = 20000;    // uptime requis pour confirmer un nouveau firmware
+static const uint32_t OTA_REBOOT_WAIT_MS    = 90000;    // délai max pour confirmer un heartbeat post-OTA

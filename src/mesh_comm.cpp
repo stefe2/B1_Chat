@@ -132,14 +132,14 @@ bool MeshComm::rawBroadcast(const uint8_t* frame, uint8_t frameLen) {
     return esp_now_send(BROADCAST_ADDR, frame, frameLen) == ESP_OK;
 }
 
-bool MeshComm::send(uint8_t type, const void* payload, uint8_t len) {
+bool MeshComm::send(uint8_t type, const void* payload, uint8_t len, uint8_t ttl) {
     if (len > MAX_PAYLOAD) return false;
 
     uint8_t frame[HDR_LEN + MAX_PAYLOAD + HMAC_LEN];
     MeshHeader hdr;
     hdr.srcId = _myId;
     hdr.seq = ++_seq;
-    hdr.ttl = MESH_TTL;
+    hdr.ttl = ttl;
     hdr.type = type;
 
     memcpy(frame, &hdr, HDR_LEN);

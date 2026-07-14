@@ -50,6 +50,13 @@ public:
     // Émet les liens directs du mesh détectés ({evt:"meshTopology",...}).
     void pushMeshTopology();
 
+    // Événements OTA (voir CLAUDE.md pour le flux complet).
+    void pushOtaReady(uint16_t target, uint8_t sessionId, uint8_t chunkSize, uint16_t totalChunks);
+    void pushOtaChunkAck(uint16_t seq, uint16_t sent, uint16_t total);
+    void pushOtaDone(uint16_t target, uint8_t sessionId);
+    void pushOtaResult(uint16_t target, bool ok, const char* fw, const char* reason);
+    void pushOtaError(uint16_t target, uint8_t sessionId, const char* reason);
+
     // Hooks optionnels déclenchés par les commandes reçues.
     void onAnim(void (*cb)(uint8_t animId, uint32_t seed)) { _animCb = cb; }
     void onVolume(void (*cb)(uint8_t volume)) { _volCb = cb; }
@@ -68,6 +75,9 @@ public:
                             uint8_t tiltMin, uint8_t tiltCenter, uint8_t tiltMax)) { _calibCb = cb; }
     void onPreview(void (*cb)(uint16_t target, uint8_t pan, uint8_t tilt)) { _previewCb = cb; }
     void onSeqQuery(void (*cb)()) { _seqQueryCb = cb; }
+    void onOtaStart(bool (*cb)(uint16_t target, uint32_t size, const char* md5Hex32)) { _otaStartCb = cb; }
+    void onOtaChunk(void (*cb)(uint16_t seq, const uint8_t* data, uint8_t len)) { _otaChunkCb = cb; }
+    void onOtaAbort(void (*cb)()) { _otaAbortCb = cb; }
 
     // État servos du maître (pour l'afficher dans la liste).
     void setMasterServos(bool on) { _masterServos = on; }
@@ -107,6 +117,9 @@ private:
     void (*_calibCb)(uint16_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t) = nullptr;
     void (*_previewCb)(uint16_t, uint8_t, uint8_t) = nullptr;
     void (*_seqQueryCb)() = nullptr;
+    bool (*_otaStartCb)(uint16_t, uint32_t, const char*) = nullptr;
+    void (*_otaChunkCb)(uint16_t, const uint8_t*, uint8_t) = nullptr;
+    void (*_otaAbortCb)() = nullptr;
 
     void handleLine(const char* line);
 

@@ -25,6 +25,23 @@ enum MeshMsgType : uint8_t {
     MSG_PREVIEW   = 7,
     MSG_AUTOANIM  = 8,
     MSG_NEIGHBORS = 9,
+    MSG_OTA_START = 10,  // maître -> esclave ciblé : démarre une session OTA
+    MSG_OTA_CHUNK = 11,  // maître -> esclave ciblé : un fragment de l'image
+    MSG_OTA_ACK   = 12,  // esclave -> maître : accusé (start/chunk/end)
+    MSG_OTA_END   = 13,  // maître -> esclave ciblé : fin de transfert, finalise
+    MSG_OTA_ABORT = 14,  // maître -> esclave ciblé : annule la session en cours
+};
+
+// Codes de statut/raison des messages OTA (OtaAckPayload.status, OtaAbortPayload.reason).
+enum OtaStatus : uint8_t {
+    OTA_OK           = 0,
+    OTA_ERR_SESSION  = 1,  // sessionId/chunkIndex inattendu (désynchronisé)
+    OTA_ERR_WRITE    = 2,  // Update.write() a échoué (fatal, pas de retry)
+    OTA_ERR_SIZE     = 3,  // Update.begin() a échoué (taille/espace)
+    OTA_ERR_MD5      = 4,  // Update.end() a échoué (intégrité/format)
+    OTA_ERR_BUSY     = 5,  // une autre session OTA est déjà en cours
+    OTA_ABORT_USER   = 10, // annulation demandée depuis la console
+    OTA_ABORT_TIMEOUT = 11, // inactivité détectée (série ou mesh)
 };
 
 // Adresse « tous les droïdes » pour les charges utiles ciblées.
@@ -101,6 +118,52 @@ struct NeighborReportPayload {
     uint8_t       count;
     NeighborEntry entries[MAX_NEIGHBORS];
 };
+
+// Taille de donnée utile par fragment OTA (marge sous MAX_PAYLOAD=200 de mesh_comm.cpp).
+static const uint8_t OTA_CHUNK_DATA_MAX = 190;
+
+// Démarre une session OTA vers `targetId` (jamais MESH_TARGET_ALL). `md5Hex`
+// est le MD5 de l'image complète, hex minuscule, SANS terminateur nul.
+struct OtaStartPayload {
+    uint16_t targetId;
+    uint8_t  sessionId;    // identifie cette tentative (rejette les acks d'une session périmée)
+    uint32_t totalSize;
+    uint16_t totalChunks;
+    uint8_t  chunkSize;    // == OTA_CHUNK_DATA_MAX, annoncé pour que la console ne le code pas en dur
+    char     md5Hex[32];
+};
+
+// Un fragment de l'image. Toujours envoyé à taille pleine (fin paddée,
+// ignorée via dataLen) pour garder la convention "len == sizeof(struct)".
+struct OtaChunkPayload {
+    uint16_t targetId;
+    uint8_t  sessionId;
+    uint16_t chunkIndex;   // 0-based, séquentiel STRICT (Update.write() est append-only)
+    uint8_t  dataLen;
+    uint8_t  data[OTA_CHUNK_DATA_MAX];
+};
+
+// Fin de transfert : l'esclave finalise (Update.end()) si tous les chunks attendus sont reçus.
+struct OtaEndPayload {
+    uint16_t targetId;
+    uint8_t  sessionId;
+    uint16_t totalChunks;
+};
+
+// Accusé esclave -> maître (start/chunk/end). hdr.srcId du message identifie déjà qui ack.
+struct OtaAckPayload {
+    uint8_t  sessionId;
+    uint8_t  kind;         // 0=START, 1=CHUNK, 2=END
+    uint16_t chunkIndex;   // valide seulement si kind==CHUNK
+    uint8_t  status;       // OtaStatus
+};
+
+// Annule une session en cours (utilisateur ou timeout côté maître).
+struct OtaAbortPayload {
+    uint16_t targetId;
+    uint8_t  sessionId;
+    uint8_t  reason;       // OtaStatus (OTA_ABORT_*)
+};
 #pragma pack(pop)
 
 // Callback appelé pour chaque message valide et non dupliqué.
@@ -116,8 +179,10 @@ public:
     // Enregistre le gestionnaire de réception.
     void onReceive(MeshReceiveHandler handler) { _handler = handler; }
 
-    // Émet un message (signé) en broadcast avec le TTL par défaut.
-    bool send(uint8_t type, const void* payload, uint8_t len);
+    // Émet un message (signé) en broadcast. `ttl` par défaut = MESH_TTL ;
+    // les envois OTA utilisent un TTL réduit (OTA_MESH_TTL) pour éviter que
+    // les ~5000 fragments d'un transfert soient re-relayés par tous les nœuds.
+    bool send(uint8_t type, const void* payload, uint8_t len, uint8_t ttl = MESH_TTL);
 
     // Dérive une clé HMAC (SHA256) à partir d'un mot de passe.
     static void deriveKey(const char* password, uint8_t out32[32]);

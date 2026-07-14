@@ -8,6 +8,7 @@
 
 #include <ArduinoJson.h>
 #include <stdarg.h>
+#include "mbedtls/base64.h"
 
 SerialConsole Console;
 
@@ -163,6 +164,62 @@ void SerialConsole::pushMeshTopology() {
         o["to"] = e.to;
         o["rssi"] = e.rssi;
     }
+    serializeJson(doc, Serial);
+    Serial.print('\n');
+}
+
+void SerialConsole::pushOtaReady(uint16_t target, uint8_t sessionId, uint8_t chunkSize, uint16_t totalChunks) {
+    if (!_clientReady) return;
+    JsonDocument doc;
+    doc["evt"] = "otaReady";
+    doc["target"] = target;
+    doc["sessionId"] = sessionId;
+    doc["chunkSize"] = chunkSize;
+    doc["totalChunks"] = totalChunks;
+    serializeJson(doc, Serial);
+    Serial.print('\n');
+}
+
+void SerialConsole::pushOtaChunkAck(uint16_t seq, uint16_t sent, uint16_t total) {
+    if (!_clientReady) return;
+    JsonDocument doc;
+    doc["evt"] = "otaChunkAck";
+    doc["seq"] = seq;
+    doc["sent"] = sent;
+    doc["total"] = total;
+    serializeJson(doc, Serial);
+    Serial.print('\n');
+}
+
+void SerialConsole::pushOtaDone(uint16_t target, uint8_t sessionId) {
+    if (!_clientReady) return;
+    JsonDocument doc;
+    doc["evt"] = "otaDone";
+    doc["target"] = target;
+    doc["sessionId"] = sessionId;
+    serializeJson(doc, Serial);
+    Serial.print('\n');
+}
+
+void SerialConsole::pushOtaResult(uint16_t target, bool ok, const char* fw, const char* reason) {
+    if (!_clientReady) return;
+    JsonDocument doc;
+    doc["evt"] = "otaResult";
+    doc["target"] = target;
+    doc["ok"] = ok;
+    if (fw && fw[0]) doc["fw"] = fw;
+    if (reason && reason[0]) doc["reason"] = reason;
+    serializeJson(doc, Serial);
+    Serial.print('\n');
+}
+
+void SerialConsole::pushOtaError(uint16_t target, uint8_t sessionId, const char* reason) {
+    if (!_clientReady) return;
+    JsonDocument doc;
+    doc["evt"] = "otaError";
+    if (target) doc["target"] = target;
+    doc["sessionId"] = sessionId;
+    doc["reason"] = reason;
     serializeJson(doc, Serial);
     Serial.print('\n');
 }
@@ -544,6 +601,32 @@ void SerialConsole::handleLine(const char* line) {
         if (Droids.forget(target)) log("droïde %04X oublié/ignoré", target);
         else pushErr("droïde inconnu: %04X", target);
         pushDroids();
+
+    } else if (!strcmp(cmd, "otaStart")) {
+        const uint16_t target = doc["target"] | 0;
+        const uint32_t size = doc["size"] | 0;
+        const char* md5 = doc["md5"] | "";
+        if (strlen(md5) != 32) {
+            pushOtaError(target, 0, "md5 invalide");
+        } else if (!_otaStartCb || !_otaStartCb(target, size, md5)) {
+            pushOtaError(target, 0, "occupé ou cible invalide");
+        }
+        // Succès : rien à pousser ici — evt:"otaReady" viendra une fois l'accusé
+        // mesh du START reçu (voir OtaMaster::pollEvent, câblé dans main.cpp).
+
+    } else if (!strcmp(cmd, "otaChunk")) {
+        const uint16_t seq = doc["seq"] | 0;
+        const char* b64 = doc["data"] | "";
+        uint8_t buf[OTA_CHUNK_DATA_MAX];
+        size_t outLen = 0;
+        if (mbedtls_base64_decode(buf, sizeof(buf), &outLen, (const uint8_t*)b64, strlen(b64)) != 0) {
+            pushErr("chunk %u: base64 invalide", seq);
+        } else if (_otaChunkCb) {
+            _otaChunkCb(seq, buf, (uint8_t)outLen);
+        }
+
+    } else if (!strcmp(cmd, "otaAbort")) {
+        if (_otaAbortCb) _otaAbortCb();
 
     } else if (!strcmp(cmd, "seqList")) {
         pushSeqList();

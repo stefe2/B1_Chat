@@ -14,12 +14,68 @@ namespace b1_chat_console.ViewModels;
 public partial class DroidsViewModel : ObservableObject
 {
     private readonly ProtocolClient _protocol;
+    private readonly OtaService _ota;
+    private Droid? _otaDroid;
 
     public ObservableCollection<Droid> Droids => _protocol.Droids;
+
+    [ObservableProperty] private bool _anyOtaActive;
 
     public DroidsViewModel(ProtocolClient protocol)
     {
         _protocol = protocol;
+        _ota = new OtaService(protocol);
+        _ota.Progress += OnOtaProgress;
+        _ota.Completed += OnOtaCompleted;
+    }
+
+    private void OnOtaProgress(int sent, int total)
+    {
+        if (_otaDroid == null) return;
+        _otaDroid.OtaProgressPct = total > 0 ? (int)(100.0 * sent / total) : 0;
+        _otaDroid.OtaStatusText = $"{sent}/{total} morceaux";
+    }
+
+    private void OnOtaCompleted(bool ok, string message)
+    {
+        if (_otaDroid != null)
+        {
+            _otaDroid.OtaInProgress = false;
+            _otaDroid.OtaStatusText = message;
+        }
+        _otaDroid = null;
+        AnyOtaActive = false;
+    }
+
+    [RelayCommand]
+    private void FlashOta(Droid? droid)
+    {
+        if (droid == null || AnyOtaActive) return;
+
+        var dlg = new OpenFileDialog { Filter = "Firmware (*.bin)|*.bin" };
+        if (dlg.ShowDialog() != true) return;
+
+        var confirm = MessageBox.Show(
+            $"Mettre à jour le firmware de « {droid.Name} » par le mesh (sans USB) ?\n\n" +
+            "Le droïde redémarrera automatiquement à la fin — ne pas l'éteindre pendant le transfert " +
+            "(généralement 8 à 15 minutes, plus si la liaison est faible).",
+            "Confirmer la mise à jour OTA", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+        if (confirm != MessageBoxResult.Yes) return;
+
+        _otaDroid = droid;
+        droid.OtaInProgress = true;
+        droid.OtaProgressPct = 0;
+        droid.OtaStatusText = "démarrage…";
+        AnyOtaActive = true;
+
+        if (!_ota.Start(droid.Id, dlg.FileName, out var error))
+        {
+            droid.OtaInProgress = false;
+            droid.OtaStatusText = error;
+            _otaDroid = null;
+            AnyOtaActive = false;
+            MessageBox.Show(error, "OTA", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
     [RelayCommand]

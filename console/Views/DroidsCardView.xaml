@@ -40,6 +40,7 @@
                             <ColumnDefinition Width="90" />
                             <ColumnDefinition Width="90" />
                             <ColumnDefinition Width="44" />
+                            <ColumnDefinition Width="150" />
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0" Text="NOM" Style="{StaticResource TableHeaderTextStyle}" />
                         <TextBlock Grid.Column="1" Text="FW" Style="{StaticResource TableHeaderTextStyle}" />
@@ -49,6 +50,7 @@
                         <TextBlock Grid.Column="5" Text="RÔLE" Style="{StaticResource TableHeaderTextStyle}" Margin="9,0,0,0" />
                         <TextBlock Grid.Column="6" Text="SERVOS" Style="{StaticResource TableHeaderTextStyle}" TextAlignment="Center" />
                         <TextBlock Grid.Column="7" Text="ANIMS AUTO" Style="{StaticResource TableHeaderTextStyle}" TextAlignment="Center" />
+                        <TextBlock Grid.Column="9" Text="FIRMWARE OTA" Style="{StaticResource TableHeaderTextStyle}" TextAlignment="Center" />
                     </Grid>
                     <Border BorderBrush="#5C000000" BorderThickness="0,0,0,1" Margin="0,0,0,2" />
 
@@ -138,6 +140,21 @@
                                                 HorizontalAlignment="Center">
                                             <TextBlock Text="✕" FontSize="12" Foreground="{StaticResource BadBrush}" FontWeight="Bold" />
                                         </Button>
+
+                                        <Button Grid.Column="9" Style="{StaticResource MiniButtonStyle}"
+                                                Command="{Binding DataContext.FlashOtaCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                CommandParameter="{Binding}"
+                                                ToolTip="Mettre à jour le firmware par le mesh, sans USB"
+                                                HorizontalAlignment="Center"
+                                                Visibility="{Binding CanFlashOta, Converter={StaticResource BoolToVisConv}}">
+                                            <TextBlock Text="Flasher (OTA)" FontSize="11" />
+                                        </Button>
+                                        <StackPanel Grid.Column="9" HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                                                    Visibility="{Binding OtaInProgress, Converter={StaticResource BoolToVisConv}}">
+                                            <ProgressBar Minimum="0" Maximum="100" Value="{Binding OtaProgressPct, Mode=OneWay}" Height="8" />
+                                            <TextBlock Text="{Binding OtaStatusText}" FontSize="9.5" Foreground="{StaticResource MutedBrush}"
+                                                       Margin="0,2,0,0" TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
                                     </Grid>
                                 </Border>
                             </DataTemplate>

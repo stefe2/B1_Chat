@@ -56,6 +56,11 @@ public partial class ProtocolClient : ObservableObject
     public event Action<JsonElement>? SeqStateReceived;
     public event Action? MeshTopologyChanged;
     public event Action? DroidsChanged;
+    public event Action<ushort, int, int, int>? OtaReadyReceived;      // target, sessionId, chunkSize, totalChunks
+    public event Action<int, int, int>? OtaChunkAckReceived;           // seq, sent, total
+    public event Action<ushort, int>? OtaDoneReceived;                 // target, sessionId
+    public event Action<ushort, bool, string?, string?>? OtaResultReceived; // target, ok, fw, reason
+    public event Action<ushort?, int, string>? OtaErrorReceived;       // target, sessionId, reason
 
     public ProtocolClient(SerialLinkService link)
     {
@@ -143,6 +148,11 @@ public partial class ProtocolClient : ObservableObject
     public void SetAutoAnim(ushort target, bool enabled) => SendCmd(new JsonObject { ["cmd"] = "autoAnim", ["target"] = target, ["enabled"] = enabled });
     public void Adopt(ushort target) => SendCmd(new JsonObject { ["cmd"] = "adopt", ["target"] = target });
     public void Forget(ushort target) => SendCmd(new JsonObject { ["cmd"] = "forget", ["target"] = target });
+
+    public void OtaStart(ushort target, uint size, string md5Hex32) =>
+        SendCmd(new JsonObject { ["cmd"] = "otaStart", ["target"] = target, ["size"] = size, ["md5"] = md5Hex32 });
+    public void OtaChunk(int seq, string base64Data) => SendCmd(new JsonObject { ["cmd"] = "otaChunk", ["seq"] = seq, ["data"] = base64Data });
+    public void OtaAbort() => SendCmd(new JsonObject { ["cmd"] = "otaAbort" });
     public void PlayAnim(ushort target, int animId, uint seed) => SendCmd(new JsonObject { ["cmd"] = "anim", ["target"] = target, ["animId"] = animId, ["seed"] = seed });
     public void Preview(ushort target, int pan, int tilt) => SendCmd(new JsonObject { ["cmd"] = "preview", ["target"] = target, ["pan"] = pan, ["tilt"] = tilt });
     public void SetCalib(ushort target, int panMin, int panCenter, int panMax, int tiltMin, int tiltCenter, int tiltMax) =>
@@ -213,6 +223,37 @@ public partial class ProtocolClient : ObservableObject
                 break;
             case "animDurations": HandleAnimDurations(root); break;
             case "seqState": SeqStateReceived?.Invoke(root); break;
+            case "otaReady":
+                OtaReadyReceived?.Invoke(
+                    (ushort)(root.TryGetProperty("target", out var ort) ? ort.GetInt32() : 0),
+                    root.TryGetProperty("sessionId", out var ors) ? ors.GetInt32() : 0,
+                    root.TryGetProperty("chunkSize", out var orc) ? orc.GetInt32() : 0,
+                    root.TryGetProperty("totalChunks", out var ortc) ? ortc.GetInt32() : 0);
+                break;
+            case "otaChunkAck":
+                OtaChunkAckReceived?.Invoke(
+                    root.TryGetProperty("seq", out var ocs) ? ocs.GetInt32() : 0,
+                    root.TryGetProperty("sent", out var ocse) ? ocse.GetInt32() : 0,
+                    root.TryGetProperty("total", out var oct) ? oct.GetInt32() : 0);
+                break;
+            case "otaDone":
+                OtaDoneReceived?.Invoke(
+                    (ushort)(root.TryGetProperty("target", out var odt) ? odt.GetInt32() : 0),
+                    root.TryGetProperty("sessionId", out var ods) ? ods.GetInt32() : 0);
+                break;
+            case "otaResult":
+                OtaResultReceived?.Invoke(
+                    (ushort)(root.TryGetProperty("target", out var ort2) ? ort2.GetInt32() : 0),
+                    root.TryGetProperty("ok", out var ook) && ook.GetBoolean(),
+                    root.TryGetProperty("fw", out var ofw) ? ofw.GetString() : null,
+                    root.TryGetProperty("reason", out var orsn) ? orsn.GetString() : null);
+                break;
+            case "otaError":
+                OtaErrorReceived?.Invoke(
+                    root.TryGetProperty("target", out var oet) && oet.GetInt32() != 0 ? (ushort?)oet.GetInt32() : null,
+                    root.TryGetProperty("sessionId", out var oes) ? oes.GetInt32() : 0,
+                    root.TryGetProperty("reason", out var oer) ? oer.GetString() ?? "" : "");
+                break;
         }
     }
 
