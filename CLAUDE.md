@@ -13,7 +13,7 @@ Un seul dépôt git (`stefe2/B1_Chat`), deux moitiés :
    multi-sauts**, avec animations fluides/organiques coordonnées par un
    **maître** qui joue aussi le son (DFPlayer Mini + ampli). Réglages persistés
    en NVS.
-2. **Console de supervision** (`console/`, WPF net8.0-windows, v0.8.x) :
+2. **Console de supervision** (`console/`, WPF net8.0-windows, v0.9.x) :
    application de bureau **100 % WPF native** (XAML/MVVM,
    `CommunityToolkit.Mvvm`) qui possède le port série (`System.IO.Ports`) et
    reproduit le design de l'ancienne page web carte par carte.
@@ -37,6 +37,11 @@ firmware (voir `tools/release.ps1` et `console/installer/release.ps1`).
 - `dotnet build` (depuis `console/`) — compile la console WPF
 - `.\tools\release.ps1 [-Publish]` — release firmware manuelle (2 rôles + manifeste SHA-256, tag `fw-vX.Y.Z`) ; en usage normal, préférer bumper `FW_VERSION` (`src/config.h`) et pousser sur `main` — la CI publie toute seule (voir ci-dessous)
 - `.\console\installer\release.ps1 [-Publish]` — release console (publish + installeur NSIS, tag `vX.Y.Z`)
+- `.\tools\ota-test.ps1 -Bin <chemin.bin> [-CorruptChunk N] [-StopAtChunk N] [-SecondStartAt N] [-ComPort COM3]` —
+  banc de test OTA : pilote le maître directement par le port série (console fermée),
+  rejoue le protocole JSON (`hello`/`otaStart`/`otaChunk`/...) et permet d'injecter des
+  fautes (chunk corrompu, abandon en plein transfert, double `otaStart`) sans dépendre
+  de l'UI. Voir section OTA et Vérification pt 7.
 
 **Release firmware automatique** (`.github/workflows/firmware-release.yml`) : se déclenche
 sur push vers `main` touchant `src/config.h`, ou manuellement (`workflow_dispatch`). Lit
@@ -77,7 +82,7 @@ Firmware **unique** ; rôle par build (`IS_MASTER`), identité auto (srcId 16 bi
 | `servo_engine.{h,cpp}` | PWM LEDC natif 50 Hz, easing smootherstep, bruit d'idle, limites calibrables |
 | `animation.{h,cpp}` | 18 keyframes-anims, lecteur non bloquant, seed de variation, `totalDurationMs()` |
 | `audio.{h,cpp}` | (maître) wrapper DFPlayer, mapping anim → plage de pistes (10 pistes `/mp3/0001..0010.mp3`) |
-| `registry.{h,cpp}` | (maître) inventaire vivant : srcId, RSSI, lastSeen, servos, autoAnim |
+| `registry.{h,cpp}` | (maître) inventaire vivant : srcId, RSSI, lastSeen, servos, autoAnim (accès synchronisés, voir pièges) |
 | `config_store.{h,cpp}` | NVS : noms, volume, params d'anim, calibration servo par droïde |
 | `sequence_store.{h,cpp}` | (maître) NVS : 8 slots de séquences nommées, ≤ 32 étapes {targetId,animId,delayMs} |
 | `serial_console.{h,cpp}` | (maître) pont JSON USB ↔ mesh pour la console |
@@ -415,9 +420,7 @@ largeur en bas. Carte Firmware sortie de la grille (fenêtre séparée).
 - [x] Console v0.9.0 (2026-07-14) : cycle de durcissement OTA (trace série
       permanente, chien de garde de chunk, verdict fiabilisé, max sémantique
       des releases, colonne FW colorée, OTA depuis GitHub). Installeur NSIS
-      construit (`installer\b1-chat-console-setup-0.9.0.exe`) — **publication
-      GitHub en attente** : lancer `.\console\installer\release.ps1 -Publish`
-      (les jetons/tags ne peuvent pas être poussés en session non supervisée).
+      publié sur GitHub (tag `v0.9.0`, `console\installer\release.ps1 -Publish`).
 
 ## Pièges connus
 
@@ -491,6 +494,14 @@ largeur en bas. Carte Firmware sortie de la grille (fenêtre séparée).
   ligne malformée du firmware ne doit JAMAIS tuer la boucle de lecture (mort
   silencieuse du lien, historique) ni l'application. Ne pas « simplifier » en
   retirant cette garde.
+- `Registry` (`registry.{h,cpp}`, fw 1.3.12) : mêmes précautions que
+  `OtaMaster`/`OtaSlave` — `seen/setServos/setAutoAnim/setFwVersion` sont
+  appelées depuis le callback ESP-NOW (tâche Wi-Fi) pendant que `loop()` lit
+  via `count()/at()` (qui renvoie désormais une **copie**, jamais une
+  référence sur le tableau mutable). Toute nouvelle méthode publique doit
+  verrouiller `_mux` ; les accès NVS (`Config.isAdopted()` dans `seen()`)
+  doivent rester **hors** verrou (accès flash interdit sous
+  `portENTER_CRITICAL`, même leçon que le gel OTA au chunk 21).
 
 ## Vérification (rappels)
 
