@@ -403,7 +403,11 @@ largeur en bas. Carte Firmware sortie de la grille (fenêtre séparée).
   `/releases/latest` (elle ignore le préfixe de tag et mélangerait les deux
   trains) — toujours lister `/releases` et filtrer par préfixe (`v` hors `fw-`
   pour l'app, `fw-` pour le firmware), voir `GetLatestReleaseAsync` dans
-  `console/MainWindow.xaml.cs`.
+  `console/Services/UpdateService.cs`. **Et ne jamais se fier à l'ordre de la
+  liste `/releases`** : observé trié lexicographiquement par tag
+  (`fw-v1.3.9` devant `fw-v1.3.10`/`fw-v1.3.11`), pas chronologiquement — la
+  console a flashé un 1.3.9 en croyant prendre le plus récent. Parser les
+  versions et prendre le maximum sémantique.
 - WPF `Setter.TargetName` ne peut pas cibler un `Freezable` nommé imbriqué dans
   une propriété (ex. un `TranslateTransform` dans `Border.RenderTransform`, un
   `DropShadowEffect` dans `Border.Effect`) : le `Trigger` doit remplacer toute la

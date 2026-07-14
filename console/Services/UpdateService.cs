@@ -35,13 +35,34 @@ public class UpdateService
         if (resp.StatusCode == System.Net.HttpStatusCode.NotFound) return null;
         resp.EnsureSuccessStatusCode();
         var list = JsonSerializer.Deserialize<JsonElement>(await resp.Content.ReadAsStringAsync());
+
+        // Ne JAMAIS se fier a l'ordre de la liste /releases : observe en pratique trie
+        // LEXICOGRAPHIQUEMENT par tag ("fw-v1.3.9" devant "fw-v1.3.11"/"fw-v1.3.10"),
+        // pas chronologiquement — la console a deja flashe un 1.3.9 en croyant prendre
+        // le plus recent. On parse les versions et on garde le maximum semantique.
+        JsonElement? best = null;
+        Version? bestVersion = null;
         foreach (var rel in list.EnumerateArray())
         {
             if (rel.TryGetProperty("draft", out var d) && d.GetBoolean()) continue;
             var tag = rel.GetProperty("tag_name").GetString() ?? "";
-            if (tagMatches(tag)) return rel;
+            if (!tagMatches(tag)) continue;
+            var v = ParseTagVersion(tag);
+            if (best == null || (v != null && (bestVersion == null || v > bestVersion)))
+            {
+                best = rel;
+                bestVersion = v;
+            }
         }
-        return null;
+        return best;
+    }
+
+    private static Version? ParseTagVersion(string tag)
+    {
+        var s = tag;
+        if (s.StartsWith("fw-", StringComparison.OrdinalIgnoreCase)) s = s[3..];
+        s = s.TrimStart('v', 'V');
+        return Version.TryParse(s, out var v) ? v : null;
     }
 
     private static string? AssetUrl(JsonElement release, Func<string, bool> match)
