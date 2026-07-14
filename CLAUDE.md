@@ -416,10 +416,17 @@ largeur en bas. Carte Firmware sortie de la grille (fenêtre séparée).
 - `OtaGuard::earlyCheck()` (`ota_guard.cpp`) doit rester la toute première
   ligne de `setup()` — tout code qui plante avant cet appel n'est jamais compté
   par le mécanisme anti-brick (risque résiduel assumé, voir section OTA).
-- `OtaSlave::onChunk()` : `Update.write()` est séquentiel/append-only. Un ack
-  retransmis pour un chunk déjà écrit ne doit **jamais** réappeler
+- `OtaSlave::processChunk()` : `Update.write()` est séquentiel/append-only. Un
+  ack retransmis pour un chunk déjà écrit ne doit **jamais** réappeler
   `Update.write()` — seul le ré-ack doit se répéter, sinon l'image écrite est
   corrompue silencieusement.
+- `Update.begin/write/end` (accès SPI flash réels : effacement de secteur tous
+  les ~21 chunks de 190 o, MD5 sur toute l'image au `end`) ne doivent **jamais**
+  s'exécuter depuis le callback ESP-NOW (tâche Wi-Fi) ni sous
+  `portENTER_CRITICAL` — gel/panic systématique au chunk 21 (premier
+  débordement du tampon de secteur 4 Ko d'`Update`). D'où la boîte aux lettres
+  d'`OtaSlave` : les `on*()` (callback) ne font que déposer le message brut,
+  `update()` (loop()) valide, écrit la flash et acke, hors verrou.
 - `OTA_CHUNK_DATA_MAX` (`mesh_comm.h`) est autoritaire côté firmware et annoncé
   à la console via `evt:otaReady.chunkSize` — ne jamais le coder en dur côté
   C# (`OtaService.cs` le lit dynamiquement).
