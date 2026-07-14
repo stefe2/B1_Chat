@@ -105,7 +105,7 @@ cryptographique absolue).
 | --- | --- |
 | `MSG_ANIM` = 1 | targetId (0xFFFF = tous), animId, syncDelayMs, seed |
 | `MSG_CONFIG` = 2 | targetId, freq, amplitude, speed |
-| `MSG_HEARTBEAT` = 4 | uptime, état (bit0 = servos, bit1 = anims auto) |
+| `MSG_HEARTBEAT` = 4 | uptime, état (bit0 = servos, bit1 = anims auto), version firmware (3 octets major/minor/patch) |
 | `MSG_SERVO` = 5 | targetId, enabled |
 | `MSG_CALIB` = 6 | targetId, 6 bornes pan/tilt (persisté par le droïde ciblé) |
 | `MSG_PREVIEW` = 7 | targetId, pan, tilt (transitoire, non persisté) |
@@ -142,7 +142,7 @@ Session gardée par handshake : `hello` → `{evt:"hello",ok,id}`, puis keepaliv
   `seqRun {slot,from?}` · `seqStop` · `seqPause` · `seqResume` · `seqState` ·
   `setMulti {ops:[...]}` · `commit` · `revert`
 - **Maître → console** (`evt`) : `hello {ok,id,fw,proto,lineMax,anims,seqSlots,trackCount,caps[],dirty}` ·
-  `droids {list:[{id,name,rssi,age,role,servos,autoAnim,adopted}]}` ·
+  `droids {list:[{id,name,rssi,age,role,servos,autoAnim,adopted,fw}]}` ·
   `log {msg}` · `err {msg}` · `config {volume,freq,amp,speed}` · `calibData {target,+6}` ·
   `meshTopology {links:[{from,to,rssi}]}` · `animDurations {list:[{animId,ms}]}` ·
   `seqList {list:[{slot,name,stepCount,loop,track}]}` · `seqData {slot,name,loop,track,steps}` ·
@@ -167,7 +167,7 @@ normalement) mais absent des contrôles individuels tant que la console n'a pas
 envoyé `adopt`. `adopt` persiste le statut en NVS (survit aux redémarrages du
 maître) ; `forget` retire l'entrée du registre **et** efface son statut NVS — un
 droïde ainsi « oublié » ou dont l'adoption est refusée redemande donc dès qu'il
-reparle. Le badge « perdu » (7 s de silence, `DROID_TIMEOUT_MS`) ne redéclenche
+reparle. Le badge « perdu » (4 s de silence, `DROID_TIMEOUT_MS`) ne redéclenche
 jamais cette question à lui seul.
 
 ## Ancienne page web de référence (`console/wwwroot/index.html`)
@@ -226,7 +226,7 @@ largeur en bas. Carte Firmware sortie de la grille (fenêtre séparée).
 
 | Quoi | Où |
 | --- | --- |
-| Noms, volume, params anim, calibrations | NVS du maître (`config_store`) |
+| Noms, volume, params anim, calibrations, statut d'adoption | NVS du maître (`config_store`) |
 | Séquences (8 slots, ≤ 32 étapes) | NVS du maître (`sequence_store`) |
 | Durées de pistes + slot→piste audio | `localStorage` de la page (temporaire, cf. contrat §1-2) |
 | Bibliothèque de séquences, dernier port | `%LOCALAPPDATA%\B1ChatConsole\` (côté console) |
@@ -278,15 +278,33 @@ largeur en bas. Carte Firmware sortie de la grille (fenêtre séparée).
       (`.github/workflows/firmware-release.yml`, déclenchée par bump de
       `FW_VERSION` ; `IS_MASTER` rendu surchargeable via `#ifndef` pour les
       nouveaux environnements PlatformIO `b1_master`/`b1_slave`).
+- [x] Adoption des droïdes (2026-07-13, fw 1.1.0) : un droïde jamais vu (ou
+      « oublié »/refusé) n'est plus ajouté automatiquement à la liste — la
+      console propose Adopter/Ignorer (`cmd adopt`/`forget`, statut persisté en
+      NVS via `config_store`, jamais dans le `registry` RAM éphémère). Bouton
+      « Oublier » pour retirer un droïde déjà adopté. Correctif au passage :
+      `ProtocolClient.HandleDroids` ne retirait jamais une entrée disparue de
+      `evt:droids` (bug latent, sans effet visible avant cette fonctionnalité).
+- [x] Version firmware par droïde (2026-07-13, fw 1.2.0) : chaque esclave
+      rapporte sa version dans son heartbeat (3 octets major/minor/patch),
+      stockée dans le `registry` et exposée via `evt:droids.fw` ; nouvelle
+      colonne FW dans la carte Droïdes. Casse la compatibilité binaire du
+      heartbeat (voir pièges) — tout le parc doit être reflashé ensemble.
+- [x] Polish carte Droïdes (2026-07-13) : colonne NOM à largeur fixe, pastilles
+      ÉTAT/RÔLE à largeur fixe et texte centré, RSSI affiché `-` (au lieu de la
+      dernière valeur figée) quand un droïde est « perdu », seuil « perdu »
+      abaissé à 4 s (`DROID_TIMEOUT_MS` + seuil console), interrupteurs on/off
+      coulissants (`OnOffSwitchStyle`) pour Servos/Anims auto.
 - [ ] Étape 6 : machine à états `droid.{h,cpp}`.
 - [ ] Contrat §2 : durées de pistes mesurées via la broche BUSY (GPIO4) — reporté.
 - [ ] Params d'anim freq/amp/speed : reçus + persistés mais **aucun effet**
       (hook `onConfig` jamais branché dans main.cpp ; curseurs marqués « bientôt
       actif » dans l'UI).
-- [ ] Première release de chaque train : premier push déjà fait (`origin/main` à
-      jour) ; firmware — bumper `FW_VERSION` et pousser déclenchera la CI ;
-      console — encore manuel (`gh auth login` une fois, puis
-      `console\installer\release.ps1 -Publish`).
+- [x] Release firmware automatique opérationnelle (`fw-v1.0.0`, `fw-v1.1.0`
+      publiées via la CI). Console : encore manuel (`gh auth login` une fois,
+      puis `console\installer\release.ps1 -Publish`).
+- [ ] OTA du firmware relayé par le mesh ESP-NOW (nouveaux `MSG_OTA_*`,
+      chunking/ACK/retry, rollback sûr) — pas encore commencé.
 
 ## Pièges connus
 
@@ -296,6 +314,13 @@ largeur en bas. Carte Firmware sortie de la grille (fenêtre séparée).
 - `handleRaw()` : l'enregistrement du voisinage doit rester **avant** le
   early-return `srcId==_myId` et la dédup (même un écho relayé de notre propre
   message prouve un lien radio direct avec le relais).
+- `HeartbeatPayload` (`mesh_comm.h`) : la réception exige `len ==
+  sizeof(HeartbeatPayload)` exact ([main.cpp](src/main.cpp)) — tout changement
+  de taille de cette struct (ex. ajout de la version FW) casse silencieusement
+  la compatibilité avec un droïde resté sur l'ancien firmware : ses heartbeats
+  sont juste ignorés (pas d'erreur), donc servos/anims auto/FW gèlent pour lui
+  côté registre/console. Reflasher tout le parc ensemble à chaque changement de
+  cette struct.
 - La page est en français partout ; commentaires code en français (firmware et page).
 - ESP32Servo abandonné (bug double-attach) → LEDC natif uniquement.
 - DFPlayer : ne sait pas rapporter la durée d'une piste ; la broche BUSY (GPIO4)

@@ -37,6 +37,10 @@ static bool ledOn = false;
 
 // Test mesh / timers
 static uint32_t nextMeshSend = 0;
+// Version firmware, décomposée une fois au démarrage à partir de FW_VERSION
+// (config.h) pour être incluse (compacte, 3 octets) dans chaque heartbeat.
+static uint8_t gFwMajor = 0, gFwMinor = 0, gFwPatch = 0;
+
 static uint32_t nextHeartbeat = 0;
 static uint32_t nextPresenceScan = 0;
 static uint32_t nextDroidsPush = 0;
@@ -61,7 +65,7 @@ static bool gSeqWaitLocal = false;
 #endif
 
 // Suivi hors-ligne (maître) : mémorise l'état en ligne pour signaler les pertes.
-static const uint32_t DROID_TIMEOUT_MS = 7000;
+static const uint32_t DROID_TIMEOUT_MS = 4000;
 #if IS_MASTER
 static bool wasOnline[Registry::MAX];
 #endif
@@ -258,6 +262,7 @@ static void onMeshMessage(uint8_t type, const uint8_t* payload, uint8_t len,
         memcpy(&hb, payload, sizeof(hb));
         Droids.setServos(srcId, hb.state & 0x01);
         Droids.setAutoAnim(srcId, hb.state & 0x02);
+        Droids.setFwVersion(srcId, hb.fwMajor, hb.fwMinor, hb.fwPatch);
 #endif
     } else if (type == MSG_HEARTBEAT) {
         // ancienne forme / présence : déjà notée.
@@ -278,6 +283,8 @@ static void onMeshMessage(uint8_t type, const uint8_t* payload, uint8_t len,
 void setup() {
     Serial.begin(115200);
     pinMode(PIN_LED_ONBOARD, OUTPUT);
+
+    sscanf(FW_VERSION, "%hhu.%hhu.%hhu", &gFwMajor, &gFwMinor, &gFwPatch);
 
     Config.begin();
 #if IS_MASTER
@@ -352,7 +359,7 @@ void loop() {
     // Heartbeat : chaque droïde signale sa présence (et l'état de ses servos).
     if (now > nextHeartbeat) {
         nextHeartbeat = now + HEARTBEAT_MS;
-        HeartbeatPayload hb{now, (uint8_t)((gServos ? 1 : 0) | (gAutoAnim ? 2 : 0))};
+        HeartbeatPayload hb{now, (uint8_t)((gServos ? 1 : 0) | (gAutoAnim ? 2 : 0)), gFwMajor, gFwMinor, gFwPatch};
         Mesh.send(MSG_HEARTBEAT, &hb, sizeof(hb));
     }
 

@@ -55,7 +55,10 @@ struct ConfigPayload {
 
 struct HeartbeatPayload {
     uint32_t uptimeMs;
-    uint8_t  state;      // bit0 = servos actifs
+    uint8_t  state;      // bit0 = servos actifs, bit1 = anims auto
+    uint8_t  fwMajor;
+    uint8_t  fwMinor;
+    uint8_t  fwPatch;
 };
 
 struct ServoPayload {

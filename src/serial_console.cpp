@@ -80,6 +80,7 @@ void SerialConsole::pushDroids() {
     me["servos"] = _masterServos;
     me["autoAnim"] = _masterAutoAnim;
     me["adopted"] = true;
+    me["fw"] = FW_VERSION;
 
     // Les autres droïdes (esclaves).
     for (uint8_t i = 0; i < Droids.count(); i++) {
@@ -93,6 +94,7 @@ void SerialConsole::pushDroids() {
         o["servos"] = e.servos;
         o["autoAnim"] = e.autoAnim;
         o["adopted"] = e.adopted;
+        o["fw"] = String(e.fwMajor) + "." + String(e.fwMinor) + "." + String(e.fwPatch);
     }
     serializeJson(doc, Serial);
     Serial.print('\n');

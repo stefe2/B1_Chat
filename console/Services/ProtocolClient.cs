@@ -266,11 +266,13 @@ public partial class ProtocolClient : ObservableObject
             }
             if (item.TryGetProperty("rssi", out var r)) droid.Rssi = r.GetInt32();
             if (item.TryGetProperty("role", out var role)) droid.IsMaster = role.GetString() == "master";
+            if (droid.IsMaster) droid.PortName = _link.PortName;
             if (item.TryGetProperty("servos", out var sv)) droid.ServosOn = sv.GetBoolean();
             if (item.TryGetProperty("autoAnim", out var aa)) droid.AutoAnimOn = aa.GetBoolean();
             if (item.TryGetProperty("adopted", out var ad)) droid.Adopted = ad.GetBoolean();
+            if (item.TryGetProperty("fw", out var fw)) droid.FwVersion = fw.GetString() ?? "";
             var age = item.TryGetProperty("age", out var a) ? a.GetInt32() : 0;
-            droid.Online = droid.IsMaster || age <= 6000;
+            droid.Online = droid.IsMaster || age <= 4000;
             droid.LastSeen = DateTime.UtcNow;
         }
 

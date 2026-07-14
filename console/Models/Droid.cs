@@ -14,19 +14,23 @@ public partial class Droid : ObservableObject
     [ObservableProperty] private bool _servosOn;
     [ObservableProperty] private bool _autoAnimOn;
     [ObservableProperty] private bool _adopted = true;
+    [ObservableProperty] private string? _portName;
+    [ObservableProperty] private string _fwVersion = "";
     [ObservableProperty] private DateTime _lastSeen = DateTime.MinValue;
 
-    public string RssiLabel => IsMaster ? "local" : $"{Rssi} dBm";
+    public string RssiLabel => IsMaster ? (PortName ?? "local") : (Online ? $"{Rssi} dBm" : "-");
     public string IdHex => Id.ToString("X4");
     public string DisplayLabel => $"{Name} ({IdHex})";
 
     // Droïde jamais adopté : en attente de décision (Adopter/Ignorer) côté UI.
     public bool IsPending => !IsMaster && !Adopted;
 
-    // Droïde déjà adopté mais hors ligne : peut être retiré manuellement du registre.
-    public bool CanForget => !IsMaster && Adopted && !Online;
+    // Droïde adopté (esclave) : peut être retiré manuellement du registre à tout moment.
+    public bool CanForget => !IsMaster && Adopted;
 
     partial void OnRssiChanged(int value) => OnPropertyChanged(nameof(RssiLabel));
+    partial void OnPortNameChanged(string? value) => OnPropertyChanged(nameof(RssiLabel));
+    partial void OnOnlineChanged(bool value) => OnPropertyChanged(nameof(RssiLabel));
     partial void OnIsMasterChanged(bool value)
     {
         OnPropertyChanged(nameof(RssiLabel));
@@ -39,5 +43,4 @@ public partial class Droid : ObservableObject
         OnPropertyChanged(nameof(IsPending));
         OnPropertyChanged(nameof(CanForget));
     }
-    partial void OnOnlineChanged(bool value) => OnPropertyChanged(nameof(CanForget));
 }

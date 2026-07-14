@@ -36,6 +36,12 @@ void Registry::setAutoAnim(uint16_t id, bool on) {
     }
 }
 
+void Registry::setFwVersion(uint16_t id, uint8_t major, uint8_t minor, uint8_t patch) {
+    for (uint8_t i = 0; i < _count; i++) {
+        if (_e[i].id == id) { _e[i].fwMajor = major; _e[i].fwMinor = minor; _e[i].fwPatch = patch; return; }
+    }
+}
+
 void Registry::setAdopted(uint16_t id, bool v) {
     for (uint8_t i = 0; i < _count; i++) {
         if (_e[i].id == id) { _e[i].adopted = v; return; }

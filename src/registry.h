@@ -22,6 +22,7 @@ public:
         bool     servos;    // état des servos rapporté par le droïde
         bool     autoAnim;  // anims spontanées au repos actives, rapporté par le droïde
         bool     adopted;   // false = en attente d'adoption (voir config_store)
+        uint8_t  fwMajor = 0, fwMinor = 0, fwPatch = 0;  // version rapportée par heartbeat
     };
 
     // Enregistre/actualise un droïde. Retourne true si nouvellement ajouté.
@@ -32,6 +33,9 @@ public:
 
     // Met à jour l'état des anims auto d'un droïde (via heartbeat).
     void setAutoAnim(uint16_t id, bool on);
+
+    // Met à jour la version firmware rapportée par un droïde (via heartbeat).
+    void setFwVersion(uint16_t id, uint8_t major, uint8_t minor, uint8_t patch);
 
     // Marque un droïde comme adopté/non adopté (statut RAM, cf. config_store pour la NVS).
     void setAdopted(uint16_t id, bool v);
