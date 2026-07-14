@@ -13,7 +13,7 @@
 //  compare à la derniere release de stefe2/B1_Chat pour proposer une mise a
 //  jour. Bump a chaque release (tools/release.ps1 s'appuie dessus).
 // ---------------------------------------------------------------------------
-#define FW_VERSION "1.3.7"
+#define FW_VERSION "1.3.9"
 
 // Version du protocole série console<->maître (incrementée quand un changement
 // n'est pas retro-compatible; les ajouts de champs/commandes n'en ont pas besoin).
@@ -109,7 +109,11 @@ static const uint8_t  OTA_MESH_TTL          = 2;        // TTL réduit dédié a
 static const uint32_t OTA_MAX_IMAGE_SIZE    = 1200000UL; // marge sous les 1.25 Mo d'une partition app
 static const uint32_t OTA_ACK_TIMEOUT_MS    = 400;      // délai avant retransmission d'un chunk/start/end
 static const uint8_t  OTA_MAX_RETRIES       = 5;        // tentatives avant échec de session (maître)
-static const uint32_t OTA_SESSION_TIMEOUT_MS = 20000;   // inactivité max côté esclave avant auto-abort
+static const uint32_t OTA_SESSION_TIMEOUT_MS = 60000;   // inactivité max côté esclave avant auto-abort
+                                                         // (> OTA_SERIAL_IDLE_TIMEOUT_MS : le maître doit
+                                                         // toujours abandonner AVANT l'esclave, pour pouvoir
+                                                         // le prévenir par MSG_OTA_ABORT — un hoquet série
+                                                         // résorbé ne doit pas trouver un esclave déjà parti)
 static const uint32_t OTA_SERIAL_IDLE_TIMEOUT_MS = 45000; // inactivité max côté maître (console disparue)
 static const uint8_t  OTA_MAX_BOOT_ATTEMPTS = 3;        // tentatives de boot avant rollback (OtaGuard)
 static const uint32_t OTA_VERIFY_UPTIME_MS  = 20000;    // uptime requis pour confirmer un nouveau firmware

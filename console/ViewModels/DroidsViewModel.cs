@@ -36,6 +36,11 @@ public partial class DroidsViewModel : ObservableObject
         _ota = new OtaService(protocol);
         _ota.Progress += OnOtaProgress;
         _ota.Completed += OnOtaCompleted;
+        _ota.Retrying += (index, attempt) =>
+        {
+            if (_otaDroid != null)
+                _otaDroid.OtaStatusText = $"chunk {index} sans réponse, tentative {attempt}…";
+        };
         // Sans ca, un chunk qui echoue a l'ecriture serie restait silencieux jusqu'a ce que le
         // maitre abandonne tout seul ~45s plus tard (timeout "console injoignable") : ici on le
         // sait tout de suite et on annule proprement des deux cotes plutot que d'attendre.
@@ -80,13 +85,19 @@ public partial class DroidsViewModel : ObservableObject
     private void OnOtaCompleted(bool ok, string message)
     {
         _flashToken = null;
-        if (_otaDroid != null)
+        var droid = _otaDroid;
+        if (droid != null)
         {
-            _otaDroid.OtaInProgress = false;
-            _otaDroid.OtaStatusText = message;
+            droid.OtaInProgress = false;
+            droid.OtaStatusText = message;
         }
         _otaDroid = null;
         AnyOtaActive = false;
+        // Le texte d'etat est masque des que OtaInProgress retombe : sans cette boite,
+        // la raison d'echec poussee par le maitre (timeout, chunk, rolledBack...)
+        // disparait avant d'avoir pu etre lue.
+        if (!ok)
+            MessageBox.Show(message, "OTA — " + (droid?.Name ?? "?"), MessageBoxButton.OK, MessageBoxImage.Error);
     }
 
     // Identifie la tentative de flash OTA en cours : si un appel async reprend (fin d'un

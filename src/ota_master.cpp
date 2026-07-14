@@ -80,20 +80,35 @@ bool OtaMaster::begin(uint16_t target, uint32_t size, const char* md5Hex32) {
 
 void OtaMaster::onSerialChunk(uint16_t index, const uint8_t* data, uint8_t len) {
     OtaChunkPayload p{};
+    bool send = false;
     {
         CriticalGuard guard(_mux);
-        if (_state != OM_AWAIT_SERIAL_CHUNK || index != _nextChunkIndex) return;
+        if (_state == OM_AWAIT_SERIAL_CHUNK && index == _nextChunkIndex) {
+            p.targetId = _target;
+            p.sessionId = _sessionId;
+            p.chunkIndex = index;
+            p.dataLen = len;
+            memcpy(p.data, data, len);
 
-        p.targetId = _target;
-        p.sessionId = _sessionId;
-        p.chunkIndex = index;
-        p.dataLen = len;
-        memcpy(p.data, data, len);
-
-        _state = OM_AWAIT_CHUNK_ACK;
-        _retryCount = 0;
+            _state = OM_AWAIT_CHUNK_ACK;
+            _retryCount = 0;
+            send = true;
+        } else if (_state == OM_AWAIT_SERIAL_CHUNK && _nextChunkIndex > 0
+                   && index == _nextChunkIndex - 1) {
+            // La console retente le chunk précédent : notre evt:otaChunkAck s'est
+            // perdu sur le lien série. Le chunk est déjà écrit chez l'esclave —
+            // on ré-émet seulement l'ack (rien à renvoyer sur le mesh), la
+            // console reprendra au bon index.
+            _pending = Event{};
+            _pending.type = EV_CHUNK_ACK;
+            _pending.chunkIndex = index;
+            _pending.sent = _nextChunkIndex;
+            _pending.total = _totalChunks;
+        }
+        // Tout autre cas (session inactive, index inattendu, chunk courant déjà
+        // en vol sur le mesh) : ignoré, les mécanismes de retry existants suffisent.
     }
-    sendFrame(MSG_OTA_CHUNK, &p, sizeof(p));
+    if (send) sendFrame(MSG_OTA_CHUNK, &p, sizeof(p));
 }
 
 void OtaMaster::abort() {

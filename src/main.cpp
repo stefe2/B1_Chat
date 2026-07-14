@@ -365,6 +365,13 @@ void setup() {
     esp_task_wdt_init(&wdtConfig);
     esp_task_wdt_add(nullptr);
 
+    // Tampons UART élargis (défaut : RX 256 o, TX 128 o). Pendant un OTA, une
+    // ligne otaChunk (~330 o) peut arriver pendant que loop() est bloqué à
+    // écrire un gros pushDroids : à 256 o le RX déborde et la ligne (donc le
+    // chunk) est perdue — le stop-and-wait série se fige alors jusqu'au
+    // timeout. À régler AVANT Serial.begin().
+    Serial.setRxBufferSize(2048);
+    Serial.setTxBufferSize(2048);
     Serial.begin(115200);
     pinMode(PIN_LED_ONBOARD, OUTPUT);
 
