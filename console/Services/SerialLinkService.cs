@@ -51,7 +51,11 @@ public class SerialLinkService : IDisposable
         _manualClose = false;
         try
         {
-            var port = new SerialPort(portName, 115200) { NewLine = "\n", Encoding = System.Text.Encoding.UTF8, ReadTimeout = 500 };
+            // WriteTimeout explicite : par defaut SerialPort.Write() bloque indefiniment si le
+            // tampon ne se vide pas assez vite (ex. lien instable) — sans ca, un chunk OTA bloque
+            // gele le thread UI (Write() est appele en synchrone depuis SendCmdRaw) sans jamais
+            // lever d'exception qu'on pourrait rattraper.
+            var port = new SerialPort(portName, 115200) { NewLine = "\n", Encoding = System.Text.Encoding.UTF8, ReadTimeout = 500, WriteTimeout = 3000 };
             port.Open();
             _port = port;
             PortName = portName;

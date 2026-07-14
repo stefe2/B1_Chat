@@ -31,6 +31,11 @@ private:
     uint16_t _totalChunks = 0;
     uint32_t _lastActivityMs = 0;
 
+    // Protege l'etat ci-dessus : onStart/onChunk/onEnd/onAbort s'executent depuis le
+    // callback ESP-NOW (tache Wi-Fi interne) alors que update() (timeout d'inactivite)
+    // s'execute depuis loop() — meme risque de course qu'OtaMaster, voir ota_master.h.
+    portMUX_TYPE _mux = portMUX_INITIALIZER_UNLOCKED;
+
     void sendAck(uint8_t kind, uint16_t chunkIndex, uint8_t status);
 };
 

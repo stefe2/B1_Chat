@@ -56,6 +56,7 @@ public partial class MainViewModel : ObservableObject
         _link.Opened += () => { Connected = true; ConnectionStatusText = "Connecté — handshake…"; };
         _link.Closed += unexpected => { Connected = false; ConnectionStatusText = unexpected ? "Déconnecté (inattendu) — reconnexion…" : "Déconnecté"; };
         _link.OpenFailed += err => ConnectionStatusText = "Échec de connexion : " + err;
+        Protocol.LinkError += err => ConnectionStatusText = "Erreur port série : " + err;
 
         Protocol.HelloReceived += () =>
         {

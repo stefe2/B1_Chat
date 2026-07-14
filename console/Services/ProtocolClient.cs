@@ -62,12 +62,22 @@ public partial class ProtocolClient : ObservableObject
     public event Action<ushort, bool, string?, string?>? OtaResultReceived; // target, ok, fw, reason
     public event Action<ushort?, int, string>? OtaErrorReceived;       // target, sessionId, reason
 
+    // Ecriture serie qui echoue (ex. port bloque/deconnecte en plein envoi) — jusqu'ici
+    // SerialLinkService.ErrorOccurred n'etait ecoute nulle part, ce qui rendait un echec
+    // d'ecriture totalement silencieux (ex. un chunk OTA qui ne part jamais).
+    public event Action<string>? LinkError;
+
     public ProtocolClient(SerialLinkService link)
     {
         _link = link;
         _link.Opened += OnOpened;
         _link.Closed += OnClosed;
         _link.LineReceived += OnLineReceived;
+        _link.ErrorOccurred += err =>
+        {
+            LogErr?.Invoke("Erreur port série : " + err);
+            LinkError?.Invoke(err);
+        };
     }
 
     private void OnOpened()

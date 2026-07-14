@@ -84,6 +84,22 @@ private:
 
     Event _pending;
 
+    // Protege tout l'etat ci-dessus : onAck() s'execute depuis le callback ESP-NOW (tache
+    // Wi-Fi interne, potentiellement un autre coeur) alors que begin()/onSerialChunk()/
+    // abort()/update()/pollEvent() s'executent depuis loop() — sans ce verrou, deux acces
+    // concurrents peuvent corrompre l'etat ou perdre un evenement (observe en test : la
+    // session se bloque a un chunk différent a chaque tentative, signature typique d'une
+    // condition de course plutot que d'un bug deterministe).
+    portMUX_TYPE _mux = portMUX_INITIALIZER_UNLOCKED;
+
+    // fail() ne fait que muter l'etat (appelee depuis l'interieur d'une section deja
+    // verrouillee par l'appelant) ; le MSG_OTA_ABORT reel est envoye par l'appelant une
+    // fois le verrou relache (Mesh.send()/esp_now_send() ne doit jamais etre invoque avec
+    // les interruptions desactivees).
+    bool     _pendingAbortNeeded = false;
+    uint16_t _pendingAbortTarget = 0;
+    uint8_t  _pendingAbortSession = 0;
+
     void sendFrame(uint8_t type, const void* payload, uint8_t len);
     void resend();
     void fail(const char* reason);

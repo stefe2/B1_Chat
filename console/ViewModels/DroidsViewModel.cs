@@ -36,6 +36,10 @@ public partial class DroidsViewModel : ObservableObject
         _ota = new OtaService(protocol);
         _ota.Progress += OnOtaProgress;
         _ota.Completed += OnOtaCompleted;
+        // Sans ca, un chunk qui echoue a l'ecriture serie restait silencieux jusqu'a ce que le
+        // maitre abandonne tout seul ~45s plus tard (timeout "console injoignable") : ici on le
+        // sait tout de suite et on annule proprement des deux cotes plutot que d'attendre.
+        _protocol.LinkError += OnLinkError;
         Droids.CollectionChanged += (_, e) =>
         {
             if (e.NewItems == null) return;
@@ -61,8 +65,21 @@ public partial class DroidsViewModel : ObservableObject
         _otaDroid.OtaStatusText = $"{sent}/{total} morceaux";
     }
 
+    private void OnLinkError(string message)
+    {
+        if (_otaDroid == null) return;
+        _flashToken = null;
+        _ota.Abort(); // previent le maitre tout de suite au lieu de le laisser attendre le timeout
+        var droid = _otaDroid;
+        droid.OtaInProgress = false;
+        droid.OtaStatusText = "Erreur d'écriture série : " + message;
+        _otaDroid = null;
+        AnyOtaActive = false;
+    }
+
     private void OnOtaCompleted(bool ok, string message)
     {
+        _flashToken = null;
         if (_otaDroid != null)
         {
             _otaDroid.OtaInProgress = false;
@@ -72,35 +89,61 @@ public partial class DroidsViewModel : ObservableObject
         AnyOtaActive = false;
     }
 
+    // Identifie la tentative de flash OTA en cours : si un appel async reprend (fin d'un
+    // telechargement) alors que ce jeton a change entretemps (echec, annulation via
+    // OnLinkError, etc.), on abandonne silencieusement plutot que de demarrer une session
+    // OTA en double sur une tentative deja consideree terminee cote UI.
+    private object? _flashToken;
+
     [RelayCommand]
-    private void FlashOta(Droid? droid)
+    private async Task FlashOta(Droid? droid)
     {
         if (droid == null || AnyOtaActive) return;
 
-        var dlg = new OpenFileDialog { Filter = "Firmware (*.bin)|*.bin" };
-        if (dlg.ShowDialog() != true) return;
-
         var confirm = MessageBox.Show(
-            $"Mettre à jour le firmware de « {droid.Name} » par le mesh (sans USB) ?\n\n" +
+            $"Mettre à jour le firmware de « {droid.Name} » vers la dernière version publiée par le mesh (sans USB) ?\n\n" +
             "Le droïde redémarrera automatiquement à la fin — ne pas l'éteindre pendant le transfert " +
             "(généralement 8 à 15 minutes, plus si la liaison est faible).",
             "Confirmer la mise à jour OTA", MessageBoxButton.YesNo, MessageBoxImage.Warning);
         if (confirm != MessageBoxResult.Yes) return;
 
+        var token = new object();
+        _flashToken = token;
         _otaDroid = droid;
         droid.OtaInProgress = true;
         droid.OtaProgressPct = 0;
-        droid.OtaStatusText = "démarrage…";
+        droid.OtaStatusText = "vérification de la dernière version…";
         AnyOtaActive = true;
 
-        if (!_ota.Start(droid.Id, dlg.FileName, out var error))
+        var result = await _update.CheckUpdatesAsync();
+        if (_flashToken != token) return;
+        if (!result.Ok || string.IsNullOrEmpty(result.Fw.UrlSlave))
         {
-            droid.OtaInProgress = false;
-            droid.OtaStatusText = error;
-            _otaDroid = null;
-            AnyOtaActive = false;
-            MessageBox.Show(error, "OTA", MessageBoxButton.OK, MessageBoxImage.Error);
+            FailOta(droid, result.Ok ? "Aucun firmware esclave trouvé dans la dernière release GitHub." : result.Error);
+            return;
         }
+
+        droid.OtaStatusText = "téléchargement du firmware…";
+        var (dlOk, path, _, _, dlError) = await _update.DownloadAssetAsync(result.Fw.UrlSlave, result.Fw.Sha256Slave);
+        if (_flashToken != token) return;
+        if (!dlOk || path == null)
+        {
+            FailOta(droid, dlError);
+            return;
+        }
+
+        droid.OtaStatusText = "démarrage…";
+        if (!_ota.Start(droid.Id, path, out var startError)) FailOta(droid, startError);
+    }
+
+    private void FailOta(Droid droid, string? error)
+    {
+        _flashToken = null;
+        droid.OtaInProgress = false;
+        droid.OtaStatusText = error ?? "erreur inconnue";
+        _otaDroid = null;
+        AnyOtaActive = false;
+        MessageBox.Show(error ?? "Erreur inconnue", "OTA", MessageBoxButton.OK, MessageBoxImage.Error);
     }
 
     [RelayCommand]
