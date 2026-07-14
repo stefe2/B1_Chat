@@ -8,7 +8,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <!-- Version sémantique : bumpée à la main à chaque phase de la roadmap (voir CLAUDE.md). -->
-    <VersionPrefix>0.8.0</VersionPrefix>
+    <VersionPrefix>0.9.0</VersionPrefix>
     <!-- N'a d'effet qu'avec PublishSingleFile (voir release.ps1) : embarque les DLL natives
          (WPF, System.IO.Ports) dans le .exe au lieu de les laisser à côté dans le dossier
          d'installation ; auto-extraites dans un cache temporaire au lancement. -->
