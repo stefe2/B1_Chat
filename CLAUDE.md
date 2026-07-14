@@ -430,6 +430,17 @@ largeur en bas. Carte Firmware sortie de la grille (fenêtre séparée).
 - `OTA_CHUNK_DATA_MAX` (`mesh_comm.h`) est autoritaire côté firmware et annoncé
   à la console via `evt:otaReady.chunkSize` — ne jamais le coder en dur côté
   C# (`OtaService.cs` le lit dynamiquement).
+- **Horodatages écrits par le callback ESP-NOW (tâche Wi-Fi)** (`lastSeen` du
+  registry, `_lastSendMs`/`_serialWaitSince` d'OtaMaster, etc.) : ils peuvent
+  être POSTÉRIEURS au `now` capturé en début de `loop()`. Toute soustraction
+  `now - horodatage` doit être comparée en **signé** (`(int32_t)(diff) >
+  seuil`) ou clampée — en non signé, la différence négative déborde en ~4e9 :
+  timeouts qui sautent instantanément (bug OTA fw ≤ 1.3.7) ou `age` à 4 Md
+  dans `evt:droids` qui faisait crasher `HandleDroids` côté console.
+- `ProtocolClient.OnLineReceived` isole chaque ligne dans un try/catch : une
+  ligne malformée du firmware ne doit JAMAIS tuer la boucle de lecture (mort
+  silencieuse du lien, historique) ni l'application. Ne pas « simplifier » en
+  retirant cette garde.
 
 ## Vérification (rappels)
 

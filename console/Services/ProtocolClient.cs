@@ -213,6 +213,20 @@ public partial class ProtocolClient : ObservableObject
 
     private void OnLineReceived(string line)
     {
+        // Aucune ligne, si malformee soit-elle, ne doit pouvoir tuer la reception :
+        // une exception qui s'echappait d'ici a deja tue la boucle de lecture en
+        // silence (fw <= 1.3.8, age deborde -> FormatException dans HandleDroids)
+        // puis, apres le passage a BeginInvoke, l'application entiere.
+        try { HandleLine(line); }
+        catch (Exception ex)
+        {
+            TraceLog.Write("ERR", $"ligne indigeste ({ex.GetType().Name} : {ex.Message}) — {TraceLog.Trunc(line)}");
+            LogErr?.Invoke("Ligne série illisible : " + ex.Message);
+        }
+    }
+
+    private void HandleLine(string line)
+    {
         LogRx?.Invoke(line);
         JsonElement root;
         try { root = JsonDocument.Parse(line).RootElement; }
@@ -320,14 +334,18 @@ public partial class ProtocolClient : ObservableObject
                 droid.Name = n.GetString() ?? "";
                 if (isNew) droid.EditingName = droid.Name;
             }
-            if (item.TryGetProperty("rssi", out var r)) droid.Rssi = r.GetInt32();
+            if (item.TryGetProperty("rssi", out var r) && r.TryGetInt32(out var rssi)) droid.Rssi = rssi;
             if (item.TryGetProperty("role", out var role)) droid.IsMaster = role.GetString() == "master";
             if (droid.IsMaster) droid.PortName = _link.PortName;
             if (item.TryGetProperty("servos", out var sv)) droid.ServosOn = sv.GetBoolean();
             if (item.TryGetProperty("autoAnim", out var aa)) droid.AutoAnimOn = aa.GetBoolean();
             if (item.TryGetProperty("adopted", out var ad)) droid.Adopted = ad.GetBoolean();
             if (item.TryGetProperty("fw", out var fw)) droid.FwVersion = fw.GetString() ?? "";
-            var age = item.TryGetProperty("age", out var a) ? a.GetInt32() : 0;
+            // TryGetInt32 (pas GetInt32) : un firmware pré-1.3.10 pouvait émettre un âge
+            // débordé (~4e9, voir serial_console.cpp) — GetInt32 levait un FormatException
+            // qui tuait la boucle de lecture (fw ≤ 1.3.8) puis l'application entière.
+            // Un âge illisible = valeur énorme = droïde considéré hors ligne.
+            var age = item.TryGetProperty("age", out var a) && a.TryGetInt32(out var ageMs) ? ageMs : int.MaxValue;
             droid.Online = droid.IsMaster || age <= 4000;
             droid.LastSeen = DateTime.UtcNow;
         }

@@ -90,7 +90,14 @@ void SerialConsole::pushDroids() {
         o["id"] = e.id;
         o["name"] = Config.getName(e.id);
         o["rssi"] = e.rssi;
-        o["age"] = now - e.lastSeen;   // ms depuis la dernière vue
+        // lastSeen est horodaté par le callback ESP-NOW (tâche Wi-Fi) avec un
+        // millis() frais : il peut être POSTÉRIEUR à now. Sans clamp, l'âge
+        // négatif déborde en ~4e9 (même famille de bug que les timeouts OTA,
+        // voir ota_master.cpp) — et ce nombre ne rentre pas dans le GetInt32()
+        // de la console (crash de HandleDroids observé en plein transfert OTA,
+        // où le callback tire ~23 fois/s et rend la collision quasi certaine).
+        const uint32_t last = e.lastSeen;
+        o["age"] = ((int32_t)(now - last) > 0) ? (now - last) : 0; // ms depuis la dernière vue
         o["role"] = "slave";
         o["servos"] = e.servos;
         o["autoAnim"] = e.autoAnim;
