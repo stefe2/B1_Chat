@@ -70,8 +70,12 @@ void OtaSlave::processStart(const OtaStartPayload& p) {
         if (_state == RECEIVING) Update.abort();
 
         if (!Update.begin(p.totalSize)) {
+            Serial.printf("OTA: Update.begin(%lu) refuse (err %u)\n",
+                          (unsigned long)p.totalSize, Update.getError());
             ackStatus = OTA_ERR_SIZE;
         } else {
+            Serial.printf("OTA: session %u demarree (%lu o, %u chunks)\n",
+                          p.sessionId, (unsigned long)p.totalSize, p.totalChunks);
             char md5[33];
             memcpy(md5, p.md5Hex, 32);
             md5[32] = '\0';
@@ -91,12 +95,16 @@ void OtaSlave::processStart(const OtaStartPayload& p) {
 void OtaSlave::processChunk(const OtaChunkPayload& p) {
     uint8_t ackStatus;
     if (_state != RECEIVING || p.sessionId != _sessionId) {
+        Serial.printf("OTA: chunk %u rejete (etat=%d, session %u vs %u)\n",
+                      p.chunkIndex, (int)_state, p.sessionId, _sessionId);
         ackStatus = OTA_ERR_SESSION;
     } else {
         _lastActivityMs = millis();
 
         if (p.chunkIndex == _expectedChunkIndex) {
             if (Update.write(const_cast<uint8_t*>(p.data), p.dataLen) != p.dataLen) {
+                Serial.printf("OTA: echec ecriture chunk %u (err %u)\n",
+                              p.chunkIndex, Update.getError());
                 ackStatus = OTA_ERR_WRITE;
             } else {
                 _expectedChunkIndex++;
@@ -108,6 +116,8 @@ void OtaSlave::processChunk(const OtaChunkPayload& p) {
             // — on se contente de ré-émettre l'ack.
             ackStatus = OTA_OK;
         } else {
+            Serial.printf("OTA: chunk %u hors sequence (attendu %u)\n",
+                          p.chunkIndex, _expectedChunkIndex);
             ackStatus = OTA_ERR_SESSION;
         }
     }
@@ -119,9 +129,12 @@ void OtaSlave::processEnd(const OtaEndPayload& p) {
     bool doRestart = false;
     if (_state != RECEIVING || p.sessionId != _sessionId
         || _expectedChunkIndex != p.totalChunks) {
+        Serial.printf("OTA: END rejete (etat=%d, session %u vs %u, %u/%u chunks)\n",
+                      (int)_state, p.sessionId, _sessionId, _expectedChunkIndex, p.totalChunks);
         ackStatus = OTA_ERR_SESSION;
     } else if (!Update.end(true)) {
         // Intégrité/format invalide : on reste sur l'image actuelle, aucun reboot.
+        Serial.printf("OTA: Update.end refuse (err %u)\n", Update.getError());
         ackStatus = OTA_ERR_MD5;
         _state = IDLE;
     } else {
@@ -138,6 +151,7 @@ void OtaSlave::processEnd(const OtaEndPayload& p) {
 
 void OtaSlave::processAbort(const OtaAbortPayload& p) {
     if (_state != RECEIVING || p.sessionId != _sessionId) return;
+    Serial.printf("OTA: abort recu (raison %u) au chunk %u\n", p.reason, _expectedChunkIndex);
     Update.abort();
     _state = IDLE;
 }
@@ -162,7 +176,14 @@ void OtaSlave::update(uint32_t nowMs) {
     default: break;
     }
 
-    if (_state == RECEIVING && nowMs - _lastActivityMs > OTA_SESSION_TIMEOUT_MS) {
+    // Comparaison SIGNEE obligatoire : _lastActivityMs vient d'un millis() frais
+    // pris pendant le traitement ci-dessus, donc potentiellement POSTERIEUR au
+    // nowMs capture en debut de loop() — en non signe, la difference negative
+    // deborde (~4 milliards) et le timeout de 20 s saute instantanement
+    // (observe en test : session abandonnee 5 ms apres son demarrage).
+    if (_state == RECEIVING && (int32_t)(nowMs - _lastActivityMs) > (int32_t)OTA_SESSION_TIMEOUT_MS) {
+        Serial.printf("OTA: inactivite, session %u abandonnee au chunk %u\n",
+                      _sessionId, _expectedChunkIndex);
         Update.abort();
         _state = IDLE;
     }

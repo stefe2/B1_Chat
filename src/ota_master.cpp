@@ -208,11 +208,18 @@ void OtaMaster::update(uint32_t nowMs) {
 
     {
         CriticalGuard guard(_mux);
+        // Comparaisons SIGNEES obligatoires : _lastSendMs/_serialWaitSince/
+        // _rebootStartMs sont horodates avec un millis() frais depuis onAck()
+        // (tache Wi-Fi) ou sendFrame() (appele par Console.update() PLUS TOT
+        // dans la meme iteration de loop()) — ils peuvent donc etre POSTERIEURS
+        // au nowMs capture en debut de loop(). En non signe, la difference
+        // negative deborde et declenche retransmissions et faux "timeout"
+        // instantanes (meme bug que cote esclave, voir ota_slave.cpp).
         switch (_state) {
         case OM_AWAIT_START_ACK:
         case OM_AWAIT_CHUNK_ACK:
         case OM_AWAIT_END_ACK:
-            if (nowMs - _lastSendMs > OTA_ACK_TIMEOUT_MS) {
+            if ((int32_t)(nowMs - _lastSendMs) > (int32_t)OTA_ACK_TIMEOUT_MS) {
                 if (++_retryCount > OTA_MAX_RETRIES) {
                     fail("timeout");
                     needAbort = _pendingAbortNeeded;
@@ -224,7 +231,7 @@ void OtaMaster::update(uint32_t nowMs) {
             break;
 
         case OM_AWAIT_SERIAL_CHUNK:
-            if (nowMs - _serialWaitSince > OTA_SERIAL_IDLE_TIMEOUT_MS) {
+            if ((int32_t)(nowMs - _serialWaitSince) > (int32_t)OTA_SERIAL_IDLE_TIMEOUT_MS) {
                 fail("console injoignable");
                 needAbort = _pendingAbortNeeded;
                 if (needAbort) { abortTarget = _pendingAbortTarget; abortSession = _pendingAbortSession; _pendingAbortNeeded = false; }
@@ -252,7 +259,7 @@ void OtaMaster::update(uint32_t nowMs) {
                 break;
             }
             (void)found;
-            if (_state == OM_AWAIT_REBOOT && nowMs - _rebootStartMs > OTA_REBOOT_WAIT_MS) {
+            if (_state == OM_AWAIT_REBOOT && (int32_t)(nowMs - _rebootStartMs) > (int32_t)OTA_REBOOT_WAIT_MS) {
                 _pending = Event{};
                 _pending.type = EV_RESULT;
                 _pending.target = _target;
