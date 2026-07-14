@@ -54,6 +54,14 @@
             <Button Content="{Binding FlashLabel}" Style="{StaticResource PrimaryButtonStyle}" Command="{Binding FlashCommand}"
                     IsEnabled="{Binding CanFlash}" HorizontalAlignment="Left" Margin="0,0,0,10" />
 
+            <StackPanel Margin="0,0,0,10" Visibility="{Binding Flashing, Converter={StaticResource BoolToVisConv}}">
+                <ProgressBar Minimum="0" Maximum="100" Value="{Binding FlashProgressPct, Mode=OneWay}"
+                             IsIndeterminate="{Binding FlashProgressIndeterminate}" Height="10" />
+                <TextBlock Text="{Binding FlashProgressPct, StringFormat='{}{0}%'}" FontSize="10.5"
+                           Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Right" Margin="0,2,0,0"
+                           Visibility="{Binding FlashProgressIndeterminate, Converter={StaticResource BoolToVisConv}, ConverterParameter=Invert}" />
+            </StackPanel>
+
             <Border Background="{StaticResource RecessBrush}" CornerRadius="4" Padding="6" Margin="0,0,0,12">
                 <ScrollViewer x:Name="FlashLogScroll" Height="150" VerticalScrollBarVisibility="Auto" ScrollChanged="FlashLogScroll_ScrollChanged">
                     <ItemsControl ItemsSource="{Binding FlashLog}">

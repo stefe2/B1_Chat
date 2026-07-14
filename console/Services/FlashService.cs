@@ -1,5 +1,7 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
+using System.Text.RegularExpressions;
 
 namespace b1_chat_console.Services;
 
@@ -12,7 +14,30 @@ namespace b1_chat_console.Services;
 public class FlashService
 {
     public event Action<string>? LogLine;
+    public event Action<int>? Progress; // 0..100
     public event Action<bool, int?, string?>? Completed; // ok, exitCode, error
+
+    // La barre de progression d'espflash (indicatif, redessinee via \r sans \n) arrive comme
+    // des "lignes" separees (StreamReader.ReadLine() coupe aussi sur un \r seul) : on l'extrait
+    // ici plutot que de la laisser noyer FlashLog de dizaines de mises a jour quasi identiques.
+    private static readonly Regex ProgressPercentRegex = new(@"(\d{1,3})\s*%", RegexOptions.Compiled);
+    private static readonly Regex ProgressFractionRegex = new(@"([\d.]+)\s*(K|M)?i?B\s*/\s*([\d.]+)\s*(K|M)?i?B", RegexOptions.Compiled);
+
+    private static double UnitMultiplier(string unit) => unit switch { "K" => 1024, "M" => 1024 * 1024, _ => 1 };
+
+    private static int? TryParseProgressPercent(string line)
+    {
+        var mf = ProgressFractionRegex.Match(line);
+        if (mf.Success)
+        {
+            var cur = double.Parse(mf.Groups[1].Value, CultureInfo.InvariantCulture) * UnitMultiplier(mf.Groups[2].Value);
+            var tot = double.Parse(mf.Groups[3].Value, CultureInfo.InvariantCulture) * UnitMultiplier(mf.Groups[4].Value);
+            if (tot > 0) return (int)Math.Clamp(100.0 * cur / tot, 0, 100);
+        }
+        var mp = ProgressPercentRegex.Match(line);
+        if (mp.Success && int.TryParse(mp.Groups[1].Value, out var pct)) return Math.Clamp(pct, 0, 100);
+        return null;
+    }
 
     public static string? FindEspflash()
     {
@@ -71,7 +96,13 @@ public class FlashService
         try
         {
             var proc = new Process { StartInfo = psi, EnableRaisingEvents = true };
-            void Line(string? s) { if (s != null) LogLine?.Invoke(s); }
+            void Line(string? s)
+            {
+                if (s == null) return;
+                var pct = TryParseProgressPercent(s);
+                if (pct.HasValue) Progress?.Invoke(pct.Value);
+                else LogLine?.Invoke(s);
+            }
             proc.OutputDataReceived += (_, a) => Line(a.Data);
             proc.ErrorDataReceived += (_, a) => Line(a.Data);
             proc.Exited += (_, _) =>
@@ -117,7 +148,13 @@ public class FlashService
         try
         {
             var proc = new Process { StartInfo = psi, EnableRaisingEvents = true };
-            void Line(string? s) { if (s != null) LogLine?.Invoke(s); }
+            void Line(string? s)
+            {
+                if (s == null) return;
+                var pct = TryParseProgressPercent(s);
+                if (pct.HasValue) Progress?.Invoke(pct.Value);
+                else LogLine?.Invoke(s);
+            }
             proc.OutputDataReceived += (_, a) => Line(a.Data);
             proc.ErrorDataReceived += (_, a) => Line(a.Data);
             proc.Exited += (_, _) =>

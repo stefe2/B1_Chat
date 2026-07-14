@@ -14,6 +14,7 @@ public partial class FirmwareViewModel : ObservableObject
     private readonly FlashService _flash = new();
     private readonly UpdateService _update = new();
     private readonly System.Threading.Timer _portScanTimer;
+    private string? _reconnectPortAfterFlash;
 
     public ObservableCollection<string> FlashLog { get; } = new();
     public ObservableCollection<string> AvailablePorts { get; } = new();
@@ -24,6 +25,12 @@ public partial class FirmwareViewModel : ObservableObject
     [ObservableProperty] private string _address = "0x10000";
     [ObservableProperty] private bool _flashing;
     [ObservableProperty] private bool _canFlash;
+    [ObservableProperty] private int _flashProgressPct;
+    // espflash n'imprime sa barre de progression (%) que s'il detecte un vrai terminal ; ici sa
+    // sortie est redirigee (Process.RedirectStandardOutput/Error), donc en pratique aucune ligne
+    // de progression n'arrive jamais -> barre indeterminee par defaut, sauf si on parvient quand
+    // meme a lire un pourcentage (voir FlashService.Progress).
+    [ObservableProperty] private bool _flashProgressIndeterminate = true;
     [ObservableProperty] private bool _isMasterRole = true;
     [ObservableProperty] private bool _showAdvanced;
     [ObservableProperty] private bool _eraseChipFirst;
@@ -72,6 +79,11 @@ public partial class FirmwareViewModel : ObservableObject
         // FlashService leve ses evenements depuis les callbacks async de Process (thread pool) :
         // remarshalage sur l'UI avant de toucher les ObservableCollection/proprietes liees.
         _flash.LogLine += line => RunOnUi(() => FlashLog.Add(line));
+        _flash.Progress += pct => RunOnUi(() =>
+        {
+            FlashProgressIndeterminate = false;
+            FlashProgressPct = pct;
+        });
         _flash.Completed += (ok, code, err) => RunOnUi(() => OnFlashCompleted(ok, code, err));
         RefreshFlashPorts();
         // Detecte une carte branchee/debranchee (ex. un deuxieme droide) sans action manuelle ;
@@ -136,9 +148,18 @@ public partial class FirmwareViewModel : ObservableObject
 
         Flashing = true;
         CanFlash = false;
+        FlashProgressPct = 0;
+        FlashProgressIndeterminate = true;
         // Le port de flash est independant du lien serie principal ; on ne le libere que s'il
-        // se trouve etre exactement celui deja ouvert par SerialLinkService (meme carte).
-        if (_link.IsOpen && _link.PortName == port) _link.PrepareForExternalClose();
+        // se trouve etre exactement celui deja ouvert par SerialLinkService (meme carte). On le
+        // rouvrira nous-memes une fois le flash termine (PrepareForExternalClose ne leve pas
+        // l'evenement Closed, donc MainViewModel.Connected resterait bloque a true sinon).
+        _reconnectPortAfterFlash = null;
+        if (_link.IsOpen && _link.PortName == port)
+        {
+            _reconnectPortAfterFlash = port;
+            _link.PrepareForExternalClose();
+        }
         FlashLog.Add(EraseChipFirst ? $"— Effacement complet puis flash démarrés sur {port} —" : $"— Flash démarré sur {port} —");
         _flash.Start(BinPath, Address, port, EraseChipFirst);
     }
@@ -147,7 +168,16 @@ public partial class FirmwareViewModel : ObservableObject
     {
         Flashing = false;
         CanFlash = BinPath != null;
+        if (ok) { FlashProgressPct = 100; FlashProgressIndeterminate = false; }
         FlashLog.Add(ok ? "— Flash terminé avec succès —" : $"— Échec du flash{(error != null ? " : " + error : $" (code {exitCode})")} —");
+
+        if (_reconnectPortAfterFlash != null)
+        {
+            var port = _reconnectPortAfterFlash;
+            _reconnectPortAfterFlash = null;
+            FlashLog.Add($"— Reconnexion à {port} —");
+            _link.Open(port);
+        }
     }
 
     [RelayCommand]

@@ -13,9 +13,12 @@ public partial class MainWindow : Window
         var vm = new MainViewModel();
         DataContext = vm;
         Title = "B1 Chat — Console de supervision";
+        vm.Droids.OpenFirmwareRequested += OpenFirmwareWindow;
     }
 
-    private void OpenFirmwareWindow_Click(object sender, RoutedEventArgs e)
+    private void OpenFirmwareWindow_Click(object sender, RoutedEventArgs e) => OpenFirmwareWindow();
+
+    private void OpenFirmwareWindow()
     {
         if (_firmwareWindow is { IsVisible: true })
         {

@@ -80,9 +80,12 @@ public class SerialLinkService : IDisposable
     }
 
     /// <summary>
-    /// Fermeture volontaire pour un besoin externe (flash espflash) : ferme sans lever d'evenement
-    /// "closed" ni tenter de reconnecter — l'appelant sait deja pourquoi le port se ferme et
-    /// rouvrira lui-meme le port apres coup si besoin (meme contrat que l'ancien StartFlash).
+    /// Fermeture volontaire pour un besoin externe (flash espflash) : ne tente pas de reconnecter
+    /// automatiquement (l'appelant rouvrira lui-meme le port apres coup si besoin, meme contrat
+    /// que l'ancien StartFlash) mais leve quand meme "Closed" (comme Close()) pour que l'etat
+    /// Connected en amont reste synchrone avec la realite du port — sinon un consommateur qui n'a
+    /// jamais ete notifie de la fermeture reste bloque a "connecte" alors que le port est deja
+    /// ferme, sans aucun moyen de redemarrer la connexion depuis l'UI.
     /// Attend (borne a 1s) que le thread de lecture arriere-plan ait vraiment fini avant de
     /// fermer/disposer le SerialPort : sans cette attente, un process externe (espflash) qui
     /// tente d'ouvrir le meme port juste apres peut se heurter a une course avec la liberation
@@ -94,7 +97,9 @@ public class SerialLinkService : IDisposable
         _manualClose = true;
         StopReconnectLoop();
         CancelAndWaitReadLoop();
+        var wasOpen = _port != null;
         ClosePortOnly();
+        if (wasOpen) RunOnUi(() => Closed?.Invoke(false));
     }
 
     private void CancelAndWaitReadLoop()

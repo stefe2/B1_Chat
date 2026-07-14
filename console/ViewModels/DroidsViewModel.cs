@@ -15,11 +15,20 @@ public partial class DroidsViewModel : ObservableObject
 {
     private readonly ProtocolClient _protocol;
     private readonly OtaService _ota;
+    private readonly UpdateService _update = new();
     private Droid? _otaDroid;
+    private string? _latestFwVersion;
 
     public ObservableCollection<Droid> Droids => _protocol.Droids;
 
     [ObservableProperty] private bool _anyOtaActive;
+
+    // Le maitre se flashe toujours par USB (pas de cible OTA pour lui-meme) ; la fenetre
+    // dediee (FirmwareWindow) vit dans MainWindow, hors de portee de cette vue -> evenement.
+    public event Action? OpenFirmwareRequested;
+
+    [RelayCommand]
+    private void OpenFirmware() => OpenFirmwareRequested?.Invoke();
 
     public DroidsViewModel(ProtocolClient protocol)
     {
@@ -27,6 +36,22 @@ public partial class DroidsViewModel : ObservableObject
         _ota = new OtaService(protocol);
         _ota.Progress += OnOtaProgress;
         _ota.Completed += OnOtaCompleted;
+        Droids.CollectionChanged += (_, e) =>
+        {
+            if (e.NewItems == null) return;
+            foreach (Droid d in e.NewItems) d.LatestFwVersion = _latestFwVersion;
+        };
+        _ = RefreshLatestFwVersionAsync();
+    }
+
+    // Verifie la derniere release firmware GitHub (prefixe "fw-") au demarrage pour
+    // colorer la colonne FW de chaque droide (vert = a jour, rouge = MAJ disponible).
+    private async Task RefreshLatestFwVersionAsync()
+    {
+        var result = await _update.CheckUpdatesAsync();
+        if (!result.Ok || string.IsNullOrEmpty(result.Fw.Latest)) return;
+        _latestFwVersion = result.Fw.Latest;
+        foreach (var d in Droids) d.LatestFwVersion = _latestFwVersion;
     }
 
     private void OnOtaProgress(int sent, int total)

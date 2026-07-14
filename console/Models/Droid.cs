@@ -16,6 +16,7 @@ public partial class Droid : ObservableObject
     [ObservableProperty] private bool _adopted = true;
     [ObservableProperty] private string? _portName;
     [ObservableProperty] private string _fwVersion = "";
+    [ObservableProperty] private string? _latestFwVersion;
     [ObservableProperty] private DateTime _lastSeen = DateTime.MinValue;
     [ObservableProperty] private bool _otaInProgress;
     [ObservableProperty] private int _otaProgressPct;
@@ -34,6 +35,14 @@ public partial class Droid : ObservableObject
     // Idem, mais masqué pendant qu'une mise à jour OTA est en cours sur ce droïde
     // (remplacé par la barre de progression).
     public bool CanFlashOta => CanForget && !OtaInProgress;
+
+    // null = pas encore verifie (ou version pas encore rapportee) -> couleur neutre.
+    public bool? FwUpToDate => string.IsNullOrEmpty(LatestFwVersion) || string.IsNullOrEmpty(FwVersion)
+        ? null
+        : FwVersion == LatestFwVersion;
+
+    partial void OnFwVersionChanged(string value) => OnPropertyChanged(nameof(FwUpToDate));
+    partial void OnLatestFwVersionChanged(string? value) => OnPropertyChanged(nameof(FwUpToDate));
 
     partial void OnRssiChanged(int value) => OnPropertyChanged(nameof(RssiLabel));
     partial void OnPortNameChanged(string? value) => OnPropertyChanged(nameof(RssiLabel));
