@@ -8,11 +8,11 @@ using b1_chat_console.Models;
 namespace b1_chat_console.Services;
 
 /// <summary>
-/// Coeur du protocole JSON serie firmware (cmd/evt) — nouveau code (n'existait que cote JS dans
-/// index.html avant ce portage). Parse les evt entrants, construit les cmd sortants via SendCmd
-/// (meme garde-fou que sendCmd() en JS : log systematique, refuse si port ferme, refuse tout sauf
-/// hello/ping avant la fin du handshake), et tient l'etat central (droides, topologie, caps,
-/// catalogue de sequences) dont les ViewModels dependent.
+/// Core of the firmware's JSON serial protocol (cmd/evt) — new code (only existed as JS in
+/// index.html before this port). Parses incoming evt messages, builds outgoing cmd messages via
+/// SendCmd (same guard rails as sendCmd() in JS: always logs, refuses if the port is closed,
+/// refuses everything except hello/ping before the handshake completes), and holds the central
+/// state (droids, topology, caps, sequence catalog) the ViewModels depend on.
 /// </summary>
 public partial class ProtocolClient : ObservableObject
 {
@@ -56,20 +56,21 @@ public partial class ProtocolClient : ObservableObject
     public event Action<JsonElement>? SeqStateReceived;
     public event Action? MeshTopologyChanged;
     public event Action? DroidsChanged;
+    public event Action<ushort, int>? AnimSent; // target, animId — used to drive the mesh topology's broadcast ripple
     public event Action<ushort, int, int, int>? OtaReadyReceived;      // target, sessionId, chunkSize, totalChunks
     public event Action<int, int, int>? OtaChunkAckReceived;           // seq, sent, total
     public event Action<ushort, int>? OtaDoneReceived;                 // target, sessionId
     public event Action<ushort, bool, string?, string?>? OtaResultReceived; // target, ok, fw, reason
     public event Action<ushort?, int, string>? OtaErrorReceived;       // target, sessionId, reason
 
-    // Ecriture serie qui echoue (ex. port bloque/deconnecte en plein envoi) — jusqu'ici
-    // SerialLinkService.ErrorOccurred n'etait ecoute nulle part, ce qui rendait un echec
-    // d'ecriture totalement silencieux (ex. un chunk OTA qui ne part jamais).
+    // A serial write that fails (e.g. port blocked/disconnected mid-send) — until now
+    // SerialLinkService.ErrorOccurred wasn't listened to anywhere, which made a write
+    // failure totally silent (e.g. an OTA chunk that never goes out).
     public event Action<string>? LinkError;
 
-    // Fermeture du port (volontaire ou non) : une session OTA en cours doit etre
-    // annulee tout de suite plutot que de retenter des chunks sur un port ferme.
-    public event Action<bool>? LinkClosed; // true = deconnexion inattendue
+    // Port closing (voluntary or not): an in-flight OTA session must be cancelled right
+    // away instead of retrying chunks on a closed port.
+    public event Action<bool>? LinkClosed; // true = unexpected disconnect
 
     public ProtocolClient(SerialLinkService link)
     {
@@ -79,7 +80,7 @@ public partial class ProtocolClient : ObservableObject
         _link.LineReceived += OnLineReceived;
         _link.ErrorOccurred += err =>
         {
-            LogErr?.Invoke("Erreur port série : " + err);
+            LogErr?.Invoke("Serial port error: " + err);
             LinkError?.Invoke(err);
         };
     }
@@ -97,9 +98,9 @@ public partial class ProtocolClient : ObservableObject
         PortOpen = false;
         SessionReady = false;
         StopKeepalive();
-        // Deconnexion volontaire (pas une coupure en cours de reconnexion auto) : la console ne
-        // peut plus garantir que ces donnees (en ligne/RSSI/liens mesh) sont encore a jour, on les
-        // vide plutot que de laisser un etat fige et potentiellement trompeur a l'ecran.
+        // Voluntary disconnect (not a drop mid-auto-reconnect): the console can no longer
+        // guarantee this data (online/RSSI/mesh links) is still current, so it's cleared
+        // instead of leaving a frozen, potentially misleading state on screen.
         if (!unexpected) ClearLiveState();
         LinkClosed?.Invoke(unexpected);
     }
@@ -118,8 +119,8 @@ public partial class ProtocolClient : ObservableObject
         StopKeepalive();
         _keepalive = new System.Threading.Timer(_ =>
         {
-            // Le minuteur tourne sur un thread arriere-plan ; SendCmdRaw leve LogTx/LogSys
-            // qui alimentent des ObservableCollection liees a l'UI, d'ou le remarshalage.
+            // The timer runs on a background thread; SendCmdRaw raises LogTx/LogSys which
+            // feed UI-bound ObservableCollections, hence the remarshaling.
             var dispatcher = System.Windows.Application.Current?.Dispatcher;
             void Send() => SendCmdRaw(new JsonObject { ["cmd"] = SessionReady ? "ping" : "hello" });
             if (dispatcher == null || dispatcher.CheckAccess()) Send();
@@ -133,7 +134,7 @@ public partial class ProtocolClient : ObservableObject
         _keepalive = null;
     }
 
-    // --- Envoi (equivalent de sendCmd() en JS) --------------------------------
+    // --- Sending (equivalent to sendCmd() in JS) --------------------------------
 
     public void SendCmd(JsonObject obj) => SendCmdRaw(obj);
 
@@ -142,13 +143,13 @@ public partial class ProtocolClient : ObservableObject
         var cmd = obj.TryGetPropertyValue("cmd", out var cNode) ? cNode?.GetValue<string>() : null;
         var line = obj.ToJsonString();
         LogTx?.Invoke(line);
-        if (!PortOpen) { LogSys?.Invoke("Non connecté — commande ignorée."); return; }
+        if (!PortOpen) { LogSys?.Invoke("Not connected — command ignored."); return; }
         var preHandshake = cmd is "hello" or "ping";
-        if (!SessionReady && !preHandshake) { LogSys?.Invoke("Handshake en attente — commande différée."); return; }
+        if (!SessionReady && !preHandshake) { LogSys?.Invoke("Handshake pending — command deferred."); return; }
         _link.Write(line + "\n");
     }
 
-    // Helpers typés pour les commandes les plus utilisées par les ViewModels.
+    // Typed helpers for the commands the ViewModels use most.
     public void RequestList() => SendCmd(new JsonObject { ["cmd"] = "list" });
     public void RequestConfig() => SendCmd(new JsonObject { ["cmd"] = "getConfig" });
     public void RequestGetAll() => SendCmd(new JsonObject { ["cmd"] = "getAll" });
@@ -168,7 +169,11 @@ public partial class ProtocolClient : ObservableObject
         SendCmd(new JsonObject { ["cmd"] = "otaStart", ["target"] = target, ["size"] = size, ["md5"] = md5Hex32 });
     public void OtaChunk(int seq, string base64Data) => SendCmd(new JsonObject { ["cmd"] = "otaChunk", ["seq"] = seq, ["data"] = base64Data });
     public void OtaAbort() => SendCmd(new JsonObject { ["cmd"] = "otaAbort" });
-    public void PlayAnim(ushort target, int animId, uint seed) => SendCmd(new JsonObject { ["cmd"] = "anim", ["target"] = target, ["animId"] = animId, ["seed"] = seed });
+    public void PlayAnim(ushort target, int animId, uint seed)
+    {
+        SendCmd(new JsonObject { ["cmd"] = "anim", ["target"] = target, ["animId"] = animId, ["seed"] = seed });
+        AnimSent?.Invoke(target, animId);
+    }
     public void Preview(ushort target, int pan, int tilt) => SendCmd(new JsonObject { ["cmd"] = "preview", ["target"] = target, ["pan"] = pan, ["tilt"] = tilt });
     public void SetCalib(ushort target, int panMin, int panCenter, int panMax, int tiltMin, int tiltCenter, int tiltMax) =>
         SendCmd(new JsonObject
@@ -209,19 +214,19 @@ public partial class ProtocolClient : ObservableObject
 
     public void SetMulti(JsonArray ops) => SendCmd(new JsonObject { ["cmd"] = "setMulti", ["ops"] = ops });
 
-    // --- Reception (equivalent de handleEvent() en JS) ------------------------
+    // --- Receiving (equivalent to handleEvent() in JS) ------------------------
 
     private void OnLineReceived(string line)
     {
-        // Aucune ligne, si malformee soit-elle, ne doit pouvoir tuer la reception :
-        // une exception qui s'echappait d'ici a deja tue la boucle de lecture en
-        // silence (fw <= 1.3.8, age deborde -> FormatException dans HandleDroids)
-        // puis, apres le passage a BeginInvoke, l'application entiere.
+        // No line, however malformed, should be able to kill reception: an exception
+        // escaping from here already killed the read loop silently once (fw <= 1.3.8,
+        // overflowed age -> FormatException in HandleDroids), then the whole app after
+        // it was routed through BeginInvoke.
         try { HandleLine(line); }
         catch (Exception ex)
         {
-            TraceLog.Write("ERR", $"ligne indigeste ({ex.GetType().Name} : {ex.Message}) — {TraceLog.Trunc(line)}");
-            LogErr?.Invoke("Ligne série illisible : " + ex.Message);
+            TraceLog.Write("ERR", $"unparseable line ({ex.GetType().Name}: {ex.Message}) — {TraceLog.Trunc(line)}");
+            LogErr?.Invoke("Unreadable serial line: " + ex.Message);
         }
     }
 
@@ -341,10 +346,10 @@ public partial class ProtocolClient : ObservableObject
             if (item.TryGetProperty("autoAnim", out var aa)) droid.AutoAnimOn = aa.GetBoolean();
             if (item.TryGetProperty("adopted", out var ad)) droid.Adopted = ad.GetBoolean();
             if (item.TryGetProperty("fw", out var fw)) droid.FwVersion = fw.GetString() ?? "";
-            // TryGetInt32 (pas GetInt32) : un firmware pré-1.3.10 pouvait émettre un âge
-            // débordé (~4e9, voir serial_console.cpp) — GetInt32 levait un FormatException
-            // qui tuait la boucle de lecture (fw ≤ 1.3.8) puis l'application entière.
-            // Un âge illisible = valeur énorme = droïde considéré hors ligne.
+            // TryGetInt32 (not GetInt32): a pre-1.3.10 firmware could emit an overflowed
+            // age (~4e9, see serial_console.cpp) — GetInt32 threw a FormatException that
+            // killed the read loop (fw <= 1.3.8) and then the whole app.
+            // An unreadable age = huge value = droid considered offline.
             var age = item.TryGetProperty("age", out var a) && a.TryGetInt32(out var ageMs) ? ageMs : int.MaxValue;
             droid.Online = droid.IsMaster || age <= 4000;
             droid.LastSeen = DateTime.UtcNow;

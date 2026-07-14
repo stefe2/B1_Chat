@@ -71,7 +71,7 @@ void SerialConsole::pushDroids() {
     doc["evt"] = "droids";
     JsonArray arr = doc["list"].to<JsonArray>();
 
-    // Le maître lui-même (absent du registry car il ignore ses propres messages).
+    // The master itself (absent from the registry since it ignores its own messages).
     JsonObject me = arr.add<JsonObject>();
     me["id"] = Mesh.myId();
     me["name"] = Config.getName(Mesh.myId());
@@ -83,21 +83,22 @@ void SerialConsole::pushDroids() {
     me["adopted"] = true;
     me["fw"] = FW_VERSION;
 
-    // Les autres droïdes (esclaves).
+    // The other droids (slaves).
     for (uint8_t i = 0; i < Droids.count(); i++) {
         const Registry::Entry& e = Droids.at(i);
         JsonObject o = arr.add<JsonObject>();
         o["id"] = e.id;
         o["name"] = Config.getName(e.id);
         o["rssi"] = e.rssi;
-        // lastSeen est horodaté par le callback ESP-NOW (tâche Wi-Fi) avec un
-        // millis() frais : il peut être POSTÉRIEUR à now. Sans clamp, l'âge
-        // négatif déborde en ~4e9 (même famille de bug que les timeouts OTA,
-        // voir ota_master.cpp) — et ce nombre ne rentre pas dans le GetInt32()
-        // de la console (crash de HandleDroids observé en plein transfert OTA,
-        // où le callback tire ~23 fois/s et rend la collision quasi certaine).
+        // lastSeen is timestamped by the ESP-NOW callback (Wi-Fi task) with a
+        // fresh millis(): it can be LATER than now. Without clamping, the
+        // negative age overflows to ~4e9 (same bug family as the OTA
+        // timeouts, see ota_master.cpp) — and that number doesn't fit in the
+        // console's GetInt32() (a HandleDroids crash was observed mid-OTA
+        // transfer, where the callback fires ~23 times/s, making the
+        // collision nearly certain).
         const uint32_t last = e.lastSeen;
-        o["age"] = ((int32_t)(now - last) > 0) ? (now - last) : 0; // ms depuis la dernière vue
+        o["age"] = ((int32_t)(now - last) > 0) ? (now - last) : 0; // ms since last seen
         o["role"] = "slave";
         o["servos"] = e.servos;
         o["autoAnim"] = e.autoAnim;
@@ -114,8 +115,8 @@ void SerialConsole::pushState() {
     uint8_t f, a, s;
     Config.animParams(f, a, s);
     JsonDocument doc;
-    // "config" (contrat §3) : la console peuple ses curseurs volume/freq/amp/
-    // speed a la connexion. (Anciennement evt:"state", jamais interprete.)
+    // "config" (contract §3): the console populates its volume/freq/amp/
+    // speed sliders on connection. (Formerly evt:"state", never interpreted.)
     doc["evt"] = "config";
     doc["volume"] = Config.volume();
     doc["freq"] = f;
@@ -324,10 +325,10 @@ void SerialConsole::update() {
         const char c = (char)Serial.read();
         if (c == '\n' || c == '\r') {
             if (_overflow) {
-                // Ligne trop longue : jetée en entier, mais signalée (avant,
-                // l'échec était silencieux et la fin de ligne parasitait la
-                // ligne suivante).
-                pushErr("ligne trop longue (max %u), commande ignoree", SERIAL_LINE_MAX - 1);
+                // Line too long: discarded entirely, but reported (before,
+                // the failure was silent and the line ending would corrupt
+                // the following line).
+                pushErr("line too long (max %u), command ignored", SERIAL_LINE_MAX - 1);
                 _overflow = false;
                 _len = 0;
             } else if (_len > 0) {
@@ -336,7 +337,7 @@ void SerialConsole::update() {
                 _len = 0;
             }
         } else if (_overflow) {
-            // on avale le reste de la ligne fautive
+            // swallows the rest of the offending line
         } else if (_len < sizeof(_buf) - 1) {
             _buf[_len++] = c;
         } else {
@@ -344,33 +345,33 @@ void SerialConsole::update() {
         }
     }
 
-    // Perte de session Web Serial si plus de keepalive.
+    // Web Serial session lost if no more keepalive.
     if (_clientReady && (millis() - _lastHelloMs > CLIENT_TIMEOUT_MS)) {
         _clientReady = false;
     }
 }
 
 // --- setMulti ----------------------------------------------------------------
-// Périmètre : les ops d'état persisté utilisées par la restauration de
-// sauvegarde. L'atomicité est obtenue par validation complète AVANT toute
-// application : un lot refusé ne modifie rien. (Un échec d'écriture NVS en
-// cours d'application — rarissime — est signalé par failedAt sans rollback.)
+// Scope: the persisted-state ops used by backup restore. Atomicity is
+// achieved by full validation BEFORE any application: a rejected batch
+// changes nothing. (An NVS write failure mid-application — extremely rare —
+// is reported via failedAt with no rollback.)
 
 bool SerialConsole::validateOp(JsonObjectConst op, char* why, size_t whyLen) {
     const char* c = op["cmd"] | "";
     if (!strcmp(c, "name") || !strcmp(c, "calib") || !strcmp(c, "volume") ||
         !strcmp(c, "config")) {
-        return true;   // champs bornés par nature (uint8/clamp)
+        return true;   // fields bounded by nature (uint8/clamp)
     }
     if (!strcmp(c, "seqSave")) {
         const uint8_t slot = op["slot"] | 0;
         const uint8_t track = op["track"] | 0;
         if (slot >= SequenceStore::SLOT_MAX) {
-            snprintf(why, whyLen, "seqSave: slot invalide %u", slot);
+            snprintf(why, whyLen, "seqSave: invalid slot %u", slot);
             return false;
         }
         if (track > AUDIO_TRACK_COUNT) {
-            snprintf(why, whyLen, "seqSave: piste invalide %u", track);
+            snprintf(why, whyLen, "seqSave: invalid track %u", track);
             return false;
         }
         return true;
@@ -378,12 +379,12 @@ bool SerialConsole::validateOp(JsonObjectConst op, char* why, size_t whyLen) {
     if (!strcmp(c, "seqDelete")) {
         const uint8_t slot = op["slot"] | 0;
         if (slot >= SequenceStore::SLOT_MAX) {
-            snprintf(why, whyLen, "seqDelete: slot invalide %u", slot);
+            snprintf(why, whyLen, "seqDelete: invalid slot %u", slot);
             return false;
         }
         return true;
     }
-    snprintf(why, whyLen, "op non supportee: %s", c[0] ? c : "(sans cmd)");
+    snprintf(why, whyLen, "unsupported op: %s", c[0] ? c : "(no cmd)");
     return false;
 }
 
@@ -448,13 +449,13 @@ bool SerialConsole::applyOp(JsonObjectConst op) {
     if (!strcmp(c, "seqDelete")) {
         return _seqDeleteCb ? _seqDeleteCb(op["slot"] | 0) : false;
     }
-    return false;   // impossible après validateOp
+    return false;   // impossible after validateOp
 }
 
 void SerialConsole::handleLine(const char* line) {
     JsonDocument doc;
     if (deserializeJson(doc, line)) {
-        pushErr("JSON invalide");
+        pushErr("invalid JSON");
         return;
     }
 
@@ -464,8 +465,8 @@ void SerialConsole::handleLine(const char* line) {
         _clientReady = true;
         _lastHelloMs = millis();
 
-        // Handshake enrichi : version + capacités, pour que la console
-        // s'adapte au firmware connecté (et propose les mises à jour GitHub).
+        // Enriched handshake: version + capabilities, so the console can
+        // adapt to the connected firmware (and offer GitHub updates).
         JsonDocument ack;
         ack["evt"] = "hello";
         ack["ok"] = true;
@@ -513,9 +514,9 @@ void SerialConsole::handleLine(const char* line) {
         pushMeshTopology();
 
     } else if (!strcmp(cmd, "getAll")) {
-        // Dump complet : rafale d'évènements existants terminée par allDone.
-        // Remplace la quinzaine de requêtes interceptées (getCalib/seqLoad par
-        // cible) que la console faisait pour la sauvegarde/restauration.
+        // Full dump: burst of existing events ending with allDone. Replaces
+        // the dozen or so intercepted per-target requests (getCalib/seqLoad)
+        // the console used to make for backup/restore.
         pushState();
         pushDroids();
         pushCalibData(Mesh.myId());
@@ -570,18 +571,18 @@ void SerialConsole::handleLine(const char* line) {
         const uint16_t id = doc["id"] | 0;
         const char* name = doc["name"] | "";
         Config.setName(id, name);
-        log("nom %04X = %s", id, name);
+        log("name %04X = %s", id, name);
         pushDroids();
         syncDirty();
 
     } else if (!strcmp(cmd, "playTrack")) {
         const uint8_t track = doc["track"] | 1;
         if (track < 1 || track > AUDIO_TRACK_COUNT) {
-            pushErr("piste invalide: %u (1-%u)", track, AUDIO_TRACK_COUNT);
+            pushErr("invalid track: %u (1-%u)", track, AUDIO_TRACK_COUNT);
             return;
         }
         if (_trackCb) _trackCb(track);
-        log("piste %u", track);
+        log("track %u", track);
 
     } else if (!strcmp(cmd, "servo")) {
         const uint16_t target = doc["target"] | (uint16_t)MESH_TARGET_ALL;
@@ -599,14 +600,14 @@ void SerialConsole::handleLine(const char* line) {
         const uint16_t target = doc["target"] | 0;
         Droids.setAdopted(target, true);
         Config.setAdopted(target, true);
-        log("droïde %04X adopté", target);
+        log("droid %04X adopted", target);
         pushDroids();
 
     } else if (!strcmp(cmd, "forget")) {
         const uint16_t target = doc["target"] | 0;
         Config.setAdopted(target, false);
-        if (Droids.forget(target)) log("droïde %04X oublié/ignoré", target);
-        else pushErr("droïde inconnu: %04X", target);
+        if (Droids.forget(target)) log("droid %04X forgotten/ignored", target);
+        else pushErr("unknown droid: %04X", target);
         pushDroids();
 
     } else if (!strcmp(cmd, "otaStart")) {
@@ -614,12 +615,12 @@ void SerialConsole::handleLine(const char* line) {
         const uint32_t size = doc["size"] | 0;
         const char* md5 = doc["md5"] | "";
         if (strlen(md5) != 32) {
-            pushOtaError(target, 0, "md5 invalide");
+            pushOtaError(target, 0, "invalid md5");
         } else if (!_otaStartCb || !_otaStartCb(target, size, md5)) {
-            pushOtaError(target, 0, "occupé ou cible invalide");
+            pushOtaError(target, 0, "busy or invalid target");
         }
-        // Succès : rien à pousser ici — evt:"otaReady" viendra une fois l'accusé
-        // mesh du START reçu (voir OtaMaster::pollEvent, câblé dans main.cpp).
+        // Success: nothing to push here — evt:"otaReady" will come once the
+        // mesh ack for START is received (see OtaMaster::pollEvent, wired in main.cpp).
 
     } else if (!strcmp(cmd, "otaChunk")) {
         const uint16_t seq = doc["seq"] | 0;
@@ -627,7 +628,7 @@ void SerialConsole::handleLine(const char* line) {
         uint8_t buf[OTA_CHUNK_DATA_MAX];
         size_t outLen = 0;
         if (mbedtls_base64_decode(buf, sizeof(buf), &outLen, (const uint8_t*)b64, strlen(b64)) != 0) {
-            pushErr("chunk %u: base64 invalide", seq);
+            pushErr("chunk %u: invalid base64", seq);
         } else if (_otaChunkCb) {
             _otaChunkCb(seq, buf, (uint8_t)outLen);
         }
@@ -641,7 +642,7 @@ void SerialConsole::handleLine(const char* line) {
     } else if (!strcmp(cmd, "seqSave")) {
         const uint8_t slot = doc["slot"] | 0;
         if (slot >= SequenceStore::SLOT_MAX) {
-            pushErr("slot invalide: %u (0-%u)", slot, SequenceStore::SLOT_MAX - 1);
+            pushErr("invalid slot: %u (0-%u)", slot, SequenceStore::SLOT_MAX - 1);
             return;
         }
         StoredSequence seq{};
@@ -649,9 +650,9 @@ void SerialConsole::handleLine(const char* line) {
         strncpy(seq.name, name, sizeof(seq.name) - 1);
         seq.name[sizeof(seq.name) - 1] = '\0';
         seq.loop = (doc["loop"] | false) ? 1 : 0;
-        const uint8_t track = doc["track"] | 0;   // absent/null = 0 = aucune
+        const uint8_t track = doc["track"] | 0;   // absent/null = 0 = none
         if (track > AUDIO_TRACK_COUNT) {
-            pushErr("piste invalide: %u (1-%u, ou null)", track, AUDIO_TRACK_COUNT);
+            pushErr("invalid track: %u (1-%u, or null)", track, AUDIO_TRACK_COUNT);
             return;
         }
         seq.track = track;
@@ -682,13 +683,13 @@ void SerialConsole::handleLine(const char* line) {
             pushSeqData(slot, seq);
             log("seq load slot=%u OK", slot);
         } else {
-            pushErr("seq load slot=%u: vide ou introuvable", slot);
+            pushErr("seq load slot=%u: empty or not found", slot);
         }
 
     } else if (!strcmp(cmd, "seqDelete")) {
         const uint8_t slot = doc["slot"] | 0;
         if (slot >= SequenceStore::SLOT_MAX) {
-            pushErr("slot invalide: %u (0-%u)", slot, SequenceStore::SLOT_MAX - 1);
+            pushErr("invalid slot: %u (0-%u)", slot, SequenceStore::SLOT_MAX - 1);
             return;
         }
         bool ok = false;
@@ -699,13 +700,13 @@ void SerialConsole::handleLine(const char* line) {
 
     } else if (!strcmp(cmd, "seqRun")) {
         const uint8_t slot = doc["slot"] | 0;
-        const uint8_t from = doc["from"] | 0;   // étape de départ (0 = début)
+        const uint8_t from = doc["from"] | 0;   // starting step (0 = beginning)
         if (slot >= SequenceStore::SLOT_MAX) {
-            pushErr("slot invalide: %u (0-%u)", slot, SequenceStore::SLOT_MAX - 1);
+            pushErr("invalid slot: %u (0-%u)", slot, SequenceStore::SLOT_MAX - 1);
             return;
         }
         if (from >= StoredSequence::STEP_MAX) {
-            pushErr("etape de depart invalide: %u (0-%u)", from, StoredSequence::STEP_MAX - 1);
+            pushErr("invalid starting step: %u (0-%u)", from, StoredSequence::STEP_MAX - 1);
             return;
         }
         if (_seqRunCb) _seqRunCb(slot, from);
@@ -733,8 +734,8 @@ void SerialConsole::handleLine(const char* line) {
         const uint8_t tiltCenter = doc["tiltCenter"] | SERVO_TILT_CENTER;
         const uint8_t tiltMax    = doc["tiltMax"]    | SERVO_TILT_MAX;
 
-        // Cache central (comme les noms) : permet à getCalib de répondre sans
-        // dépendre d'un aller-retour mesh vers un esclave distant.
+        // Central cache (like the names): lets getCalib answer without
+        // depending on a mesh round-trip to a remote slave.
         const uint16_t cacheId = target == MESH_TARGET_ALL ? Mesh.myId() : target;
         Config.setCalib(cacheId, ServoCalib{panMin, panCenter, panMax, tiltMin, tiltCenter, tiltMax});
 
@@ -764,13 +765,13 @@ void SerialConsole::handleLine(const char* line) {
         if (ops.isNull()) {
             res["ok"] = false;
             res["failedAt"] = 0;
-            res["error"] = "ops manquant ou pas un tableau";
+            res["error"] = "ops missing or not an array";
             serializeJson(res, Serial);
             Serial.print('\n');
             return;
         }
 
-        // Passe 1 : validation complète — un lot refusé ne modifie rien.
+        // Pass 1: full validation — a rejected batch changes nothing.
         char why[96];
         uint16_t idx = 0;
         for (JsonObjectConst op : ops) {
@@ -785,7 +786,7 @@ void SerialConsole::handleLine(const char* line) {
             idx++;
         }
 
-        // Passe 2 : application.
+        // Pass 2: application.
         uint16_t applied = 0;
         bool ok = true;
         for (JsonObjectConst op : ops) {
@@ -796,7 +797,7 @@ void SerialConsole::handleLine(const char* line) {
         res["applied"] = applied;
         if (!ok) {
             res["failedAt"] = applied;
-            res["error"] = "echec d'application (ecriture NVS?)";
+            res["error"] = "application failed (NVS write?)";
         }
         serializeJson(res, Serial);
         Serial.print('\n');
@@ -806,23 +807,23 @@ void SerialConsole::handleLine(const char* line) {
         syncDirty();
 
     } else if (!strcmp(cmd, "commit")) {
-        // Engage la surcouche RAM (volume/params/noms) en NVS.
+        // Commits the RAM overlay (volume/params/names) to NVS.
         Config.commitPending();
-        log("configuration engagee (NVS)");
+        log("configuration committed (NVS)");
         syncDirty();
 
     } else if (!strcmp(cmd, "revert")) {
-        // Jette les modifications non engagées et ré-applique l'état persisté.
+        // Discards uncommitted changes and re-applies the persisted state.
         Config.revertPending();
         if (_volCb) _volCb(Config.volume());
-        log("modifications annulees");
+        log("changes reverted");
         pushState();
         pushDroids();
         syncDirty();
 
     } else if (cmd[0] == '\0') {
-        pushErr("commande sans champ cmd");
+        pushErr("command missing cmd field");
     } else {
-        pushErr("commande inconnue: %s", cmd);
+        pushErr("unknown command: %s", cmd);
     }
 }

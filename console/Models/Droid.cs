@@ -26,23 +26,44 @@ public partial class Droid : ObservableObject
     public string IdHex => Id.ToString("X4");
     public string DisplayLabel => $"{Name} ({IdHex})";
 
-    // Droïde jamais adopté : en attente de décision (Adopter/Ignorer) côté UI.
+    // Never-adopted droid: waiting on a UI decision (Adopt/Ignore).
     public bool IsPending => !IsMaster && !Adopted;
 
-    // Droïde adopté (esclave) : peut être retiré manuellement du registre à tout moment.
+    // Adopted droid (slave): can be manually removed from the registry at any time.
     public bool CanForget => !IsMaster && Adopted;
 
-    // Idem, mais masqué pendant qu'une mise à jour OTA est en cours sur ce droïde
-    // (remplacé par la barre de progression).
-    public bool CanFlashOta => CanForget && !OtaInProgress;
-
-    // null = pas encore verifie (ou version pas encore rapportee) -> couleur neutre.
+    // null = not checked yet (or version not reported yet) -> neutral color.
     public bool? FwUpToDate => string.IsNullOrEmpty(LatestFwVersion) || string.IsNullOrEmpty(FwVersion)
         ? null
         : FwVersion == LatestFwVersion;
 
-    partial void OnFwVersionChanged(string value) => OnPropertyChanged(nameof(FwUpToDate));
-    partial void OnLatestFwVersionChanged(string? value) => OnPropertyChanged(nameof(FwUpToDate));
+    // USB flash entry point (master only) : hidden once the master's own firmware is
+    // confirmed up to date, since the header's "Firmware…" button remains available
+    // as the manual/dev fallback regardless.
+    public bool CanFlashUsb => IsMaster && FwUpToDate != true;
+
+    // Also hidden while an OTA is already running (replaced by the progress bar) or
+    // once the droid is confirmed up to date.
+    public bool CanFlashOta => CanForget && !OtaInProgress && FwUpToDate != true;
+
+    // Fills the flash-actions column with a status badge once both flash entry points
+    // above are hidden because the droid is confirmed up to date.
+    public bool ShowFwUpToDateBadge => !IsPending && !OtaInProgress && FwUpToDate == true;
+
+    partial void OnFwVersionChanged(string value)
+    {
+        OnPropertyChanged(nameof(FwUpToDate));
+        OnPropertyChanged(nameof(CanFlashUsb));
+        OnPropertyChanged(nameof(CanFlashOta));
+        OnPropertyChanged(nameof(ShowFwUpToDateBadge));
+    }
+    partial void OnLatestFwVersionChanged(string? value)
+    {
+        OnPropertyChanged(nameof(FwUpToDate));
+        OnPropertyChanged(nameof(CanFlashUsb));
+        OnPropertyChanged(nameof(CanFlashOta));
+        OnPropertyChanged(nameof(ShowFwUpToDateBadge));
+    }
 
     partial void OnRssiChanged(int value) => OnPropertyChanged(nameof(RssiLabel));
     partial void OnPortNameChanged(string? value) => OnPropertyChanged(nameof(RssiLabel));
@@ -52,7 +73,9 @@ public partial class Droid : ObservableObject
         OnPropertyChanged(nameof(RssiLabel));
         OnPropertyChanged(nameof(IsPending));
         OnPropertyChanged(nameof(CanForget));
+        OnPropertyChanged(nameof(CanFlashUsb));
         OnPropertyChanged(nameof(CanFlashOta));
+        OnPropertyChanged(nameof(ShowFwUpToDateBadge));
     }
     partial void OnNameChanged(string value) => OnPropertyChanged(nameof(DisplayLabel));
     partial void OnAdoptedChanged(bool value)
@@ -60,6 +83,11 @@ public partial class Droid : ObservableObject
         OnPropertyChanged(nameof(IsPending));
         OnPropertyChanged(nameof(CanForget));
         OnPropertyChanged(nameof(CanFlashOta));
+        OnPropertyChanged(nameof(ShowFwUpToDateBadge));
     }
-    partial void OnOtaInProgressChanged(bool value) => OnPropertyChanged(nameof(CanFlashOta));
+    partial void OnOtaInProgressChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanFlashOta));
+        OnPropertyChanged(nameof(ShowFwUpToDateBadge));
+    }
 }

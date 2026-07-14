@@ -13,7 +13,7 @@ public class SequenceLibraryItem
     public DateTime SavedAt { get; set; }
 }
 
-/// <summary>Forme plate (POCO) pour serialisation JSON de SequenceStep.</summary>
+/// <summary>Flat form (POCO) for JSON serialization of SequenceStep.</summary>
 public class SequenceStepDto
 {
     public int AnimId { get; set; }

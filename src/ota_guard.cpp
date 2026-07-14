@@ -21,8 +21,9 @@ bool OtaGuard::earlyCheck() {
 
     const uint8_t attempts = p.getUChar("attempts", 0) + 1;
     if (attempts > OTA_MAX_BOOT_ATTEMPTS) {
-        // Trop de boots ratés depuis l'OTA : on revient sur l'autre partition
-        // (esp_ota_get_next_update_partition alterne forcément app0/app1).
+        // Too many failed boots since the OTA: switch back to the other
+        // partition (esp_ota_get_next_update_partition necessarily
+        // alternates app0/app1).
         p.remove("pending");
         p.remove("attempts");
         p.end();
@@ -31,7 +32,7 @@ bool OtaGuard::earlyCheck() {
             esp_ota_set_boot_partition(prev);
         }
         esp_restart();
-        return true; // jamais atteint (esp_restart ne revient pas)
+        return true; // never reached (esp_restart doesn't return)
     }
 
     p.putUChar("attempts", attempts);

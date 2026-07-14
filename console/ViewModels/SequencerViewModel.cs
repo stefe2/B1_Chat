@@ -70,7 +70,7 @@ public partial class SequencerViewModel : ObservableObject
     private void PushHistory()
     {
         _history.Push(Snapshot());
-        while (_history.Count > HistoryMax) { /* Stack a pas de RemoveAt : on tolere > 50 sur ce portage minimal */ break; }
+        while (_history.Count > HistoryMax) { /* Stack has no RemoveAt: > 50 is tolerated on this minimal port */ break; }
         _future.Clear();
         UpdateUndoButtons();
     }
@@ -104,7 +104,7 @@ public partial class SequencerViewModel : ObservableObject
         UpdateUndoButtons();
     }
 
-    // --- Edition ----------------------------------------------------------------
+    // --- Editing ----------------------------------------------------------------
 
     [RelayCommand]
     private void AddStep()
@@ -167,7 +167,7 @@ public partial class SequencerViewModel : ObservableObject
         Dirty = false;
     }
 
-    // --- Firmware : 8 slots NVS --------------------------------------------------
+    // --- Firmware: 8 NVS slots --------------------------------------------------
 
     [RelayCommand]
     private void LoadSlot(SequenceSlotMeta? meta)
@@ -199,7 +199,7 @@ public partial class SequencerViewModel : ObservableObject
     private void SaveToSlot()
     {
         var slot = CurrentSlot ?? FindFreeSlot();
-        if (slot < 0) { MessageBox.Show("Les 8 slots sont occupés.", "Séquenceur", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
+        if (slot < 0) { MessageBox.Show("All 8 slots are occupied.", "Sequencer", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
         _protocol.SeqSave(slot, Name, Loop, AudioTrack, Steps);
         CurrentSlot = slot;
         Dirty = false;
@@ -225,7 +225,7 @@ public partial class SequencerViewModel : ObservableObject
     [RelayCommand] private void Pause() => _protocol.SeqPause();
     [RelayCommand] private void Resume() => _protocol.SeqResume();
 
-    // --- Bibliotheque locale ------------------------------------------------------
+    // --- Local library ------------------------------------------------------
 
     [RelayCommand]
     private void SaveToLibrary()
@@ -268,7 +268,7 @@ public partial class SequencerViewModel : ObservableObject
     {
         if (item == null) return;
         var slot = Catalog.FirstOrDefault(c => c.Name == item.Name)?.Slot ?? FindFreeSlot();
-        if (slot < 0) { MessageBox.Show("Les 8 slots sont occupés.", "Séquenceur", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
+        if (slot < 0) { MessageBox.Show("All 8 slots are occupied.", "Sequencer", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
         var steps = item.Steps.Select(s => new SequenceStep { AnimId = s.AnimId, Target = s.Target, DelayMs = s.DelayMs });
         _protocol.SeqSave(slot, item.Name, item.Loop, item.AudioTrack, steps);
     }
@@ -277,7 +277,7 @@ public partial class SequencerViewModel : ObservableObject
     private void PullFromMaster(SequenceSlotMeta? meta)
     {
         if (meta == null) return;
-        // Charge le slot dans l'editeur (OnSeqData), puis sauve immediatement en bibliotheque.
+        // Loads the slot into the editor (OnSeqData), then immediately saves it to the library.
         void Once(JsonElement root)
         {
             _protocol.SeqDataReceived -= Once;
@@ -292,7 +292,7 @@ public partial class SequencerViewModel : ObservableObject
     [RelayCommand]
     private void Export()
     {
-        var dlg = new SaveFileDialog { FileName = $"{(string.IsNullOrEmpty(Name) ? "sequence" : Name)}.b1seq.json", Filter = "Séquence B1 (*.b1seq.json)|*.b1seq.json" };
+        var dlg = new SaveFileDialog { FileName = $"{(string.IsNullOrEmpty(Name) ? "sequence" : Name)}.b1seq.json", Filter = "B1 Sequence (*.b1seq.json)|*.b1seq.json" };
         if (dlg.ShowDialog() != true) return;
         var obj = new JsonObject
         {
@@ -305,7 +305,7 @@ public partial class SequencerViewModel : ObservableObject
     [RelayCommand]
     private void Import()
     {
-        var dlg = new OpenFileDialog { Filter = "Séquence B1 (*.b1seq.json)|*.b1seq.json|JSON (*.json)|*.json" };
+        var dlg = new OpenFileDialog { Filter = "B1 Sequence (*.b1seq.json)|*.b1seq.json|JSON (*.json)|*.json" };
         if (dlg.ShowDialog() != true) return;
         try
         {
@@ -325,11 +325,11 @@ public partial class SequencerViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            MessageBox.Show("Import impossible : " + ex.Message, "Séquenceur", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show("Import failed: " + ex.Message, "Sequencer", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
-    // --- Repetition (client-side, ne persiste rien) --------------------------------
+    // --- Rehearsal (client-side, persists nothing) --------------------------------
 
     [RelayCommand]
     private void ToggleRehearsal()

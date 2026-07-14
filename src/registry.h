@@ -1,22 +1,22 @@
 #pragma once
 
 // ============================================================================
-//  Registry — inventaire vivant des droïdes (maître)
+//  Registry — live droid inventory (master)
 //
-//  Alimenté par les messages reçus (heartbeat, anim, ...). Suit pour chaque
-//  droïde : srcId, RSSI, date de dernière vue. Permet de détecter les
-//  nouvelles connexions et les droïdes hors ligne (timeout).
-//  Voir project.md (§10).
+//  Fed by incoming messages (heartbeat, anim, ...). Tracks for each droid:
+//  srcId, RSSI, last-seen timestamp. Lets us detect new connections and
+//  offline droids (timeout).
+//  See project.md (§10).
 //
-//  Concurrence : les setters « réception » (seen/setServos/setAutoAnim/
-//  setFwVersion) sont appelés depuis le callback ESP-NOW (tâche Wi-Fi interne)
-//  alors que tout le reste (lectures de pushDroids/OtaMaster/loop, adopt/
-//  forget) tourne sur la tâche loop(). Chaque méthode publique est donc
-//  atomique (spinlock portMUX) et at() retourne une COPIE de l'entrée plutôt
-//  qu'une référence sur un tableau mutable. Les retraits (forget) n'ayant
-//  lieu que côté loop(), une itération count()/at() depuis loop() ne peut pas
-//  voir d'entrée décalée sous ses pieds — au pire elle manque un droïde
-//  fraîchement inséré par la tâche Wi-Fi, sans conséquence.
+//  Concurrency: the "receive" setters (seen/setServos/setAutoAnim/
+//  setFwVersion) are called from the ESP-NOW callback (internal Wi-Fi task)
+//  while everything else (pushDroids/OtaMaster/loop reads, adopt/forget)
+//  runs on the loop() task. Every public method is therefore atomic
+//  (portMUX spinlock) and at() returns a COPY of the entry rather than a
+//  reference into a mutable array. Since removals (forget) only happen on
+//  the loop() side, a count()/at() iteration from loop() can't see an entry
+//  shift under it — at worst it misses a droid freshly inserted by the
+//  Wi-Fi task, with no consequence.
 // ============================================================================
 
 #include <Arduino.h>
@@ -29,42 +29,42 @@ public:
         uint16_t id;
         int16_t  rssi;
         uint32_t lastSeen;
-        bool     servos;    // état des servos rapporté par le droïde
-        bool     autoAnim;  // anims spontanées au repos actives, rapporté par le droïde
-        bool     adopted;   // false = en attente d'adoption (voir config_store)
-        uint8_t  fwMajor = 0, fwMinor = 0, fwPatch = 0;  // version rapportée par heartbeat
+        bool     servos;    // servo state reported by the droid
+        bool     autoAnim;  // spontaneous idle anims active, reported by the droid
+        bool     adopted;   // false = pending adoption (see config_store)
+        uint8_t  fwMajor = 0, fwMinor = 0, fwPatch = 0;  // version reported via heartbeat
     };
 
-    // Enregistre/actualise un droïde. Retourne true si nouvellement ajouté.
+    // Registers/refreshes a droid. Returns true if newly added.
     bool seen(uint16_t id, int rssi, uint32_t now);
 
-    // Met à jour l'état des servos d'un droïde (via heartbeat).
+    // Updates a droid's servo state (via heartbeat).
     void setServos(uint16_t id, bool on);
 
-    // Met à jour l'état des anims auto d'un droïde (via heartbeat).
+    // Updates a droid's auto-anim state (via heartbeat).
     void setAutoAnim(uint16_t id, bool on);
 
-    // Met à jour la version firmware rapportée par un droïde (via heartbeat).
+    // Updates the firmware version reported by a droid (via heartbeat).
     void setFwVersion(uint16_t id, uint8_t major, uint8_t minor, uint8_t patch);
 
-    // Marque un droïde comme adopté/non adopté (statut RAM, cf. config_store pour la NVS).
+    // Marks a droid as adopted/not adopted (RAM status, see config_store for NVS).
     void setAdopted(uint16_t id, bool v);
 
-    // Retire un droïde du registre (Oublier / adoption refusée). Retourne
-    // true s'il a été trouvé et retiré.
+    // Removes a droid from the registry (Forget / adoption declined). Returns
+    // true if it was found and removed.
     bool forget(uint16_t id);
 
     uint8_t count() const;
 
-    // Copie de l'entrée i (jamais une référence : le tableau sous-jacent est
-    // muté par la tâche Wi-Fi).
+    // Copy of entry i (never a reference: the underlying array is mutated
+    // by the Wi-Fi task).
     Entry at(uint8_t i) const;
 
-    // Droïde considéré en ligne s'il a été vu depuis moins de `timeoutMs`.
-    // Différence SIGNÉE : lastSeen (horodaté par la tâche Wi-Fi) peut être
-    // postérieur à `now` capturé en début de loop() — en non signé, le droïde
-    // clignoterait « hors ligne » (même famille de bug que l'age de
-    // pushDroids, voir CLAUDE.md pièges).
+    // A droid is considered online if it was seen less than `timeoutMs` ago.
+    // SIGNED difference: lastSeen (timestamped by the Wi-Fi task) can be
+    // later than `now` captured at the start of loop() — in unsigned math,
+    // the droid would flicker "offline" (same bug family as pushDroids's
+    // age, see CLAUDE.md pitfalls).
     bool online(uint8_t i, uint32_t now, uint32_t timeoutMs) const;
 
 private:

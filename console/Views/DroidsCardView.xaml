@@ -16,11 +16,11 @@
                         <Rectangle Canvas.Left="9" Canvas.Top="9" Width="6" Height="6" RadiusX="1.3" RadiusY="1.3" Stroke="{StaticResource AccentBrush}" StrokeThickness="1.4" />
                     </Canvas>
                 </Border>
-                <TextBlock Text="DROÏDES DÉTECTÉS" Style="{StaticResource CardTitleStyle}" FontSize="13" Margin="0" DockPanel.Dock="Left" VerticalAlignment="Center" />
-                <Button Content="Sauvegarder…" Style="{StaticResource MiniButtonStyle}" DockPanel.Dock="Left" Margin="12,0,0,0" VerticalAlignment="Center" Command="{Binding BackupCommand}" />
-                <Button Content="Restaurer…" Style="{StaticResource MiniButtonStyle}" DockPanel.Dock="Left" Margin="6,0,0,0" VerticalAlignment="Center" Command="{Binding RestoreCommand}" />
+                <TextBlock Text="DETECTED DROIDS" Style="{StaticResource CardTitleStyle}" FontSize="13" Margin="0" DockPanel.Dock="Left" VerticalAlignment="Center" />
+                <Button Content="Backup…" Style="{StaticResource MiniButtonStyle}" DockPanel.Dock="Left" Margin="12,0,0,0" VerticalAlignment="Center" Command="{Binding BackupCommand}" />
+                <Button Content="Restore…" Style="{StaticResource MiniButtonStyle}" DockPanel.Dock="Left" Margin="6,0,0,0" VerticalAlignment="Center" Command="{Binding RestoreCommand}" />
                 <TextBlock DockPanel.Dock="Right" VerticalAlignment="Center" Foreground="{StaticResource Muted2Brush}" FontSize="10.5">
-                    <Run Text="{Binding Droids.Count, Mode=OneWay}" /><Run Text=" en réseau" />
+                    <Run Text="{Binding Droids.Count, Mode=OneWay}" /><Run Text=" on the network" />
                 </TextBlock>
             </DockPanel>
 
@@ -42,15 +42,15 @@
                             <ColumnDefinition Width="150" />
                             <ColumnDefinition Width="44" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="NOM" Style="{StaticResource TableHeaderTextStyle}" />
-                        <TextBlock Grid.Column="1" Text="FW" Style="{StaticResource TableHeaderTextStyle}" />
+                        <TextBlock Grid.Column="0" Text="NAME" Style="{StaticResource TableHeaderTextStyle}" />
+                        <TextBlock Grid.Column="1" Text="VERSION" Style="{StaticResource TableHeaderTextStyle}" />
                         <TextBlock Grid.Column="2" Text="ID" Style="{StaticResource TableHeaderTextStyle}" />
                         <TextBlock Grid.Column="3" Text="RSSI" Style="{StaticResource TableHeaderTextStyle}" />
-                        <TextBlock Grid.Column="4" Text="ÉTAT" Style="{StaticResource TableHeaderTextStyle}" Margin="9,0,0,0" />
-                        <TextBlock Grid.Column="5" Text="RÔLE" Style="{StaticResource TableHeaderTextStyle}" Margin="9,0,0,0" />
+                        <TextBlock Grid.Column="4" Text="STATE" Style="{StaticResource TableHeaderTextStyle}" Margin="9,0,0,0" />
+                        <TextBlock Grid.Column="5" Text="ROLE" Style="{StaticResource TableHeaderTextStyle}" Margin="9,0,0,0" />
                         <TextBlock Grid.Column="6" Text="SERVOS" Style="{StaticResource TableHeaderTextStyle}" TextAlignment="Center" />
-                        <TextBlock Grid.Column="7" Text="ANIMS AUTO" Style="{StaticResource TableHeaderTextStyle}" TextAlignment="Center" />
-                        <TextBlock Grid.Column="8" Text="FIRMWARE" Style="{StaticResource TableHeaderTextStyle}" TextAlignment="Center" />
+                        <TextBlock Grid.Column="7" Text="AUTO ANIMS" Style="{StaticResource TableHeaderTextStyle}" TextAlignment="Center" />
+                        <TextBlock Grid.Column="8" Text="UPDATE" Style="{StaticResource TableHeaderTextStyle}" TextAlignment="Center" />
                     </Grid>
                     <Border BorderBrush="#5C000000" BorderThickness="0,0,0,1" Margin="0,0,0,2" />
 
@@ -91,18 +91,18 @@
                                                    FontFamily="{StaticResource MonoFont}" FontSize="11" VerticalAlignment="Center" />
 
                                         <Border Grid.Column="4" Style="{Binding Online, Converter={StaticResource BoolToStyleConv}, ConverterParameter='HaloBadgeOkStyle|HaloBadgeBadStyle'}" VerticalAlignment="Center" HorizontalAlignment="Left" MinWidth="66">
-                                            <TextBlock Text="{Binding Online, Converter={StaticResource BoolToTextConv}, ConverterParameter='en ligne|perdu'}" FontSize="11" Foreground="{StaticResource TextStrongBrush}" TextAlignment="Center" />
+                                            <TextBlock Text="{Binding Online, Converter={StaticResource BoolToTextConv}, ConverterParameter='online|lost'}" FontSize="11" Foreground="{StaticResource TextStrongBrush}" TextAlignment="Center" />
                                         </Border>
 
                                         <Border Grid.Column="5" Style="{Binding IsMaster, Converter={StaticResource BoolToStyleConv}, ConverterParameter='HaloBadgeOkStyle|HaloBadgeWarnStyle'}"
                                                 VerticalAlignment="Center" HorizontalAlignment="Left" MinWidth="66"
                                                 Visibility="{Binding IsPending, Converter={StaticResource BoolToVisConv}, ConverterParameter=Invert}">
-                                            <TextBlock Text="{Binding IsMaster, Converter={StaticResource BoolToTextConv}, ConverterParameter='maître|esclave'}"
+                                            <TextBlock Text="{Binding IsMaster, Converter={StaticResource BoolToTextConv}, ConverterParameter='master|slave'}"
                                                        FontSize="11" Foreground="{StaticResource TextStrongBrush}" TextAlignment="Center" />
                                         </Border>
                                         <Border Grid.Column="5" Style="{StaticResource HaloBadgeWarnStyle}" VerticalAlignment="Center" HorizontalAlignment="Left" MinWidth="66"
                                                 Visibility="{Binding IsPending, Converter={StaticResource BoolToVisConv}}">
-                                            <TextBlock Text="nouveau" FontSize="11" Foreground="{StaticResource TextStrongBrush}" TextAlignment="Center" />
+                                            <TextBlock Text="new" FontSize="11" Foreground="{StaticResource TextStrongBrush}" TextAlignment="Center" />
                                         </Border>
 
                                         <ToggleButton Grid.Column="6" Style="{StaticResource OnOffSwitchStyle}"
@@ -117,7 +117,7 @@
                                                 CommandParameter="{Binding}"
                                                 HorizontalAlignment="Center"
                                                 Visibility="{Binding IsPending, Converter={StaticResource BoolToVisConv}}">
-                                            <TextBlock Text="Adopter" FontSize="11" />
+                                            <TextBlock Text="Adopt" FontSize="11" />
                                         </Button>
 
                                         <ToggleButton Grid.Column="7" Style="{StaticResource OnOffSwitchStyle}"
@@ -125,30 +125,30 @@
                                                       Command="{Binding DataContext.ToggleAutoAnimCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                       CommandParameter="{Binding}"
                                                       HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                      ToolTip="Anims auto"
+                                                      ToolTip="Auto anims"
                                                       Visibility="{Binding IsPending, Converter={StaticResource BoolToVisConv}, ConverterParameter=Invert}" />
                                         <Button Grid.Column="7" Style="{StaticResource MiniButtonStyle}"
                                                 Command="{Binding DataContext.ForgetDroidCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                 CommandParameter="{Binding}"
                                                 HorizontalAlignment="Center"
                                                 Visibility="{Binding IsPending, Converter={StaticResource BoolToVisConv}}">
-                                            <TextBlock Text="Ignorer" FontSize="11" />
+                                            <TextBlock Text="Ignore" FontSize="11" />
                                         </Button>
 
                                         <Button Grid.Column="8" Style="{StaticResource MiniButtonStyle}"
                                                 Command="{Binding DataContext.OpenFirmwareCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                ToolTip="Ouvrir la fenêtre de flash firmware (USB)"
+                                                ToolTip="Open the firmware flash window (USB)"
                                                 HorizontalAlignment="Center"
-                                                Visibility="{Binding IsMaster, Converter={StaticResource BoolToVisConv}}">
-                                            <TextBlock Text="Flasher" FontSize="11" />
+                                                Visibility="{Binding CanFlashUsb, Converter={StaticResource BoolToVisConv}}">
+                                            <TextBlock Text="Flash" FontSize="11" />
                                         </Button>
                                         <Button Grid.Column="8" Style="{StaticResource MiniButtonStyle}"
                                                 Command="{Binding DataContext.FlashOtaCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                 CommandParameter="{Binding}"
-                                                ToolTip="Mettre à jour le firmware par le mesh, sans USB"
+                                                ToolTip="Update firmware over the mesh, no USB required"
                                                 HorizontalAlignment="Center"
                                                 Visibility="{Binding CanFlashOta, Converter={StaticResource BoolToVisConv}}">
-                                            <TextBlock Text="Flasher (OTA)" FontSize="11" />
+                                            <TextBlock Text="Flash (OTA)" FontSize="11" />
                                         </Button>
                                         <StackPanel Grid.Column="8" HorizontalAlignment="Stretch" VerticalAlignment="Center"
                                                     Visibility="{Binding OtaInProgress, Converter={StaticResource BoolToVisConv}}">
@@ -156,11 +156,15 @@
                                             <TextBlock Text="{Binding OtaStatusText}" FontSize="9.5" Foreground="{StaticResource MutedBrush}"
                                                        Margin="0,2,0,0" TextTrimming="CharacterEllipsis" />
                                         </StackPanel>
+                                        <Border Grid.Column="8" Style="{StaticResource HaloBadgeOkStyle}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                Visibility="{Binding ShowFwUpToDateBadge, Converter={StaticResource BoolToVisConv}}">
+                                            <TextBlock Text="Up to date ✓" FontSize="10.5" Foreground="{StaticResource TextStrongBrush}" TextAlignment="Center" />
+                                        </Border>
 
                                         <Button Grid.Column="9" Style="{StaticResource MiniButtonStyle}"
                                                 Command="{Binding DataContext.ForgetDroidCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                 CommandParameter="{Binding}"
-                                                ToolTip="Retirer ce droïde de la liste — il redemandera à être adopté s'il reparle."
+                                                ToolTip="Remove this droid from the list — it will ask to be adopted again if it talks."
                                                 Visibility="{Binding CanForget, Converter={StaticResource BoolToVisConv}}"
                                                 HorizontalAlignment="Center">
                                             <TextBlock Text="✕" FontSize="12" Foreground="{StaticResource BadBrush}" FontWeight="Bold" />

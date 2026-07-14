@@ -3,30 +3,30 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Border Style="{StaticResource CardBorderStyle}">
         <StackPanel>
-            <TextBlock Text="FIRMWARE (MAÎTRE)" Style="{StaticResource CardTitleStyle}" />
+            <TextBlock Text="FIRMWARE (MASTER)" Style="{StaticResource CardTitleStyle}" />
 
-            <TextBlock Text="RÔLE À FLASHER" Style="{StaticResource FieldLabelStyle}" Margin="0,0,0,4" />
+            <TextBlock Text="ROLE TO FLASH" Style="{StaticResource FieldLabelStyle}" Margin="0,0,0,4" />
             <UniformGrid Rows="1" Columns="2" Margin="0,0,0,10">
-                <ToggleButton Content="Maître" Style="{StaticResource HaloToggleButtonStyle}"
+                <ToggleButton Content="Master" Style="{StaticResource HaloToggleButtonStyle}"
                               IsChecked="{Binding IsMasterRole, Mode=OneWay}" Command="{Binding SelectMasterRoleCommand}" Margin="0,0,4,0" />
-                <ToggleButton Content="Esclave" Style="{StaticResource HaloToggleButtonStyle}"
+                <ToggleButton Content="Slave" Style="{StaticResource HaloToggleButtonStyle}"
                               IsChecked="{Binding IsSlaveRole, Mode=OneWay}" Command="{Binding SelectSlaveRoleCommand}" Margin="4,0,0,0" />
             </UniformGrid>
 
-            <TextBlock Text="PORT DE FLASH" Style="{StaticResource FieldLabelStyle}" Margin="0,0,0,4" />
+            <TextBlock Text="FLASH PORT" Style="{StaticResource FieldLabelStyle}" Margin="0,0,0,4" />
             <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
                 <ComboBox Width="120" Style="{StaticResource DarkComboBoxStyle}" ItemsSource="{Binding AvailablePorts}"
                           SelectedItem="{Binding SelectedFlashPort}" Margin="0,0,6,0" />
                 <Button Content="Rescan" Style="{StaticResource MiniButtonStyle}" Command="{Binding RefreshFlashPortsCommand}"
-                        ToolTip="Indépendant du port connecté dans la fenêtre principale — choisis n'importe quelle carte ESP32 branchée, même jamais connectée." />
+                        ToolTip="Independent of the port connected in the main window — pick any plugged-in ESP32 board, even one never connected." />
             </StackPanel>
 
-            <TextBlock Text="SOURCE DU BINAIRE" Style="{StaticResource FieldLabelStyle}" Margin="0,0,0,4" />
+            <TextBlock Text="BINARY SOURCE" Style="{StaticResource FieldLabelStyle}" Margin="0,0,0,4" />
             <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                <Button Content="Depuis GitHub" Style="{StaticResource MiniButtonStyle}" Command="{Binding PrepareFromGithubCommand}" Margin="0,0,8,0"
-                        ToolTip="Télécharge et vérifie (SHA-256) la dernière version publiée pour le rôle sélectionné ci-dessus." />
-                <Button Content="Fichier local…" Style="{StaticResource MiniButtonStyle}" Command="{Binding PickBinCommand}"
-                        ToolTip="Choisir un .bin quelconque (ex. build local pio run) — non vérifié." />
+                <Button Content="From GitHub" Style="{StaticResource MiniButtonStyle}" Command="{Binding PrepareFromGithubCommand}" Margin="0,0,8,0"
+                        ToolTip="Downloads and verifies (SHA-256) the latest release published for the role selected above." />
+                <Button Content="Local file…" Style="{StaticResource MiniButtonStyle}" Command="{Binding PickBinCommand}"
+                        ToolTip="Pick any .bin (e.g. a local pio run build) — unverified." />
             </StackPanel>
 
             <Border Background="{StaticResource RecessBrush}" CornerRadius="4" Padding="8,6" Margin="0,0,0,8">
@@ -34,20 +34,20 @@
                            Foreground="{Binding BinVerified, Converter={StaticResource BoolToBrushConv}, ConverterParameter='OkBrush|MutedBrush'}" />
             </Border>
 
-            <Button Content="Options avancées" Style="{StaticResource MiniButtonStyle}" Command="{Binding ToggleAdvancedCommand}"
+            <Button Content="Advanced options" Style="{StaticResource MiniButtonStyle}" Command="{Binding ToggleAdvancedCommand}"
                     HorizontalAlignment="Left" Margin="0,0,0,6" />
             <StackPanel Orientation="Horizontal" Margin="0,0,0,8" Visibility="{Binding ShowAdvanced, Converter={StaticResource BoolToVisConv}}">
-                <TextBlock Text="Adresse " VerticalAlignment="Center" FontSize="11" />
+                <TextBlock Text="Address " VerticalAlignment="Center" FontSize="11" />
                 <TextBox Width="90" Style="{StaticResource RecessedTextBoxStyle}" Text="{Binding Address}" Margin="4,0,0,0" />
             </StackPanel>
 
             <Border Background="{StaticResource RecessBrush}" CornerRadius="4" Padding="10,8" Margin="0,0,0,10"
                     BorderBrush="{StaticResource WarnBrush}" BorderThickness="1">
                 <StackPanel>
-                    <CheckBox Content="Effacer complètement la puce avant de flasher" Style="{StaticResource DangerCheckBoxStyle}"
+                    <CheckBox Content="Fully erase the chip before flashing" Style="{StaticResource DangerCheckBoxStyle}"
                               IsChecked="{Binding EraseChipFirst}" />
                     <TextBlock Style="{StaticResource HintTextStyle}" TextWrapping="Wrap" Margin="24,4,0,0"
-                               Text="Efface aussi tous les réglages sauvegardés (NVS) — irréversible. Un flash normal n'y touche jamais." />
+                               Text="Also erases all saved settings (NVS) — irreversible. A normal flash never touches this." />
                 </StackPanel>
             </Border>
 
@@ -75,16 +75,16 @@
             </Border>
 
             <Separator Margin="0,0,0,8" />
-            <TextBlock Text="MISES À JOUR (GITHUB)" Style="{StaticResource SectionSubtitleStyle}" FontSize="13" />
+            <TextBlock Text="UPDATES (GITHUB)" Style="{StaticResource SectionSubtitleStyle}" FontSize="13" />
             <TextBlock Text="{Binding UpdateStatus}" Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="0,0,0,6" />
             <StackPanel Orientation="Horizontal" Margin="0,0,0,4" Visibility="{Binding HasAppUpdate, Converter={StaticResource BoolToVisConv}}">
-                <TextBlock Text="Application : " FontSize="11" />
-                <TextBlock Text="{Binding AppLatest, StringFormat='v{0} disponible'}" FontSize="11" Foreground="{StaticResource OkBrush}" Margin="0,0,8,0" />
-                <Button Content="Installer" Style="{StaticResource MiniButtonStyle}" Command="{Binding InstallAppUpdateCommand}" />
+                <TextBlock Text="App: " FontSize="11" />
+                <TextBlock Text="{Binding AppLatest, StringFormat='v{0} available'}" FontSize="11" Foreground="{StaticResource OkBrush}" Margin="0,0,8,0" />
+                <Button Content="Install" Style="{StaticResource MiniButtonStyle}" Command="{Binding InstallAppUpdateCommand}" />
             </StackPanel>
             <StackPanel Orientation="Horizontal" Visibility="{Binding HasFwUpdate, Converter={StaticResource BoolToVisConv}}">
-                <TextBlock Text="Firmware : " FontSize="11" />
-                <TextBlock Text="{Binding FwLatest, StringFormat='v{0} disponible (maître + esclave)'}" FontSize="11" Foreground="{StaticResource OkBrush}" />
+                <TextBlock Text="Firmware: " FontSize="11" />
+                <TextBlock Text="{Binding FwLatest, StringFormat='v{0} available (master + slave)'}" FontSize="11" Foreground="{StaticResource OkBrush}" />
             </StackPanel>
         </StackPanel>
     </Border>

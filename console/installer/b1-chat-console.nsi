@@ -1,13 +1,13 @@
-﻿; Installateur NSIS pour B1 Chat — Console de supervision
-; Compilé avec : makensis.exe b1-chat-console.nsi
-; Installation par utilisateur (pas de droits admin requis).
+﻿; NSIS installer for B1 Chat — Supervision Console
+; Compiled with: makensis.exe b1-chat-console.nsi
+; Per-user install (no admin rights required).
 
 Unicode true
 SetCompressor /SOLID lzma
 
 !define APPNAME "B1 Chat Console"
-!define APPDISPLAY "B1 Chat — Console de supervision"
-; Aligne sur <VersionPrefix> du csproj ; surchargeable : makensis /DAPPVERSION=x.y.z
+!define APPDISPLAY "B1 Chat — Supervision Console"
+; Matches the csproj's <VersionPrefix>; overridable: makensis /DAPPVERSION=x.y.z
 !ifndef APPVERSION
   !define APPVERSION "0.8.0"
 !endif
@@ -25,9 +25,11 @@ RequestExecutionLevel user
 !include "MUI2.nsh"
 !include "FileFunc.nsh"
 
+!define MUI_ICON "..\Assets\AppIcon.ico"
+!define MUI_UNICON "..\Assets\AppIcon.ico"
 !define MUI_ABORTWARNING
 !define MUI_FINISHPAGE_RUN "$INSTDIR\${EXENAME}"
-!define MUI_FINISHPAGE_RUN_TEXT "Lancer ${APPDISPLAY}"
+!define MUI_FINISHPAGE_RUN_TEXT "Launch ${APPDISPLAY}"
 
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_DIRECTORY
@@ -37,7 +39,6 @@ RequestExecutionLevel user
 !insertmacro MUI_UNPAGE_CONFIRM
 !insertmacro MUI_UNPAGE_INSTFILES
 
-!insertmacro MUI_LANGUAGE "French"
 !insertmacro MUI_LANGUAGE "English"
 
 Section "Application" SecApp
@@ -48,11 +49,11 @@ Section "Application" SecApp
 
   WriteUninstaller "$INSTDIR\uninstall.exe"
 
-  ; Raccourcis (menu Démarrer + bureau)
+  ; Shortcuts (Start menu + desktop)
   CreateShortCut "$SMPROGRAMS\${APPNAME}.lnk" "$INSTDIR\${EXENAME}"
   CreateShortCut "$DESKTOP\${APPNAME}.lnk" "$INSTDIR\${EXENAME}"
 
-  ; Entrée "Applications installées" (par utilisateur)
+  ; "Installed apps" entry (per-user)
   WriteRegStr HKCU "${UNINSTKEY}" "DisplayName" "${APPDISPLAY}"
   WriteRegStr HKCU "${UNINSTKEY}" "DisplayVersion" "${APPVERSION}"
   WriteRegStr HKCU "${UNINSTKEY}" "Publisher" "${PUBLISHER}"
@@ -65,19 +66,6 @@ Section "Application" SecApp
   ${GetSize} "$INSTDIR" "/S=0K" $0 $1 $2
   IntFmt $0 "0x%08X" $0
   WriteRegDWORD HKCU "${UNINSTKEY}" "EstimatedSize" "$0"
-
-  ; Vérification du runtime WebView2 (requis par l'application)
-  ClearErrors
-  ReadRegStr $0 HKLM "SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}" "pv"
-  IfErrors 0 webview2_ok
-  ClearErrors
-  ReadRegStr $0 HKCU "Software\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}" "pv"
-  IfErrors 0 webview2_ok
-  MessageBox MB_YESNO|MB_ICONEXCLAMATION \
-    "Le runtime Microsoft Edge WebView2 est requis mais semble absent de ce PC.$\r$\n$\r$\nVoulez-vous ouvrir la page de téléchargement de Microsoft ?" \
-    IDNO webview2_ok
-  ExecShell "open" "https://developer.microsoft.com/microsoft-edge/webview2/"
-webview2_ok:
 SectionEnd
 
 Section "Uninstall"

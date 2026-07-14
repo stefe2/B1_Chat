@@ -7,20 +7,21 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
-    <!-- Version sémantique : bumpée à la main à chaque phase de la roadmap (voir CLAUDE.md). -->
+    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
+    <!-- Semantic version: bumped by hand at each roadmap phase (see CLAUDE.md). -->
     <VersionPrefix>0.9.0</VersionPrefix>
-    <!-- N'a d'effet qu'avec PublishSingleFile (voir release.ps1) : embarque les DLL natives
-         (WPF, System.IO.Ports) dans le .exe au lieu de les laisser à côté dans le dossier
-         d'installation ; auto-extraites dans un cache temporaire au lancement. -->
+    <!-- Only takes effect with PublishSingleFile (see release.ps1): bundles the native DLLs
+         (WPF, System.IO.Ports) into the .exe instead of leaving them alongside it in the
+         install folder; auto-extracted to a temp cache at launch. -->
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
-    <!-- Sans ça, le SDK ajoute automatiquement "+<hash-git>" à la suite de notre propre
-         "+build.N" (InformationalVersion ci-dessous) : version illisible dans le titre/l'en-tête. -->
+    <!-- Without this, the SDK automatically appends "+<git-hash>" after our own
+         "+build.N" (InformationalVersion below): unreadable version in the title/header. -->
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
 
-  <!-- Numéro de build auto-incrémenté à chaque compilation (fichier build.number).
-       Donne FileVersion 0.3.0.N et InformationalVersion "0.3.0+build.N",
-       affichées dans le titre de la fenêtre et l'en-tête du dashboard. -->
+  <!-- Build number auto-incremented on every compile (build.number file).
+       Produces FileVersion 0.3.0.N and InformationalVersion "0.3.0+build.N",
+       shown in the window title and dashboard header. -->
   <PropertyGroup>
     <BuildNumberFile>$(MSBuildProjectDirectory)\build.number</BuildNumberFile>
     <BuildNumber Condition="Exists('$(BuildNumberFile)')">$([System.IO.File]::ReadAllText('$(BuildNumberFile)').Trim())</BuildNumber>
@@ -45,10 +46,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Resource Include="Assets\AppIcon.ico" />
     <None Include="wwwroot\**" CopyToOutputDirectory="PreserveNewest" />
-    <!-- Outil de flash ESP32 (espflash.exe, non versionné) : déposé par l'utilisateur, voir CLAUDE.md.
-         ExcludeFromSingleFile+CopyToPublishDirectory : un .exe imbriqué n'est jamais bundlé dans le
-         single-file (silencieusement exclu sinon) ; il doit rester un fichier à part à côté. -->
+    <!-- ESP32 flashing tool (espflash.exe, not version-controlled): dropped in by the user,
+         see CLAUDE.md. ExcludeFromSingleFile+CopyToPublishDirectory: a nested .exe is never
+         bundled into the single-file output (silently excluded otherwise); it must stay a
+         separate file alongside. -->
     <None Include="tools\**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
   </ItemGroup>
 

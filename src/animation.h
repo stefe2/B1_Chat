@@ -1,21 +1,21 @@
 #pragma once
 
 // ============================================================================
-//  AnimationPlayer — animations de tête par keyframes (pan/tilt)
+//  AnimationPlayer — head animations via keyframes (pan/tilt)
 //
-//  - Chaque animation est une suite de keyframes exprimées en OFFSET (degrés)
-//    par rapport au centre, jouées via ServoEngine (easing intégré).
-//  - Lecture non bloquante : on avance à la keyframe suivante quand le
-//    mouvement est terminé et le temps de maintien écoulé.
-//  - Variation par `seed` : léger jitter déterministe sur cibles et durées,
-//    pour que la même animation paraisse vivante et non répétitive.
-//  Voir project.md (section 6).
+//  - Each animation is a sequence of keyframes expressed as an OFFSET
+//    (degrees) from center, played via ServoEngine (built-in easing).
+//  - Non-blocking playback: advances to the next keyframe once the movement
+//    is finished and the hold time has elapsed.
+//  - Variation via `seed`: slight deterministic jitter on targets and
+//    durations, so the same animation feels alive rather than repetitive.
+//  See project.md (section 6).
 // ============================================================================
 
 #include <Arduino.h>
 #include "servo_engine.h"
 
-// Identifiants d'animation (doivent rester alignés avec project.md §6).
+// Animation IDs (must stay aligned with project.md §6).
 enum AnimId : uint8_t {
     ANIM_IDLE           = 0,
     ANIM_LOOK_AROUND    = 1,
@@ -33,8 +33,8 @@ enum AnimId : uint8_t {
     ANIM_WHIRR_SEARCH   = 13,
     ANIM_SIGNAL_GLITCH  = 14,
     ANIM_GREETING_NOD   = 15,
-    ANIM_POWER_DOWN     = 16,  // boucle jusqu'à interruption par un autre geste
-    ANIM_TALK           = 17,  // boucle ; pensé pour accompagner une piste audio
+    ANIM_POWER_DOWN     = 16,  // loops until interrupted by another gesture
+    ANIM_TALK           = 17,  // loops; meant to accompany an audio track
     ANIM_COUNT          = 18,
 };
 
@@ -42,25 +42,25 @@ class AnimationPlayer {
 public:
     void begin(ServoEngine* engine);
 
-    // Démarre une animation. `seed` fait varier le rendu (0 = valeur par défaut).
+    // Starts an animation. `seed` varies the rendering (0 = default value).
     void play(uint8_t animId, uint32_t seed = 0);
 
-    // À appeler régulièrement (dans loop()).
+    // To be called regularly (in loop()).
     void update();
 
-    // Arrête l'animation en cours.
+    // Stops the current animation.
     void stop() { _playing = false; }
 
     bool isPlaying() const { return _playing; }
     uint8_t current() const { return _animId; }
 
-    // Tire un identifiant d'animation « active » au hasard (hors IDLE, hors gestes
-    // déclenchés manuellement uniquement comme POWER_DOWN/TALK).
+    // Picks a random "active" animation ID (excluding IDLE and gestures
+    // triggered manually only, like POWER_DOWN/TALK).
     static uint8_t randomAnimId(uint32_t seed);
 
-    // Durée totale indicative (ms) d'un geste (somme des keyframes). Pour un geste en
-    // boucle (POWER_DOWN, TALK) ou IDLE, retourne une valeur par défaut indicative
-    // puisqu'il n'y a pas de durée finie naturelle.
+    // Indicative total duration (ms) of a gesture (sum of keyframes). For a
+    // looping gesture (POWER_DOWN, TALK) or IDLE, returns an indicative
+    // default value since there's no natural finite duration.
     static uint32_t totalDurationMs(uint8_t animId);
 
 private:
@@ -73,7 +73,7 @@ private:
     uint32_t _holdStart = 0;
     uint16_t _holdDur = 0;
 
-    // RNG déterministe (LCG) pour le jitter.
+    // Deterministic RNG (LCG) for jitter.
     uint32_t _rng = 1;
     uint8_t  rnd(uint8_t n);
     int      jitter(uint8_t amp);

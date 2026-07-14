@@ -40,7 +40,7 @@ public partial class CalibrationViewModel : ObservableObject
     private void OnCalibData(JsonElement root)
     {
         var target = root.TryGetProperty("target", out var t) ? (ushort)t.GetInt32() : (ushort)0;
-        if (_loadedFor != target) return; // reponse perimee (cible changee entre-temps)
+        if (_loadedFor != target) return; // stale response (target changed in the meantime)
 
         if (root.TryGetProperty("panMin", out var pn)) PanMin = pn.GetInt32();
         if (root.TryGetProperty("panCenter", out var pc)) PanCenter = pc.GetInt32();

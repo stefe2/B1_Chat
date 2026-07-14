@@ -1,16 +1,17 @@
 #pragma once
 
 // ============================================================================
-//  OtaMaster — orchestration d'une session OTA vers UN esclave (maître uniquement)
+//  OtaMaster — orchestrates an OTA session toward ONE slave (master only)
 //
-//  Reçoit les chunks décodés (base64 -> binaire) depuis serial_console.cpp,
-//  les relaie sur le mesh en stop-and-wait (un chunk en vol, ACK requis avant
-//  le suivant — Update.write() côté esclave est append-only, la reprise de
-//  désordre serait de la complexité inutile). Une seule session à la fois.
+//  Receives decoded chunks (base64 -> binary) from serial_console.cpp,
+//  relays them over the mesh in stop-and-wait (one chunk in flight, ACK
+//  required before the next — Update.write() on the slave side is
+//  append-only, so handling out-of-order chunks would be needless
+//  complexity). One session at a time.
 //
-//  Ne dépend PAS de serial_console.h : les événements à pousser vers la
-//  console sont récupérés via pollEvent() et traduits en JSON par main.cpp,
-//  comme le reste du firmware (seul SerialConsole parle JSON/Serial).
+//  Does NOT depend on serial_console.h: events to push to the console are
+//  fetched via pollEvent() and translated to JSON by main.cpp, like the
+//  rest of the firmware (only SerialConsole speaks JSON/Serial).
 // ============================================================================
 
 #include "config.h"
@@ -35,26 +36,26 @@ public:
         char      reason[24] = {0};
     };
 
-    // Démarre une session. false = occupé, cible inconnue ou taille invalide
-    // (l'appelant doit alors pousser otaError lui-même — voir serial_console.cpp).
+    // Starts a session. false = busy, unknown target, or invalid size
+    // (the caller must then push otaError itself — see serial_console.cpp).
     bool begin(uint16_t target, uint32_t size, const char* md5Hex32);
 
-    // Chunk décodé (depuis base64) reçu du série pour la session en cours.
-    // Ignoré si `index` ne correspond pas au chunk attendu ou hors session.
+    // Decoded chunk (from base64) received over serial for the current
+    // session. Ignored if `index` doesn't match the expected chunk or is out of session.
     void onSerialChunk(uint16_t index, const uint8_t* data, uint8_t len);
 
-    // Annulation utilisateur.
+    // User cancellation.
     void abort();
 
-    // Accusé mesh reçu (appelé depuis onMeshMessage, type MSG_OTA_ACK).
+    // Mesh acknowledgment received (called from onMeshMessage, type MSG_OTA_ACK).
     void onAck(uint16_t srcId, const OtaAckPayload& p);
 
-    // Tick timeout/retry + surveillance post-reboot (appelé depuis loop()).
+    // Timeout/retry tick + post-reboot monitoring (called from loop()).
     void update(uint32_t nowMs);
 
     bool busy() const { return _state != OM_IDLE; }
 
-    // Consomme l'événement en attente (type EV_NONE si rien de nouveau).
+    // Consumes the pending event (type EV_NONE if nothing new).
     Event pollEvent();
 
 private:
@@ -72,10 +73,10 @@ private:
     uint32_t _serialWaitSince = 0;
     uint32_t _rebootStartMs = 0;
     uint32_t _lastSeenAtRebootStart = 0;
-    // Version rapportée par la cible AVANT l'OTA (capturée dans begin()) : la
-    // console ne peut pas connaître de façon fiable la version intégrée dans
-    // un .bin arbitraire, donc la confirmation post-reboot compare "a changé
-    // par rapport à avant" plutôt que "correspond à ce qui était annoncé".
+    // Version reported by the target BEFORE the OTA (captured in begin()):
+    // the console can't reliably know the version baked into an arbitrary
+    // .bin, so post-reboot confirmation compares "changed relative to
+    // before" rather than "matches what was announced".
     uint8_t  _prevFwMajor = 0, _prevFwMinor = 0, _prevFwPatch = 0;
 
     uint8_t  _lastSentType = 0;
@@ -84,18 +85,19 @@ private:
 
     Event _pending;
 
-    // Protege tout l'etat ci-dessus : onAck() s'execute depuis le callback ESP-NOW (tache
-    // Wi-Fi interne, potentiellement un autre coeur) alors que begin()/onSerialChunk()/
-    // abort()/update()/pollEvent() s'executent depuis loop() — sans ce verrou, deux acces
-    // concurrents peuvent corrompre l'etat ou perdre un evenement (observe en test : la
-    // session se bloque a un chunk différent a chaque tentative, signature typique d'une
-    // condition de course plutot que d'un bug deterministe).
+    // Protects all the state above: onAck() runs from the ESP-NOW callback
+    // (internal Wi-Fi task, potentially another core) while
+    // begin()/onSerialChunk()/abort()/update()/pollEvent() run from loop() —
+    // without this lock, two concurrent accesses can corrupt the state or
+    // drop an event (observed in testing: the session stalls on a
+    // different chunk each attempt, the typical signature of a race
+    // condition rather than a deterministic bug).
     portMUX_TYPE _mux = portMUX_INITIALIZER_UNLOCKED;
 
-    // fail() ne fait que muter l'etat (appelee depuis l'interieur d'une section deja
-    // verrouillee par l'appelant) ; le MSG_OTA_ABORT reel est envoye par l'appelant une
-    // fois le verrou relache (Mesh.send()/esp_now_send() ne doit jamais etre invoque avec
-    // les interruptions desactivees).
+    // fail() only mutates state (called from inside a section already
+    // locked by the caller); the actual MSG_OTA_ABORT is sent by the
+    // caller once the lock is released (Mesh.send()/esp_now_send() must
+    // never be invoked with interrupts disabled).
     bool     _pendingAbortNeeded = false;
     uint16_t _pendingAbortTarget = 0;
     uint8_t  _pendingAbortSession = 0;

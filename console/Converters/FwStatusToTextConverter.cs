@@ -7,9 +7,9 @@ public class FwStatusToTextConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture) => value switch
     {
-        true => "À jour",
-        false => "Mise à jour disponible",
-        _ => "Version la plus récente inconnue",
+        true => "Up to date",
+        false => "Update available",
+        _ => "Latest version unknown",
     };
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotSupportedException();

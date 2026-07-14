@@ -1,19 +1,19 @@
 #pragma once
 
 // ============================================================================
-//  SerialConsole — pont JSON sur l'USB pour la console web (maître)
+//  SerialConsole — JSON bridge over USB for the web console (master)
 //
-//  Protocole : une ligne = un message JSON (voir project.md §10).
-//  - PC → maître : {cmd:"list"|"anim"|"config"|"volume"|"name"|"playTrack"|
+//  Protocol: one line = one JSON message (see project.md §10).
+//  - PC → master: {cmd:"list"|"anim"|"config"|"volume"|"name"|"playTrack"|
 //                   "getConfig"|"calib"|"preview"|"getCalib"|"getAnimDurations"|
 //                   "seqState"|"servo"|"autoAnim"|"getMeshTopology"|"getAll"|
 //                   "setMulti"|"commit"|"revert"|"seqPause"|"seqResume", ...}
-//  - maître → PC : {evt:"droids"|"log"|"config"|"meshTopology"|"err"|"allDone"|
+//  - master → PC: {evt:"droids"|"log"|"config"|"meshTopology"|"err"|"allDone"|
 //                   "setMultiDone"|"dirty", ...}
 //
-//  Les logs applicatifs passent par log() pour rester au format JSON et ne pas
-//  polluer le protocole. Des hooks permettent au firmware d'agir sur les
-//  commandes (jouer une anim, régler le volume, etc.).
+//  Application logs go through log() to stay in JSON format and not pollute
+//  the protocol. Hooks let the firmware act on commands (play an anim, set
+//  the volume, etc.).
 // ============================================================================
 
 #include <Arduino.h>
@@ -24,40 +24,40 @@ class SerialConsole {
 public:
     void begin();
 
-    // Lit et traite les commandes entrantes (à appeler dans loop()).
+    // Reads and processes incoming commands (to be called in loop()).
     void update();
 
-    // Émet un log au format {evt:"log","msg":...}.
+    // Emits a log in {evt:"log","msg":...} format.
     void log(const char* fmt, ...);
 
-    // Émet une erreur explicite au format {evt:"err","msg":...} — commande
-    // inconnue/invalide, ligne tronquée, JSON invalide. La console l'affiche
-    // en rouge au lieu que l'échec soit silencieux.
+    // Emits an explicit error in {evt:"err","msg":...} format — unknown/invalid
+    // command, truncated line, invalid JSON. The console shows it in red
+    // instead of the failure being silent.
     void pushErr(const char* fmt, ...);
 
-    // Émet la liste des droïdes ({evt:"droids",...}) et l'état ({evt:"state"}).
+    // Emits the droid list ({evt:"droids",...}) and the state ({evt:"state"}).
     void pushDroids();
     void pushState();
 
-    // Émet la durée indicative (ms) de chaque geste ({evt:"animDurations",...}).
+    // Emits the indicative duration (ms) of each gesture ({evt:"animDurations",...}).
     void pushAnimDurations();
 
-    // Émet l'état de lecture d'une séquence ({evt:"seqState",...}).
-    // track = trame audio de la séquence en cours (0 = aucune).
+    // Emits a sequence's playback state ({evt:"seqState",...}).
+    // track = audio track of the running sequence (0 = none).
     void pushSeqState(bool playing, uint8_t slot, uint8_t index, uint8_t total,
                       uint8_t track = 0, bool paused = false);
 
-    // Émet les liens directs du mesh détectés ({evt:"meshTopology",...}).
+    // Emits the mesh's detected direct links ({evt:"meshTopology",...}).
     void pushMeshTopology();
 
-    // Événements OTA (voir CLAUDE.md pour le flux complet).
+    // OTA events (see CLAUDE.md for the full flow).
     void pushOtaReady(uint16_t target, uint8_t sessionId, uint8_t chunkSize, uint16_t totalChunks);
     void pushOtaChunkAck(uint16_t seq, uint16_t sent, uint16_t total);
     void pushOtaDone(uint16_t target, uint8_t sessionId);
     void pushOtaResult(uint16_t target, bool ok, const char* fw, const char* reason);
     void pushOtaError(uint16_t target, uint8_t sessionId, const char* reason);
 
-    // Hooks optionnels déclenchés par les commandes reçues.
+    // Optional hooks triggered by incoming commands.
     void onAnim(void (*cb)(uint8_t animId, uint32_t seed)) { _animCb = cb; }
     void onVolume(void (*cb)(uint8_t volume)) { _volCb = cb; }
     void onTrack(void (*cb)(uint8_t track)) { _trackCb = cb; }
@@ -79,18 +79,18 @@ public:
     void onOtaChunk(void (*cb)(uint16_t seq, const uint8_t* data, uint8_t len)) { _otaChunkCb = cb; }
     void onOtaAbort(void (*cb)()) { _otaAbortCb = cb; }
 
-    // État servos du maître (pour l'afficher dans la liste).
+    // Master's servo state (to display it in the list).
     void setMasterServos(bool on) { _masterServos = on; }
 
-    // État anims auto du maître (pour l'afficher dans la liste).
+    // Master's auto-anim state (to display it in the list).
     void setMasterAutoAnim(bool on) { _masterAutoAnim = on; }
 
-    // Session Web Serial validée par handshake hello/ping.
+    // Web Serial session validated via the hello/ping handshake.
     bool isClientReady() const { return _clientReady; }
 
 private:
-    // Tampon de ligne : 4 Ko pour accepter seqSave 32 étapes et setMulti.
-    // (256 o auparavant : toute ligne plus longue était jetée en silence.)
+    // Line buffer: 4 KB to accept a 32-step seqSave and setMulti.
+    // (256 B before: any longer line was silently dropped.)
     static const uint16_t SERIAL_LINE_MAX = 4096;
     char     _buf[SERIAL_LINE_MAX];
     uint16_t _len = 0;
@@ -123,12 +123,12 @@ private:
 
     void handleLine(const char* line);
 
-    // setMulti : validation puis application d'une op du lot (name/calib/
-    // volume/config/seqSave/seqDelete). validateOp remplit `why` en cas de refus.
+    // setMulti: validation then application of a batch op (name/calib/
+    // volume/config/seqSave/seqDelete). validateOp fills `why` on rejection.
     bool validateOp(JsonObjectConst op, char* why, size_t whyLen);
     bool applyOp(JsonObjectConst op);
 
-    // Pousse {evt:"dirty"} quand l'état « modifications non engagées » change.
+    // Pushes {evt:"dirty"} when the "uncommitted changes" state changes.
     void syncDirty();
     bool _lastDirtySent = false;
 

@@ -4,7 +4,7 @@ using System.Windows.Data;
 
 namespace b1_chat_console.Converters;
 
-/// <summary>ConverterParameter = "cleStyleSiVrai|cleStyleSiFaux" (recherchees dans Application.Resources).</summary>
+/// <summary>ConverterParameter = "styleKeyIfTrue|styleKeyIfFalse" (looked up in Application.Resources).</summary>
 public class BoolToStyleConverter : IValueConverter
 {
     public object? Convert(object value, Type targetType, object parameter, CultureInfo culture)

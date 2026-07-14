@@ -1,161 +1,159 @@
-# CLAUDE.md — Projet B1 Chat (contrôle multi-droïdes B1 Battle Droid)
+# CLAUDE.md — B1 Chat project (multi-droid B1 Battle Droid control)
 
-Fichier de suivi unique du projet (fusion de l'ancien `project.md` et du CLAUDE.md
-de la console — **à maintenir à jour à chaque étape terminée**, demande explicite
-de l'utilisateur).
+Single project tracking file (merger of the old `project.md` and the console's
+CLAUDE.md — **keep it up to date after every completed step**, explicit
+request from the user).
 
-## Vue d'ensemble
+## Overview
 
-Un seul dépôt git (`stefe2/B1_Chat`), deux moitiés :
+A single git repo (`stefe2/B1_Chat`), two halves:
 
-1. **Firmware ESP32** (racine du dépôt, PlatformIO/Arduino) : pilote plusieurs
-   têtes de droïdes B1 (2 servos pan/tilt chacune) en réseau **ESP-NOW mesh
-   multi-sauts**, avec animations fluides/organiques coordonnées par un
-   **maître** qui joue aussi le son (DFPlayer Mini + ampli). Réglages persistés
-   en NVS.
-2. **Console de supervision** (`console/`, WPF net8.0-windows, v0.9.x) :
-   application de bureau **100 % WPF native** (XAML/MVVM,
-   `CommunityToolkit.Mvvm`) qui possède le port série (`System.IO.Ports`) et
-   reproduit le design de l'ancienne page web carte par carte.
-   `console/wwwroot/index.html` (HTML+CSS+JS inline, tout en français) est
-   **conservée intacte** comme référence de comportement/design, mais n'est
-   plus rendue à l'exécution (l'ancienne coquille WebView2 a été retirée).
-   Fusionnée dans ce dépôt (elle vivait avant dans `b1-chat-console`, dépôt
-   séparé sans remote — jamais publié ; historique perdu au passage, aucune
-   perte réelle). `FIRMWARE-CONTRACT.md` liste les extensions de protocole que
-   la console attend du firmware.
+1. **ESP32 firmware** (repo root, PlatformIO/Arduino): drives several B1
+   droid heads (2 pan/tilt servos each) over a **multi-hop ESP-NOW mesh**
+   network, with smooth/organic animations coordinated by a **master** that
+   also plays sound (DFPlayer Mini + amp). Settings persisted in NVS.
+2. **Supervision console** (`console/`, WPF net8.0-windows, v0.9.x): a
+   **100% native WPF** desktop app (XAML/MVVM, `CommunityToolkit.Mvvm`) that
+   owns the serial port (`System.IO.Ports`) and reproduces the old web
+   page's design card by card. `console/wwwroot/index.html` (inline
+   HTML+CSS+JS) is **kept intact** as a behavior/design reference, but is no
+   longer rendered at runtime (the old WebView2 shell has been removed).
+   Merged into this repo (it used to live in `b1-chat-console`, a separate
+   repo with no remote — never published; history lost in the process, no
+   real loss). `FIRMWARE-CONTRACT.md` lists the protocol extensions the
+   console expects from the firmware.
 
-Deux trains de release GitHub distincts au sein du **même** dépôt, distingués
-par le préfixe du tag : `vX.Y.Z` pour l'app console, `fw-vX.Y.Z` pour le
-firmware (voir `tools/release.ps1` et `console/installer/release.ps1`).
+Two distinct GitHub release trains within the **same** repo, distinguished
+by tag prefix: `vX.Y.Z` for the console app, `fw-vX.Y.Z` for the firmware
+(see `tools/release.ps1` and `console/installer/release.ps1`).
 
-## Commandes
+## Commands
 
-- `pio run -e b1` — compile le firmware (pio.exe : `%USERPROFILE%\.platformio\penv\Scripts\pio.exe`)
-- `pio run -e b1 -t upload` — flash une carte (rôle choisi par `IS_MASTER` dans `src/config.h` **avant** de flasher : 1 = maître, un seul par réseau ; 0 = esclave)
-- `tools\espflash.exe write-bin --port COMx -B 460800 0x10000 .pio\build\b1\firmware.bin` — flash sans PlatformIO (espflash 4.4.0, aussi utilisé par la carte Firmware de la console)
-- `dotnet build` (depuis `console/`) — compile la console WPF
-- `.\tools\release.ps1 [-Publish]` — release firmware manuelle (2 rôles + manifeste SHA-256, tag `fw-vX.Y.Z`) ; en usage normal, préférer bumper `FW_VERSION` (`src/config.h`) et pousser sur `main` — la CI publie toute seule (voir ci-dessous)
-- `.\console\installer\release.ps1 [-Publish]` — release console (publish + installeur NSIS, tag `vX.Y.Z`)
-- `.\tools\ota-test.ps1 -Bin <chemin.bin> [-CorruptChunk N] [-StopAtChunk N] [-SecondStartAt N] [-ComPort COM3]` —
-  banc de test OTA : pilote le maître directement par le port série (console fermée),
-  rejoue le protocole JSON (`hello`/`otaStart`/`otaChunk`/...) et permet d'injecter des
-  fautes (chunk corrompu, abandon en plein transfert, double `otaStart`) sans dépendre
-  de l'UI. Voir section OTA et Vérification pt 7.
+- `pio run -e b1` — builds the firmware (pio.exe: `%USERPROFILE%\.platformio\penv\Scripts\pio.exe`)
+- `pio run -e b1 -t upload` — flashes a board (role chosen via `IS_MASTER` in `src/config.h` **before** flashing: 1 = master, only one per network; 0 = slave)
+- `tools\espflash.exe write-bin --port COMx -B 460800 0x10000 .pio\build\b1\firmware.bin` — flash without PlatformIO (espflash 4.4.0, also used by the console's Firmware card)
+- `dotnet build` (from `console/`) — builds the WPF console
+- `.\tools\release.ps1 [-Publish]` — manual firmware release (2 roles + SHA-256 manifest, tag `fw-vX.Y.Z`); in normal use, prefer bumping `FW_VERSION` (`src/config.h`) and pushing to `main` — CI publishes on its own (see below)
+- `.\console\installer\release.ps1 [-Publish]` — console release (publish + NSIS installer, tag `vX.Y.Z`)
+- `.\tools\ota-test.ps1 -Bin <path.bin> [-CorruptChunk N] [-StopAtChunk N] [-SecondStartAt N] [-ComPort COM3]` —
+  OTA test bench: drives the master directly over the serial port (console closed),
+  replays the JSON protocol (`hello`/`otaStart`/`otaChunk`/...) and lets you inject
+  faults (corrupted chunk, mid-transfer abort, double `otaStart`) without depending
+  on the UI. See the OTA section and Verification pt 7.
 
-**Release firmware automatique** (`.github/workflows/firmware-release.yml`) : se déclenche
-sur push vers `main` touchant `src/config.h`, ou manuellement (`workflow_dispatch`). Lit
-`FW_VERSION`, saute si le tag `fw-vX.Y.Z` existe déjà (idempotent), sinon compile
-`b1_master`/`b1_slave` (PlatformIO sur runner GitHub), calcule le manifeste SHA-256, tague
-et publie la release — aucun `gh auth login` local nécessaire (jeton `GITHUB_TOKEN`
-fourni par Actions). Flux normal : bumper `FW_VERSION`, commit, push sur `main`, attendre
-la CI. `tools/release.ps1 -Publish` reste un repli manuel (éviter de l'utiliser en plus de
-la CI pour la même version — double tag/release).
+**Automatic firmware release** (`.github/workflows/firmware-release.yml`): triggers
+on push to `main` touching `src/config.h`, or manually (`workflow_dispatch`). Reads
+`FW_VERSION`, skips if the `fw-vX.Y.Z` tag already exists (idempotent), otherwise builds
+`b1_master`/`b1_slave` (PlatformIO on a GitHub runner), computes the SHA-256 manifest, tags
+and publishes the release — no local `gh auth login` needed (`GITHUB_TOKEN`
+provided by Actions). Normal flow: bump `FW_VERSION`, commit, push to `main`, wait for
+CI. `tools/release.ps1 -Publish` remains a manual fallback (avoid using it in addition to
+CI for the same version — duplicate tag/release).
 
-## Matériel (DOIT ESP32 DevKit V1)
+## Hardware (DOIT ESP32 DevKit V1)
 
 | Signal | GPIO |
 | --- | --- |
 | Servo PAN | GPIO25 |
 | Servo TILT | GPIO26 |
-| DFPlayer RX (maître) | GPIO17 (TX2), via 1 kΩ |
-| DFPlayer TX (maître) | GPIO16 (RX2) |
-| DFPlayer BUSY (maître) | GPIO4 (câblé, **pas encore exploité**) |
-| LED de vie | GPIO2 (onboard) |
+| DFPlayer RX (master) | GPIO17 (TX2), via 1 kΩ |
+| DFPlayer TX (master) | GPIO16 (RX2) |
+| DFPlayer BUSY (master) | GPIO4 (wired, **not yet used**) |
+| Life LED | GPIO2 (onboard) |
 
-- Servos en 5 V externe (BEC), masse commune, condo ≥ 470 µF conseillé.
-- Audio : DAC_L/DAC_R du DFPlayer → ampli externe (PAM8403) → 1 haut-parleur (maître).
-- Broches à éviter : strapping GPIO0/2/5/12/15 ; input-only GPIO34-39.
-- 4-6 droïdes prévus (extensible), servos SG90/MG996R.
+- Servos on external 5V (BEC), common ground, ≥ 470 µF capacitor recommended.
+- Audio: DFPlayer's DAC_L/DAC_R → external amp (PAM8403) → 1 speaker (master).
+- Pins to avoid: strapping GPIO0/2/5/12/15; input-only GPIO34-39.
+- 4-6 droids planned (extensible), SG90/MG996R servos.
 
-## Architecture firmware (`src/`)
+## Firmware architecture (`src/`)
 
-Firmware **unique** ; rôle par build (`IS_MASTER`), identité auto (srcId 16 bits =
-2 derniers octets de la MAC — brancher → flasher → terminé, aucun ID à gérer).
+**Single** firmware; role set at build time (`IS_MASTER`), auto identity (16-bit srcId =
+last 2 bytes of the MAC — plug in → flash → done, no ID to manage).
 
-| Fichier | Rôle |
+| File | Role |
 | --- | --- |
-| `main.cpp` | setup()/loop(), câblage des modules, timers non bloquants |
-| `config.h` | rôle, pins, bornes servo par défaut, constantes mesh/audio/topologie |
-| `mesh_comm.{h,cpp}` | ESP-NOW : en-tête {srcId,seq,ttl,type}, dédup (srcId,seq), relais TTL, HMAC-SHA256 tronqué 8 o, **voisinage radio direct** (MAC émetteur physique + RSSI) |
-| `mesh_topology.{h,cpp}` | (maître) agrégateur d'arêtes dirigées {from,to,rssi} du graphe de voisinage |
-| `servo_engine.{h,cpp}` | PWM LEDC natif 50 Hz, easing smootherstep, bruit d'idle, limites calibrables |
-| `animation.{h,cpp}` | 18 keyframes-anims, lecteur non bloquant, seed de variation, `totalDurationMs()` |
-| `audio.{h,cpp}` | (maître) wrapper DFPlayer, mapping anim → plage de pistes (10 pistes `/mp3/0001..0010.mp3`) |
-| `registry.{h,cpp}` | (maître) inventaire vivant : srcId, RSSI, lastSeen, servos, autoAnim (accès synchronisés, voir pièges) |
-| `config_store.{h,cpp}` | NVS : noms, volume, params d'anim, calibration servo par droïde |
-| `sequence_store.{h,cpp}` | (maître) NVS : 8 slots de séquences nommées, ≤ 32 étapes {targetId,animId,delayMs} |
-| `serial_console.{h,cpp}` | (maître) pont JSON USB ↔ mesh pour la console |
-| `ota_guard.{h,cpp}` | (tous rôles) anti-brick : flag NVS + rollback manuel vers l'autre partition si le nouveau firmware ne démarre pas correctement |
-| `ota_master.{h,cpp}` | (maître) orchestre une session OTA vers un esclave (stop-and-wait, retry, confirmation post-reboot via heartbeat) |
-| `ota_slave.{h,cpp}` | (esclave) reçoit une image OTA relayée par le mesh, écrit via `Update` |
-| `droid.{h,cpp}` | machine à états haut niveau (étape 6, **pas encore fait**) |
+| `main.cpp` | setup()/loop(), module wiring, non-blocking timers |
+| `config.h` | role, pins, default servo limits, mesh/audio/topology constants |
+| `mesh_comm.{h,cpp}` | ESP-NOW: header {srcId,seq,ttl,type}, dedup (srcId,seq), TTL relay, truncated 8-byte HMAC-SHA256, **direct radio neighborhood** (physical sender MAC + RSSI) |
+| `mesh_topology.{h,cpp}` | (master) aggregator of directed {from,to,rssi} edges of the neighborhood graph |
+| `servo_engine.{h,cpp}` | native 50 Hz LEDC PWM, smootherstep easing, idle noise, calibratable limits |
+| `animation.{h,cpp}` | 18 keyframe anims, non-blocking player, variation seed, `totalDurationMs()` |
+| `audio.{h,cpp}` | (master) DFPlayer wrapper, anim → track-range mapping (10 tracks `/mp3/0001..0010.mp3`) |
+| `registry.{h,cpp}` | (master) live inventory: srcId, RSSI, lastSeen, servos, autoAnim (synchronized access, see pitfalls) |
+| `config_store.{h,cpp}` | NVS: names, volume, anim params, per-droid servo calibration |
+| `sequence_store.{h,cpp}` | (master) NVS: 8 named sequence slots, ≤ 32 steps {targetId,animId,delayMs} |
+| `serial_console.{h,cpp}` | (master) USB JSON ↔ mesh bridge for the console |
+| `ota_guard.{h,cpp}` | (all roles) anti-brick: NVS flag + manual rollback to the other partition if the new firmware doesn't start correctly |
+| `ota_master.{h,cpp}` | (master) orchestrates an OTA session toward a slave (stop-and-wait, retry, post-reboot confirmation via heartbeat) |
+| `ota_slave.{h,cpp}` | (slave) receives an OTA image relayed by the mesh, writes via `Update` |
+| `droid.{h,cpp}` | high-level state machine (step 6, **not done yet**) |
 
-Dépendances : `DFRobotDFPlayerMini`, `ArduinoJson`. Build flags : `-D MESH_TTL=4`,
-`-D GROUP_KEY="changeme"` (clé **compilée uniquement**, pas de re-clé à l'exécution).
+Dependencies: `DFRobotDFPlayerMini`, `ArduinoJson`. Build flags: `-D MESH_TTL=4`,
+`-D GROUP_KEY="changeme"` (**compile-time-only** key, no re-keying at runtime).
 
-Environnements PlatformIO (`platformio.ini`) : `[env:b1]` — rôle décidé par `#define
-IS_MASTER` dans `config.h`, pour le flash/dev local (`pio run -e b1 -t upload`).
-`[env:b1_master]`/`[env:b1_slave]` — dédiés à la release CI, forcent le rôle via
-`-D IS_MASTER=1|0` sans toucher à `config.h` (celui-ci guarde `IS_MASTER` avec un
-`#ifndef`, comme `MESH_TTL`/`GROUP_KEY`, pour que la surcharge en ligne de commande
-fonctionne) ; n'affectent pas `[env:b1]`.
+PlatformIO environments (`platformio.ini`): `[env:b1]` — role decided by `#define
+IS_MASTER` in `config.h`, for local flash/dev (`pio run -e b1 -t upload`).
+`[env:b1_master]`/`[env:b1_slave]` — dedicated to CI releases, force the role via
+`-D IS_MASTER=1|0` without touching `config.h` (which guards `IS_MASTER` with an
+`#ifndef`, like `MESH_TTL`/`GROUP_KEY`, so the command-line override
+works); don't affect `[env:b1]`.
 
-## Protocole mesh (ESP-NOW broadcast, canal fixe)
+## Mesh protocol (ESP-NOW broadcast, fixed channel)
 
-Trame = header + payload + HMAC(8 o, TTL exclu de la signature). Relais : dédup
-(srcId,seq) en ring buffer, puis si ttl>0 → ttl-- et re-broadcast. Deux séries de
-B1 avec des `GROUP_KEY` différents s'ignorent ; messages falsifiés rejetés.
-Anti-rejeu : dédup + seq monotone (suffisant pour un prop, pas une garantie
-cryptographique absolue).
+Frame = header + payload + HMAC(8 B, TTL excluded from the signature). Relay: dedup
+(srcId,seq) in a ring buffer, then if ttl>0 → ttl-- and re-broadcast. Two B1
+fleets with different `GROUP_KEY`s ignore each other; tampered messages are rejected.
+Anti-replay: dedup + monotonic seq (enough for a prop, not an absolute
+cryptographic guarantee).
 
-| Type | Charge utile |
+| Type | Payload |
 | --- | --- |
-| `MSG_ANIM` = 1 | targetId (0xFFFF = tous), animId, syncDelayMs, seed |
+| `MSG_ANIM` = 1 | targetId (0xFFFF = all), animId, syncDelayMs, seed |
 | `MSG_CONFIG` = 2 | targetId, freq, amplitude, speed |
-| `MSG_HEARTBEAT` = 4 | uptime, état (bit0 = servos, bit1 = anims auto), version firmware (3 octets major/minor/patch) |
+| `MSG_HEARTBEAT` = 4 | uptime, state (bit0 = servos, bit1 = auto anims), firmware version (3 bytes major/minor/patch) |
 | `MSG_SERVO` = 5 | targetId, enabled |
-| `MSG_CALIB` = 6 | targetId, 6 bornes pan/tilt (persisté par le droïde ciblé) |
-| `MSG_PREVIEW` = 7 | targetId, pan, tilt (transitoire, non persisté) |
-| `MSG_AUTOANIM` = 8 | targetId, enabled (pause des anims spontanées au repos) |
-| `MSG_NEIGHBORS` = 9 | count + [{id, rssi}] : rapport périodique du voisinage radio **direct** de l'émetteur (3 s + gigue anti-collision ; le RSSI est mesuré par l'émetteur du rapport même si le rapport est ensuite relayé) |
-| `MSG_OTA_START` = 10 | (maître→esclave ciblé) targetId, sessionId, totalSize, totalChunks, chunkSize, md5Hex[32] — démarre une session OTA |
-| `MSG_OTA_CHUNK` = 11 | (maître→esclave ciblé) targetId, sessionId, chunkIndex, dataLen, data[190] — un fragment de l'image, envoyé à taille pleine |
-| `MSG_OTA_ACK` = 12 | (esclave→maître) sessionId, kind (0=start/1=chunk/2=end), chunkIndex, status |
-| `MSG_OTA_END` = 13 | (maître→esclave ciblé) targetId, sessionId, totalChunks — finalise (`Update.end()`) si tous les chunks attendus sont reçus |
-| `MSG_OTA_ABORT` = 14 | (maître→esclave ciblé) targetId, sessionId, reason — annule la session en cours |
+| `MSG_CALIB` = 6 | targetId, 6 pan/tilt limits (persisted by the targeted droid) |
+| `MSG_PREVIEW` = 7 | targetId, pan, tilt (transient, not persisted) |
+| `MSG_AUTOANIM` = 8 | targetId, enabled (pauses spontaneous idle anims) |
+| `MSG_NEIGHBORS` = 9 | count + [{id, rssi}]: periodic report of the sender's **direct** radio neighborhood (3s + anti-collision jitter; RSSI is measured by the report's sender even if the report is then relayed) |
+| `MSG_OTA_START` = 10 | (master→targeted slave) targetId, sessionId, totalSize, totalChunks, chunkSize, md5Hex[32] — starts an OTA session |
+| `MSG_OTA_CHUNK` = 11 | (master→targeted slave) targetId, sessionId, chunkIndex, dataLen, data[190] — one fragment of the image, sent at full size |
+| `MSG_OTA_ACK` = 12 | (slave→master) sessionId, kind (0=start/1=chunk/2=end), chunkIndex, status |
+| `MSG_OTA_END` = 13 | (master→targeted slave) targetId, sessionId, totalChunks — finalizes (`Update.end()`) if all expected chunks were received |
+| `MSG_OTA_ABORT` = 14 | (master→targeted slave) targetId, sessionId, reason — cancels the ongoing session |
 
-## Animations (18, alignées firmware ↔ tableau `ANIMS` dans index.html)
+## Animations (18, aligned firmware ↔ `ANIMS` table in index.html)
 
 0 IDLE · 1 LOOK_AROUND · 2 NOD_YES · 3 SHAKE_NO · 4 CURIOUS_TILT · 5 SCAN_SLOW ·
 6 ALERT_SNAP · 7 TRACK · 8 GLITCH_STUTTER · 9 CONFUSED_TILT · 10 DOUBLE_TAKE ·
 11 SLEEPY_DROOP · 12 TARGET_LOCK · 13 WHIRR_SEARCH · 14 SIGNAL_GLITCH ·
-15 GREETING_NOD · 16 POWER_DOWN (**boucle**) · 17 TALK (**boucle**, tilt rapide
-façon bouche qui parle, pensé pour accompagner une piste audio).
+15 GREETING_NOD · 16 POWER_DOWN (**loops**) · 17 TALK (**loops**, fast tilt like
+a talking mouth, meant to accompany an audio track).
 
-Les deux gestes en boucle sont exclus du tirage aléatoire d'idle et comptent pour
-`LOOPING_ANIM_DEFAULT_MS` (2 s, indicatif) dans `totalDurationMs()`.
-Comportement au repos : le maître tire un geste au hasard toutes les 2,5-5 s et le
-diffuse à tous (esclave isolé : 3-7 s, local) — suspendable par droïde (« Anims
-auto »), sans couper les servos ni bloquer Jouer/Séquenceur.
+The two looping gestures are excluded from the random idle draw and count as
+`LOOPING_ANIM_DEFAULT_MS` (2s, indicative) in `totalDurationMs()`.
+Idle behavior: the master picks a random gesture every 2.5-5s and
+broadcasts it to everyone (isolated slave: 3-7s, local) — suspendable per droid
+("Auto anims"), without cutting the servos or blocking Play/Sequencer.
 
-## Protocole série JSON (console ↔ maître, 115200 bauds, 1 ligne = 1 message)
+## JSON serial protocol (console ↔ master, 115200 baud, 1 line = 1 message)
 
-Session gardée par handshake : `hello` → `{evt:"hello",ok,id}`, puis keepalive
-`ping` (timeout 5 s côté firmware, `_clientReady`).
+Session guarded by a handshake: `hello` → `{evt:"hello",ok,id}`, then keepalive
+`ping` (5s timeout on the firmware side, `_clientReady`).
 
-- **Console → maître** (`cmd`) : `hello` · `ping` · `list` · `getConfig` · `getAll` ·
+- **Console → master** (`cmd`): `hello` · `ping` · `list` · `getConfig` · `getAll` ·
   `config {target,freq,amp,speed}` · `volume {value}` · `name {id,name}` ·
   `playTrack {track}` · `servo {target,enabled}` · `autoAnim {target,enabled}` ·
   `adopt {target}` · `forget {target}` ·
   `anim {target,animId,seed}` · `preview {target,pan,tilt}` ·
-  `calib {target,+6 bornes}` · `getCalib {target}` · `getAnimDurations` ·
+  `calib {target,+6 limits}` · `getCalib {target}` · `getAnimDurations` ·
   `getMeshTopology` · `seqList` · `seqLoad {slot}` ·
   `seqSave {slot,name,loop,track,steps}` · `seqDelete {slot}` ·
   `seqRun {slot,from?}` · `seqStop` · `seqPause` · `seqResume` · `seqState` ·
   `setMulti {ops:[...]}` · `commit` · `revert` ·
   `otaStart {target,size,md5}` · `otaChunk {seq,data}` (data = base64) · `otaAbort {}`
-- **Maître → console** (`evt`) : `hello {ok,id,fw,proto,lineMax,anims,seqSlots,trackCount,caps[],dirty}` ·
+- **Master → console** (`evt`): `hello {ok,id,fw,proto,lineMax,anims,seqSlots,trackCount,caps[],dirty}` ·
   `droids {list:[{id,name,rssi,age,role,servos,autoAnim,adopted,fw}]}` ·
   `log {msg}` · `err {msg}` · `config {volume,freq,amp,speed}` · `calibData {target,+6}` ·
   `meshTopology {links:[{from,to,rssi}]}` · `animDurations {list:[{animId,ms}]}` ·
@@ -167,359 +165,398 @@ Session gardée par handshake : `hello` → `{evt:"hello",ok,id}`, puis keepaliv
   `otaDone {target,sessionId}` · `otaResult {target,ok,fw?,reason?}` ·
   `otaError {target?,sessionId?,reason}`
 
-Champs inconnus dans une commande : ignorés (la console peut être plus récente que
-le firmware). Réponses routées exclusivement sur `evt`. Tampon de ligne : 4 Ko
-(`lineMax` annoncé au handshake ; toute ligne plus longue → `err`).
+Unknown fields in a command: ignored (the console may be newer than the
+firmware). Responses routed exclusively on `evt`. Line buffer: 4 KB
+(`lineMax` announced at handshake; any longer line → `err`).
 
-**Commit/revert** (volume, params d'anim, noms — pas la calibration ni les
-séquences) : les setters sont « live » (surcouche RAM), la NVS n'est écrite qu'au
-`commit` ; `revert` recharge l'état persisté. La console doit envoyer `commit`
-après un `setMulti` de restauration. [FIRMWARE-CONTRACT.md](FIRMWARE-CONTRACT.md)
-tient l'état d'implémentation (§1/§3/§4/§5 faits ; §2 durées de pistes reporté —
-approche broche BUSY).
+**Commit/revert** (volume, anim params, names — not calibration or
+sequences): setters are "live" (RAM overlay), NVS is only written on
+`commit`; `revert` reloads the persisted state. The console must send `commit`
+after a restore `setMulti`. [FIRMWARE-CONTRACT.md](FIRMWARE-CONTRACT.md)
+tracks the implementation status (§1/§3/§4/§5 done; §2 track durations deferred —
+BUSY-pin approach).
 
-**Adoption des droïdes** (`registry`/`config_store`) : un droïde jamais vu
-(`adopted:false` dans `evt:droids`) reste dans le mesh (anims broadcast reçues
-normalement) mais absent des contrôles individuels tant que la console n'a pas
-envoyé `adopt`. `adopt` persiste le statut en NVS (survit aux redémarrages du
-maître) ; `forget` retire l'entrée du registre **et** efface son statut NVS — un
-droïde ainsi « oublié » ou dont l'adoption est refusée redemande donc dès qu'il
-reparle. Le badge « perdu » (4 s de silence, `DROID_TIMEOUT_MS`) ne redéclenche
-jamais cette question à lui seul.
+**Droid adoption** (`registry`/`config_store`): a droid never seen before
+(`adopted:false` in `evt:droids`) stays in the mesh (broadcast anims received
+normally) but is absent from individual controls until the console has
+sent `adopt`. `adopt` persists the status in NVS (survives master reboots);
+`forget` removes the entry from the registry **and** clears its NVS status — a
+droid "forgotten" this way, or whose adoption was declined, therefore asks again as soon as it
+talks again. The "lost" badge (4s of silence, `DROID_TIMEOUT_MS`) never
+re-triggers this question on its own.
 
-## OTA du firmware (esclaves, relayé par le mesh)
+## Firmware OTA (slaves, relayed by the mesh)
 
-Un esclave adopté peut être reflashé **sans USB**, déclenché par un bouton
-« Flasher (OTA) » sur sa ligne dans la carte Droïdes. Le `.bin` transite par le
-lien série existant (console → maître, en base64) puis par le mesh ESP-NOW
-(maître → esclave ciblé), en `stop-and-wait` : un fragment de 190 o en vol à la
-fois, accusé requis avant le suivant (`Update.write()` côté esclave est
-séquentiel/append-only, pas de reprise de désordre). **Une seule session à la
-fois** sur tout le parc.
+An adopted slave can be reflashed **without USB**, triggered by a
+"Flash (OTA)" button on its row in the Droids card. The `.bin` travels over the
+existing serial link (console → master, base64-encoded) then over the ESP-NOW mesh
+(master → targeted slave), `stop-and-wait`: one 190-byte fragment in flight at a
+time, acknowledgment required before the next (`Update.write()` on the slave side is
+sequential/append-only, no out-of-order handling). **Only one session at a
+time** across the whole fleet.
 
-Déroulé : `otaStart` (console, avec taille + MD5) → le maître valide la cible
-(connue du registre) et envoie `MSG_OTA_START` → une fois acquitté, `evt:otaReady`
-→ la console pousse les chunks un par un via `otaChunk`, chacun relayé en
-`MSG_OTA_CHUNK` → `evt:otaChunkAck` après chaque accusé (déclenche l'envoi du
-suivant côté console) → dernier chunk acquitté → `MSG_OTA_END` → `evt:otaDone`
-(le maître a fini, l'esclave redémarre) → le maître surveille ensuite les
-heartbeats de la cible jusqu'à `OTA_REBOOT_WAIT_MS` (~90 s) et pousse
-`evt:otaResult`. Comme la console ne peut pas connaître de façon fiable la
-version intégrée dans un `.bin` arbitraire, le succès est déterminé en comparant
-la version rapportée **après** redémarrage à celle d'**avant** l'OTA (capturée
-au moment de `otaStart`) plutôt qu'à une version annoncée — `ok:true` si elle a
-changé, `reason:"rolledBack"` si elle est identique, `reason:"injoignable"` si
-aucun heartbeat n'arrive dans le délai. Fenêtre de grâce (`OTA_REBOOT_GRACE_MS`,
-5 s) : un signe de vie à version inchangée dans les premières secondes est
-ignoré — l'esclave ne reboote que ~250 ms après son ack de END, un dernier
-heartbeat de l'ancienne image peut encore arriver (faux « rolledBack » rendu
-940 ms après `otaDone`, observé au banc) ; un vrai rollback prend ≥ 10-30 s.
+Flow: `otaStart` (console, with size + MD5) → the master validates the target
+(known to the registry) and sends `MSG_OTA_START` → once acked, `evt:otaReady`
+→ the console pushes the chunks one by one via `otaChunk`, each relayed as
+`MSG_OTA_CHUNK` → `evt:otaChunkAck` after each ack (triggers sending the
+next one from the console) → last chunk acked → `MSG_OTA_END` → `evt:otaDone`
+(the master is done, the slave reboots) → the master then monitors the
+target's heartbeats until `OTA_REBOOT_WAIT_MS` (~90s) and pushes
+`evt:otaResult`. Since the console can't reliably know the
+version baked into an arbitrary `.bin`, success is determined by comparing
+the version reported **after** reboot to the one from **before** the OTA (captured
+at `otaStart` time) rather than to an announced version — `ok:true` if it
+changed, `reason:"rolledBack"` if it's identical, `reason:"unreachable"` if
+no heartbeat arrives within the delay. Grace window (`OTA_REBOOT_GRACE_MS`,
+5s): a sign of life at an unchanged version in the first few seconds is
+ignored — the slave only reboots ~250 ms after its END ack, one last
+heartbeat from the old image can still arrive (false "rolledBack" rendered
+940 ms after `otaDone`, observed at the bench); a real rollback takes ≥ 10-30s.
 
-Sécurité anti-brick (`ota_guard.{h,cpp}`) : avant de finaliser (`Update.end(true)`,
-qui vérifie déjà taille/MD5 et refuse de rebooter sur une image invalide),
-l'esclave arme un flag NVS puis redémarre. Au boot suivant, si ce flag est
-présent, un compteur de tentatives s'incrémente ; au-delà de
-`OTA_MAX_BOOT_ATTEMPTS` (3), le firmware bascule **lui-même**
-(`esp_ota_set_boot_partition`) sur l'autre partition (`esp_ota_get_next_update_partition`
-alterne forcément app0/app1) et redémarre — un rollback manuel via l'API
-`esp_ota_ops` standard, sans dépendre du rollback bootloader d'ESP-IDF
-(non exposé simplement en `framework=arduino`). Si le firmware tourne
-`OTA_VERIFY_UPTIME_MS` (~20 s) sans reset, le flag est effacé : l'image est
-confirmée bonne.
+Anti-brick safety net (`ota_guard.{h,cpp}`): before finalizing (`Update.end(true)`,
+which already checks size/MD5 and refuses to reboot into an invalid image),
+the slave arms an NVS flag then reboots. On the next boot, if this flag is
+present, an attempt counter increments; past
+`OTA_MAX_BOOT_ATTEMPTS` (3), the firmware itself switches
+(`esp_ota_set_boot_partition`) to the other partition (`esp_ota_get_next_update_partition`
+necessarily alternates app0/app1) and reboots — a manual rollback via the standard
+`esp_ota_ops` API, without relying on ESP-IDF's bootloader rollback
+(not simply exposed under `framework=arduino`). If the firmware runs for
+`OTA_VERIFY_UPTIME_MS` (~20s) without a reset, the flag is cleared: the image is
+confirmed good.
 
-**Risque résiduel assumé** : un crash survenant *avant* `OtaGuard::earlyCheck()`
-(1re ligne de `setup()`) ne serait jamais compté ni rattrapé. Réduit dans la
-pratique par la vérification MD5/format déjà faite avant tout reboot, qui
-filtre l'essentiel des cas de transfert corrompu — il ne reste que « l'image
-est valide mais plante quasi instantanément ». Un `esp_task_wdt` (10 s) est
-aussi armé pour rattraper un nouveau firmware qui boucle/bloque sans céder la
-main.
+**Residual risk accepted**: a crash occurring *before* `OtaGuard::earlyCheck()`
+(1st line of `setup()`) would never be counted or caught. Reduced in
+practice by the MD5/format check already done before any reboot, which
+filters out most corrupted-transfer cases — the only remaining case is "the image
+is valid but crashes almost instantly". An `esp_task_wdt` (10s) is
+also armed to catch a new firmware that loops/hangs without yielding.
 
-**Durée réaliste** : ~5 240 fragments pour une image ~1 Mo → **8 à 15 minutes**
-par esclave en conditions normales, jusqu'à 20-30 min en liaison faible ou
-multi-sauts. Affiché dans la console comme une progression (fragments envoyés
-sur total), pas une durée fixe promise.
+**Realistic duration**: ~5,240 fragments for a ~1 MB image → **8 to 15 minutes**
+per slave under normal conditions, up to 20-30 min over a weak or
+multi-hop link. Displayed in the console as a progress indicator (fragments sent
+out of total), not a promised fixed duration.
 
-## Ancienne page web de référence (`console/wwwroot/index.html`)
+## Old reference web page (`console/wwwroot/index.html`)
 
-Page HTML+CSS+JS inline conservée **intacte** (non modifiée depuis la réécriture
-WPF) — sert uniquement de spec comportementale/visuelle (texte français exact,
-palette, comportement carte par carte) pour l'implémentation native ci-dessous.
-N'est **plus rendue** par l'application (l'ancienne coquille WebView2, qui la
-chargeait via `window.chrome.webview.postMessage`, a été retirée).
+Inline HTML+CSS+JS page kept **intact** (unmodified since the WPF
+rewrite) — serves only as a behavioral/visual spec (exact French text,
+palette, card-by-card behavior) for the native implementation below.
+No longer **rendered** by the application (the old WebView2 shell, which
+loaded it via `window.chrome.webview.postMessage`, has been removed).
 
-Cartes qu'elle documente : Droïdes (noms, servos, anims auto, sauvegarde/
-restauration) · Calibration servos (aperçu direct + auto-save) · Animation ·
-Audio · Firmware (flash espflash) · Topologie du mesh (graphe SVG des liens
-directs, fusion bidirectionnelle au RSSI le plus faible) · Séquenceur (catalogue
-8 slots + bibliothèque locale illimitée + éditeur + timeline multi-pistes + trame
-audio + mode Répéter console-side + undo/redo + export/import `.b1seq.json`) ·
-Activité (carte retirée côté WPF, voir État d'avancement).
+Cards it documents: Droids (names, servos, auto anims, backup/
+restore) · Servo calibration (live preview + auto-save) · Animation ·
+Audio · Firmware (espflash flashing) · Mesh topology (SVG graph of direct
+links, bidirectional merge at the weakest RSSI) · Sequencer (catalog of
+8 slots + unlimited local library + editor + multi-track timeline + audio
+track + console-side Rehearse mode + undo/redo + export/import `.b1seq.json`) ·
+Activity (card removed on the WPF side, see Progress).
 
-Le protocole firmware (`cmd`/`evt`, ci-dessus) y est transporté dans `write`
-(sortant) et `line` (entrant, parsé → `handleEvent()`) ; le vocabulaire transport
-WebView2 (`listPorts`/`open`/`write`/`flash`/`libList`/...) n'a plus cours côté
-WPF, remplacé par un appel direct à `Services/SerialLinkService.cs` +
-`Services/ProtocolClient.cs` (pas de pont postMessage).
+The firmware protocol (`cmd`/`evt`, above) is carried there through `write`
+(outgoing) and `line` (incoming, parsed → `handleEvent()`); the WebView2
+transport vocabulary (`listPorts`/`open`/`write`/`flash`/`libList`/...) no longer
+applies on the WPF side, replaced by a direct call to `Services/SerialLinkService.cs` +
+`Services/ProtocolClient.cs` (no postMessage bridge).
 
-### Architecture console (`console/`) — WPF natif (XAML/MVVM)
+### Console architecture (`console/`) — native WPF (XAML/MVVM)
 
-Réécriture complète (2026-07-13) : l'ancienne coquille WebView2 est remplacée par
-une UI **100 % XAML**, carte par carte, pilotée par `CommunityToolkit.Mvvm`
-(`[ObservableProperty]`/`[RelayCommand]`). `index.html` reste sur disque, intacte,
-comme référence de design/comportement (section ci-dessus) mais n'est plus
-chargée par l'application.
+Complete rewrite (2026-07-13): the old WebView2 shell is replaced by a
+**100% XAML** UI, card by card, driven by `CommunityToolkit.Mvvm`
+(`[ObservableProperty]`/`[RelayCommand]`). `index.html` stays on disk, intact,
+as a design/behavior reference (section above) but is no longer
+loaded by the application.
 
-| Dossier/fichier | Rôle |
+| Folder/file | Role |
 | --- | --- |
-| `MainWindow.xaml(.cs)` | en-tête (logo, statut connexion, commit/revert, bouton « Firmware… ») + grille des cartes |
-| `FirmwareWindow.xaml(.cs)` | fenêtre séparée hébergeant `Views/FirmwareCardView` (flash espflash + MAJ GitHub), ouverte depuis le bouton d'en-tête |
-| `App.xaml(.cs)` | composition root : convertisseurs + dictionnaires de ressources fusionnés |
-| `Themes/Theme.xaml` | palette (brushes), dégradés boutons/LED/nœuds du mesh — portée depuis les custom properties CSS de `index.html` |
-| `Themes/Effects.xaml` | styles partagés : `CardBorderStyle`, `BeveledButtonStyle`, `HaloBadge*Style`, `MetalSliderStyle`, `DarkComboBoxStyle`, `CardIconBoxStyle`, `MeshNodeEllipseStyle`, etc. |
-| `Models/` | `Droid`, `MeshNodeVisual`/`MeshEdgeVisual`, séquences, calibration — objets liés aux vues |
-| `ViewModels/` | `MainViewModel` + un par carte (`DroidsViewModel`, `CalibrationViewModel`, `AnimationViewModel`, `AudioViewModel`, `FirmwareViewModel`, `MeshTopologyViewModel`, `SequencerViewModel`) |
-| `Views/` | un `UserControl` XAML par carte (plus de carte Activité) |
-| `Services/SerialLinkService.cs` | port série natif (`System.IO.Ports`), auto-reconnexion (3 s) |
-| `Services/ProtocolClient.cs` | état central : parse les `evt` JSON entrants, construit les `cmd` sortants (équivalent C# du `sendCmd()`/`handleEvent()` JS) |
-| `Services/UpdateService.cs` / `FlashService.cs` / `LibraryService.cs` / `SettingsService.cs` | MAJ GitHub, flash espflash, bibliothèque locale de séquences, `settings.json` |
-| `Services/OtaService.cs` | pilote une session OTA (un esclave à la fois) : lit le `.bin`, calcule le MD5, envoie un fragment par `evt:otaChunkAck` reçu |
-| `Converters/` | `BoolToStyleConverter`, `BoolToTextConverter`, `BoolToVisibilityConverter`, `BoolToBrushConverter`, `StrengthToBrushConverter` (couleur des liens du mesh selon le RSSI) |
-| `b1-chat-console.csproj` | build number auto-incrémenté, version depuis `VersionPrefix`, `IncludeNativeLibrariesForSelfExtract`, `tools/` (espflash) exclu du single-file mais copié au publish |
-| `installer/b1-chat-console.nsi` + `release.ps1` | installeur NSIS + script de release GitHub (tag `vX.Y.Z`) |
+| `MainWindow.xaml(.cs)` | header (logo, connection status, commit/revert, "Firmware…" button) + card grid |
+| `FirmwareWindow.xaml(.cs)` | separate window hosting `Views/FirmwareCardView` (espflash flashing + GitHub update), opened from the header button |
+| `App.xaml(.cs)` | composition root: converters + merged resource dictionaries |
+| `Themes/Theme.xaml` | palette (brushes), button/LED/mesh-node gradients — ported from index.html's CSS custom properties |
+| `Themes/Effects.xaml` | shared styles: `CardBorderStyle`, `BeveledButtonStyle`, `HaloBadge*Style`, `MetalSliderStyle`, `DarkComboBoxStyle`, `CardIconBoxStyle`, `MeshNodeEllipseStyle`, etc. |
+| `Models/` | `Droid`, `MeshNodeVisual`/`MeshEdgeVisual`, sequences, calibration — view-bound objects |
+| `ViewModels/` | `MainViewModel` + one per card (`DroidsViewModel`, `CalibrationViewModel`, `AnimationViewModel`, `AudioViewModel`, `FirmwareViewModel`, `MeshTopologyViewModel`, `SequencerViewModel`) |
+| `Views/` | one XAML `UserControl` per card (no more Activity card) |
+| `Services/SerialLinkService.cs` | native serial port (`System.IO.Ports`), auto-reconnect (3s) |
+| `Services/ProtocolClient.cs` | central state: parses incoming JSON `evt`, builds outgoing `cmd` (C# equivalent of JS's `sendCmd()`/`handleEvent()`) |
+| `Services/UpdateService.cs` / `FlashService.cs` / `LibraryService.cs` / `SettingsService.cs` | GitHub updates, espflash flashing, local sequence library, `settings.json` |
+| `Services/OtaService.cs` | drives an OTA session (one slave at a time): reads the `.bin`, computes the MD5, sends one fragment per `evt:otaChunkAck` received |
+| `Converters/` | `BoolToStyleConverter`, `BoolToTextConverter`, `BoolToVisibilityConverter`, `BoolToBrushConverter`, `StrengthToBrushConverter` (mesh link color by RSSI) |
+| `b1-chat-console.csproj` | auto-incremented build number, version from `VersionPrefix`, `IncludeNativeLibrariesForSelfExtract`, `tools/` (espflash) excluded from the single-file but copied on publish |
+| `installer/b1-chat-console.nsi` + `release.ps1` | NSIS installer + GitHub release script (tag `vX.Y.Z`) |
 
-Disposition de la grille principale (`MainWindow.xaml`) : Droïdes (colonne gauche,
-pleine hauteur) · colonne droite empilée Calibration → Topologie du mesh →
-(rangée Animation + Audio côte à côte, largeur égale) · Séquenceur en pleine
-largeur en bas. Carte Firmware sortie de la grille (fenêtre séparée).
+Main grid layout (`MainWindow.xaml`): Droids (left column,
+full height) · right column stacked Calibration → Mesh topology →
+(Animation + Audio row side by side, equal width) · Sequencer full
+width at the bottom. Firmware card taken out of the grid (separate window).
 
-## Stockage
+## Storage
 
-| Quoi | Où |
+| What | Where |
 | --- | --- |
-| Noms, volume, params anim, calibrations, statut d'adoption | NVS du maître (`config_store`) |
-| Séquences (8 slots, ≤ 32 étapes) | NVS du maître (`sequence_store`) |
-| Durées de pistes + slot→piste audio | `localStorage` de la page (temporaire, cf. contrat §1-2) |
-| Bibliothèque de séquences, dernier port | `%LOCALAPPDATA%\B1ChatConsole\` (côté console) |
-| Flag anti-brick OTA (pending/attempts) | NVS de **chaque droïde** flashé en OTA, namespace `"ota"` séparé (`ota_guard`) |
+| Names, volume, anim params, calibrations, adoption status | Master's NVS (`config_store`) |
+| Sequences (8 slots, ≤ 32 steps) | Master's NVS (`sequence_store`) |
+| Track durations + slot→audio-track | Page's `localStorage` (temporary, see contract §1-2) |
+| Sequence library, last port | `%LOCALAPPDATA%\B1ChatConsole\` (console side) |
+| OTA anti-brick flag (pending/attempts) | NVS of **each droid** flashed via OTA, separate `"ota"` namespace (`ota_guard`) |
 
-## État d'avancement
+## Progress
 
-- [x] Étapes 1-5, 7-10 : servo_engine, mesh_comm (HMAC, relais), animation (18
-      gestes), audio, config_store + registry, serial_console, dashboard,
-      sequence_store + exécution autonome.
-- [x] Refonte séquenceur : catalogue par nom (slots cachés), durées réelles
-      (`getAnimDurations`), progression live (`seqState`), acks seqSaved/seqDeleted,
-      garde `anim.isPlaying()` pour les étapes ciblant le maître.
-- [x] Pause « Anims auto » par droïde (MSG_AUTOANIM, heartbeat bit1, colonne UI).
-- [x] Topologie du mesh (MSG_NEIGHBORS, module mesh_topology, carte graphe SVG).
-- [x] Console WPF v0.8.0 : port série natif, auto-reconnexion, flash intégré,
-      bibliothèque locale, sauvegarde/restauration, timeline, Répéter,
-      export/import. `index.html` remplace `web/dashboard_V7.html`.
-- [x] Phase « écosystème » (2026-07-07), firmware 1.0.0 : tampon série 4 Ko +
-      `err` explicites, handshake enrichi (fw/proto/lineMax/caps/dirty), `getAll`
-      + `allDone`, contrat §3 (`evt:config`), §1 (trame audio par séquence, jouée
-      en autonome, sons par geste supprimés quand une trame existe), §5 (`seqRun
-      from`, pause/reprise avec pause DFPlayer), §4 (`setMulti` atomique),
-      commit/revert KyberEditor (volume/params/noms). Page + C# (checkUpdates
-      GitHub, download+install, scripts de release firmware et console) livrés.
-- [x] Fusion des dépôts (2026-07-13) : la console (`b1-chat-console`, dépôt
-      local jamais poussé) est rapatriée dans `console/` de ce dépôt (copie
-      simple, un commit, historique des 6 commits console non conservé — rien
-      n'était publié). Un seul dépôt GitHub désormais (`stefe2/B1_Chat`), deux
-      trains de tags (`vX.Y.Z` app, `fw-vX.Y.Z` firmware) ; `MainWindow.xaml.cs`
-      adapté (liste les releases du dépôt et filtre par préfixe de tag au lieu
-      de `/releases/latest`, qui aurait mélangé les deux trains).
-- [x] Réécriture complète de la console en WPF natif (2026-07-13, `index.html`
-      conservée intacte comme référence, plus rendue à l'exécution) : 8 cartes
-      portées en XAML/MVVM (`CommunityToolkit.Mvvm`), `ProtocolClient` C# comme
-      nouvel état central (équivalent natif du `sendCmd()`/`handleEvent()` JS),
-      auto-reconnexion série, undo/redo séquenceur, topologie du mesh (Canvas +
-      layout circulaire porté tel quel).
-- [x] Polish visuel + réagencement (2026-07-13) : carte Calibration servos prise
-      comme modèle de référence (slider métal, pastilles de valeur, ComboBox
-      sombre) puis propagée aux autres cartes ; en-tête redessiné (logo, statut,
-      CTA accent) ; carte Topologie du mesh redessinée (nœuds glossy, anneaux
-      radar, liens colorés par force de signal) et déplacée entre Calibration et
-      Animation ; carte Activité supprimée ; carte Firmware sortie de la grille
-      vers une fenêtre séparée (`FirmwareWindow`, bouton dédié en en-tête) ;
-      Animation et Audio placées côte à côte au-dessus du Séquenceur.
-- [x] Refonte du flux firmware console (rôle Maître/Esclave choisi explicitement
-      avant la source, source GitHub auto-suffisante avec vérification, adresse
-      reléguée en options avancées) + release firmware automatique par CI
-      (`.github/workflows/firmware-release.yml`, déclenchée par bump de
-      `FW_VERSION` ; `IS_MASTER` rendu surchargeable via `#ifndef` pour les
-      nouveaux environnements PlatformIO `b1_master`/`b1_slave`).
-- [x] Adoption des droïdes (2026-07-13, fw 1.1.0) : un droïde jamais vu (ou
-      « oublié »/refusé) n'est plus ajouté automatiquement à la liste — la
-      console propose Adopter/Ignorer (`cmd adopt`/`forget`, statut persisté en
-      NVS via `config_store`, jamais dans le `registry` RAM éphémère). Bouton
-      « Oublier » pour retirer un droïde déjà adopté. Correctif au passage :
-      `ProtocolClient.HandleDroids` ne retirait jamais une entrée disparue de
-      `evt:droids` (bug latent, sans effet visible avant cette fonctionnalité).
-- [x] Version firmware par droïde (2026-07-13, fw 1.2.0) : chaque esclave
-      rapporte sa version dans son heartbeat (3 octets major/minor/patch),
-      stockée dans le `registry` et exposée via `evt:droids.fw` ; nouvelle
-      colonne FW dans la carte Droïdes. Casse la compatibilité binaire du
-      heartbeat (voir pièges) — tout le parc doit être reflashé ensemble.
-- [x] Polish carte Droïdes (2026-07-13) : colonne NOM à largeur fixe, pastilles
-      ÉTAT/RÔLE à largeur fixe et texte centré, RSSI affiché `-` (au lieu de la
-      dernière valeur figée) quand un droïde est « perdu », seuil « perdu »
-      abaissé à 4 s (`DROID_TIMEOUT_MS` + seuil console), interrupteurs on/off
-      coulissants (`OnOffSwitchStyle`) pour Servos/Anims auto.
-- [ ] Étape 6 : machine à états `droid.{h,cpp}`.
-- [ ] Contrat §2 : durées de pistes mesurées via la broche BUSY (GPIO4) — reporté.
-- [ ] Params d'anim freq/amp/speed : reçus + persistés mais **aucun effet**
-      (hook `onConfig` jamais branché dans main.cpp ; curseurs marqués « bientôt
-      actif » dans l'UI).
-- [x] Release firmware automatique opérationnelle (`fw-v1.0.0`, `fw-v1.1.0`
-      publiées via la CI). Console : encore manuel (`gh auth login` une fois,
-      puis `console\installer\release.ps1 -Publish`).
-- [x] OTA du firmware relayé par le mesh ESP-NOW (2026-07-14, fw 1.3.0) : un
-      esclave adopté peut être reflashé sans USB depuis la carte Droïdes
-      (`MSG_OTA_START/CHUNK/ACK/END/ABORT`, stop-and-wait, une session à la
-      fois) + `ota_guard` (rollback manuel anti-brick, voir section OTA
-      ci-dessus). Testé uniquement sur carte de rechange dédiée pour l'instant
-      (voir Vérification) — pas encore validé sur un vrai droïde du parc.
-- [x] Chemin nominal OTA **validé au banc** (2026-07-14, fw 1.3.11) : transfert
-      complet 1.3.9 → 1.3.11 (~4 min, 5111 chunks à ~22/s, un seul saut),
-      reboot propre, verdict `otaResult{ok:true}` correct, colonne FW à jour.
-      A nécessité une longue traque de bugs (fw 1.3.2 → 1.3.11 + console) :
-      accès flash sous `portENTER_CRITICAL` dans le callback ESP-NOW (gel au
-      chunk 21 → boîte aux lettres callback→loop), débordements non signés
-      `now - horodatage` (timeouts instantanés, faux `age` ~4e9 qui crashait
-      `HandleDroids` et tuait la boucle de lecture — les « gels » aux chunks
-      716/848/859), segment série sans retry (chien de garde console 3 s ×5 +
-      re-ack maître + tampons UART 2 Ko + timeout esclave 60 s > maître 45 s),
-      faux `rolledBack` (verdict rendu sur un heartbeat pré-reboot → fenêtre
-      de grâce 5 s), et tri lexicographique de l'API GitHub `/releases` (la
-      console flashait 1.3.9 en croyant prendre le plus récent → max
-      sémantique). Trace série permanente ajoutée
+- [x] Steps 1-5, 7-10: servo_engine, mesh_comm (HMAC, relay), animation (18
+      gestures), audio, config_store + registry, serial_console, dashboard,
+      sequence_store + standalone playback.
+- [x] Sequencer overhaul: catalog by name (hidden slots), real durations
+      (`getAnimDurations`), live progress (`seqState`), seqSaved/seqDeleted acks,
+      `anim.isPlaying()` guard for steps targeting the master.
+- [x] Per-droid "Auto anims" pause (MSG_AUTOANIM, heartbeat bit1, UI column).
+- [x] Mesh topology (MSG_NEIGHBORS, mesh_topology module, SVG graph card).
+- [x] WPF console v0.8.0: native serial port, auto-reconnect, integrated flashing,
+      local library, backup/restore, timeline, Rehearse,
+      export/import. `index.html` replaces `web/dashboard_V7.html`.
+- [x] "Ecosystem" phase (2026-07-07), firmware 1.0.0: 4 KB serial buffer +
+      explicit `err`, enriched handshake (fw/proto/lineMax/caps/dirty), `getAll`
+      + `allDone`, contract §3 (`evt:config`), §1 (per-sequence audio track, played
+      standalone, per-gesture sounds suppressed when a track exists), §5 (`seqRun
+      from`, pause/resume with DFPlayer pause), §4 (atomic `setMulti`),
+      KyberEditor-style commit/revert (volume/params/names). Page + C# (GitHub
+      checkUpdates, download+install, firmware and console release scripts) shipped.
+- [x] Repo merge (2026-07-13): the console (`b1-chat-console`, a
+      local repo never pushed) is brought into `console/` in this repo (plain
+      copy, one commit, the 6-commit console history not kept — nothing
+      was published). Only one GitHub repo now (`stefe2/B1_Chat`), two
+      tag trains (`vX.Y.Z` app, `fw-vX.Y.Z` firmware); `MainWindow.xaml.cs`
+      adapted (lists the repo's releases and filters by tag prefix instead
+      of `/releases/latest`, which would have mixed the two trains).
+- [x] Complete rewrite of the console in native WPF (2026-07-13, `index.html`
+      kept intact as a reference, no longer rendered at runtime): 8 cards
+      ported to XAML/MVVM (`CommunityToolkit.Mvvm`), C# `ProtocolClient` as the
+      new central state (native equivalent of JS's `sendCmd()`/`handleEvent()`),
+      auto-reconnecting serial, sequencer undo/redo, mesh topology (Canvas +
+      circular layout ported as-is).
+- [x] Visual polish + rearrangement (2026-07-13): Servo Calibration card taken
+      as the reference model (metal slider, value pills, dark
+      ComboBox) then propagated to the other cards; header redesigned (logo, status,
+      accent CTA); Mesh Topology card redesigned (glossy nodes, radar
+      rings, links colored by signal strength) and moved between Calibration and
+      Animation; Activity card removed; Firmware card taken out of the grid
+      into a separate window (`FirmwareWindow`, dedicated header button);
+      Animation and Audio placed side by side above the Sequencer.
+- [x] Console firmware-flow overhaul (Master/Slave role chosen explicitly
+      before the source, self-sufficient GitHub source with verification, address
+      relegated to advanced options) + automatic firmware release via CI
+      (`.github/workflows/firmware-release.yml`, triggered by a `FW_VERSION`
+      bump; `IS_MASTER` made overridable via `#ifndef` for the
+      new `b1_master`/`b1_slave` PlatformIO environments).
+- [x] Droid adoption (2026-07-13, fw 1.1.0): a droid never seen before (or
+      "forgotten"/declined) is no longer automatically added to the list — the
+      console offers Adopt/Ignore (`cmd adopt`/`forget`, status persisted in
+      NVS via `config_store`, never in the ephemeral RAM `registry`). "Forget"
+      button to remove an already-adopted droid. Fixed along the way:
+      `ProtocolClient.HandleDroids` never removed an entry that had disappeared from
+      `evt:droids` (latent bug, no visible effect before this feature).
+- [x] Per-droid firmware version (2026-07-13, fw 1.2.0): each slave
+      reports its version in its heartbeat (3 bytes major/minor/patch),
+      stored in the `registry` and exposed via `evt:droids.fw`; new
+      FW column in the Droids card. Breaks heartbeat binary
+      compatibility (see pitfalls) — the whole fleet must be reflashed together.
+- [x] Droids card polish (2026-07-13): fixed-width NAME column, fixed-width
+      centered-text STATE/ROLE badges, RSSI shown as `-` (instead of the
+      last frozen value) when a droid is "lost", "lost" threshold
+      lowered to 4s (`DROID_TIMEOUT_MS` + console-side threshold), sliding
+      on/off switches (`OnOffSwitchStyle`) for Servos/Auto anims.
+- [ ] Step 6: `droid.{h,cpp}` state machine.
+- [ ] Contract §2: track durations measured via the BUSY pin (GPIO4) — deferred.
+- [ ] Anim freq/amp/speed params: received + persisted but **no effect**
+      (`onConfig` hook never wired up in main.cpp; sliders marked "coming
+      soon" in the UI).
+- [x] Automatic firmware release operational (`fw-v1.0.0`, `fw-v1.1.0`
+      published via CI). Console: still manual (`gh auth login` once,
+      then `console\installer\release.ps1 -Publish`).
+- [x] Firmware OTA relayed by the ESP-NOW mesh (2026-07-14, fw 1.3.0): an
+      adopted slave can be reflashed without USB from the Droids card
+      (`MSG_OTA_START/CHUNK/ACK/END/ABORT`, stop-and-wait, one session at a
+      time) + `ota_guard` (manual anti-brick rollback, see the OTA section
+      above). So far only tested on a dedicated spare board (see
+      Verification) — not yet validated on a real fleet droid.
+- [x] Nominal OTA path **validated at the bench** (2026-07-14, fw 1.3.11): full
+      transfer 1.3.9 → 1.3.11 (~4 min, 5111 chunks at ~22/s, single hop),
+      clean reboot, correct `otaResult{ok:true}` verdict, FW column up to date.
+      Required a long bug hunt (fw 1.3.2 → 1.3.11 + console):
+      flash access under `portENTER_CRITICAL` in the ESP-NOW callback (freeze at
+      chunk 21 → callback→loop mailbox), unsigned overflow in
+      `now - timestamp` (instant timeouts, false `age` ~4e9 that crashed
+      `HandleDroids` and killed the read loop — the "freezes" at chunks
+      716/848/859), serial segment with no retry (console watchdog 3s ×5 +
+      master re-ack + 2 KB UART buffers + slave 60s timeout > master's 45s),
+      false `rolledBack` (verdict rendered on a pre-reboot heartbeat → 5s
+      grace window), and lexicographic sorting of the GitHub `/releases` API (the
+      console flashed 1.3.9 thinking it was the latest → semantic
+      max). Permanent serial trace added
       (`%LOCALAPPDATA%\B1ChatConsole\serial-trace.log`).
-      Restent à faire (Vérification pt 7) : `.bin` corrompu, rollback forcé,
-      abandon console en cours de transfert, garde anti-double-session,
-      multi-sauts.
-- [x] Robustesse OTA validée au banc (2026-07-14 nuit, fw 1.3.12) via
-      `tools/ota-test.ps1` (banc de test série scriptable : rejoue le
-      protocole console et injecte des fautes — chunk corrompu, abandon,
-      double otaStart) :
-      · chunk corrompu en vol → `ERR_MD5` (err 7) au END, **aucun reboot**,
-        l'esclave reste sur son image ;
-      · double `otaStart` → `otaError « occupé »`, la session en cours
-        continue sans perturbation ;
-      · abandon console au chunk 1200 → abort maître à 45 s pile (raison 11),
-        l'esclave purge la session, la suivante repart proprement ;
-      · rollback anti-brick (build `-D OTA_TEST_FORCE_CRASH`, hook inerte
-        gardé dans main.cpp) : 3 panics au boot → bascule automatique de
-        partition au 4ᵉ boot → ancienne image récupérée en **3,6 s**, verdict
-        `rolledBack` authentique côté maître ;
-      · régression nominale 1.3.11 → 1.3.12 (avec le Registry synchronisé
-        des deux côtés) → `otaResult{ok:true}` en ~1 s post-reboot.
-      Reste : multi-sauts (3ᵉ carte requise) et premier OTA sur un vrai
-      droïde du parc.
-- [x] Console v0.9.0 (2026-07-14) : cycle de durcissement OTA (trace série
-      permanente, chien de garde de chunk, verdict fiabilisé, max sémantique
-      des releases, colonne FW colorée, OTA depuis GitHub). Installeur NSIS
-      publié sur GitHub (tag `v0.9.0`, `console\installer\release.ps1 -Publish`).
+      Still to do (Verification pt 7): corrupted `.bin`, forced rollback,
+      console abort mid-transfer, anti-double-session guard,
+      multi-hop.
+- [x] OTA robustness validated at the bench (2026-07-14 night, fw 1.3.12) via
+      `tools/ota-test.ps1` (scriptable serial test bench: replays the
+      console protocol and injects faults — corrupted chunk, abort,
+      double otaStart):
+      · corrupted chunk in flight → `ERR_MD5` (err 7) at END, **no reboot**,
+        the slave stays on its image;
+      · double `otaStart` → `otaError "busy"`, the in-progress session
+        continues undisturbed;
+      · console abort at chunk 1200 → master aborts at exactly 45s (reason 11),
+        the slave purges the session, the next one starts cleanly;
+      · anti-brick rollback (`-D OTA_TEST_FORCE_CRASH` build, inert hook
+        kept in main.cpp): 3 boot panics → automatic partition switch
+        on the 4th boot → old image recovered in **3.6s**, genuine
+        `rolledBack` verdict on the master's side;
+      · nominal regression 1.3.11 → 1.3.12 (with the Registry synchronized
+        on both sides) → `otaResult{ok:true}` ~1s post-reboot.
+      Remaining: multi-hop (3rd board required) and a first OTA on a real
+      fleet droid.
+- [x] Console v0.9.0 (2026-07-14): OTA hardening cycle (permanent serial
+      trace, chunk watchdog, more reliable verdict, semantic release
+      max, colored FW column, OTA from GitHub). NSIS installer
+      published on GitHub (tag `v0.9.0`, `console\installer\release.ps1 -Publish`).
+- [x] Console/firmware English pass + icon + Droids/Mesh-Topology/header
+      overhaul (2026-07-14): app icon designed and wired in everywhere
+      (csproj, windows, installer); Droids card reworked (disambiguated
+      VERSION/UPDATE columns, flash buttons hidden once a droid's firmware is
+      confirmed up to date, "Up to date ✓" badge); Mesh Topology card given
+      the full treatment — ambient effects (rotating radar sweep, spinning
+      ring on the master, starfield, master/slave legend, auto-scaling
+      radius) and live-telemetry effects (per-node signal halo,
+      heartbeat-flash pulse, OTA travel indicator, hop-wave ripple on
+      broadcast, TALK-sync pulse, mini-stats readout); header bar
+      regrouped into three visually separated clusters. Entire codebase
+      (console C#/XAML, firmware `src/*.h/.cpp` comments, docs, build
+      scripts) switched from French to English — see the updated
+      convention below. `console/wwwroot/index.html` deliberately left
+      untouched (frozen design reference, never rendered).
+      **Post-translation crash found and fixed**: connecting to a real
+      master with ≥1 droid crashed the console immediately
+      (`XamlParseException` → `Cannot animate '(0).(1)' on an object
+      instance that cannot be modified`) — see the new Known pitfalls
+      entry below for the root cause and fix.
 
-## Pièges connus
+## Known pitfalls
 
-- `serial_console` : tampon de ligne 256 o (voir bug ci-dessus).
-- `IS_MASTER` vit dans `config.h` : vérifier sa valeur avant chaque flash (il
-  part dans les commits avec la dernière valeur utilisée).
-- `handleRaw()` : l'enregistrement du voisinage doit rester **avant** le
-  early-return `srcId==_myId` et la dédup (même un écho relayé de notre propre
-  message prouve un lien radio direct avec le relais).
-- `HeartbeatPayload` (`mesh_comm.h`) : la réception exige `len ==
-  sizeof(HeartbeatPayload)` exact ([main.cpp](src/main.cpp)) — tout changement
-  de taille de cette struct (ex. ajout de la version FW) casse silencieusement
-  la compatibilité avec un droïde resté sur l'ancien firmware : ses heartbeats
-  sont juste ignorés (pas d'erreur), donc servos/anims auto/FW gèlent pour lui
-  côté registre/console. Reflasher tout le parc ensemble à chaque changement de
-  cette struct.
-- La page est en français partout ; commentaires code en français (firmware et page).
-- ESP32Servo abandonné (bug double-attach) → LEDC natif uniquement.
-- DFPlayer : ne sait pas rapporter la durée d'une piste ; la broche BUSY (GPIO4)
-  est le seul moyen d'observer la fin de lecture.
-- KyberEditor (`C:\Program Files\KyberEditor`) : source d'inspiration UX de la
-  console et origine de `tools\espflash.exe` ; ses firmwares/bootloaders ne nous
-  servent pas (PlatformIO génère les nôtres).
-- Un seul dépôt GitHub pour l'app et le firmware : ne jamais utiliser l'API
-  `/releases/latest` (elle ignore le préfixe de tag et mélangerait les deux
-  trains) — toujours lister `/releases` et filtrer par préfixe (`v` hors `fw-`
-  pour l'app, `fw-` pour le firmware), voir `GetLatestReleaseAsync` dans
-  `console/Services/UpdateService.cs`. **Et ne jamais se fier à l'ordre de la
-  liste `/releases`** : observé trié lexicographiquement par tag
-  (`fw-v1.3.9` devant `fw-v1.3.10`/`fw-v1.3.11`), pas chronologiquement — la
-  console a flashé un 1.3.9 en croyant prendre le plus récent. Parser les
-  versions et prendre le maximum sémantique.
-- WPF `Setter.TargetName` ne peut pas cibler un `Freezable` nommé imbriqué dans
-  une propriété (ex. un `TranslateTransform` dans `Border.RenderTransform`, un
-  `DropShadowEffect` dans `Border.Effect`) : le `Trigger` doit remplacer toute la
-  propriété du parent par un nouvel objet plutôt que nommer l'enfant.
-- `DockPanel.LastChildFill` vaut `True` par défaut : le **dernier** enfant ignore
-  son propre `Dock` et s'étire pour remplir l'espace restant — piège classique
-  pour un groupe censé rester collé à un bord (ex. les contrôles de connexion de
-  l'en-tête) ; mettre `LastChildFill="False"` si tous les enfants doivent
-  respecter leur `Dock`.
-- `IS_MASTER` a deux mécanismes de réglage distincts, ne pas les confondre :
-  `[env:b1]` (flash/dev local) lit la valeur écrite en dur dans `config.h` ;
-  `[env:b1_master]`/`[env:b1_slave]` (release CI) l'ignorent et forcent le rôle
-  via `-D IS_MASTER=1|0`. Modifier `config.h` n'affecte jamais les deux derniers.
-- `OtaGuard::earlyCheck()` (`ota_guard.cpp`) doit rester la toute première
-  ligne de `setup()` — tout code qui plante avant cet appel n'est jamais compté
-  par le mécanisme anti-brick (risque résiduel assumé, voir section OTA).
-- `OtaSlave::processChunk()` : `Update.write()` est séquentiel/append-only. Un
-  ack retransmis pour un chunk déjà écrit ne doit **jamais** réappeler
-  `Update.write()` — seul le ré-ack doit se répéter, sinon l'image écrite est
-  corrompue silencieusement.
-- `Update.begin/write/end` (accès SPI flash réels : effacement de secteur tous
-  les ~21 chunks de 190 o, MD5 sur toute l'image au `end`) ne doivent **jamais**
-  s'exécuter depuis le callback ESP-NOW (tâche Wi-Fi) ni sous
-  `portENTER_CRITICAL` — gel/panic systématique au chunk 21 (premier
-  débordement du tampon de secteur 4 Ko d'`Update`). D'où la boîte aux lettres
-  d'`OtaSlave` : les `on*()` (callback) ne font que déposer le message brut,
-  `update()` (loop()) valide, écrit la flash et acke, hors verrou.
-- `OTA_CHUNK_DATA_MAX` (`mesh_comm.h`) est autoritaire côté firmware et annoncé
-  à la console via `evt:otaReady.chunkSize` — ne jamais le coder en dur côté
-  C# (`OtaService.cs` le lit dynamiquement).
-- **Horodatages écrits par le callback ESP-NOW (tâche Wi-Fi)** (`lastSeen` du
-  registry, `_lastSendMs`/`_serialWaitSince` d'OtaMaster, etc.) : ils peuvent
-  être POSTÉRIEURS au `now` capturé en début de `loop()`. Toute soustraction
-  `now - horodatage` doit être comparée en **signé** (`(int32_t)(diff) >
-  seuil`) ou clampée — en non signé, la différence négative déborde en ~4e9 :
-  timeouts qui sautent instantanément (bug OTA fw ≤ 1.3.7) ou `age` à 4 Md
-  dans `evt:droids` qui faisait crasher `HandleDroids` côté console.
-- `ProtocolClient.OnLineReceived` isole chaque ligne dans un try/catch : une
-  ligne malformée du firmware ne doit JAMAIS tuer la boucle de lecture (mort
-  silencieuse du lien, historique) ni l'application. Ne pas « simplifier » en
-  retirant cette garde.
-- `Registry` (`registry.{h,cpp}`, fw 1.3.12) : mêmes précautions que
-  `OtaMaster`/`OtaSlave` — `seen/setServos/setAutoAnim/setFwVersion` sont
-  appelées depuis le callback ESP-NOW (tâche Wi-Fi) pendant que `loop()` lit
-  via `count()/at()` (qui renvoie désormais une **copie**, jamais une
-  référence sur le tableau mutable). Toute nouvelle méthode publique doit
-  verrouiller `_mux` ; les accès NVS (`Config.isAdopted()` dans `seen()`)
-  doivent rester **hors** verrou (accès flash interdit sous
-  `portENTER_CRITICAL`, même leçon que le gel OTA au chunk 21).
+- `serial_console`: 256-byte line buffer (see the bug above).
+- `IS_MASTER` lives in `config.h`: check its value before every flash (it
+  goes into commits with whatever value was last used).
+- `handleRaw()`: neighbor recording must stay **before** the
+  `srcId==_myId` early-return and the dedup (even a relayed echo of our own
+  message proves a direct radio link with the relay).
+- `HeartbeatPayload` (`mesh_comm.h`): reception requires an exact `len ==
+  sizeof(HeartbeatPayload)` ([main.cpp](src/main.cpp)) — any change to this
+  struct's size (e.g. adding the FW version) silently breaks
+  compatibility with a droid still on the old firmware: its heartbeats
+  are just ignored (no error), so servos/auto-anims/FW freeze for it
+  on the registry/console side. Reflash the whole fleet together on every change to
+  this struct.
+- Everything is now in English (GUI, code comments, docs) — see the
+  2026-07-14 milestone above. `console/wwwroot/index.html` is the sole,
+  deliberate exception: it stays French and untouched, as a frozen
+  design reference no longer rendered at runtime.
+- **WPF `Storyboard` inside a `DataTemplate` (e.g. `ItemsControl.ItemTemplate`)
+  must target animated `Transform`s by name** (`x:Name` + `Storyboard.TargetName`),
+  never via an implicit compound path like
+  `(Ellipse.RenderTransform).(RotateTransform.Angle)`. When the template is
+  instantiated more than once (≥2 items), WPF freezes/shares the unnamed
+  Freezable declared directly in markup across the clones; the first
+  `Storyboard.Begin()` then throws `InvalidOperationException: Cannot
+  animate '(0).(1)' on an object instance that cannot be modified`
+  (surfaces as an unhandled `XamlParseException` crashing the whole app).
+  Only reproduces with ≥2 items — a single-item test looks fine. Also:
+  `Storyboard.TargetName` cannot be set from inside a `Style.Triggers`
+  (`Style` has no NameScope) — a `DataTrigger`-driven `BeginStoryboard`
+  that needs to target a named sibling element must live in
+  `DataTemplate.Triggers` instead (see `MeshTopologyCardView.xaml`'s
+  master-ring and heartbeat-pulse-ring animations for the fixed pattern).
+  Static, one-off elements outside any repeating template (e.g. the
+  topology card's starfield/radar-sweep) are unaffected.
+- ESP32Servo abandoned (double-attach bug) → native LEDC only.
+- DFPlayer: can't report a track's duration; the BUSY pin (GPIO4)
+  is the only way to observe when playback ends.
+- KyberEditor (`C:\Program Files\KyberEditor`): UX inspiration source for the
+  console and origin of `tools\espflash.exe`; its firmwares/bootloaders are of no
+  use to us (PlatformIO generates ours).
+- A single GitHub repo for the app and the firmware: never use the
+  `/releases/latest` API (it ignores the tag prefix and would mix the two
+  trains) — always list `/releases` and filter by prefix (`v` excluding `fw-`
+  for the app, `fw-` for the firmware), see `GetLatestReleaseAsync` in
+  `console/Services/UpdateService.cs`. **And never trust the order of the
+  `/releases` list**: observed sorted lexicographically by tag
+  (`fw-v1.3.9` before `fw-v1.3.10`/`fw-v1.3.11`), not chronologically — the
+  console flashed a 1.3.9 thinking it was the latest. Parse the
+  versions and take the semantic maximum.
+- WPF `Setter.TargetName` can't target a named `Freezable` nested inside
+  a property (e.g. a `TranslateTransform` in `Border.RenderTransform`, a
+  `DropShadowEffect` in `Border.Effect`): the `Trigger` must replace the whole
+  parent property with a new object rather than naming the child.
+- `DockPanel.LastChildFill` defaults to `True`: the **last** child ignores
+  its own `Dock` and stretches to fill the remaining space — a classic pitfall
+  for a group meant to stay stuck to an edge (e.g. the header's connection
+  controls); set `LastChildFill="False"` if every child must
+  respect its `Dock`.
+- `IS_MASTER` has two distinct configuration mechanisms, don't confuse them:
+  `[env:b1]` (local flash/dev) reads the value hardcoded in `config.h`;
+  `[env:b1_master]`/`[env:b1_slave]` (CI release) ignore it and force the role
+  via `-D IS_MASTER=1|0`. Editing `config.h` never affects the latter two.
+- `OtaGuard::earlyCheck()` (`ota_guard.cpp`) must remain the very first
+  line of `setup()` — any code that crashes before this call is never counted
+  by the anti-brick mechanism (residual risk accepted, see the OTA section).
+- `OtaSlave::processChunk()`: `Update.write()` is sequential/append-only. A
+  retransmitted ack for an already-written chunk must **never** call
+  `Update.write()` again — only the re-ack should repeat, otherwise the written
+  image is silently corrupted.
+- `Update.begin/write/end` (real SPI flash access: sector erase every
+  ~21 chunks of 190 B, MD5 over the whole image at `end`) must **never**
+  run from the ESP-NOW callback (Wi-Fi task) or under
+  `portENTER_CRITICAL` — systematic freeze/panic at chunk 21 (first
+  overflow of `Update`'s 4 KB sector buffer). Hence `OtaSlave`'s mailbox:
+  the `on*()` (callback) only drop the raw message,
+  `update()` (loop()) validates, writes to flash, and acks, outside the lock.
+- `OTA_CHUNK_DATA_MAX` (`mesh_comm.h`) is authoritative on the firmware side and announced
+  to the console via `evt:otaReady.chunkSize` — never hardcode it on the
+  C# side (`OtaService.cs` reads it dynamically).
+- **Timestamps written by the ESP-NOW callback (Wi-Fi task)** (registry's
+  `lastSeen`, OtaMaster's `_lastSendMs`/`_serialWaitSince`, etc.): they can
+  be LATER than the `now` captured at the start of `loop()`. Any subtraction
+  `now - timestamp` must be compared as **signed** (`(int32_t)(diff) >
+  threshold`) or clamped — in unsigned math, the negative difference overflows to ~4e9:
+  timeouts that fire instantly (OTA bug fw ≤ 1.3.7) or `age` at 4 billion
+  in `evt:droids` that crashed `HandleDroids` on the console side.
+- `ProtocolClient.OnLineReceived` isolates every line in a try/catch: a
+  malformed line from the firmware must NEVER kill the read loop (silent
+  death of the link, historically) or the application. Don't "simplify" by
+  removing this guard.
+- `Registry` (`registry.{h,cpp}`, fw 1.3.12): same precautions as
+  `OtaMaster`/`OtaSlave` — `seen/setServos/setAutoAnim/setFwVersion` are
+  called from the ESP-NOW callback (Wi-Fi task) while `loop()` reads
+  via `count()/at()` (which now returns a **copy**, never a
+  reference into the mutable array). Any new public method must
+  lock `_mux`; NVS access (`Config.isAdopted()` inside `seen()`)
+  must stay **outside** the lock (flash access forbidden under
+  `portENTER_CRITICAL`, same lesson as the OTA freeze at chunk 21).
 
-## Vérification (rappels)
+## Verification (reminders)
 
-1. `pio run -e b1` compile (tester aussi `IS_MASTER 0`).
-2. Sweep servo fluide ; `MSG_ANIM` relayé ≥ 2 sauts sans tempête de broadcast.
-3. Anim maître → piste son associée ; 2 clés de groupe différentes s'ignorent.
-4. Console connectée : liste des droïdes, anim/volume/nom, persistance après reboot.
-5. Séquence sauvée → reboot maître → `Jouer` fonctionne sans PC.
-6. Topologie : éloigner un esclave hors de portée directe du maître → son lien
-   direct disparaît du graphe, les liens via relais restent.
-7. OTA — **uniquement sur une carte de rechange, jamais un droïde en service** —
-   tous ces points sont ✅ validés au banc (2026-07-14, fw 1.3.12, via
-   `tools/ota-test.ps1`, voir État d'avancement) :
-   transfert nominal (progression, `otaResult{ok:true}`, `evt:droids.fw` à
-   jour) ✅ ; `.bin` corrompu → `ERR_MD5` à la fin, pas de reboot ✅ ; abandon
-   série (fermer la console en cours de transfert) → auto-abort côté maître,
-   session suivante propre ✅ ; rollback — build de test qui plante juste après
-   `earlyCheck()` (`-D OTA_TEST_FORCE_CRASH`), poussé par OTA, doit revenir
-   seul sur l'ancienne image après `OTA_MAX_BOOT_ATTEMPTS` boots ratés ✅ ;
-   garde anti-double-session (`otaError « occupé »`) ✅.
-   Restent : multi-sauts (3ᵉ carte) et premier OTA sur un vrai droïde.
+1. `pio run -e b1` builds (also test `IS_MASTER 0`).
+2. Smooth servo sweep; `MSG_ANIM` relayed ≥ 2 hops without a broadcast storm.
+3. Master anim → associated sound track; 2 different group keys ignore each other.
+4. Console connected: droid list, anim/volume/name, persistence after reboot.
+5. Sequence saved → master reboot → `Play` works without a PC.
+6. Topology: move a slave out of the master's direct range → its direct
+   link disappears from the graph, relayed links remain.
+7. OTA — **only on a spare board, never a droid in service** —
+   all these points are ✅ validated at the bench (2026-07-14, fw 1.3.12, via
+   `tools/ota-test.ps1`, see Progress):
+   nominal transfer (progress, `otaResult{ok:true}`, `evt:droids.fw` up
+   to date) ✅; corrupted `.bin` → `ERR_MD5` at the end, no reboot ✅; serial
+   abort (close the console mid-transfer) → auto-abort on the master's side,
+   next session clean ✅; rollback — test build that crashes right after
+   `earlyCheck()` (`-D OTA_TEST_FORCE_CRASH`), pushed via OTA, must revert
+   on its own to the old image after `OTA_MAX_BOOT_ATTEMPTS` failed boots ✅;
+   anti-double-session guard (`otaError "busy"`) ✅.
+   Remaining: multi-hop (3rd board) and a first OTA on a real droid.

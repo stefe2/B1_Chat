@@ -3,7 +3,7 @@ using System.Text.Json;
 
 namespace b1_chat_console.Services;
 
-/// <summary>Porte de LoadSettings/SaveSettings (ex-MainWindow.xaml.cs) : meme fichier, meme forme.</summary>
+/// <summary>Port of LoadSettings/SaveSettings (formerly MainWindow.xaml.cs): same file, same shape.</summary>
 public class SettingsService
 {
     private static readonly string SettingsDir = Path.Combine(
@@ -21,7 +21,7 @@ public class SettingsService
             if (doc.TryGetProperty("lastPort", out var p) && p.ValueKind == JsonValueKind.String)
                 LastPort = p.GetString();
         }
-        catch { /* fichier absent/corrompu : on repart sans dernier port connu */ }
+        catch { /* file missing/corrupt: start over without a known last port */ }
     }
 
     public void SetLastPort(string? port)
@@ -38,6 +38,6 @@ public class SettingsService
             var json = JsonSerializer.Serialize(new { lastPort = LastPort });
             File.WriteAllText(SettingsFile, json);
         }
-        catch { /* disque plein/verrouille : non bloquant */ }
+        catch { /* disk full/locked: non-blocking */ }
     }
 }

@@ -1,47 +1,47 @@
 #pragma once
 
 // ============================================================================
-//  ServoEngine — pilotage fluide et organique de la tête (pan + tilt)
+//  ServoEngine — smooth, organic head motion driver (pan + tilt)
 //
-//  - Interpolation non bloquante à SERVO_UPDATE_HZ (voir config.h)
-//  - Easing ease-in-out entre positions cibles (pas de mouvement linéaire brut)
-//  - Bruit d'idle optionnel (micro-oscillations) pour un rendu vivant
-//  Les angles sont bornés aux limites mécaniques définies dans config.h.
-//  PWM piloté via l'API LEDC native du core ESP32 (pas de dépendance externe).
+//  - Non-blocking interpolation at SERVO_UPDATE_HZ (see config.h)
+//  - Ease-in-out easing between target positions (no raw linear motion)
+//  - Optional idle noise (micro-oscillations) for a lifelike feel
+//  Angles are clamped to the mechanical limits defined in config.h.
+//  PWM driven via the ESP32 core's native LEDC API (no external dependency).
 // ============================================================================
 
 #include <Arduino.h>
 
 class ServoEngine {
 public:
-    // Attache les servos et centre la tête.
+    // Attaches the servos and centers the head.
     void begin();
 
-    // Définit une nouvelle cible atteinte en `durationMs` avec easing.
-    // pan/tilt en degrés (bornés automatiquement).
+    // Sets a new target reached in `durationMs` with easing.
+    // pan/tilt in degrees (automatically clamped).
     void setTarget(float panDeg, float tiltDeg, uint32_t durationMs);
 
-    // Recentre la tête.
+    // Recenters the head.
     void center(uint32_t durationMs = 800);
 
-    // À appeler très régulièrement (dans loop()). Met à jour les servos
-    // au rythme SERVO_UPDATE_HZ.
+    // To be called very regularly (in loop()). Updates the servos at the
+    // SERVO_UPDATE_HZ rate.
     void update();
 
-    // Vrai tant qu'un mouvement d'interpolation est en cours.
+    // True while an interpolation move is in progress.
     bool isMoving() const { return _moving; }
 
-    // Active/désactive le bruit d'idle et règle son amplitude (degrés).
+    // Enables/disables idle noise and sets its amplitude (degrees).
     void setIdleNoise(bool on, float panAmp = 3.0f, float tiltAmp = 2.0f);
 
-    // Redéfinit les bornes mécaniques pan/tilt (calibration par droïde).
-    // Les valeurs invalides (min > max) sont corrigées ; le centre est
-    // ramené dans l'intervalle [min, max].
+    // Redefines the pan/tilt mechanical limits (per-droid calibration).
+    // Invalid values (min > max) are corrected; the center is clamped back
+    // into the [min, max] range.
     void setLimits(uint8_t panMin, uint8_t panCenter, uint8_t panMax,
                    uint8_t tiltMin, uint8_t tiltCenter, uint8_t tiltMax);
 
-    // Active/coupe physiquement les sorties PWM (protection des servos).
-    // Désactivé : les broches sont détachées (aucun signal → servos libres).
+    // Physically enables/disables the PWM outputs (servo protection).
+    // Disabled: the pins are detached (no signal -> servos free to move).
     void setEnabled(bool en);
     bool isEnabled() const { return _enabled; }
 
@@ -51,23 +51,23 @@ public:
 private:
     bool _enabled = true;
 
-    // Bornes mécaniques courantes (degrés) ; défauts posés dans begin(),
-    // remplaçables par setLimits() (calibration persistée par droïde).
+    // Current mechanical limits (degrees); defaults set in begin(),
+    // replaceable via setLimits() (per-droid persisted calibration).
     uint8_t _panMin = 0, _panCenter = 90, _panMax = 180;
     uint8_t _tiltMin = 0, _tiltCenter = 90, _tiltMax = 180;
 
     // Interpolation
     float _startPan = 0, _startTilt = 0;
     float _targetPan = 0, _targetTilt = 0;
-    float _curPan = 0, _curTilt = 0;   // position de base (sans bruit)
+    float _curPan = 0, _curTilt = 0;   // base position (without noise)
     uint32_t _moveStart = 0;
     uint32_t _moveDur = 0;
     bool _moving = false;
 
-    // Cadence d'écriture
+    // Write cadence
     uint32_t _lastWrite = 0;
 
-    // Bruit d'idle
+    // Idle noise
     bool  _idleNoise = false;
     float _panNoiseAmp = 0;
     float _tiltNoiseAmp = 0;

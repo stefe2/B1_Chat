@@ -11,9 +11,9 @@ struct TrackRange {
     uint8_t last;
 };
 
-// Index = animId (0..17, voir animation.h). Les plages restent dans 1..AUDIO_TRACK_COUNT.
-// Les nouveaux gestes (8..17) réutilisent les pistes existantes par proximité
-// thématique — le projet n'a que 10 pistes fixes, à ajuster à l'oreille.
+// Index = animId (0..17, see animation.h). Ranges stay within 1..AUDIO_TRACK_COUNT.
+// The newer gestures (8..17) reuse existing tracks by thematic proximity —
+// the project only has 10 fixed tracks, to be tuned by ear.
 const TrackRange ANIM_TRACKS[] = {
     {1, 2},   // IDLE
     {1, 2},   // LOOK_AROUND
@@ -32,7 +32,7 @@ const TrackRange ANIM_TRACKS[] = {
     {9, 9},   // SIGNAL_GLITCH
     {3, 4},   // GREETING_NOD
     {1, 2},   // POWER_DOWN
-    {1, 10},  // TALK (n'importe quelle piste — accompagne une réplique quelconque)
+    {1, 10},  // TALK (any track — accompanies an arbitrary line)
 };
 }
 

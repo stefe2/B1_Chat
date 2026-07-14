@@ -12,7 +12,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         var vm = new MainViewModel();
         DataContext = vm;
-        Title = "B1 Chat — Console de supervision";
+        Title = "B1 Chat — Supervision Console";
         vm.Droids.OpenFirmwareRequested += OpenFirmwareWindow;
     }
 

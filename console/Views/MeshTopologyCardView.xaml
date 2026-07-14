@@ -14,16 +14,23 @@
                         <Line X1="4.5" Y1="12.5" X2="10.5" Y2="12.5" Stroke="{StaticResource AccentBrush}" StrokeThickness="1.2" />
                     </Canvas>
                 </Border>
-                <TextBlock Text="TOPOLOGIE DU MESH" Style="{StaticResource CardTitleStyle}" FontSize="13" Margin="0" DockPanel.Dock="Left" VerticalAlignment="Center" />
+                <TextBlock Text="MESH TOPOLOGY" Style="{StaticResource CardTitleStyle}" FontSize="13" Margin="0" DockPanel.Dock="Left" VerticalAlignment="Center" />
                 <TextBlock DockPanel.Dock="Right" VerticalAlignment="Center" Foreground="{StaticResource Muted2Brush}" FontSize="10.5">
-                    <Run Text="{Binding LinkCount, Mode=OneWay}" /><Run Text=" liens directs" />
+                    <Run Text="{Binding LinkCount, Mode=OneWay}" /><Run Text=" direct links" />
                 </TextBlock>
             </DockPanel>
 
-            <TextBlock Text="Qui entend qui en direct sur le mesh radio — épaisseur/opacité selon la force du signal."
-                       Style="{StaticResource HintTextStyle}" Margin="0,0,0,10" TextWrapping="Wrap" />
+            <TextBlock Text="Who hears whom directly over the mesh radio — thickness/opacity track signal strength."
+                       Style="{StaticResource HintTextStyle}" Margin="0,0,0,6" TextWrapping="Wrap" />
 
-            <TextBlock Text="Aucun droïde détecté." Foreground="{StaticResource MutedBrush}" FontSize="12"
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                <Ellipse Width="8" Height="8" Fill="{StaticResource MeshMasterNodeBrush}" VerticalAlignment="Center" />
+                <TextBlock Text="Master" FontSize="10.5" Foreground="{StaticResource MutedBrush}" Margin="4,0,14,0" VerticalAlignment="Center" />
+                <Ellipse Width="8" Height="8" Fill="{StaticResource MeshSlaveNodeBrush}" VerticalAlignment="Center" />
+                <TextBlock Text="Slave" FontSize="10.5" Foreground="{StaticResource MutedBrush}" Margin="4,0,0,0" VerticalAlignment="Center" />
+            </StackPanel>
+
+            <TextBlock Text="No droid detected." Foreground="{StaticResource MutedBrush}" FontSize="12"
                        Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisConv}}" Margin="0,30" HorizontalAlignment="Center" />
 
             <Border Background="{StaticResource RecessBrush}" CornerRadius="10" Width="260" Height="260" HorizontalAlignment="Center"
@@ -31,9 +38,165 @@
                 <Border.Effect>
                     <DropShadowEffect Color="Black" Direction="270" ShadowDepth="1" BlurRadius="6" Opacity="0.6" />
                 </Border.Effect>
-                <Canvas Width="260" Height="260">
+                <Canvas Width="260" Height="260" ClipToBounds="True">
+                    <Canvas.Resources>
+                        <Style x:Key="StarDotStyle" TargetType="Ellipse">
+                            <Setter Property="Fill" Value="White" />
+                            <Setter Property="IsHitTestVisible" Value="False" />
+                            <Setter Property="RenderTransform">
+                                <Setter.Value>
+                                    <TranslateTransform />
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </Canvas.Resources>
                     <Ellipse Style="{StaticResource MeshRadarRingStyle}" Canvas.Left="40" Canvas.Top="40" Width="180" Height="180" />
                     <Ellipse Style="{StaticResource MeshRadarRingStyle}" Canvas.Left="80" Canvas.Top="80" Width="100" Height="100" />
+
+                    <!-- Ambient starfield: purely decorative, no VM binding. Small dots drifting
+                         slowly at staggered rates behind the graph. -->
+                    <Ellipse Style="{StaticResource StarDotStyle}" Canvas.Left="18" Canvas.Top="38" Width="1.6" Height="1.6" Opacity="0.22">
+                        <Ellipse.Triggers>
+                            <EventTrigger RoutedEvent="FrameworkElement.Loaded">
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetProperty="(Ellipse.RenderTransform).(TranslateTransform.Y)" From="0" To="4" Duration="0:0:4" AutoReverse="True" RepeatBehavior="Forever" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                        </Ellipse.Triggers>
+                    </Ellipse>
+                    <Ellipse Style="{StaticResource StarDotStyle}" Canvas.Left="230" Canvas.Top="25" Width="2" Height="2" Opacity="0.18">
+                        <Ellipse.Triggers>
+                            <EventTrigger RoutedEvent="FrameworkElement.Loaded">
+                                <BeginStoryboard>
+                                    <Storyboard BeginTime="0:0:0.6">
+                                        <DoubleAnimation Storyboard.TargetProperty="(Ellipse.RenderTransform).(TranslateTransform.Y)" From="0" To="-5" Duration="0:0:5" AutoReverse="True" RepeatBehavior="Forever" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                        </Ellipse.Triggers>
+                    </Ellipse>
+                    <Ellipse Style="{StaticResource StarDotStyle}" Canvas.Left="248" Canvas.Top="95" Width="1.4" Height="1.4" Opacity="0.28">
+                        <Ellipse.Triggers>
+                            <EventTrigger RoutedEvent="FrameworkElement.Loaded">
+                                <BeginStoryboard>
+                                    <Storyboard BeginTime="0:0:1.2">
+                                        <DoubleAnimation Storyboard.TargetProperty="(Ellipse.RenderTransform).(TranslateTransform.Y)" From="0" To="4" Duration="0:0:3.5" AutoReverse="True" RepeatBehavior="Forever" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                        </Ellipse.Triggers>
+                    </Ellipse>
+                    <Ellipse Style="{StaticResource StarDotStyle}" Canvas.Left="240" Canvas.Top="210" Width="1.8" Height="1.8" Opacity="0.2">
+                        <Ellipse.Triggers>
+                            <EventTrigger RoutedEvent="FrameworkElement.Loaded">
+                                <BeginStoryboard>
+                                    <Storyboard BeginTime="0:0:1.8">
+                                        <DoubleAnimation Storyboard.TargetProperty="(Ellipse.RenderTransform).(TranslateTransform.Y)" From="0" To="-4" Duration="0:0:4.5" AutoReverse="True" RepeatBehavior="Forever" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                        </Ellipse.Triggers>
+                    </Ellipse>
+                    <Ellipse Style="{StaticResource StarDotStyle}" Canvas.Left="200" Canvas.Top="245" Width="1.5" Height="1.5" Opacity="0.25">
+                        <Ellipse.Triggers>
+                            <EventTrigger RoutedEvent="FrameworkElement.Loaded">
+                                <BeginStoryboard>
+                                    <Storyboard BeginTime="0:0:0.3">
+                                        <DoubleAnimation Storyboard.TargetProperty="(Ellipse.RenderTransform).(TranslateTransform.Y)" From="0" To="4" Duration="0:0:5.5" AutoReverse="True" RepeatBehavior="Forever" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                        </Ellipse.Triggers>
+                    </Ellipse>
+                    <Ellipse Style="{StaticResource StarDotStyle}" Canvas.Left="60" Canvas.Top="248" Width="2" Height="2" Opacity="0.18">
+                        <Ellipse.Triggers>
+                            <EventTrigger RoutedEvent="FrameworkElement.Loaded">
+                                <BeginStoryboard>
+                                    <Storyboard BeginTime="0:0:2.1">
+                                        <DoubleAnimation Storyboard.TargetProperty="(Ellipse.RenderTransform).(TranslateTransform.Y)" From="0" To="-4" Duration="0:0:4" AutoReverse="True" RepeatBehavior="Forever" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                        </Ellipse.Triggers>
+                    </Ellipse>
+                    <Ellipse Style="{StaticResource StarDotStyle}" Canvas.Left="12" Canvas.Top="175" Width="1.6" Height="1.6" Opacity="0.24">
+                        <Ellipse.Triggers>
+                            <EventTrigger RoutedEvent="FrameworkElement.Loaded">
+                                <BeginStoryboard>
+                                    <Storyboard BeginTime="0:0:0.9">
+                                        <DoubleAnimation Storyboard.TargetProperty="(Ellipse.RenderTransform).(TranslateTransform.Y)" From="0" To="5" Duration="0:0:6" AutoReverse="True" RepeatBehavior="Forever" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                        </Ellipse.Triggers>
+                    </Ellipse>
+                    <Ellipse Style="{StaticResource StarDotStyle}" Canvas.Left="20" Canvas.Top="95" Width="1.4" Height="1.4" Opacity="0.3">
+                        <Ellipse.Triggers>
+                            <EventTrigger RoutedEvent="FrameworkElement.Loaded">
+                                <BeginStoryboard>
+                                    <Storyboard BeginTime="0:0:1.5">
+                                        <DoubleAnimation Storyboard.TargetProperty="(Ellipse.RenderTransform).(TranslateTransform.Y)" From="0" To="-3" Duration="0:0:3" AutoReverse="True" RepeatBehavior="Forever" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                        </Ellipse.Triggers>
+                    </Ellipse>
+                    <Ellipse Style="{StaticResource StarDotStyle}" Canvas.Left="130" Canvas.Top="8" Width="1.8" Height="1.8" Opacity="0.2">
+                        <Ellipse.Triggers>
+                            <EventTrigger RoutedEvent="FrameworkElement.Loaded">
+                                <BeginStoryboard>
+                                    <Storyboard BeginTime="0:0:2.4">
+                                        <DoubleAnimation Storyboard.TargetProperty="(Ellipse.RenderTransform).(TranslateTransform.Y)" From="0" To="4" Duration="0:0:5" AutoReverse="True" RepeatBehavior="Forever" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                        </Ellipse.Triggers>
+                    </Ellipse>
+                    <Ellipse Style="{StaticResource StarDotStyle}" Canvas.Left="130" Canvas.Top="250" Width="1.5" Height="1.5" Opacity="0.22">
+                        <Ellipse.Triggers>
+                            <EventTrigger RoutedEvent="FrameworkElement.Loaded">
+                                <BeginStoryboard>
+                                    <Storyboard BeginTime="0:0:0.5">
+                                        <DoubleAnimation Storyboard.TargetProperty="(Ellipse.RenderTransform).(TranslateTransform.Y)" From="0" To="-4" Duration="0:0:4.8" AutoReverse="True" RepeatBehavior="Forever" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                        </Ellipse.Triggers>
+                    </Ellipse>
+
+                    <!-- Rotating radar sweep, purely decorative: a thin wedge fading from
+                         transparent (trailing edge) to a dim accent glow (leading edge),
+                         spinning continuously around the canvas center. -->
+                    <Path IsHitTestVisible="False" RenderTransformOrigin="0.5,0.5">
+                        <Path.Fill>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                <GradientStop Color="#00FF9D2E" Offset="0" />
+                                <GradientStop Color="#40FF9D2E" Offset="1" />
+                            </LinearGradientBrush>
+                        </Path.Fill>
+                        <Path.Data>
+                            <PathGeometry>
+                                <PathFigure StartPoint="130,130" IsClosed="True">
+                                    <LineSegment Point="100.5,11.6" />
+                                    <LineSegment Point="159.5,11.6" />
+                                </PathFigure>
+                            </PathGeometry>
+                        </Path.Data>
+                        <Path.RenderTransform>
+                            <RotateTransform CenterX="130" CenterY="130" />
+                        </Path.RenderTransform>
+                        <Path.Triggers>
+                            <EventTrigger RoutedEvent="FrameworkElement.Loaded">
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetProperty="(Path.RenderTransform).(RotateTransform.Angle)" From="0" To="360" Duration="0:0:6" RepeatBehavior="Forever" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                        </Path.Triggers>
+                    </Path>
 
                     <ItemsControl ItemsSource="{Binding Edges}">
                         <ItemsControl.ItemsPanel>
@@ -57,15 +220,132 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
                                 <Canvas>
-                                    <Ellipse Style="{StaticResource MeshNodeEllipseStyle}" Canvas.Left="{Binding Left}" Canvas.Top="{Binding Top}" />
+                                    <Ellipse Width="30" Height="30" Canvas.Left="{Binding MasterRingLeft}" Canvas.Top="{Binding MasterRingTop}"
+                                             Stroke="{StaticResource AccentBrush}" StrokeThickness="1" StrokeDashArray="2,3"
+                                             Visibility="{Binding IsMaster, Converter={StaticResource BoolToVisConv}}"
+                                             RenderTransformOrigin="0.5,0.5" IsHitTestVisible="False">
+                                        <Ellipse.RenderTransform>
+                                            <RotateTransform x:Name="MasterRingRotate" />
+                                        </Ellipse.RenderTransform>
+                                        <Ellipse.Triggers>
+                                            <EventTrigger RoutedEvent="FrameworkElement.Loaded">
+                                                <BeginStoryboard>
+                                                    <Storyboard>
+                                                        <DoubleAnimation Storyboard.TargetName="MasterRingRotate" Storyboard.TargetProperty="Angle" From="0" To="360" Duration="0:0:8" RepeatBehavior="Forever" />
+                                                    </Storyboard>
+                                                </BeginStoryboard>
+                                            </EventTrigger>
+                                        </Ellipse.Triggers>
+                                    </Ellipse>
+                                    <!-- Signal halo: only on slaves — the master already gets its own
+                                         permanent accent glow (MeshNodeEllipseStyle), so this would
+                                         double up on it. Colored by this node's strongest incident link. -->
+                                    <Ellipse Canvas.Left="{Binding Left}" Canvas.Top="{Binding Top}">
+                                        <Ellipse.Style>
+                                            <Style TargetType="Ellipse" BasedOn="{StaticResource MeshNodeEllipseStyle}">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsMaster}" Value="False">
+                                                        <Setter Property="Effect">
+                                                            <Setter.Value>
+                                                                <DropShadowEffect Color="{Binding BestLinkStrength, Converter={StaticResource StrengthToBrushConv}, ConverterParameter=Color}"
+                                                                                  ShadowDepth="0" BlurRadius="12" Opacity="0.7" />
+                                                            </Setter.Value>
+                                                        </Setter>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Ellipse.Style>
+                                    </Ellipse>
                                     <TextBlock Canvas.Left="{Binding LabelLeft}" Canvas.Top="{Binding LabelTop}" Width="60"
                                                TextAlignment="Center" Text="{Binding Label}" FontSize="10" Foreground="{StaticResource TextBrush}" />
+
+                                    <!-- Heartbeat-flash: one-shot expanding/fading ring, played via
+                                         DataTrigger.EnterActions the instant an item is (re)created with
+                                         Pulse=true — i.e. exactly when this droid's telemetry refreshed
+                                         (see MeshTopologyViewModel.Render()). Never on the master, which
+                                         already has its own permanent ring above. -->
+                                    <Ellipse x:Name="PulseRingEllipse" Width="26" Height="26" Canvas.Left="{Binding PulseRingLeft}" Canvas.Top="{Binding PulseRingTop}"
+                                             Stroke="{StaticResource AccentBrush}" StrokeThickness="1.5" Fill="Transparent"
+                                             Opacity="0" IsHitTestVisible="False" RenderTransformOrigin="0.5,0.5">
+                                        <Ellipse.RenderTransform>
+                                            <ScaleTransform x:Name="PulseScale" ScaleX="1" ScaleY="1" />
+                                        </Ellipse.RenderTransform>
+                                    </Ellipse>
                                 </Canvas>
+                                <DataTemplate.Triggers>
+                                    <DataTrigger Binding="{Binding Pulse}" Value="True">
+                                        <DataTrigger.EnterActions>
+                                            <BeginStoryboard>
+                                                <Storyboard>
+                                                    <DoubleAnimation Storyboard.TargetName="PulseRingEllipse" Storyboard.TargetProperty="Opacity" From="0.85" To="0" Duration="0:0:0.65" />
+                                                    <DoubleAnimation Storyboard.TargetName="PulseScale" Storyboard.TargetProperty="ScaleX" From="1" To="1.7" Duration="0:0:0.65" />
+                                                    <DoubleAnimation Storyboard.TargetName="PulseScale" Storyboard.TargetProperty="ScaleY" From="1" To="1.7" Duration="0:0:0.65" />
+                                                </Storyboard>
+                                            </BeginStoryboard>
+                                        </DataTrigger.EnterActions>
+                                    </DataTrigger>
+                                </DataTemplate.Triggers>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
+
+                    <!-- OTA travel indicator: "marching ants" dashed line from master to whichever
+                         droid currently has an OTA session in flight — a directional approximation
+                         (the mesh is a TTL flood-relay, not point-to-point routing), not a literal
+                         packet trace. The dash-offset animation loops permanently in the background;
+                         only Visibility gates whether it's seen. -->
+                    <Line X1="{Binding OtaX1}" Y1="{Binding OtaY1}" X2="{Binding OtaX2}" Y2="{Binding OtaY2}"
+                          Stroke="{StaticResource AccentBrush}" StrokeThickness="2.5" StrokeDashArray="4,3"
+                          StrokeStartLineCap="Round" StrokeEndLineCap="Round" IsHitTestVisible="False"
+                          Visibility="{Binding OtaTravelActive, Converter={StaticResource BoolToVisConv}}">
+                        <Line.Triggers>
+                            <EventTrigger RoutedEvent="FrameworkElement.Loaded">
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetProperty="StrokeDashOffset" From="0" To="-14" Duration="0:0:0.4" RepeatBehavior="Forever" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                        </Line.Triggers>
+                    </Line>
+
+                    <!-- Hop-wave ripple: one-shot expanding/fading ring from the master's position,
+                         played from code-behind (MeshTopologyCardView.xaml.cs) on every outgoing anim
+                         broadcast. Reframes "multi-hop path" honestly: the mesh floods hop-by-hop
+                         (TTL-bounded broadcast + dedup) rather than following a single path, so an
+                         outward ripple is the more accurate visualization. -->
+                    <Ellipse x:Name="HopWaveRing" Width="20" Height="20" Fill="Transparent"
+                             Stroke="{StaticResource AccentBrush}" StrokeThickness="2" Opacity="0"
+                             IsHitTestVisible="False" RenderTransformOrigin="0.5,0.5"
+                             Canvas.Left="{Binding MasterX}" Canvas.Top="{Binding MasterY}">
+                        <Ellipse.RenderTransform>
+                            <TransformGroup>
+                                <ScaleTransform ScaleX="1" ScaleY="1" />
+                                <TranslateTransform X="-10" Y="-10" />
+                            </TransformGroup>
+                        </Ellipse.RenderTransform>
+                    </Ellipse>
+
+                    <!-- TALK-sync pulse: rhythmic (not audio-reactive — no amplitude data available)
+                         pulse on the master node while it plays the TALK animation, for the anim's
+                         known duration. Also played from code-behind. -->
+                    <Ellipse x:Name="TalkPulseRing" Width="20" Height="20" Fill="Transparent"
+                             Stroke="{StaticResource AccentBrush}" StrokeThickness="2" Opacity="0"
+                             IsHitTestVisible="False" RenderTransformOrigin="0.5,0.5"
+                             Canvas.Left="{Binding MasterX}" Canvas.Top="{Binding MasterY}">
+                        <Ellipse.RenderTransform>
+                            <TransformGroup>
+                                <ScaleTransform ScaleX="1" ScaleY="1" />
+                                <TranslateTransform X="-10" Y="-10" />
+                            </TransformGroup>
+                        </Ellipse.RenderTransform>
+                    </Ellipse>
                 </Canvas>
             </Border>
+
+            <TextBlock Text="{Binding StatsText}" Foreground="{StaticResource Muted2Brush}" FontSize="9.5"
+                       HorizontalAlignment="Center" Margin="0,8,0,0" TextTrimming="CharacterEllipsis"
+                       Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisConv}, ConverterParameter=Invert}" />
         </StackPanel>
     </Border>
 </UserControl>

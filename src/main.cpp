@@ -14,10 +14,10 @@
 #include "ota_slave.h"
 #include "esp_task_wdt.h"
 
-// NOTE: banc de test temporaire (étapes 2-8). Sera remplacé par la machine
-// à états du droïde à l'étape 6.
+// NOTE: temporary test bench (steps 2-8). Will be replaced by the droid's
+// state machine at step 6.
 
-// Journalisation : JSON via la console sur le maître, texte brut sur l'esclave.
+// Logging: JSON via the console on the master, plain text on the slave.
 #if IS_MASTER
   #define LOGF(fmt, ...) Console.log(fmt, ##__VA_ARGS__)
 #else
@@ -28,21 +28,21 @@ static ServoEngine head;
 static AnimationPlayer anim;
 static uint32_t nextMove = 0;
 
-// État runtime des servos de CE droïde (pilotable depuis la console web).
+// Runtime servo state of THIS droid (controllable from the web console).
 static bool gServos = true;
 
-// Anims spontanées au repos de CE droïde (pilotable depuis la console web).
-// N'affecte pas Jouer (anim) ni le Séquenceur : uniquement le tirage aléatoire au repos.
+// Spontaneous idle anims of THIS droid (controllable from the web console).
+// Doesn't affect Play (anim) or the Sequencer: only the random idle draw.
 static bool gAutoAnim = true;
 
-// LED de vie (témoin d'exécution) — clignotement non bloquant.
+// Life LED (execution indicator) — non-blocking blink.
 static uint32_t lastBlink = 0;
 static bool ledOn = false;
 
-// Test mesh / timers
+// Mesh test / timers
 static uint32_t nextMeshSend = 0;
-// Version firmware, décomposée une fois au démarrage à partir de FW_VERSION
-// (config.h) pour être incluse (compacte, 3 octets) dans chaque heartbeat.
+// Firmware version, decomposed once at startup from FW_VERSION (config.h)
+// to be included (compact, 3 bytes) in every heartbeat.
 static uint8_t gFwMajor = 0, gFwMinor = 0, gFwPatch = 0;
 
 static uint32_t nextHeartbeat = 0;
@@ -50,31 +50,32 @@ static uint32_t nextPresenceScan = 0;
 static uint32_t nextDroidsPush = 0;
 static uint32_t nextNeighborReport = 0;
 
-// Lecteur de séquence stockée (maître) : exécution autonome sans PC.
+// Stored sequence player (master): autonomous playback without a PC.
 #if IS_MASTER
 static StoredSequence gSeq;
 static bool gSeqPlaying = false;
 static uint8_t gSeqIndex = 0;
 static uint32_t gSeqNextAt = 0;
 static uint8_t gSeqSlot = 0;
-// Pause : fige le compte à rebours de l'étape en cours (délai restant mémorisé)
-// et la trame audio ; la reprise repart exactement où on était.
+// Pause: freezes the current step's countdown (remaining delay remembered)
+// and the audio track; resuming picks up exactly where it left off.
 static bool gSeqPaused = false;
 static uint32_t gSeqPauseRemainMs = 0;
-// Vrai si l'étape en cours cible ce maître : on attend alors la fin réelle de
-// l'animation locale (anim.isPlaying()) en plus du délai avant d'avancer. Pour
-// une étape ciblant uniquement un esclave distant, cette donnée n'existe pas
-// côté maître (pas d'accusé de réception mesh) : on reste sur le délai seul.
+// True if the current step targets this master: in that case we also wait
+// for the local animation to actually finish (anim.isPlaying()) in addition
+// to the delay before advancing. For a step targeting only a remote slave,
+// this information doesn't exist on the master's side (no mesh
+// acknowledgment): it relies on the delay alone.
 static bool gSeqWaitLocal = false;
 #endif
 
-// Suivi hors-ligne (maître) : mémorise l'état en ligne pour signaler les pertes.
+// Offline tracking (master): remembers the online state to report losses.
 static const uint32_t DROID_TIMEOUT_MS = 4000;
 #if IS_MASTER
 static bool wasOnline[Registry::MAX];
 #endif
 
-// Active/coupe les servos de ce droïde (protection matérielle).
+// Enables/disables this droid's servos (hardware protection).
 static void applyServos(bool en) {
     gServos = en;
     head.setEnabled(en);
@@ -82,29 +83,29 @@ static void applyServos(bool en) {
 #if IS_MASTER
     Console.setMasterServos(en);
 #endif
-    LOGF("servos %s", en ? "ACTIFS" : "COUPÉS");
+    LOGF("servos %s", en ? "ON" : "OFF");
 }
 
-// Met en pause/reprend l'animation spontanée au repos de CE droïde.
+// Pauses/resumes THIS droid's spontaneous idle animation.
 static void applyAutoAnim(bool en) {
     gAutoAnim = en;
 #if IS_MASTER
     Console.setMasterAutoAnim(en);
 #endif
-    LOGF("anims auto %s", en ? "ACTIVES" : "EN PAUSE");
+    LOGF("auto anims %s", en ? "ON" : "PAUSED");
 }
 
-// Persiste et applique une calibration reçue pour CE droïde (maître ou esclave).
+// Persists and applies a received calibration for THIS droid (master or slave).
 static void applyCalib(const CalibPayload& p) {
     const ServoCalib c{p.panMin, p.panCenter, p.panMax, p.tiltMin, p.tiltCenter, p.tiltMax};
     Config.setCalib(Mesh.myId(), c);
     head.setLimits(c.panMin, c.panCenter, c.panMax, c.tiltMin, c.tiltCenter, c.tiltMax);
     head.center();
-    LOGF("calibration appliquee (pan %u/%u/%u, tilt %u/%u/%u)",
+    LOGF("calibration applied (pan %u/%u/%u, tilt %u/%u/%u)",
          p.panMin, p.panCenter, p.panMax, p.tiltMin, p.tiltCenter, p.tiltMax);
 }
 
-// Hook console : jouer une animation localement (maître).
+// Console hook: play an animation locally (master).
 #if IS_MASTER
 static void playLocalAnim(uint8_t animId, uint32_t seed) {
     if (gServos) {
@@ -113,14 +114,14 @@ static void playLocalAnim(uint8_t animId, uint32_t seed) {
     }
 }
 
-// Hook console : activer/couper les servos d'une cible (maître).
+// Console hook: enable/disable a target's servos (master).
 static void onServoCmd(uint16_t target, bool en) {
     ServoPayload p{target, (uint8_t)(en ? 1 : 0)};
     Mesh.send(MSG_SERVO, &p, sizeof(p));
     if (target == MESH_TARGET_ALL || target == Mesh.myId()) applyServos(en);
 }
 
-// Hook console : mettre en pause/reprendre l'animation spontanée d'une cible (maître).
+// Console hook: pause/resume a target's spontaneous animation (master).
 static void onAutoAnimCmd(uint16_t target, bool en) {
     AutoAnimPayload p{target, (uint8_t)(en ? 1 : 0)};
     Mesh.send(MSG_AUTOANIM, &p, sizeof(p));
@@ -132,7 +133,7 @@ static void onVolumeCmd(uint8_t v) {
 }
 
 static void onTrackCmd(uint8_t track) {
-    if (!Audio.playTrack(track)) LOGF("audio indisponible (track %u)", track);
+    if (!Audio.playTrack(track)) LOGF("audio unavailable (track %u)", track);
 }
 
 static bool onSeqSave(uint8_t slot, const StoredSequence& seq) {
@@ -154,21 +155,21 @@ static bool onSeqDelete(uint8_t slot) {
 static void onSeqRun(uint8_t slot, uint8_t from) {
     if (!Sequences.load(slot, gSeq) || gSeq.stepCount == 0) {
         gSeqPlaying = false;
-        Console.pushErr("sequence slot=%u introuvable/vide", slot);
+        Console.pushErr("sequence slot=%u not found/empty", slot);
         Console.pushSeqState(false, slot, 0, 0);
         return;
     }
     if (from >= gSeq.stepCount) {
         gSeqPlaying = false;
-        Console.pushErr("etape de depart %u >= %u etapes (slot %u)", from, gSeq.stepCount, slot);
+        Console.pushErr("starting step %u >= %u steps (slot %u)", from, gSeq.stepCount, slot);
         Console.pushSeqState(false, slot, 0, gSeq.stepCount, gSeq.track);
         return;
     }
     gSeqSlot = slot;
     gSeqPlaying = true;
     gSeqPaused = false;
-    // from > 0 : gestes seulement — la trame audio ne peut pas démarrer en
-    // cours de fichier (elle partira au prochain passage par l'étape 0 en boucle).
+    // from > 0: gestures only — the audio track can't start mid-file (it will
+    // start on the next loop pass through step 0).
     gSeqIndex = from;
     gSeqWaitLocal = false;
     gSeqNextAt = millis();
@@ -181,7 +182,7 @@ static void onSeqStop() {
     Console.pushSeqState(false, gSeqSlot, gSeqIndex, gSeq.stepCount, gSeq.track);
 }
 
-// Pause/reprise : fige le délai restant de l'étape en cours et la trame audio.
+// Pause/resume: freezes the current step's remaining delay and the audio track.
 static void onSeqPauseCmd(bool paused) {
     if (!gSeqPlaying || paused == gSeqPaused) return;
     const uint32_t now = millis();
@@ -196,13 +197,13 @@ static void onSeqPauseCmd(bool paused) {
     Console.pushSeqState(true, gSeqSlot, gSeqIndex, gSeq.stepCount, gSeq.track, gSeqPaused);
 }
 
-// Répond à une demande ponctuelle d'état (ex. dashboard qui se connecte en
-// cours de lecture, sans attendre la prochaine transition d'étape).
+// Answers a one-off state request (e.g. a dashboard connecting mid-playback,
+// without waiting for the next step transition).
 static void onSeqQueryCmd() {
     Console.pushSeqState(gSeqPlaying, gSeqSlot, gSeqIndex, gSeq.stepCount, gSeq.track, gSeqPaused);
 }
 
-// Hook console : calibration reçue (déjà filtrée sur target == ce droïde).
+// Console hook: calibration received (already filtered on target == this droid).
 static void onCalibCmd(uint16_t target, uint8_t panMin, uint8_t panCenter, uint8_t panMax,
                         uint8_t tiltMin, uint8_t tiltCenter, uint8_t tiltMax) {
     (void)target;
@@ -210,7 +211,7 @@ static void onCalibCmd(uint16_t target, uint8_t panMin, uint8_t panCenter, uint8
     applyCalib(p);
 }
 
-// Hook console : aperçu transitoire (non persisté), déjà filtré sur target.
+// Console hook: transient preview (not persisted), already filtered on target.
 static void onPreviewCmd(uint16_t target, uint8_t pan, uint8_t tilt) {
     (void)target;
     head.setTarget(pan, tilt, 150);
@@ -220,10 +221,10 @@ static void onPreviewCmd(uint16_t target, uint8_t pan, uint8_t tilt) {
 static void onMeshMessage(uint8_t type, const uint8_t* payload, uint8_t len,
                           uint16_t srcId, int rssi) {
 #if IS_MASTER
-    // Tout message reçu prouve la présence de ce droïde.
+    // Any received message proves this droid's presence.
     if (Droids.seen(srcId, rssi, millis())) {
         const String name = Config.getName(srcId);
-        LOGF("nouveau B1 %04X%s%s connecté au mesh (total %u)",
+        LOGF("new B1 %04X%s%s connected to the mesh (total %u)",
              srcId, name.length() ? " " : "", name.c_str(), Droids.count());
     }
 #else
@@ -233,7 +234,7 @@ static void onMeshMessage(uint8_t type, const uint8_t* payload, uint8_t len,
     if (type == MSG_ANIM && len == sizeof(AnimPayload)) {
         AnimPayload p;
         memcpy(&p, payload, sizeof(p));
-        LOGF("ANIM de %04X (rssi %d) target=%04X anim=%u", srcId, rssi, p.targetId, p.animId);
+        LOGF("ANIM from %04X (rssi %d) target=%04X anim=%u", srcId, rssi, p.targetId, p.animId);
         if (p.targetId == MESH_TARGET_ALL || p.targetId == Mesh.myId()) {
             if (gServos) anim.play(p.animId, p.seed);
 #if IS_MASTER
@@ -269,7 +270,7 @@ static void onMeshMessage(uint8_t type, const uint8_t* payload, uint8_t len,
         Droids.setFwVersion(srcId, hb.fwMajor, hb.fwMinor, hb.fwPatch);
 #endif
     } else if (type == MSG_HEARTBEAT) {
-        // ancienne forme / présence : déjà notée.
+        // old form / presence: already noted.
     } else if (type == MSG_NEIGHBORS && len == sizeof(NeighborReportPayload)) {
 #if IS_MASTER
         NeighborReportPayload rep;
@@ -310,13 +311,13 @@ static void onMeshMessage(uint8_t type, const uint8_t* payload, uint8_t len,
         OtaS.onAbort(srcId, p);
 #endif
     } else {
-        LOGF("type=%u len=%u de %04X (rssi %d)", type, len, srcId, rssi);
+        LOGF("type=%u len=%u from %04X (rssi %d)", type, len, srcId, rssi);
     }
 }
 
 #if IS_MASTER
-// Relais entre les commandes série (SerialConsole) et OtaMaster — main.cpp
-// est le seul point de câblage entre le mesh/registre et le protocole JSON.
+// Relay between serial commands (SerialConsole) and OtaMaster — main.cpp is
+// the only wiring point between the mesh/registry and the JSON protocol.
 static bool onOtaStartCmd(uint16_t target, uint32_t size, const char* md5Hex32) {
     return OtaM.begin(target, size, md5Hex32);
 }
@@ -327,7 +328,7 @@ static void onOtaAbortCmd() {
     OtaM.abort();
 }
 
-// Traduit l'événement OTA en attente (s'il y en a un) en evt JSON console.
+// Translates the pending OTA event (if any) into a console JSON evt.
 static void pumpOtaEvents() {
     const OtaMaster::Event ev = OtaM.pollEvent();
     switch (ev.type) {
@@ -353,36 +354,36 @@ static void pumpOtaEvents() {
 #endif
 
 void setup() {
-    // Doit rester la toute première ligne : un crash survenant avant cet
-    // appel ne serait jamais compté par le mécanisme anti-brick (voir
-    // CLAUDE.md, pièges connus).
+    // Must remain the very first line: a crash occurring before this call
+    // would never be counted by the anti-brick mechanism (see CLAUDE.md,
+    // known pitfalls).
     if (Guard.earlyCheck()) return;
 
 #ifdef OTA_TEST_FORCE_CRASH
-    // Build de test du rollback anti-brick (jamais défini en release) : plante
-    // volontairement juste APRÈS earlyCheck() — chaque boot incrémente donc le
-    // compteur de tentatives d'OtaGuard, qui doit basculer tout seul sur
-    // l'ancienne partition après OTA_MAX_BOOT_ATTEMPTS. À pousser par OTA sur
-    // une carte de test UNIQUEMENT (voir CLAUDE.md, Vérification pt 7) :
+    // Anti-brick rollback test build (never defined in release): crashes
+    // intentionally right AFTER earlyCheck() — every boot therefore
+    // increments OtaGuard's attempt counter, which must switch back to the
+    // old partition on its own after OTA_MAX_BOOT_ATTEMPTS. To be pushed via
+    // OTA to a test board ONLY (see CLAUDE.md, Verification pt 7):
     //   $env:PLATFORMIO_BUILD_FLAGS='-D OTA_TEST_FORCE_CRASH'; pio run -e b1_slave
     Serial.begin(115200);
-    Serial.println("OTA_TEST_FORCE_CRASH: plantage volontaire");
+    Serial.println("OTA_TEST_FORCE_CRASH: intentional crash");
     delay(50);
     *(volatile int*)0 = 0; // LoadStoreError -> panic -> reboot
 #endif
 
-    // Filet de sécurité : un nouveau firmware qui plante/boucle sans céder la
-    // main après le passage d'OtaGuard doit quand même finir par redémarrer
-    // (sans compter uniquement sur le watchdog par défaut d'Arduino).
+    // Safety net: a new firmware that crashes/loops without yielding after
+    // OtaGuard runs must still eventually reboot (not relying solely on
+    // Arduino's default watchdog).
     esp_task_wdt_config_t wdtConfig = {10000, 0, true};
     esp_task_wdt_init(&wdtConfig);
     esp_task_wdt_add(nullptr);
 
-    // Tampons UART élargis (défaut : RX 256 o, TX 128 o). Pendant un OTA, une
-    // ligne otaChunk (~330 o) peut arriver pendant que loop() est bloqué à
-    // écrire un gros pushDroids : à 256 o le RX déborde et la ligne (donc le
-    // chunk) est perdue — le stop-and-wait série se fige alors jusqu'au
-    // timeout. À régler AVANT Serial.begin().
+    // Widened UART buffers (default: RX 256 B, TX 128 B). During an OTA, an
+    // otaChunk line (~330 B) can arrive while loop() is blocked writing a
+    // large pushDroids: at 256 B the RX buffer overflows and the line (so
+    // the chunk) is lost — the serial stop-and-wait then freezes until the
+    // timeout. Must be set BEFORE Serial.begin().
     Serial.setRxBufferSize(2048);
     Serial.setTxBufferSize(2048);
     Serial.begin(115200);
@@ -399,7 +400,7 @@ void setup() {
     head.setIdleNoise(true);
     anim.begin(&head);
 
-    // État initial des servos : maître en pause si MASTER_ANIM_PAUSED.
+    // Initial servo state: master paused if MASTER_ANIM_PAUSED.
 #if IS_MASTER && MASTER_ANIM_PAUSED
     gServos = false;
 #else
@@ -437,12 +438,12 @@ void setup() {
 
     if (Mesh.begin(GROUP_KEY)) {
         Mesh.onReceive(onMeshMessage);
-        // Calibration persistée de CE droïde (bornes par défaut si jamais réglée).
+        // Persisted calibration of THIS droid (default limits if never set).
         const ServoCalib c = Config.getCalib(Mesh.myId());
         head.setLimits(c.panMin, c.panCenter, c.panMax, c.tiltMin, c.tiltCenter, c.tiltMax);
-        LOGF("mesh prêt, id=%04X (servos %s)", Mesh.myId(), gServos ? "ACTIFS" : "COUPÉS");
+        LOGF("mesh ready, id=%04X (servos %s)", Mesh.myId(), gServos ? "ON" : "OFF");
     } else {
-        LOGF("mesh: échec d'initialisation");
+        LOGF("mesh: initialization failed");
     }
     head.center();
 }
@@ -462,33 +463,33 @@ void loop() {
     OtaS.update(now);
 #endif
 
-    // LED de vie.
+    // Life LED.
     if (now - lastBlink >= LED_BLINK_MS) {
         lastBlink = now;
         ledOn = !ledOn;
         digitalWrite(PIN_LED_ONBOARD, ledOn ? HIGH : LOW);
     }
 
-    // Heartbeat : chaque droïde signale sa présence (et l'état de ses servos).
+    // Heartbeat: each droid reports its presence (and its servo state).
     if (now > nextHeartbeat) {
         nextHeartbeat = now + HEARTBEAT_MS;
         HeartbeatPayload hb{now, (uint8_t)((gServos ? 1 : 0) | (gAutoAnim ? 2 : 0)), gFwMajor, gFwMinor, gFwPatch};
         Mesh.send(MSG_HEARTBEAT, &hb, sizeof(hb));
     }
 
-    // Rapport de voisinage direct (topologie) : chaque droïde diffuse
-    // périodiquement les nœuds qu'il entend en direct, avec le RSSI mesuré.
-    // Gigue aléatoire pour éviter que tous les droïdes n'émettent en lockstep
-    // (l'ESP-NOW broadcast n'a pas d'accusé de réception : des collisions
-    // répétées feraient perdre systématiquement ces rapports).
+    // Direct neighborhood report (topology): each droid periodically
+    // broadcasts the nodes it hears directly, with the measured RSSI.
+    // Random jitter to avoid every droid transmitting in lockstep (ESP-NOW
+    // broadcast has no acknowledgment: repeated collisions would
+    // systematically lose these reports).
     if (now > nextNeighborReport) {
         nextNeighborReport = now + NEIGHBOR_REPORT_MS + (uint32_t)random(0, 500);
         NeighborReportPayload rep{};
         rep.count = Mesh.copyNeighbors(rep.entries, MAX_NEIGHBORS, NEIGHBOR_STALE_MS);
         Mesh.send(MSG_NEIGHBORS, &rep, sizeof(rep));
 #if IS_MASTER
-        // Son propre voisinage direct est déjà connu localement, pas besoin
-        // d'attendre un aller-retour réseau pour l'intégrer à la topologie.
+        // Its own direct neighborhood is already known locally, no need to
+        // wait for a network round-trip to fold it into the topology.
         const uint32_t now2 = millis();
         for (uint8_t i = 0; i < rep.count; i++)
             MeshTopo.seen(Mesh.myId(), rep.entries[i].id, rep.entries[i].rssi, now2);
@@ -496,11 +497,12 @@ void loop() {
     }
 
 #if IS_MASTER
-    // Séquence persistée en cours (prioritaire sur le random maître). Si l'étape en
-    // cours cible ce maître, on attend aussi la fin réelle de l'animation locale
-    // (gSeqWaitLocal && anim.isPlaying()) en plus du délai, pour ne pas couper un
-    // mouvement en cours — impossible à garantir pour les esclaves distants (pas
-    // d'accusé de réception mesh), qui restent sur le délai seul.
+    // In-progress stored sequence (takes priority over the master's random
+    // idle draw). If the current step targets this master, we also wait for
+    // the local animation to actually finish (gSeqWaitLocal &&
+    // anim.isPlaying()) in addition to the delay, so as not to cut off an
+    // in-progress movement — impossible to guarantee for remote slaves (no
+    // mesh acknowledgment), which rely on the delay alone.
     if (gSeqPlaying && !gSeqPaused && gServos && now >= gSeqNextAt && !(gSeqWaitLocal && anim.isPlaying())) {
         if (gSeq.stepCount == 0) {
             gSeqPlaying = false;
@@ -515,8 +517,8 @@ void loop() {
                 }
             }
             if (gSeqPlaying) {
-                // Trame audio de la séquence : lancée à la première étape (et à
-                // chaque retour à l'étape 0 en boucle, comme la répétition console).
+                // Sequence's audio track: started on the first step (and on
+                // every loop back to step 0, like the console's rehearsal mode).
                 if (gSeqIndex == 0 && gSeq.track) Audio.playTrack(gSeq.track);
                 const SeqStep& st = gSeq.steps[gSeqIndex];
                 const uint32_t seed = (uint32_t)esp_random();
@@ -525,8 +527,8 @@ void loop() {
                 gSeqWaitLocal = (st.targetId == MESH_TARGET_ALL || st.targetId == Mesh.myId());
                 if (gSeqWaitLocal) {
                     anim.play(st.animId, seed);
-                    // Le DFPlayer ne joue qu'une piste à la fois : avec une trame
-                    // audio, les sons par geste la couperaient — on les supprime.
+                    // The DFPlayer only plays one track at a time: with an
+                    // audio track set, per-gesture sounds would cut it off — so they're skipped.
                     if (!gSeq.track) Audio.playForAnim(st.animId, seed);
                 }
                 gSeqNextAt = now + st.delayMs;
@@ -536,28 +538,28 @@ void loop() {
         }
     }
 
-    // Surveillance de présence : signale un B1 qui passe hors-ligne.
+    // Presence monitoring: reports a B1 going offline.
     if (now > nextPresenceScan) {
         nextPresenceScan = now + 1000;
         for (uint8_t i = 0; i < Droids.count(); i++) {
             const bool on = Droids.online(i, now, DROID_TIMEOUT_MS);
             if (wasOnline[i] && !on) {
                 const String name = Config.getName(Droids.at(i).id);
-                LOGF("B1 %04X%s%s hors-ligne", Droids.at(i).id,
+                LOGF("B1 %04X%s%s offline", Droids.at(i).id,
                      name.length() ? " " : "", name.c_str());
             }
             wasOnline[i] = on;
         }
     }
 
-    // Envoi périodique de la liste des droïdes à la console web.
+    // Periodically sends the droid list to the web console.
     if (now > nextDroidsPush) {
         nextDroidsPush = now + 1500;
         Console.pushDroids();
         Console.pushMeshTopology();
     }
 
-    // Le maître choisit une anim au hasard, la joue et la diffuse au groupe.
+    // The master picks a random anim, plays it, and broadcasts it to the group.
     if (!gSeqPlaying && gServos && gAutoAnim && !anim.isPlaying() && now > nextMeshSend) {
         nextMeshSend = now + (uint32_t)random(2500, 5000);
         const uint32_t seed = (uint32_t)esp_random();
@@ -568,7 +570,7 @@ void loop() {
         Audio.playForAnim(animId, seed);
     }
 #else
-    // Un esclave isolé (sans maître) s'anime aussi tout seul.
+    // An isolated slave (no master) also animates itself on its own.
     if (gServos && gAutoAnim && !anim.isPlaying() && now > nextMove) {
         nextMove = now + (uint32_t)random(3000, 7000);
         const uint32_t seed = (uint32_t)esp_random();

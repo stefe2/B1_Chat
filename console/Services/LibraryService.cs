@@ -4,7 +4,7 @@ using b1_chat_console.Models;
 
 namespace b1_chat_console.Services;
 
-/// <summary>Porte de SendLibrary/libSave/libDelete (ex-MainWindow.xaml.cs) : meme dossier, meme format JSON.</summary>
+/// <summary>Port of SendLibrary/libSave/libDelete (formerly MainWindow.xaml.cs): same folder, same JSON format.</summary>
 public class LibraryService
 {
     private static readonly string LibraryDir = Path.Combine(
@@ -30,10 +30,10 @@ public class LibraryService
                     var item = JsonSerializer.Deserialize<SequenceLibraryItem>(File.ReadAllText(f));
                     if (item != null) items.Add(item);
                 }
-                catch { /* fichier corrompu : ignore, pas de quoi bloquer la liste */ }
+                catch { /* corrupt file: ignore, not worth blocking the list */ }
             }
         }
-        catch { /* repertoire illisible : liste vide */ }
+        catch { /* unreadable directory: empty list */ }
         return items;
     }
 

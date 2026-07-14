@@ -4,7 +4,7 @@ using System.Windows.Media;
 
 namespace b1_chat_console.Converters;
 
-/// <summary>Interpole Bad->Warn->Ok selon une force de signal 0..1 (liens du mesh).</summary>
+/// <summary>Interpolates Bad->Warn->Ok based on a 0..1 signal strength (mesh links).</summary>
 public class StrengthToBrushConverter : IValueConverter
 {
     private static readonly Color Bad = (Color)ColorConverter.ConvertFromString("#FF5B52")!;
@@ -15,6 +15,9 @@ public class StrengthToBrushConverter : IValueConverter
     {
         var t = value is double d ? Math.Clamp(d, 0, 1) : 0;
         var color = t < 0.5 ? Lerp(Bad, Warn, t / 0.5) : Lerp(Warn, Ok, (t - 0.5) / 0.5);
+        // ConverterParameter="Color" returns the raw Color (e.g. for a DropShadowEffect.Color,
+        // which isn't a Brush) instead of the default SolidColorBrush.
+        if (parameter as string == "Color") return color;
         return new SolidColorBrush(color);
     }
 

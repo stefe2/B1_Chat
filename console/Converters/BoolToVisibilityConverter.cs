@@ -4,7 +4,7 @@ using System.Windows.Data;
 
 namespace b1_chat_console.Converters;
 
-/// <summary>ConverterParameter = "Invert" pour inverser (true -> Collapsed).</summary>
+/// <summary>ConverterParameter = "Invert" to flip it (true -> Collapsed).</summary>
 public class BoolToVisibilityConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)

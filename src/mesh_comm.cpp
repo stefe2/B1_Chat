@@ -13,13 +13,13 @@ MeshComm* MeshComm::_instance = nullptr;
 
 namespace {
 const uint8_t BROADCAST_ADDR[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-const uint8_t HMAC_LEN = 8;                       // signature tronquée
-const uint8_t HDR_LEN = sizeof(MeshHeader);       // 6 octets
+const uint8_t HMAC_LEN = 8;                       // truncated signature
+const uint8_t HDR_LEN = sizeof(MeshHeader);       // 6 bytes
 const uint8_t MAX_PAYLOAD = 200;
-const uint8_t TTL_OFFSET = 4;                     // position du champ ttl
+const uint8_t TTL_OFFSET = 4;                     // position of the ttl field
 }  // namespace
 
-// --- Callback statique ESP-NOW (core 3.x) ----------------------------------
+// --- Static ESP-NOW callback (core 3.x) ----------------------------------
 static void espnowRecvCb(const esp_now_recv_info_t* info, const uint8_t* data, int len) {
     int rssi = 0;
     if (info && info->rx_ctrl) rssi = info->rx_ctrl->rssi;
@@ -46,8 +46,8 @@ void MeshComm::recordNeighbor(uint16_t id, int rssi, uint32_t now) {
         _neighbors[_neighborCount++] = {id, (int8_t)rssi, now};
         return;
     }
-    // Table pleine : réutilise le voisin le plus périmé plutôt que d'ignorer
-    // silencieusement une nouvelle mesure.
+    // Table full: reuse the stalest neighbor rather than silently dropping
+    // a new measurement.
     uint8_t oldest = 0;
     for (uint8_t i = 1; i < MAX_NEIGHBORS; i++)
         if (_neighbors[i].lastSeenMs < _neighbors[oldest].lastSeenMs) oldest = i;
@@ -71,14 +71,14 @@ bool MeshComm::begin(const char* groupPassword) {
     _instance = this;
     deriveKey(groupPassword, _key);
 
-    // Dérive l'identité depuis la MAC (2 derniers octets).
+    // Derives the identity from the MAC (last 2 bytes).
     uint8_t mac[6];
     WiFi.mode(WIFI_STA);
     WiFi.disconnect();
     esp_read_mac(mac, ESP_MAC_WIFI_STA);
     _myId = idFromMac(mac);
 
-    // Fixe le canal radio commun au groupe.
+    // Fixes the radio channel shared by the group.
     esp_wifi_set_promiscuous(true);
     esp_wifi_set_channel(MESH_WIFI_CHANNEL, WIFI_SECOND_CHAN_NONE);
     esp_wifi_set_promiscuous(false);
@@ -86,7 +86,7 @@ bool MeshComm::begin(const char* groupPassword) {
     if (esp_now_init() != ESP_OK) return false;
     esp_now_register_recv_cb(espnowRecvCb);
 
-    // Ajoute le peer broadcast.
+    // Adds the broadcast peer.
     esp_now_peer_info_t peer = {};
     memcpy(peer.peer_addr, BROADCAST_ADDR, 6);
     peer.channel = MESH_WIFI_CHANNEL;
@@ -98,7 +98,7 @@ bool MeshComm::begin(const char* groupPassword) {
 }
 
 void MeshComm::computeHmac(const uint8_t* frame, uint8_t frameLen, uint8_t out8[8]) {
-    // Copie de travail avec ttl neutralisé (exclu de la signature).
+    // Working copy with ttl neutralized (excluded from the signature).
     uint8_t tmp[HDR_LEN + MAX_PAYLOAD];
     memcpy(tmp, frame, frameLen);
     tmp[TTL_OFFSET] = 0;
@@ -121,7 +121,7 @@ bool MeshComm::verify(const uint8_t* frame, uint8_t frameLen) {
     const uint8_t signedLen = frameLen - HMAC_LEN;
     uint8_t expected[HMAC_LEN];
     computeHmac(frame, signedLen, expected);
-    // Comparaison à temps constant.
+    // Constant-time comparison.
     uint8_t diff = 0;
     const uint8_t* got = frame + signedLen;
     for (uint8_t i = 0; i < HMAC_LEN; i++) diff |= expected[i] ^ got[i];
@@ -148,7 +148,7 @@ bool MeshComm::send(uint8_t type, const void* payload, uint8_t len, uint8_t ttl)
     const uint8_t signedLen = HDR_LEN + len;
     computeHmac(frame, signedLen, frame + signedLen);
 
-    // Notre propre message ne doit pas être re-traité s'il nous revient.
+    // Our own message must not be re-processed if it comes back to us.
     remember(_myId, hdr.seq);
 
     return rawBroadcast(frame, signedLen + HMAC_LEN);
@@ -171,26 +171,26 @@ void MeshComm::remember(uint16_t srcId, uint16_t seq) {
 void MeshComm::handleRaw(const uint8_t* mac, const uint8_t* data, int len, int rssi) {
     if (len < HDR_LEN + HMAC_LEN || len > HDR_LEN + MAX_PAYLOAD + HMAC_LEN) return;
 
-    // 1) Authentification : rejette les autres groupes / messages falsifiés.
+    // 1) Authentication: rejects other groups / tampered messages.
     if (!verify(data, (uint8_t)len)) return;
 
     MeshHeader hdr;
     memcpy(&hdr, data, HDR_LEN);
 
-    // 1.5) Topologie : quiconque nous a physiquement transmis cette trame
-    // (mac) est un voisin radio direct — indépendamment du srcId applicatif
-    // et du dédoublonnage ci-dessous. Doit s'exécuter ICI, avant le
-    // early-return srcId==_myId et avant le dédoublonnage, car :
-    //  - l'écho relayé de notre propre message original (hdr.srcId==_myId)
-    //    prouve quand même qu'on entend directement le relais ;
-    //  - une copie dupliquée/relayée d'un (srcId,seq) déjà vu rafraîchit
-    //    quand même la mesure RSSI de CE lien radio précis.
+    // 1.5) Topology: whoever physically transmitted this frame to us (mac)
+    // is a direct radio neighbor — independent of the application-level
+    // srcId and of the dedup below. Must run HERE, before the
+    // srcId==_myId early-return and before dedup, because:
+    //  - a relayed echo of our own original message (hdr.srcId==_myId)
+    //    still proves we directly hear the relay;
+    //  - a duplicate/relayed copy of an already-seen (srcId,seq) still
+    //    refreshes the RSSI measurement for THIS specific radio link.
     const uint16_t neighborId = idFromMac(mac);
     if (neighborId != 0 && neighborId != _myId) {
         recordNeighbor(neighborId, rssi, millis());
     }
 
-    // 2) Ignore nos propres messages et les doublons (anti-boucle).
+    // 2) Ignores our own messages and duplicates (anti-loop).
     if (hdr.srcId == _myId) return;
     if (alreadySeen(hdr.srcId, hdr.seq)) return;
     remember(hdr.srcId, hdr.seq);
@@ -198,11 +198,11 @@ void MeshComm::handleRaw(const uint8_t* mac, const uint8_t* data, int len, int r
     const uint8_t payloadLen = (uint8_t)len - HDR_LEN - HMAC_LEN;
     const uint8_t* payload = data + HDR_LEN;
 
-    // 3) Remonte à l'application.
+    // 3) Passes it up to the application.
     if (_handler) _handler(hdr.type, payload, payloadLen, hdr.srcId, rssi);
 
-    // 4) Relais multi-sauts : décrémente le TTL et re-broadcast (HMAC exclut
-    //    le TTL, donc la signature reste valide).
+    // 4) Multi-hop relay: decrements the TTL and re-broadcasts (the HMAC
+    //    excludes the TTL, so the signature stays valid).
     if (hdr.ttl > 0) {
         uint8_t relay[HDR_LEN + MAX_PAYLOAD + HMAC_LEN];
         memcpy(relay, data, len);

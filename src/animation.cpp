@@ -2,8 +2,8 @@
 #include "config.h"
 
 // ---------------------------------------------------------------------------
-//  Keyframes : offsets (degrés) par rapport au centre. moveMs = durée du
-//  déplacement (easing), holdMs = maintien avant la keyframe suivante.
+//  Keyframes: offsets (degrees) from center. moveMs = movement duration
+//  (easing), holdMs = hold time before the next keyframe.
 // ---------------------------------------------------------------------------
 struct KeyFrame {
     int8_t   panOff;
@@ -14,7 +14,7 @@ struct KeyFrame {
 
 namespace {
 
-// -- Définitions des animations (offsets depuis le centre) ------------------
+// -- Animation definitions (offsets from center) ------------------
 const KeyFrame LOOK_AROUND[] = {
     {-40,   5, 900, 500}, { 40,   5, 1200, 500}, {  0,   0, 800, 300},
 };
@@ -81,7 +81,7 @@ struct AnimDef {
     bool            loop;
 };
 
-// L'ordre doit suivre l'enum AnimId. IDLE = pas de keyframes (bruit d'idle seul).
+// The order must follow the AnimId enum. IDLE = no keyframes (idle noise only).
 const AnimDef ANIMS[ANIM_COUNT] = {
     {nullptr,          0,                                     false},  // ANIM_IDLE
     {LOOK_AROUND,      sizeof(LOOK_AROUND) / sizeof(KeyFrame),      false},
@@ -99,12 +99,12 @@ const AnimDef ANIMS[ANIM_COUNT] = {
     {WHIRR_SEARCH,     sizeof(WHIRR_SEARCH) / sizeof(KeyFrame),     false},
     {SIGNAL_GLITCH,    sizeof(SIGNAL_GLITCH) / sizeof(KeyFrame),    false},
     {GREETING_NOD,     sizeof(GREETING_NOD) / sizeof(KeyFrame),     false},
-    {POWER_DOWN,       sizeof(POWER_DOWN) / sizeof(KeyFrame),       true},   // boucle
-    {TALK,             sizeof(TALK) / sizeof(KeyFrame),             true},   // boucle
+    {POWER_DOWN,       sizeof(POWER_DOWN) / sizeof(KeyFrame),       true},   // loops
+    {TALK,             sizeof(TALK) / sizeof(KeyFrame),             true},   // loops
 };
 
-// Valeur indicative (ms) utilisée pour les gestes sans durée finie naturelle
-// (IDLE : pas de keyframes ; POWER_DOWN/TALK : bouclent indéfiniment).
+// Indicative value (ms) used for gestures with no natural finite duration
+// (IDLE: no keyframes; POWER_DOWN/TALK: loop indefinitely).
 const uint32_t LOOPING_ANIM_DEFAULT_MS = 2000;
 
 }  // namespace
@@ -125,8 +125,8 @@ int AnimationPlayer::jitter(uint8_t amp) {
 }
 
 uint8_t AnimationPlayer::randomAnimId(uint32_t seed) {
-    // Anims « actives » tirables au hasard : 1..ANIM_POWER_DOWN-1 (exclut IDLE, et
-    // exclut POWER_DOWN/TALK qui sont des gestes à déclenchement manuel uniquement).
+    // "Active" anims eligible for random draw: 1..ANIM_POWER_DOWN-1 (excludes IDLE, and
+    // excludes POWER_DOWN/TALK which are manual-trigger-only gestures).
     uint32_t r = seed * 1103515245u + 12345u;
     return 1 + (uint8_t)((r >> 16) % (ANIM_POWER_DOWN - 1));
 }
@@ -149,7 +149,7 @@ void AnimationPlayer::play(uint8_t animId, uint32_t seed) {
     _idx = 0;
     _holding = false;
 
-    // IDLE ou animation vide : on laisse la tête en bruit d'idle.
+    // IDLE or empty animation: leave the head in idle noise.
     if (ANIMS[animId].count == 0) {
         _playing = false;
         _engine->center(600);
@@ -163,7 +163,7 @@ void AnimationPlayer::issueCurrentFrame() {
     const AnimDef& a = ANIMS[_animId];
     const KeyFrame& f = a.frames[_idx];
 
-    // Cible absolue = centre + offset + léger jitter organique.
+    // Absolute target = center + offset + slight organic jitter.
     const float pan  = SERVO_PAN_CENTER  + f.panOff  + jitter(4);
     const float tilt = SERVO_TILT_CENTER + f.tiltOff + jitter(3);
     const uint16_t move = f.moveMs + (uint16_t)(jitter(6) * 10);
@@ -178,13 +178,13 @@ void AnimationPlayer::update() {
     if (!_playing || !_engine) return;
     if (_engine->isMoving()) return;
 
-    // Déclenche le déplacement vers la keyframe courante.
+    // Triggers the move toward the current keyframe.
     if (_needMove) {
         issueCurrentFrame();
         return;
     }
 
-    // Arrivé : gère le temps de maintien.
+    // Arrived: handles the hold time.
     const uint32_t now = millis();
     if (!_holding) {
         _holding = true;
@@ -193,7 +193,7 @@ void AnimationPlayer::update() {
     }
     if (now - _holdStart < _holdDur) return;
 
-    // Passe à la keyframe suivante.
+    // Advances to the next keyframe.
     _idx++;
     const AnimDef& a = ANIMS[_animId];
     if (_idx >= a.count) {

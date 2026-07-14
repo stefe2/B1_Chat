@@ -1,21 +1,21 @@
 # ============================================================================
-#  release.ps1 — release firmware B1 sur GitHub (stefe2/B1_Chat)
+#  release.ps1 — releases B1 firmware to GitHub (stefe2/B1_Chat)
 #
-#  NOTE : depuis .github/workflows/firmware-release.yml, la publication est
-#  automatique — bump FW_VERSION dans src/config.h, commit, push sur main, et
-#  la CI compile les deux rôles + publie la release GitHub toute seule (aucun
-#  gh auth login ni exécution locale requis). Ce script reste utile pour un
-#  build/manifeste local de vérification, ou comme repli manuel si la CI est
-#  indisponible — éviter de lancer -Publish en plus de la CI pour la même
-#  version (double tag/release).
+#  NOTE: since .github/workflows/firmware-release.yml, publishing is
+#  automatic — bump FW_VERSION in src/config.h, commit, push to main, and CI
+#  builds both roles + publishes the GitHub release on its own (no gh auth
+#  login or local run required). This script remains useful for a local
+#  verification build/manifest, or as a manual fallback if CI is unavailable
+#  — avoid running -Publish in addition to CI for the same version (duplicate
+#  tag/release).
 #
-#  Compile les DEUX rôles (IS_MASTER 1 puis 0), produit dist/ avec les .bin
-#  nommés par version + firmware_manifest.json (SHA-256, modèle KyberEditor),
-#  puis (avec -Publish) tag git fw-vX.Y.Z + release GitHub avec les assets.
+#  Builds BOTH roles (IS_MASTER 1 then 0), produces dist/ with .bin files
+#  named by version + firmware_manifest.json (SHA-256, KyberEditor-style),
+#  then (with -Publish) tags git fw-vX.Y.Z + creates a GitHub release with the assets.
 #
-#  Usage :  .\tools\release.ps1 [-Notes "notes de version"] [-Publish]
-#  Prérequis pour -Publish : gh auth login (une fois).
-#  La version vient de FW_VERSION dans src/config.h (source de vérité).
+#  Usage:  .\tools\release.ps1 [-Notes "release notes"] [-Publish]
+#  Prerequisite for -Publish: gh auth login (once).
+#  The version comes from FW_VERSION in src/config.h (source of truth).
 # ============================================================================
 param(
     [string]$Notes = "",
@@ -29,27 +29,27 @@ Set-Location $repo
 $pio = Join-Path $env:USERPROFILE ".platformio\penv\Scripts\pio.exe"
 $configH = "src/config.h"
 
-# --- Version depuis config.h ------------------------------------------------
+# --- Version from config.h ------------------------------------------------
 $config = Get-Content $configH -Raw
-if ($config -notmatch '#define\s+FW_VERSION\s+"([^"]+)"') { throw "FW_VERSION introuvable dans $configH" }
+if ($config -notmatch '#define\s+FW_VERSION\s+"([^"]+)"') { throw "FW_VERSION not found in $configH" }
 $version = $Matches[1]
 Write-Host "Firmware v$version" -ForegroundColor Cyan
 
-# --- Compile un rôle et copie le binaire -------------------------------------
+# --- Builds a role and copies the binary -------------------------------------
 $dist = Join-Path $repo "dist"
 New-Item -ItemType Directory -Force $dist | Out-Null
 
-# Mémorise le rôle actuel pour le restaurer à la fin (il vit dans config.h).
-if ($config -notmatch '#define\s+IS_MASTER\s+(\d)') { throw "IS_MASTER introuvable dans $configH" }
+# Remembers the current role to restore it at the end (it lives in config.h).
+if ($config -notmatch '#define\s+IS_MASTER\s+(\d)') { throw "IS_MASTER not found in $configH" }
 $originalRole = $Matches[1]
 
 function Build-Role([int]$isMaster, [string]$roleName) {
     $c = Get-Content $configH -Raw
     $c = $c -replace '#define\s+IS_MASTER\s+\d', "#define IS_MASTER $isMaster"
     Set-Content $configH $c -NoNewline
-    Write-Host "Compilation $roleName (IS_MASTER $isMaster)..." -ForegroundColor Cyan
+    Write-Host "Building $roleName (IS_MASTER $isMaster)..." -ForegroundColor Cyan
     $buildOutput = & $pio run -e b1 2>&1
-    if ($LASTEXITCODE -ne 0) { $buildOutput | Write-Host; throw "echec de compilation ($roleName)" }
+    if ($LASTEXITCODE -ne 0) { $buildOutput | Write-Host; throw "build failed ($roleName)" }
     $buildOutput | Select-Object -Last 1 | Write-Host
     $out = Join-Path $dist "b1-$roleName-v$version.bin"
     Copy-Item ".pio/build/b1/firmware.bin" $out -Force
@@ -60,13 +60,13 @@ try {
     $masterBin = Build-Role 1 "master"
     $slaveBin  = Build-Role 0 "slave"
 } finally {
-    # Restaure le rôle d'origine.
+    # Restores the original role.
     $c = Get-Content $configH -Raw
     $c = $c -replace '#define\s+IS_MASTER\s+\d', "#define IS_MASTER $originalRole"
     Set-Content $configH $c -NoNewline
 }
 
-# --- Manifeste (modèle KyberEditor : version, fichiers, sha256, tailles) -----
+# --- Manifest (KyberEditor-style: version, files, sha256, sizes) -----
 function FileEntry([string]$path, [string]$role) {
     $f = Get-Item $path
     [ordered]@{
@@ -85,19 +85,19 @@ $manifest = [ordered]@{
 }
 $manifestPath = Join-Path $dist "firmware_manifest.json"
 $manifest | ConvertTo-Json -Depth 4 | Set-Content $manifestPath -Encoding utf8
-Write-Host "dist/ pret :" -ForegroundColor Green
+Write-Host "dist/ ready:" -ForegroundColor Green
 Get-ChildItem $dist | Format-Table Name, Length -AutoSize | Out-String | Write-Host
 
-# --- Publication GitHub -------------------------------------------------------
+# --- GitHub publishing -------------------------------------------------------
 if ($Publish) {
     $tag = "fw-v$version"
     git tag $tag 2>$null
     git push origin main --tags
-    $relNotes = if ($Notes) { $Notes } else { "Release firmware v$version (maitre + esclave)." }
+    $relNotes = if ($Notes) { $Notes } else { "B1 firmware release v$version (master + slave)." }
     gh release create $tag $masterBin $slaveBin $manifestPath `
         --title "Firmware B1 v$version" `
         --notes $relNotes
-    Write-Host "Release $tag publiee sur GitHub." -ForegroundColor Green
+    Write-Host "Release $tag published to GitHub." -ForegroundColor Green
 } else {
-    Write-Host "Compilation seulement (ajoute -Publish pour tagger + publier la release GitHub)." -ForegroundColor Yellow
+    Write-Host "Build only (add -Publish to tag + publish the GitHub release)." -ForegroundColor Yellow
 }

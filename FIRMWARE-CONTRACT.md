@@ -1,42 +1,42 @@
-# Contrat firmware — extensions proposées au protocole B1
+# Firmware contract — proposed extensions to the B1 protocol
 
-Ce document décrit les évolutions du protocole JSON-lines (`{cmd:...}` → `{evt:...}`,
-115200 bauds, une ligne par message) que la console attend du firmware ESP32 maître.
-La console (≥ v0.7.0) fonctionne **sans** ces extensions — chaque section décrit le
-comportement de repli actuel et ce qui s'améliorera quand l'extension sera implémentée.
+This document describes the evolutions of the JSON-lines protocol (`{cmd:...}` → `{evt:...}`,
+115200 baud, one line per message) that the console expects from the master ESP32 firmware.
+The console (≥ v0.7.0) works **without** these extensions — each section describes the
+current fallback behavior and what will improve once the extension is implemented.
 
-Rédigé le 2026-07-12, pendant que le code source du firmware n'était pas disponible.
+Written on 2026-07-12, while the firmware source code wasn't yet available.
 
-## ⚑ État d'implémentation (firmware ≥ 1.0.0, 2026-07-07)
+## ⚑ Implementation status (firmware ≥ 1.0.0, 2026-07-07)
 
-| Section | État |
+| Section | Status |
 | --- | --- |
-| §1 trame audio (`track` dans seqSave/seqData/seqList/seqState, jouée par seqRun) | ✅ implémenté |
-| §2 `getTrackDurations` | ⏳ reporté (approche broche BUSY à venir) |
-| §3 réponse `getConfig` = `{evt:"config",...}` | ✅ implémenté |
-| §4 `setMulti` atomique (validation complète avant application) | ✅ implémenté |
-| §5 `seqRun {from}`, `seqPause`/`seqResume`, `seqState.paused` + push par étape | ✅ implémenté |
+| §1 audio track (`track` in seqSave/seqData/seqList/seqState, played by seqRun) | ✅ implemented |
+| §2 `getTrackDurations` | ⏳ deferred (BUSY-pin approach planned) |
+| §3 `getConfig` response = `{evt:"config",...}` | ✅ implemented |
+| §4 atomic `setMulti` (full validation before application) | ✅ implemented |
+| §5 `seqRun {from}`, `seqPause`/`seqResume`, `seqState.paused` + per-step push | ✅ implemented |
 
-**Au-delà du contrat** (inspiré du protocole KyberEditor) : tampon de ligne porté à
-4 Ko (`lineMax` annoncé) ; `{evt:"err", msg}` pour toute commande invalide ;
-handshake `hello` enrichi (`fw`, `proto`, `lineMax`, `anims`, `seqSlots`,
-`trackCount`, `caps[]`, `dirty`) ; `{cmd:"getAll"}` = dump complet (rafale
-d'évènements existants terminée par `{evt:"allDone"}`) ; modèle commit/revert pour
-volume/params d'anim/noms (`{cmd:"commit"}` / `{cmd:"revert"}` / `{evt:"dirty"}` —
-les setters sont « live », la NVS n'est écrite qu'au commit ; **la console doit
-envoyer `commit` après un `setMulti` de restauration**).
+**Beyond the contract** (inspired by the KyberEditor protocol): line buffer raised to
+4 KB (`lineMax` announced); `{evt:"err", msg}` for any invalid command; enriched
+`hello` handshake (`fw`, `proto`, `lineMax`, `anims`, `seqSlots`,
+`trackCount`, `caps[]`, `dirty`); `{cmd:"getAll"}` = full dump (burst of
+existing events ending with `{evt:"allDone"}`); commit/revert model for
+volume/anim params/names (`{cmd:"commit"}` / `{cmd:"revert"}` / `{evt:"dirty"}` —
+setters are "live", NVS is only written on commit; **the console must
+send `commit` after a restore `setMulti`**).
 
 ---
 
-## 1. Trame audio attachée à une séquence (priorité haute)
+## 1. Audio track attached to a sequence (high priority)
 
-**Aujourd'hui** : la console associe une piste audio (1-10) à chaque slot de séquence,
-mais uniquement dans son propre `localStorage` (`b1.audioBySlot`). Un `seqRun` lancé
-par le maître ne joue **aucun** son ; seul le mode « Répéter » de la console
-synchronise l'audio (elle envoie `playTrack` elle-même).
+**Today**: the console associates an audio track (1-10) with each sequence slot,
+but only in its own `localStorage` (`b1.audioBySlot`). A `seqRun` triggered
+by the master plays **no** sound at all; only the console's "Rehearse" mode
+syncs the audio (it sends `playTrack` itself).
 
-**Demandé** : `seqSave` accepte un champ `track` (entier 1-10, ou `null` = pas d'audio),
-persisté en NVS avec la séquence.
+**Requested**: `seqSave` accepts a `track` field (integer 1-10, or `null` = no audio),
+persisted in NVS with the sequence.
 
 ```json
 → {"cmd":"seqSave","slot":2,"name":"Parade","loop":false,"track":3,"steps":[...]}
@@ -46,55 +46,55 @@ persisté en NVS avec la séquence.
 ← {"evt":"seqData","slot":2,"name":"Parade","loop":false,"track":3,"steps":[...]}
 ```
 
-- `seqRun` sur un slot avec `track` non nul : le maître lance la piste (équivalent
-  `playTrack`) **au moment de la première étape**, puis déroule les étapes normalement.
-- `seqList` inclut `track` dans chaque entrée (affichage catalogue).
-- Champ absent/inconnu = `null` (rétro-compatible).
+- `seqRun` on a slot with a non-null `track`: the master starts the track
+  (equivalent to `playTrack`) **at the first step**, then runs through the steps normally.
+- `seqList` includes `track` in each entry (catalog display).
+- Missing/unknown field = `null` (backward-compatible).
 
-**Migration console** : quand `seqData` contiendra `track`, la console l'utilisera comme
-source de vérité et migrera son `localStorage` vers le firmware au premier `seqSave`.
+**Console migration**: once `seqData` carries `track`, the console will use it as
+the source of truth and migrate its `localStorage` to the firmware on the next `seqSave`.
 
-## 2. Durée des pistes audio (priorité haute)
+## 2. Audio track duration (high priority)
 
-**Aujourd'hui** : la console chronomètre les pistes à la main (bouton « Mesurer la
-durée ») pour dessiner la trame audio à l'échelle sur la timeline.
+**Today**: the console times tracks by hand (a "Measure duration" button)
+to draw the audio track to scale on the timeline.
 
-**Demandé** : si le module audio le permet (DFPlayer & co. savent parfois lire la
-durée, sinon tabler sur une table maintenue avec les fichiers) :
+**Requested**: if the audio module supports it (DFPlayer & co. can sometimes read
+the duration, otherwise fall back to a table maintained alongside the files):
 
 ```json
 → {"cmd":"getTrackDurations"}
 ← {"evt":"trackDurations","list":[{"track":1,"ms":12400},{"track":2,"ms":8100}]}
 ```
 
-Pistes de durée inconnue : omises de la liste. La console gardera la mesure manuelle
-en repli pour celles-là.
+Tracks of unknown duration: omitted from the list. The console will keep the
+manual measurement as a fallback for those.
 
-## 3. Lecture de la configuration générale (priorité moyenne)
+## 3. Reading the general configuration (medium priority)
 
-**Aujourd'hui** : la console envoie `getConfig` au handshake mais **ne connaît pas la
-forme de la réponse** (elle la journalise sans l'interpréter). Conséquences : les
-curseurs volume/fréquence/amplitude/vitesse affichent des valeurs par défaut au
-démarrage, et la restauration de sauvegarde ne peut pas comparer ces paramètres
-(ils sont proposés « à l'aveugle », décochés par défaut).
+**Today**: the console sends `getConfig` at handshake but **doesn't know the
+shape of the response** (it logs it without interpreting it). Consequences: the
+volume/frequency/amplitude/speed sliders show default values on
+startup, and backup restore can't compare these settings
+(they're offered "blindly", unchecked by default).
 
-**Demandé** : documenter/normaliser la réponse ainsi :
+**Requested**: document/standardize the response as follows:
 
 ```json
 → {"cmd":"getConfig"}
 ← {"evt":"config","volume":20,"freq":50,"amp":60,"speed":50}
 ```
 
-La console peuplera alors ses curseurs à la connexion et fera une vraie
-réconciliation champ par champ de ces valeurs à la restauration.
+The console will then populate its sliders on connection and do a true
+field-by-field reconciliation of these values on restore.
 
-## 4. Écriture atomique par lot — `setMulti` (priorité moyenne)
+## 4. Atomic batch write — `setMulti` (medium priority)
 
-Inspiré du `SETM` du firmware Kyber : la restauration de sauvegarde envoie
-aujourd'hui une rafale de commandes espacées de 200 ms (noms, calibrations,
-séquences) — lent et interruptible à mi-chemin.
+Inspired by the Kyber firmware's `SETM`: backup restore currently sends
+a burst of commands spaced 200 ms apart (names, calibrations,
+sequences) — slow and interruptible partway through.
 
-**Demandé** :
+**Requested**:
 
 ```json
 → {"cmd":"setMulti","ops":[
@@ -105,23 +105,23 @@ séquences) — lent et interruptible à mi-chemin.
 ← {"evt":"setMultiDone","ok":true,"applied":3}
 ```
 
-- Tout ou rien : si une op échoue, aucune n'est persistée, et la réponse indique
-  l'index fautif : `{"evt":"setMultiDone","ok":false,"failedAt":1,"error":"..."}`.
-- Taille bornée par le tampon série : accepter au minimum 4 Ko par ligne, et la
-  console fragmentera ses lots au-delà.
+- All or nothing: if one op fails, none are persisted, and the response reports
+  the offending index: `{"evt":"setMultiDone","ok":false,"failedAt":1,"error":"..."}`.
+- Size bounded by the serial buffer: accept at least 4 KB per line, and the
+  console will fragment its batches beyond that.
 
-## 5. Contrôle de lecture enrichi (confort)
+## 5. Enriched playback control (nice-to-have)
 
-- `{"cmd":"seqRun","slot":2,"from":5}` — démarrer à l'étape 6 (la console émule ça en
-  mode répétition, mais pas pour l'exécution autonome).
-- `{"cmd":"seqPause"}` / `{"cmd":"seqResume"}` — avec `{"evt":"seqState","paused":true,...}`.
-- `seqState` pendant la lecture : pousser l'événement **à chaque étape** (déjà le cas
-  semble-t-il) et inclure `track` s'il y a une trame audio.
+- `{"cmd":"seqRun","slot":2,"from":5}` — start at step 6 (the console emulates this
+  in rehearsal mode, but not for standalone playback).
+- `{"cmd":"seqPause"}` / `{"cmd":"seqResume"}` — with `{"evt":"seqState","paused":true,...}`.
+- `seqState` during playback: push the event **on every step** (already seems to
+  be the case) and include `track` if there's an audio track.
 
-## Rappels d'implémentation
+## Implementation reminders
 
-- Une ligne = un JSON complet terminé par `\n` ; ignorer les lignes invalides.
-- Champs inconnus dans une commande : les **ignorer** (la console peut être plus
-  récente que le firmware). Ne jamais échouer sur un champ en trop.
-- Toute nouvelle réponse doit garder un champ `evt` unique et stable — la console
-  route exclusivement là-dessus.
+- One line = one complete JSON object terminated by `\n`; ignore invalid lines.
+- Unknown fields in a command: **ignore** them (the console may be newer
+  than the firmware). Never fail on an extra field.
+- Any new response must keep a single, stable `evt` field — the console
+  routes exclusively on it.

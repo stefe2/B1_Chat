@@ -26,21 +26,21 @@ public partial class FirmwareViewModel : ObservableObject
     [ObservableProperty] private bool _flashing;
     [ObservableProperty] private bool _canFlash;
     [ObservableProperty] private int _flashProgressPct;
-    // espflash n'imprime sa barre de progression (%) que s'il detecte un vrai terminal ; ici sa
-    // sortie est redirigee (Process.RedirectStandardOutput/Error), donc en pratique aucune ligne
-    // de progression n'arrive jamais -> barre indeterminee par defaut, sauf si on parvient quand
-    // meme a lire un pourcentage (voir FlashService.Progress).
+    // espflash only prints its progress bar (%) if it detects a real terminal; here its
+    // output is redirected (Process.RedirectStandardOutput/Error), so in practice no
+    // progress line ever arrives -> indeterminate bar by default, unless a percentage can
+    // still be read (see FlashService.Progress).
     [ObservableProperty] private bool _flashProgressIndeterminate = true;
     [ObservableProperty] private bool _isMasterRole = true;
     [ObservableProperty] private bool _showAdvanced;
     [ObservableProperty] private bool _eraseChipFirst;
 
     public bool IsSlaveRole => !IsMasterRole;
-    public string RoleLabel => IsMasterRole ? "MAÎTRE" : "ESCLAVE";
-    public string FlashLabel => $"Flasher {RoleLabel}";
+    public string RoleLabel => IsMasterRole ? "MASTER" : "SLAVE";
+    public string FlashLabel => $"Flash {RoleLabel}";
     public string ReadyStatus => BinPath == null
-        ? "Aucun binaire chargé."
-        : System.IO.Path.GetFileName(BinPath) + (BinVerified ? " — SHA-256 vérifié ✓" : " — non vérifié (fichier local)");
+        ? "No binary loaded."
+        : System.IO.Path.GetFileName(BinPath) + (BinVerified ? " — SHA-256 verified ✓" : " — unverified (local file)");
 
     partial void OnIsMasterRoleChanged(bool value)
     {
@@ -76,8 +76,8 @@ public partial class FirmwareViewModel : ObservableObject
     {
         _protocol = protocol;
         _link = link;
-        // FlashService leve ses evenements depuis les callbacks async de Process (thread pool) :
-        // remarshalage sur l'UI avant de toucher les ObservableCollection/proprietes liees.
+        // FlashService raises its events from Process's async callbacks (thread pool):
+        // remarshal onto the UI before touching bound ObservableCollections/properties.
         _flash.LogLine += line => RunOnUi(() => FlashLog.Add(line));
         _flash.Progress += pct => RunOnUi(() =>
         {
@@ -86,8 +86,8 @@ public partial class FirmwareViewModel : ObservableObject
         });
         _flash.Completed += (ok, code, err) => RunOnUi(() => OnFlashCompleted(ok, code, err));
         RefreshFlashPorts();
-        // Detecte une carte branchee/debranchee (ex. un deuxieme droide) sans action manuelle ;
-        // diff-based dans RefreshFlashPorts pour ne pas perturber le ComboBox si rien ne change.
+        // Detects a board being plugged/unplugged (e.g. a second droid) with no manual action;
+        // diff-based in RefreshFlashPorts so the ComboBox isn't disturbed if nothing changed.
         _portScanTimer = new System.Threading.Timer(_ => RunOnUi(RefreshFlashPorts), null, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(2));
     }
 
@@ -96,10 +96,10 @@ public partial class FirmwareViewModel : ObservableObject
     [RelayCommand] private void ToggleAdvanced() => ShowAdvanced = !ShowAdvanced;
 
     /// <summary>
-    /// Scan de ports independant de SerialLinkService : la fenetre Firmware n'a pas besoin
-    /// d'etre connectee (ni meme d'une carte qui parle deja le protocole JSON) pour flasher.
-    /// Presélectionne le port actuellement connecte dans la fenetre principale par confort,
-    /// sans jamais en dependre.
+    /// Port scan independent of SerialLinkService: the Firmware window doesn't need to be
+    /// connected (nor even to a board that already speaks the JSON protocol) to flash.
+    /// Preselects the port currently connected in the main window for convenience,
+    /// without ever depending on it.
     /// </summary>
     [RelayCommand]
     private void RefreshFlashPorts()
@@ -117,7 +117,7 @@ public partial class FirmwareViewModel : ObservableObject
     [RelayCommand]
     private void PickBin()
     {
-        var dlg = new OpenFileDialog { Filter = "Image firmware (*.bin)|*.bin|Tous les fichiers (*.*)|*.*" };
+        var dlg = new OpenFileDialog { Filter = "Firmware image (*.bin)|*.bin|All files (*.*)|*.*" };
         if (dlg.ShowDialog() != true) return;
         BinPath = dlg.FileName;
         BinVerified = false;
@@ -130,19 +130,19 @@ public partial class FirmwareViewModel : ObservableObject
         if (string.IsNullOrEmpty(BinPath) || Flashing) return;
         if (string.IsNullOrEmpty(SelectedFlashPort))
         {
-            System.Windows.MessageBox.Show("Choisis d'abord un port série pour le flash (liste « Port de flash » ci-dessus).",
-                "Aucun port sélectionné", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
+            System.Windows.MessageBox.Show("First choose a serial port for the flash (the \"Flash port\" list above).",
+                "No port selected", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
             return;
         }
 
         var port = SelectedFlashPort;
-        var message = $"Écrire le firmware {RoleLabel} « {System.IO.Path.GetFileName(BinPath)} » à {Address} sur {port} ?\n\nLe firmware actuel sera remplacé. Ne débranche rien pendant l'opération.";
+        var message = $"Write the {RoleLabel} firmware « {System.IO.Path.GetFileName(BinPath)} » at {Address} on {port}?\n\nThe current firmware will be replaced. Do not unplug anything during the operation.";
         if (EraseChipFirst)
-            message = $"⚠ EFFACEMENT COMPLET DE LA PUCE, puis écriture du firmware {RoleLabel} « {System.IO.Path.GetFileName(BinPath)} » sur {port}.\n\n" +
-                       "Tous les réglages sauvegardés sur CE droïde (nom, calibration servo, et si maître : volume, séquences, paramètres d'anim) seront perdus définitivement — pas seulement le firmware.\n\n" +
-                       "Continuer ?";
+            message = $"⚠ FULL CHIP ERASE, then writing the {RoleLabel} firmware « {System.IO.Path.GetFileName(BinPath)} » on {port}.\n\n" +
+                       "All settings saved on THIS droid (name, servo calibration, and if master: volume, sequences, anim parameters) will be permanently lost — not just the firmware.\n\n" +
+                       "Continue?";
 
-        if (System.Windows.MessageBox.Show(message, "Confirmer le flash", System.Windows.MessageBoxButton.YesNo,
+        if (System.Windows.MessageBox.Show(message, "Confirm flash", System.Windows.MessageBoxButton.YesNo,
                 System.Windows.MessageBoxImage.Warning) != System.Windows.MessageBoxResult.Yes)
             return;
 
@@ -150,17 +150,17 @@ public partial class FirmwareViewModel : ObservableObject
         CanFlash = false;
         FlashProgressPct = 0;
         FlashProgressIndeterminate = true;
-        // Le port de flash est independant du lien serie principal ; on ne le libere que s'il
-        // se trouve etre exactement celui deja ouvert par SerialLinkService (meme carte). On le
-        // rouvrira nous-memes une fois le flash termine (PrepareForExternalClose ne leve pas
-        // l'evenement Closed, donc MainViewModel.Connected resterait bloque a true sinon).
+        // The flash port is independent of the main serial link; it's only released if it
+        // happens to be exactly the one already opened by SerialLinkService (same board). It
+        // will be reopened ourselves once the flash finishes (PrepareForExternalClose doesn't
+        // raise the Closed event, so MainViewModel.Connected would otherwise stay stuck at true).
         _reconnectPortAfterFlash = null;
         if (_link.IsOpen && _link.PortName == port)
         {
             _reconnectPortAfterFlash = port;
             _link.PrepareForExternalClose();
         }
-        FlashLog.Add(EraseChipFirst ? $"— Effacement complet puis flash démarrés sur {port} —" : $"— Flash démarré sur {port} —");
+        FlashLog.Add(EraseChipFirst ? $"— Full erase then flash started on {port} —" : $"— Flash started on {port} —");
         _flash.Start(BinPath, Address, port, EraseChipFirst);
     }
 
@@ -169,13 +169,13 @@ public partial class FirmwareViewModel : ObservableObject
         Flashing = false;
         CanFlash = BinPath != null;
         if (ok) { FlashProgressPct = 100; FlashProgressIndeterminate = false; }
-        FlashLog.Add(ok ? "— Flash terminé avec succès —" : $"— Échec du flash{(error != null ? " : " + error : $" (code {exitCode})")} —");
+        FlashLog.Add(ok ? "— Flash completed successfully —" : $"— Flash failed{(error != null ? ": " + error : $" (code {exitCode})")} —");
 
         if (_reconnectPortAfterFlash != null)
         {
             var port = _reconnectPortAfterFlash;
             _reconnectPortAfterFlash = null;
-            FlashLog.Add($"— Reconnexion à {port} —");
+            FlashLog.Add($"— Reconnecting to {port} —");
             _link.Open(port);
         }
     }
@@ -183,9 +183,9 @@ public partial class FirmwareViewModel : ObservableObject
     [RelayCommand]
     private async Task CheckUpdates()
     {
-        UpdateStatus = "Vérification en cours…";
+        UpdateStatus = "Checking…";
         var (ok, error) = await RunCheckUpdatesAsync();
-        UpdateStatus = ok ? "Vérifié." : "Erreur : " + error;
+        UpdateStatus = ok ? "Checked." : "Error: " + error;
     }
 
     private async Task<(bool Ok, string? Error)> RunCheckUpdatesAsync()
@@ -209,7 +209,7 @@ public partial class FirmwareViewModel : ObservableObject
         var (ok, path, error) = await _update.DownloadAppInstallerAsync(AppDownloadUrl);
         if (!ok || path == null)
         {
-            UpdateStatus = "Échec du téléchargement : " + error;
+            UpdateStatus = "Download failed: " + error;
             return;
         }
         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = path, UseShellExecute = true });
@@ -219,28 +219,28 @@ public partial class FirmwareViewModel : ObservableObject
     private async Task PrepareFirmwareAsync(string? url, string? sha256)
     {
         if (string.IsNullOrEmpty(url)) return;
-        UpdateStatus = "Téléchargement du firmware…";
+        UpdateStatus = "Downloading firmware…";
         var (ok, path, name, size, error) = await _update.DownloadAssetAsync(url, sha256);
         if (!ok || path == null)
         {
-            UpdateStatus = "Échec : " + error;
+            UpdateStatus = "Failed: " + error;
             return;
         }
         BinPath = path;
         BinVerified = true;
         Address = "0x10000";
         CanFlash = true;
-        UpdateStatus = $"{name} téléchargé, SHA-256 vérifié — prêt à flasher.";
+        UpdateStatus = $"{name} downloaded, SHA-256 verified — ready to flash.";
     }
 
     [RelayCommand]
     private async Task PrepareFromGithub()
     {
-        UpdateStatus = "Vérification des mises à jour…";
+        UpdateStatus = "Checking for updates…";
         var (ok, error) = await RunCheckUpdatesAsync();
         if (!ok)
         {
-            UpdateStatus = "Erreur : " + error;
+            UpdateStatus = "Error: " + error;
             return;
         }
 
@@ -248,7 +248,7 @@ public partial class FirmwareViewModel : ObservableObject
         var sha = IsMasterRole ? FwShaMaster : FwShaSlave;
         if (string.IsNullOrEmpty(url))
         {
-            UpdateStatus = $"Aucun firmware {RoleLabel} trouvé dans la dernière release GitHub.";
+            UpdateStatus = $"No {RoleLabel} firmware found in the latest GitHub release.";
             return;
         }
         await PrepareFirmwareAsync(url, sha);

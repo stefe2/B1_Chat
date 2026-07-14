@@ -10,15 +10,15 @@ struct SequenceBlob {
     uint8_t loop;
     uint8_t stepCount;
     SeqStep steps[StoredSequence::STEP_MAX];
-    uint8_t track;   // ajouté en fin de blob : les anciens blobs (sans ce
-                     // champ) restent lisibles, track vaut alors 0 (aucune)
+    uint8_t track;   // added at the end of the blob: old blobs (without this
+                     // field) stay readable, track then defaults to 0 (none)
 };
 
-// Taille du blob avant l'ajout de `track` (accepté en lecture, jamais écrit).
+// Blob size before `track` was added (accepted on read, never written).
 const size_t BLOB_LEN_V1 = sizeof(SequenceBlob) - sizeof(uint8_t);
 
-// Lit un blob en acceptant l'ancienne et la nouvelle taille. blob doit être
-// zéro-initialisé par l'appelant (track=0 pour un ancien blob).
+// Reads a blob, accepting both the old and new size. blob must be
+// zero-initialized by the caller (track=0 for an old blob).
 bool readBlob(Preferences& p, const char* key, SequenceBlob& blob) {
     const size_t got = p.getBytes(key, &blob, sizeof(blob));
     return got == sizeof(blob) || got == BLOB_LEN_V1;

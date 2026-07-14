@@ -14,8 +14,8 @@ void MeshTopology::seen(uint16_t from, uint16_t to, int8_t rssi, uint32_t now) {
         _e[_count++] = {from, to, rssi, now};
         return;
     }
-    // Table pleine : réutilise l'arête la plus périmée plutôt que de rejeter
-    // silencieusement un nouveau lien (la topologie évolue dans le temps).
+    // Table full: reuses the stalest edge rather than silently rejecting a
+    // new link (the topology evolves over time).
     uint8_t oldest = 0;
     for (uint8_t i = 1; i < MAX_EDGES; i++)
         if (_e[i].lastSeen < _e[oldest].lastSeen) oldest = i;

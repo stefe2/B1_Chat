@@ -23,8 +23,8 @@ public partial class DroidsViewModel : ObservableObject
 
     [ObservableProperty] private bool _anyOtaActive;
 
-    // Le maitre se flashe toujours par USB (pas de cible OTA pour lui-meme) ; la fenetre
-    // dediee (FirmwareWindow) vit dans MainWindow, hors de portee de cette vue -> evenement.
+    // The master is always flashed over USB (no OTA target for itself); the dedicated
+    // window (FirmwareWindow) lives in MainWindow, out of this view's reach -> event.
     public event Action? OpenFirmwareRequested;
 
     [RelayCommand]
@@ -39,15 +39,15 @@ public partial class DroidsViewModel : ObservableObject
         _ota.Retrying += (index, attempt) =>
         {
             if (_otaDroid != null)
-                _otaDroid.OtaStatusText = $"chunk {index} sans réponse, tentative {attempt}…";
+                _otaDroid.OtaStatusText = $"chunk {index} no response, attempt {attempt}…";
         };
-        // Sans ca, un chunk qui echoue a l'ecriture serie restait silencieux jusqu'a ce que le
-        // maitre abandonne tout seul ~45s plus tard (timeout "console injoignable") : ici on le
-        // sait tout de suite et on annule proprement des deux cotes plutot que d'attendre.
+        // Without this, a chunk that fails to write to the serial port stayed silent until the
+        // master gave up on its own ~45s later (the "console unreachable" timeout): here we know
+        // right away and cancel cleanly on both sides instead of waiting it out.
         _protocol.LinkError += OnLinkError;
         _protocol.LinkClosed += unexpected =>
         {
-            if (_otaDroid != null) OnLinkError(unexpected ? "liaison série coupée" : "liaison série fermée");
+            if (_otaDroid != null) OnLinkError(unexpected ? "serial link dropped" : "serial link closed");
         };
         Droids.CollectionChanged += (_, e) =>
         {
@@ -57,8 +57,8 @@ public partial class DroidsViewModel : ObservableObject
         _ = RefreshLatestFwVersionAsync();
     }
 
-    // Verifie la derniere release firmware GitHub (prefixe "fw-") au demarrage pour
-    // colorer la colonne FW de chaque droide (vert = a jour, rouge = MAJ disponible).
+    // Checks the latest GitHub firmware release ("fw-" prefix) at startup to color
+    // each droid's version column (green = up to date, red = update available).
     private async Task RefreshLatestFwVersionAsync()
     {
         var result = await _update.CheckUpdatesAsync();
@@ -71,20 +71,20 @@ public partial class DroidsViewModel : ObservableObject
     {
         if (_otaDroid == null) return;
         _otaDroid.OtaProgressPct = total > 0 ? (int)(100.0 * sent / total) : 0;
-        _otaDroid.OtaStatusText = $"{sent}/{total} morceaux";
+        _otaDroid.OtaStatusText = $"{sent}/{total} chunks";
     }
 
     private void OnLinkError(string message)
     {
         if (_otaDroid == null) return;
         _flashToken = null;
-        _ota.Abort(); // previent le maitre tout de suite au lieu de le laisser attendre le timeout
+        _ota.Abort(); // notifies the master right away instead of letting it wait for the timeout
         var droid = _otaDroid;
         droid.OtaInProgress = false;
-        droid.OtaStatusText = "Erreur de liaison série : " + message;
+        droid.OtaStatusText = "Serial link error: " + message;
         _otaDroid = null;
         AnyOtaActive = false;
-        MessageBox.Show("Mise à jour OTA interrompue — " + message, "OTA — " + droid.Name,
+        MessageBox.Show("OTA update interrupted — " + message, "OTA — " + droid.Name,
                         MessageBoxButton.OK, MessageBoxImage.Error);
     }
 
@@ -99,17 +99,17 @@ public partial class DroidsViewModel : ObservableObject
         }
         _otaDroid = null;
         AnyOtaActive = false;
-        // Le texte d'etat est masque des que OtaInProgress retombe : sans cette boite,
-        // la raison d'echec poussee par le maitre (timeout, chunk, rolledBack...)
-        // disparait avant d'avoir pu etre lue.
+        // The status text is hidden as soon as OtaInProgress drops: without this dialog,
+        // the failure reason pushed by the master (timeout, chunk, rolledBack...)
+        // disappears before it can be read.
         if (!ok)
             MessageBox.Show(message, "OTA — " + (droid?.Name ?? "?"), MessageBoxButton.OK, MessageBoxImage.Error);
     }
 
-    // Identifie la tentative de flash OTA en cours : si un appel async reprend (fin d'un
-    // telechargement) alors que ce jeton a change entretemps (echec, annulation via
-    // OnLinkError, etc.), on abandonne silencieusement plutot que de demarrer une session
-    // OTA en double sur une tentative deja consideree terminee cote UI.
+    // Identifies the in-flight OTA flash attempt: if an async call resumes (a download
+    // finishes) after this token has changed in the meantime (failure, cancellation via
+    // OnLinkError, etc.), it bails out silently instead of starting a duplicate OTA
+    // session on an attempt the UI already considers finished.
     private object? _flashToken;
 
     [RelayCommand]
@@ -118,10 +118,10 @@ public partial class DroidsViewModel : ObservableObject
         if (droid == null || AnyOtaActive) return;
 
         var confirm = MessageBox.Show(
-            $"Mettre à jour le firmware de « {droid.Name} » vers la dernière version publiée par le mesh (sans USB) ?\n\n" +
-            "Le droïde redémarrera automatiquement à la fin — ne pas l'éteindre pendant le transfert " +
-            "(généralement 8 à 15 minutes, plus si la liaison est faible).",
-            "Confirmer la mise à jour OTA", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            $"Update the firmware of « {droid.Name} » to the latest version published over the mesh (no USB)?\n\n" +
+            "The droid will reboot automatically once done — do not power it off during the transfer " +
+            "(typically 8 to 15 minutes, longer over a weak link).",
+            "Confirm OTA update", MessageBoxButton.YesNo, MessageBoxImage.Warning);
         if (confirm != MessageBoxResult.Yes) return;
 
         var token = new object();
@@ -129,18 +129,18 @@ public partial class DroidsViewModel : ObservableObject
         _otaDroid = droid;
         droid.OtaInProgress = true;
         droid.OtaProgressPct = 0;
-        droid.OtaStatusText = "vérification de la dernière version…";
+        droid.OtaStatusText = "checking the latest version…";
         AnyOtaActive = true;
 
         var result = await _update.CheckUpdatesAsync();
         if (_flashToken != token) return;
         if (!result.Ok || string.IsNullOrEmpty(result.Fw.UrlSlave))
         {
-            FailOta(droid, result.Ok ? "Aucun firmware esclave trouvé dans la dernière release GitHub." : result.Error);
+            FailOta(droid, result.Ok ? "No slave firmware found in the latest GitHub release." : result.Error);
             return;
         }
 
-        droid.OtaStatusText = "téléchargement du firmware…";
+        droid.OtaStatusText = "downloading firmware…";
         var (dlOk, path, _, _, dlError) = await _update.DownloadAssetAsync(result.Fw.UrlSlave, result.Fw.Sha256Slave);
         if (_flashToken != token) return;
         if (!dlOk || path == null)
@@ -149,7 +149,7 @@ public partial class DroidsViewModel : ObservableObject
             return;
         }
 
-        droid.OtaStatusText = "démarrage…";
+        droid.OtaStatusText = "starting…";
         if (!_ota.Start(droid.Id, path, out var startError)) FailOta(droid, startError);
     }
 
@@ -157,10 +157,10 @@ public partial class DroidsViewModel : ObservableObject
     {
         _flashToken = null;
         droid.OtaInProgress = false;
-        droid.OtaStatusText = error ?? "erreur inconnue";
+        droid.OtaStatusText = error ?? "unknown error";
         _otaDroid = null;
         AnyOtaActive = false;
-        MessageBox.Show(error ?? "Erreur inconnue", "OTA", MessageBoxButton.OK, MessageBoxImage.Error);
+        MessageBox.Show(error ?? "Unknown error", "OTA", MessageBoxButton.OK, MessageBoxImage.Error);
     }
 
     [RelayCommand]
@@ -203,11 +203,11 @@ public partial class DroidsViewModel : ObservableObject
         _protocol.Forget(droid.Id);
     }
 
-    // --- Sauvegarde / restauration --------------------------------------------
-    // Simplifie par rapport a index.html : pas de fenetre de diff dediee, une
-    // confirmation MessageBox avant restauration (le contenu du plan met l'accent
-    // sur le portage fonctionnel des 8 cartes, pas la reproduction pixel-pres de
-    // chaque boite de dialogue annexe).
+    // --- Backup / restore --------------------------------------------
+    // Simplified compared to index.html: no dedicated diff window, just a
+    // confirmation MessageBox before restoring (the roadmap emphasized a
+    // functional port of the 8 cards, not a pixel-perfect reproduction of
+    // every secondary dialog).
 
     [RelayCommand]
     private void Backup()
@@ -234,7 +234,7 @@ public partial class DroidsViewModel : ObservableObject
             ["names"] = namesObj,
         };
         File.WriteAllText(dlg.FileName, backup.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
-        MessageBox.Show($"Sauvegarde enregistree : {dlg.FileName}", "Sauvegarde", MessageBoxButton.OK, MessageBoxImage.Information);
+        MessageBox.Show($"Backup saved: {dlg.FileName}", "Backup", MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
     [RelayCommand]
@@ -247,14 +247,14 @@ public partial class DroidsViewModel : ObservableObject
         try { backup = JsonNode.Parse(File.ReadAllText(dlg.FileName)) as JsonObject; }
         catch (Exception ex)
         {
-            MessageBox.Show("Fichier illisible : " + ex.Message, "Restauration", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show("Unreadable file: " + ex.Message, "Restore", MessageBoxButton.OK, MessageBoxImage.Error);
             return;
         }
         if (backup == null) return;
 
         var confirm = MessageBox.Show(
-            $"Restaurer la configuration depuis « {Path.GetFileName(dlg.FileName)} » ?\n\nLes noms, le volume et les parametres d'animation seront ecrases.",
-            "Confirmer la restauration", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            $"Restore the configuration from « {Path.GetFileName(dlg.FileName)} »?\n\nNames, volume, and animation settings will be overwritten.",
+            "Confirm restore", MessageBoxButton.YesNo, MessageBoxImage.Warning);
         if (confirm != MessageBoxResult.Yes) return;
 
         var ops = new JsonArray();
@@ -279,7 +279,7 @@ public partial class DroidsViewModel : ObservableObject
         }
         else
         {
-            // Ancien firmware : envoi espace au lieu d'un lot atomique.
+            // Older firmware: send one by one instead of an atomic batch.
             foreach (var op in ops)
             {
                 if (op is not JsonObject o) continue;

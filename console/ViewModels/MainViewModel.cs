@@ -19,13 +19,13 @@ public partial class MainViewModel : ObservableObject
 
     [ObservableProperty] private string? _selectedPort;
     [ObservableProperty] private bool _connected;
-    [ObservableProperty] private string _connectionStatusText = "Déconnecté";
+    [ObservableProperty] private string _connectionStatusText = "Disconnected";
 
     public string AppVersion { get; } =
         Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "dev";
 
     public string VersionSubtitle =>
-        $"Console de supervision — v{AppVersion.Replace("+build.", " (build ")}{(AppVersion.Contains("+build.") ? ")" : "")}";
+        $"Supervision Console — v{AppVersion.Replace("+build.", " (build ")}{(AppVersion.Contains("+build.") ? ")" : "")}";
 
     public DroidsViewModel Droids { get; }
     public CalibrationViewModel Calibration { get; }
@@ -53,14 +53,14 @@ public partial class MainViewModel : ObservableObject
         Topology = new MeshTopologyViewModel(Protocol);
         Sequencer = new SequencerViewModel(Protocol);
 
-        _link.Opened += () => { Connected = true; ConnectionStatusText = "Connecté — handshake…"; };
-        _link.Closed += unexpected => { Connected = false; ConnectionStatusText = unexpected ? "Déconnecté (inattendu) — reconnexion…" : "Déconnecté"; };
-        _link.OpenFailed += err => ConnectionStatusText = "Échec de connexion : " + err;
-        Protocol.LinkError += err => ConnectionStatusText = "Erreur port série : " + err;
+        _link.Opened += () => { Connected = true; ConnectionStatusText = "Connected — handshake…"; };
+        _link.Closed += unexpected => { Connected = false; ConnectionStatusText = unexpected ? "Disconnected (unexpected) — reconnecting…" : "Disconnected"; };
+        _link.OpenFailed += err => ConnectionStatusText = "Connection failed: " + err;
+        Protocol.LinkError += err => ConnectionStatusText = "Serial port error: " + err;
 
         Protocol.HelloReceived += () =>
         {
-            ConnectionStatusText = Protocol.SessionReady ? $"Connecté — fw {Protocol.FwVersion ?? "?"}" : "Handshake échoué";
+            ConnectionStatusText = Protocol.SessionReady ? $"Connected — fw {Protocol.FwVersion ?? "?"}" : "Handshake failed";
             OnPropertyChanged(nameof(ShowCommitUi));
         };
         Protocol.PropertyChanged += (_, e) =>

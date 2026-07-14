@@ -5,14 +5,14 @@
         <StackPanel>
             <TextBlock Text="ANIMATION" Style="{StaticResource CardTitleStyle}" />
 
-            <TextBlock Text="CIBLE" Style="{StaticResource FieldLabelStyle}" Margin="0,0,0,4" />
+            <TextBlock Text="TARGET" Style="{StaticResource FieldLabelStyle}" Margin="0,0,0,4" />
             <ComboBox Style="{StaticResource DarkComboBoxStyle}" ItemsSource="{Binding Targets}" SelectedItem="{Binding SelectedTarget}"
                       DisplayMemberPath="DisplayLabel" Margin="0,0,0,8" />
-            <TextBlock Text="GESTE" Style="{StaticResource FieldLabelStyle}" Margin="0,0,0,4" />
+            <TextBlock Text="GESTURE" Style="{StaticResource FieldLabelStyle}" Margin="0,0,0,4" />
             <ComboBox Style="{StaticResource DarkComboBoxStyle}" ItemsSource="{Binding Anims}" SelectedIndex="{Binding SelectedAnimIndex}" Margin="0,0,0,10" />
-            <Button Content="Jouer" Style="{StaticResource PrimaryButtonStyle}" Command="{Binding PlayAnimCommand}" HorizontalAlignment="Left" Margin="0,0,0,14" />
+            <Button Content="Play" Style="{StaticResource PrimaryButtonStyle}" Command="{Binding PlayAnimCommand}" HorizontalAlignment="Left" Margin="0,0,0,14" />
 
-            <TextBlock Text="PARAMÈTRES D'ANIMATION (BIENTÔT ACTIF)" Style="{StaticResource SectionSubtitleStyle}"
+            <TextBlock Text="ANIMATION PARAMETERS (COMING SOON)" Style="{StaticResource SectionSubtitleStyle}"
                        Foreground="{StaticResource MutedBrush}" />
 
             <Grid Margin="0,0,0,6">
@@ -21,7 +21,7 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" Text="FRÉQ." Style="{StaticResource FieldLabelStyle}" />
+                <TextBlock Grid.Column="0" Text="FREQ." Style="{StaticResource FieldLabelStyle}" />
                 <Slider Grid.Column="1" Style="{StaticResource MetalSliderStyle}" Minimum="0" Maximum="100" Value="{Binding Freq}" Margin="6,0" />
                 <Border Grid.Column="2" Style="{StaticResource ValuePillStyle}"><TextBlock Text="{Binding Freq}" Style="{StaticResource ValuePillTextStyle}" /></Border>
             </Grid>
@@ -31,7 +31,7 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" Text="AMPLI." Style="{StaticResource FieldLabelStyle}" />
+                <TextBlock Grid.Column="0" Text="AMP." Style="{StaticResource FieldLabelStyle}" />
                 <Slider Grid.Column="1" Style="{StaticResource MetalSliderStyle}" Minimum="0" Maximum="100" Value="{Binding Amp}" Margin="6,0" />
                 <Border Grid.Column="2" Style="{StaticResource ValuePillStyle}"><TextBlock Text="{Binding Amp}" Style="{StaticResource ValuePillTextStyle}" /></Border>
             </Grid>
@@ -41,7 +41,7 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" Text="VITESSE" Style="{StaticResource FieldLabelStyle}" />
+                <TextBlock Grid.Column="0" Text="SPEED" Style="{StaticResource FieldLabelStyle}" />
                 <Slider Grid.Column="1" Style="{StaticResource MetalSliderStyle}" Minimum="0" Maximum="100" Value="{Binding Speed}" Margin="6,0" />
                 <Border Grid.Column="2" Style="{StaticResource ValuePillStyle}"><TextBlock Text="{Binding Speed}" Style="{StaticResource ValuePillTextStyle}" /></Border>
             </Grid>

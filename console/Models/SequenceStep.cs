@@ -2,7 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace b1_chat_console.Models;
 
-/// <summary>Target = 0xFFFF signifie "tous les droides".</summary>
+/// <summary>Target = 0xFFFF means "all droids".</summary>
 public partial class SequenceStep : ObservableObject
 {
     [ObservableProperty] private int _animId;

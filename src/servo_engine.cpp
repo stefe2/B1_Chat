@@ -2,8 +2,8 @@
 #include "config.h"
 
 namespace {
-// Easing ease-in-out (smootherstep) : dérivées nulles aux extrémités -> départ
-// et arrêt doux, mouvement organique.
+// Ease-in-out easing (smootherstep): zero derivatives at both ends -> soft
+// start and stop, organic movement.
 inline float easeInOut(float t) {
     if (t < 0) t = 0;
     if (t > 1) t = 1;
@@ -14,20 +14,20 @@ inline float clampf(float v, float lo, float hi) {
     return v < lo ? lo : (v > hi ? hi : v);
 }
 
-// PWM servo via LEDC natif : 50 Hz, résolution 16 bits (période 20 ms).
+// Servo PWM via native LEDC: 50 Hz, 16-bit resolution (20 ms period).
 const uint32_t SERVO_LEDC_FREQ = 50;
 const uint8_t  SERVO_LEDC_BITS = 16;
 const uint32_t SERVO_PERIOD_US = 1000000UL / SERVO_LEDC_FREQ;  // 20000 µs
 const uint32_t SERVO_MAX_DUTY  = (1UL << SERVO_LEDC_BITS) - 1;
 
-// Convertit une largeur d'impulsion (µs) en rapport cyclique LEDC.
+// Converts a pulse width (µs) into an LEDC duty cycle.
 inline uint32_t usToDuty(float us) {
     return (uint32_t)((us * SERVO_MAX_DUTY) / SERVO_PERIOD_US);
 }
 }  // namespace
 
 void ServoEngine::begin() {
-    // Attache les sorties PWM (API pin-based du core ESP32 3.x).
+    // Attaches the PWM outputs (pin-based API of the ESP32 3.x core).
     ledcAttach(PIN_SERVO_PAN, SERVO_LEDC_FREQ, SERVO_LEDC_BITS);
     ledcAttach(PIN_SERVO_TILT, SERVO_LEDC_FREQ, SERVO_LEDC_BITS);
 
@@ -80,14 +80,14 @@ void ServoEngine::setEnabled(bool en) {
         ledcAttach(PIN_SERVO_TILT, SERVO_LEDC_FREQ, SERVO_LEDC_BITS);
         writeServos(_curPan, _curTilt);
     } else {
-        // Coupe le signal PWM : servos libres, aucun échauffement.
+        // Cuts the PWM signal: servos free to move, no heating.
         ledcDetach(PIN_SERVO_PAN);
         ledcDetach(PIN_SERVO_TILT);
     }
 }
 
-// Bruit organique : somme de deux sinusoïdes à fréquences incommensurables
-// -> déambulation lente non répétitive, sans à-coups.
+// Organic noise: sum of two sine waves at incommensurable frequencies
+// -> slow, non-repetitive wandering, with no jerkiness.
 float ServoEngine::noise(float t, float phase) const {
     return 0.6f * sinf(t * 0.70f + phase) + 0.4f * sinf(t * 1.73f + phase * 2.1f);
 }
@@ -96,7 +96,7 @@ void ServoEngine::writeServos(float panDeg, float tiltDeg) {
     panDeg = clampf(panDeg, _panMin, _panMax);
     tiltDeg = clampf(tiltDeg, _tiltMin, _tiltMax);
 
-    // Angle (0..180°) -> largeur d'impulsion (µs) -> rapport cyclique LEDC.
+    // Angle (0..180°) -> pulse width (µs) -> LEDC duty cycle.
     const float span = SERVO_MAX_US - SERVO_MIN_US;
     const float usPan = SERVO_MIN_US + (panDeg / 180.0f) * span;
     const float usTilt = SERVO_MIN_US + (tiltDeg / 180.0f) * span;
@@ -111,7 +111,7 @@ void ServoEngine::update() {
     if (now - _lastWrite < interval) return;
     _lastWrite = now;
 
-    // Progression de l'interpolation (position de base).
+    // Interpolation progress (base position).
     if (_moving) {
         float t = (float)(now - _moveStart) / (float)_moveDur;
         if (t >= 1.0f) {
@@ -123,7 +123,7 @@ void ServoEngine::update() {
         _curTilt = _startTilt + (_targetTilt - _startTilt) * e;
     }
 
-    // Bruit d'idle superposé (n'altère pas la position de base mémorisée).
+    // Overlaid idle noise (doesn't alter the remembered base position).
     float outPan = _curPan;
     float outTilt = _curTilt;
     if (_idleNoise) {

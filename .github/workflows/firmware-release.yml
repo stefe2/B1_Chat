@@ -1,7 +1,7 @@
 name: Release firmware
 
-# Se declenche quand FW_VERSION (src/config.h) change sur main, ou manuellement.
-# Idempotent : si le tag fw-vX.Y.Z existe deja sur GitHub, ne fait rien.
+# Triggers when FW_VERSION (src/config.h) changes on main, or manually.
+# Idempotent: if the tag fw-vX.Y.Z already exists on GitHub, does nothing.
 on:
   push:
     branches: [main]
@@ -19,18 +19,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Lire la version (FW_VERSION dans src/config.h)
+      - name: Read the version (FW_VERSION in src/config.h)
         id: version
         run: |
           VERSION=$(grep -oP '#define\s+FW_VERSION\s+"\K[^"]+' src/config.h)
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=fw-v$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Verifier si cette version est deja publiee
+      - name: Check if this version is already published
         id: check
         run: |
           if git ls-remote --tags origin "refs/tags/${{ steps.version.outputs.tag }}" | grep -q .; then
-            echo "${{ steps.version.outputs.tag }} existe deja sur GitHub, rien a faire."
+            echo "${{ steps.version.outputs.tag }} already exists on GitHub, nothing to do."
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
@@ -42,19 +42,19 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Installer PlatformIO
+      - name: Install PlatformIO
         if: steps.check.outputs.skip == 'false'
         run: pip install -U platformio
 
-      - name: Compiler le role maitre
+      - name: Build the master role
         if: steps.check.outputs.skip == 'false'
         run: pio run -e b1_master
 
-      - name: Compiler le role esclave
+      - name: Build the slave role
         if: steps.check.outputs.skip == 'false'
         run: pio run -e b1_slave
 
-      - name: Preparer les artefacts et le manifeste
+      - name: Prepare the artifacts and manifest
         if: steps.check.outputs.skip == 'false'
         run: |
           VERSION="${{ steps.version.outputs.version }}"
@@ -73,13 +73,13 @@ jobs:
                 {role:"slave", file:$sfile, sha256:$ssha, size:$ssize}
              ]}' > dist/firmware_manifest.json
 
-      - name: Creer et pousser le tag
+      - name: Create and push the tag
         if: steps.check.outputs.skip == 'false'
         run: |
           git tag "${{ steps.version.outputs.tag }}"
           git push origin "${{ steps.version.outputs.tag }}"
 
-      - name: Publier la release GitHub
+      - name: Publish the GitHub release
         if: steps.check.outputs.skip == 'false'
         uses: softprops/action-gh-release@v2
         with:

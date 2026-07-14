@@ -6,15 +6,15 @@ using System.Windows.Threading;
 namespace b1_chat_console.Services;
 
 /// <summary>
-/// Pilote une session OTA (un esclave à la fois) : lit le .bin, calcule son MD5,
-/// puis envoie un chunk par evt:otaChunkAck reçu (stop-and-wait, piloté par le
-/// firmware — voir ota_master.cpp/CLAUDE.md). Ne connaît pas le mesh : tout
-/// transite par ProtocolClient, comme le reste de la console.
+/// Drives an OTA session (one slave at a time): reads the .bin, computes its MD5,
+/// then sends one chunk per evt:otaChunkAck received (stop-and-wait, driven by
+/// the firmware — see ota_master.cpp/CLAUDE.md). Knows nothing about the mesh:
+/// everything goes through ProtocolClient, like the rest of the console.
 ///
-/// Le segment série console↔maître n'a aucun retry côté firmware (contrairement
-/// au segment mesh) : un chien de garde retente donc le chunk courant après
-/// WatchdogTimeout de silence (le maître ré-émet l'ack si le chunk était déjà
-/// passé — voir onSerialChunk), et déclare l'échec après MaxRetries.
+/// The console<->master serial segment has no firmware-side retry (unlike the
+/// mesh segment): a watchdog therefore retries the current chunk after
+/// WatchdogTimeout of silence (the master re-emits the ack if the chunk had
+/// already gone through — see onSerialChunk), and declares failure after MaxRetries.
 /// </summary>
 public class OtaService
 {
@@ -34,7 +34,7 @@ public class OtaService
 
     public event Action<int, int>? Progress;   // sent, total
     public event Action<bool, string>? Completed; // ok, message
-    public event Action<int, int>? Retrying;   // index, tentative (info UI)
+    public event Action<int, int>? Retrying;   // index, attempt (UI info)
 
     public OtaService(ProtocolClient protocol)
     {
@@ -52,11 +52,11 @@ public class OtaService
     public bool Start(ushort target, string binPath, out string error)
     {
         error = "";
-        if (_active) { error = "Une mise à jour OTA est déjà en cours."; return false; }
+        if (_active) { error = "An OTA update is already in progress."; return false; }
 
         try { _image = File.ReadAllBytes(binPath); }
-        catch (Exception ex) { error = "Fichier illisible : " + ex.Message; return false; }
-        if (_image.Length == 0) { error = "Fichier vide."; return false; }
+        catch (Exception ex) { error = "Unreadable file: " + ex.Message; return false; }
+        if (_image.Length == 0) { error = "Empty file."; return false; }
 
         _target = target;
         _active = true;
@@ -96,7 +96,7 @@ public class OtaService
         {
             _watchdog.Stop();
             _active = false;
-            Completed?.Invoke(false, $"Liaison série silencieuse (chunk {_lastSentIndex} sans réponse après {MaxRetries} tentatives).");
+            Completed?.Invoke(false, $"Serial link silent (chunk {_lastSentIndex} no response after {MaxRetries} attempts).");
             return;
         }
 
@@ -127,9 +127,9 @@ public class OtaService
         }
         else
         {
-            // Dernier chunk accusé : la suite (END mesh, reboot de l'esclave,
-            // confirmation ~90 s) se joue entre maître et esclave sans nous —
-            // le chien de garde n'a plus rien à surveiller.
+            // Last chunk acked: what follows (mesh END, slave reboot, ~90s
+            // confirmation) plays out between master and slave without us —
+            // the watchdog has nothing left to watch.
             _watchdog.Stop();
         }
     }
@@ -139,7 +139,7 @@ public class OtaService
         if (!_active || target != _target) return;
         _watchdog.Stop();
         _active = false;
-        Completed?.Invoke(ok, ok ? $"Mise à jour réussie (fw {fw})." : $"Échec après redémarrage : {reason}.");
+        Completed?.Invoke(ok, ok ? $"Update succeeded (fw {fw})." : $"Failed after reboot: {reason}.");
     }
 
     private void OnError(ushort? target, int sessionId, string reason)
@@ -147,6 +147,6 @@ public class OtaService
         if (!_active || (target.HasValue && target.Value != _target)) return;
         _watchdog.Stop();
         _active = false;
-        Completed?.Invoke(false, "Échec du transfert : " + reason);
+        Completed?.Invoke(false, "Transfer failed: " + reason);
     }
 }

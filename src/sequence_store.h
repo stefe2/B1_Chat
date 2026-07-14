@@ -1,10 +1,10 @@
 #pragma once
 
 // ============================================================================
-//  SequenceStore — séquences persistées en NVS (maître)
+//  SequenceStore — sequences persisted in NVS (master)
 //
-//  Stocke jusqu'à SEQ_SLOT_MAX séquences nommées. Chaque séquence contient
-//  une liste d'étapes (animId, cible, délai) et un mode boucle.
+//  Stores up to SEQ_SLOT_MAX named sequences. Each sequence contains a list
+//  of steps (animId, target, delay) and a loop mode.
 // ============================================================================
 
 #include <Arduino.h>
@@ -24,7 +24,7 @@ struct StoredSequence {
     uint8_t loop;
     uint8_t stepCount;
     SeqStep steps[STEP_MAX];
-    uint8_t track;   // trame audio du maître (1-10), 0 = aucune
+    uint8_t track;   // master's audio track (1-10), 0 = none
 };
 
 struct StoredSequenceMeta {
@@ -32,7 +32,7 @@ struct StoredSequenceMeta {
     char    name[StoredSequence::NAME_LEN];
     uint8_t loop;
     uint8_t stepCount;
-    uint8_t track;   // 0 = aucune
+    uint8_t track;   // 0 = none
 };
 
 class SequenceStore {
@@ -45,7 +45,7 @@ public:
     bool load(uint8_t slot, StoredSequence& out);
     bool remove(uint8_t slot);
 
-    // Liste des séquences existantes. Retourne le nombre écrit dans out.
+    // List of existing sequences. Returns the count written to out.
     uint8_t list(StoredSequenceMeta* out, uint8_t maxOut);
 
 private:

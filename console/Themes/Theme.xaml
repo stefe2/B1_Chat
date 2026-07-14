@@ -1,7 +1,7 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <!-- Palette portee depuis les custom properties CSS de wwwroot/index.html (theme metal brosse sombre). -->
+    <!-- Palette ported from wwwroot/index.html's CSS custom properties (dark brushed-metal theme). -->
 
     <SolidColorBrush x:Key="BgBrush" Color="#43464C" />
     <SolidColorBrush x:Key="Bg2Brush" Color="#3A3D42" />
@@ -35,15 +35,15 @@
         <GradientStop Color="#3A3D42" Offset="1" />
     </LinearGradientBrush>
 
-    <!-- Bevel diagonal a deux tons (equivalent du duo border-hi/border-lo CSS, applique en une
-         seule bordure degradee 135deg : clair en haut-gauche, sombre en bas-droite). -->
+    <!-- Two-tone diagonal bevel (equivalent to the CSS border-hi/border-lo duo, applied as a
+         single 135deg gradient border: light top-left, dark bottom-right). -->
     <LinearGradientBrush x:Key="BevelBorderBrush" StartPoint="0,0" EndPoint="1,1">
         <GradientStop Color="#38FFFFFF" Offset="0" />
         <GradientStop Color="#15FFFFFF" Offset="0.4" />
         <GradientStop Color="#73000000" Offset="1" />
     </LinearGradientBrush>
 
-    <!-- Degrade de bouton "metal brosse" plus contraste (highlight net en haut, ombre en bas). -->
+    <!-- Higher-contrast "brushed metal" button gradient (sharp highlight on top, shadow at the bottom). -->
     <LinearGradientBrush x:Key="ButtonBrush" StartPoint="0,0" EndPoint="0,1">
         <GradientStop Color="#6A6F79" Offset="0" />
         <GradientStop Color="#5A5E66" Offset="0.15" />
@@ -60,8 +60,8 @@
         <GradientStop Color="#484B52" Offset="1" />
     </LinearGradientBrush>
 
-    <!-- Texture de bruit diagonale (approx. du repeating-linear-gradient 115deg de index.html),
-         tuilee en DrawingBrush pour rester leger. -->
+    <!-- Diagonal noise texture (approximates index.html's 115deg repeating-linear-gradient),
+         tiled as a DrawingBrush to stay lightweight. -->
     <DrawingBrush x:Key="NoiseTileBrush" TileMode="Tile" Viewport="0,0,4,4" ViewportUnits="Absolute" Opacity="0.05">
         <DrawingBrush.Drawing>
             <DrawingGroup>
@@ -90,7 +90,7 @@
         <GradientStop Color="#2CB86C" Offset="1" />
     </RadialGradientBrush>
 
-    <!-- Bouton d'action principale (Connecter/Deconnecter) en accent orange, façon CTA HTML. -->
+    <!-- Primary action button (Connect/Disconnect) in accent orange, HTML-CTA-style. -->
     <LinearGradientBrush x:Key="AccentButtonBrush" StartPoint="0,0" EndPoint="0,1">
         <GradientStop Color="#FFB35C" Offset="0" />
         <GradientStop Color="#FF9D2E" Offset="0.25" />
@@ -107,7 +107,7 @@
         <GradientStop Color="#EF9330" Offset="1" />
     </LinearGradientBrush>
 
-    <!-- Noeuds du graphe de topologie du mesh : spheres glossy, maitre en accent, esclave en metal neutre. -->
+    <!-- Mesh topology graph nodes: glossy spheres, master in accent color, slave in neutral metal. -->
     <RadialGradientBrush x:Key="MeshMasterNodeBrush" Center="0.35,0.3" GradientOrigin="0.35,0.3" RadiusX="0.9" RadiusY="0.9">
         <GradientStop Color="#FFC176" Offset="0" />
         <GradientStop Color="#FF9D2E" Offset="0.55" />

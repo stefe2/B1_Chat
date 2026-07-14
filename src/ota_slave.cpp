@@ -7,9 +7,8 @@
 OtaSlave OtaS;
 
 namespace {
-// RAII : protege UNIQUEMENT la boite aux lettres (voir ota_slave.h). Aucun
-// Update.*, Mesh.send() ni delay()/ESP.restart() ne doit etre appele sous
-// ce verrou.
+// RAII: protects ONLY the mailbox (see ota_slave.h). No Update.*,
+// Mesh.send(), or delay()/ESP.restart() must be called under this lock.
 struct CriticalGuard {
     portMUX_TYPE& mux;
     explicit CriticalGuard(portMUX_TYPE& m) : mux(m) { portENTER_CRITICAL(&mux); }
@@ -18,7 +17,7 @@ struct CriticalGuard {
 }  // namespace
 
 // ---------------------------------------------------------------------------
-//  Côté callback ESP-NOW (tâche Wi-Fi) : dépôt en boîte aux lettres seulement
+//  ESP-NOW callback side (Wi-Fi task): mailbox drop only
 // ---------------------------------------------------------------------------
 
 void OtaSlave::post(PendingType type, const void* payload, size_t len) {
@@ -52,7 +51,7 @@ void OtaSlave::onAbort(uint16_t srcId, const OtaAbortPayload& p) {
 }
 
 // ---------------------------------------------------------------------------
-//  Côté loop() : traitement réel (validation + flash + ack), hors verrou
+//  loop() side: actual processing (validation + flash + ack), outside the lock
 // ---------------------------------------------------------------------------
 
 void OtaSlave::sendAck(uint8_t kind, uint16_t chunkIndex, uint8_t status) {
@@ -63,18 +62,18 @@ void OtaSlave::sendAck(uint8_t kind, uint16_t chunkIndex, uint8_t status) {
 void OtaSlave::processStart(const OtaStartPayload& p) {
     uint8_t ackStatus;
     if (_state == RECEIVING && p.sessionId == _sessionId) {
-        // Retransmission dupliquée du START (ack précédent perdu) : re-ack
-        // idempotent, surtout ne pas relancer Update.begin() en double.
+        // Duplicate START retransmission (previous ack lost): idempotent
+        // re-ack, above all don't call Update.begin() a second time.
         ackStatus = OTA_OK;
     } else {
         if (_state == RECEIVING) Update.abort();
 
         if (!Update.begin(p.totalSize)) {
-            Serial.printf("OTA: Update.begin(%lu) refuse (err %u)\n",
+            Serial.printf("OTA: Update.begin(%lu) refused (err %u)\n",
                           (unsigned long)p.totalSize, Update.getError());
             ackStatus = OTA_ERR_SIZE;
         } else {
-            Serial.printf("OTA: session %u demarree (%lu o, %u chunks)\n",
+            Serial.printf("OTA: session %u started (%lu B, %u chunks)\n",
                           p.sessionId, (unsigned long)p.totalSize, p.totalChunks);
             char md5[33];
             memcpy(md5, p.md5Hex, 32);
@@ -95,7 +94,7 @@ void OtaSlave::processStart(const OtaStartPayload& p) {
 void OtaSlave::processChunk(const OtaChunkPayload& p) {
     uint8_t ackStatus;
     if (_state != RECEIVING || p.sessionId != _sessionId) {
-        Serial.printf("OTA: chunk %u rejete (etat=%d, session %u vs %u)\n",
+        Serial.printf("OTA: chunk %u rejected (state=%d, session %u vs %u)\n",
                       p.chunkIndex, (int)_state, p.sessionId, _sessionId);
         ackStatus = OTA_ERR_SESSION;
     } else {
@@ -103,7 +102,7 @@ void OtaSlave::processChunk(const OtaChunkPayload& p) {
 
         if (p.chunkIndex == _expectedChunkIndex) {
             if (Update.write(const_cast<uint8_t*>(p.data), p.dataLen) != p.dataLen) {
-                Serial.printf("OTA: echec ecriture chunk %u (err %u)\n",
+                Serial.printf("OTA: write failed for chunk %u (err %u)\n",
                               p.chunkIndex, Update.getError());
                 ackStatus = OTA_ERR_WRITE;
             } else {
@@ -111,12 +110,12 @@ void OtaSlave::processChunk(const OtaChunkPayload& p) {
                 ackStatus = OTA_OK;
             }
         } else if (_expectedChunkIndex > 0 && p.chunkIndex == _expectedChunkIndex - 1) {
-            // Chunk déjà écrit (notre ack précédent s'est perdu) : Update.write()
-            // est append-only, on ne le rappelle JAMAIS pour un index déjà écrit
-            // — on se contente de ré-émettre l'ack.
+            // Chunk already written (our previous ack was lost): Update.write()
+            // is append-only, NEVER call it again for an already-written index
+            // — just re-emit the ack.
             ackStatus = OTA_OK;
         } else {
-            Serial.printf("OTA: chunk %u hors sequence (attendu %u)\n",
+            Serial.printf("OTA: chunk %u out of sequence (expected %u)\n",
                           p.chunkIndex, _expectedChunkIndex);
             ackStatus = OTA_ERR_SESSION;
         }
@@ -129,12 +128,12 @@ void OtaSlave::processEnd(const OtaEndPayload& p) {
     bool doRestart = false;
     if (_state != RECEIVING || p.sessionId != _sessionId
         || _expectedChunkIndex != p.totalChunks) {
-        Serial.printf("OTA: END rejete (etat=%d, session %u vs %u, %u/%u chunks)\n",
+        Serial.printf("OTA: END rejected (state=%d, session %u vs %u, %u/%u chunks)\n",
                       (int)_state, p.sessionId, _sessionId, _expectedChunkIndex, p.totalChunks);
         ackStatus = OTA_ERR_SESSION;
     } else if (!Update.end(true)) {
-        // Intégrité/format invalide : on reste sur l'image actuelle, aucun reboot.
-        Serial.printf("OTA: Update.end refuse (err %u)\n", Update.getError());
+        // Invalid integrity/format: stay on the current image, no reboot.
+        Serial.printf("OTA: Update.end refused (err %u)\n", Update.getError());
         ackStatus = OTA_ERR_MD5;
         _state = IDLE;
     } else {
@@ -144,14 +143,14 @@ void OtaSlave::processEnd(const OtaEndPayload& p) {
     }
     sendAck(2, 0, ackStatus);
     if (doRestart) {
-        delay(250); // laisse partir la trame d'ack avant de couper la radio
+        delay(250); // let the ack frame go out before cutting the radio
         ESP.restart();
     }
 }
 
 void OtaSlave::processAbort(const OtaAbortPayload& p) {
     if (_state != RECEIVING || p.sessionId != _sessionId) return;
-    Serial.printf("OTA: abort recu (raison %u) au chunk %u\n", p.reason, _expectedChunkIndex);
+    Serial.printf("OTA: abort received (reason %u) at chunk %u\n", p.reason, _expectedChunkIndex);
     Update.abort();
     _state = IDLE;
 }
@@ -176,13 +175,13 @@ void OtaSlave::update(uint32_t nowMs) {
     default: break;
     }
 
-    // Comparaison SIGNEE obligatoire : _lastActivityMs vient d'un millis() frais
-    // pris pendant le traitement ci-dessus, donc potentiellement POSTERIEUR au
-    // nowMs capture en debut de loop() — en non signe, la difference negative
-    // deborde (~4 milliards) et le timeout de 20 s saute instantanement
-    // (observe en test : session abandonnee 5 ms apres son demarrage).
+    // SIGNED comparison is mandatory: _lastActivityMs comes from a fresh
+    // millis() taken during the processing above, so it can be LATER than
+    // the nowMs captured at the start of loop() — in unsigned math, the
+    // negative difference overflows (~4 billion) and the 20s timeout fires
+    // instantly (observed in testing: session abandoned 5 ms after it started).
     if (_state == RECEIVING && (int32_t)(nowMs - _lastActivityMs) > (int32_t)OTA_SESSION_TIMEOUT_MS) {
-        Serial.printf("OTA: inactivite, session %u abandonnee au chunk %u\n",
+        Serial.printf("OTA: inactivity, session %u abandoned at chunk %u\n",
                       _sessionId, _expectedChunkIndex);
         Update.abort();
         _state = IDLE;

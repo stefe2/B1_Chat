@@ -4,8 +4,8 @@
 Registry Droids;
 
 namespace {
-// RAII : même construction que dans ota_master.cpp/ota_slave.cpp. Ne JAMAIS
-// faire d'accès NVS/flash ni d'appel bloquant sous ce verrou.
+// RAII: same construction as in ota_master.cpp/ota_slave.cpp. NEVER do
+// NVS/flash access or a blocking call under this lock.
 struct CriticalGuard {
     portMUX_TYPE& mux;
     explicit CriticalGuard(portMUX_TYPE& m) : mux(m) { portENTER_CRITICAL(&mux); }
@@ -23,13 +23,13 @@ bool Registry::seen(uint16_t id, int rssi, uint32_t now) {
                 return false;
             }
         }
-        if (_count >= MAX) return false;  // table pleine
+        if (_count >= MAX) return false;  // table full
     }
 
-    // Droïde encore inconnu : lecture NVS HORS verrou (accès flash interdit
-    // sous portENTER_CRITICAL — leçon du gel OTA au chunk 21), puis
-    // re-vérification à l'insertion (un autre message du même droïde a pu
-    // l'insérer entre-temps).
+    // Still-unknown droid: NVS read OUTSIDE the lock (flash access is
+    // forbidden under portENTER_CRITICAL — lesson from the OTA freeze at
+    // chunk 21), then re-check on insertion (another message from the same
+    // droid may have inserted it in the meantime).
     const bool adopted = Config.isAdopted(id);
 
     CriticalGuard guard(_mux);
@@ -53,7 +53,7 @@ bool Registry::seen(uint16_t id, int rssi, uint32_t now) {
         _count++;
         return true;
     }
-    return false;  // table pleine
+    return false;  // table full
 }
 
 void Registry::setServos(uint16_t id, bool on) {

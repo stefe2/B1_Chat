@@ -8,7 +8,7 @@ const char* NVS_NS = "b1";
 }
 
 void ConfigStore::begin() {
-    // false = lecture/écriture.
+    // false = read/write.
     _p.begin(NVS_NS, false);
 }
 
@@ -41,24 +41,24 @@ void ConfigStore::setAnimParams(uint8_t freq, uint8_t amp, uint8_t speed) {
 }
 
 void ConfigStore::nameKey(uint16_t id, char out[8]) {
-    // Clé NVS courte (< 15 car.) : "n" + hex de l'id, ex. "n3A7C".
+    // Short NVS key (< 15 chars): "n" + hex of the id, e.g. "n3A7C".
     snprintf(out, 8, "n%04X", id);
 }
 
 String ConfigStore::getName(uint16_t id) {
-    // La surcouche RAM (modif non engagée) a priorité sur la NVS.
+    // The RAM overlay (uncommitted change) takes priority over NVS.
     for (uint8_t i = 0; i < PENDING_NAMES_MAX; i++) {
         if (_pendNames[i].used && _pendNames[i].id == id) return _pendNames[i].name;
     }
     char key[8];
     nameKey(id, key);
-    // Teste l'existence pour éviter le log d'erreur NVS « NOT_FOUND ».
+    // Checks existence to avoid the NVS "NOT_FOUND" error log.
     if (!_p.isKey(key)) return String("");
     return _p.getString(key, "");
 }
 
 void ConfigStore::setName(uint16_t id, const String& name) {
-    // Écrit la surcouche RAM (slot existant, sinon slot libre).
+    // Writes the RAM overlay (existing slot, otherwise a free slot).
     int free = -1;
     for (uint8_t i = 0; i < PENDING_NAMES_MAX; i++) {
         if (_pendNames[i].used && _pendNames[i].id == id) {
@@ -73,8 +73,8 @@ void ConfigStore::setName(uint16_t id, const String& name) {
         _dirty = true;
         return;
     }
-    // Surcouche pleine (improbable : 32 slots) : dégrade en écriture directe
-    // pour ne rien perdre.
+    // Overlay full (unlikely: 32 slots): falls back to a direct write so
+    // nothing is lost.
     char key[8];
     nameKey(id, key);
     _p.putString(key, name);
@@ -116,7 +116,7 @@ void ConfigStore::revertPending() {
 }
 
 void ConfigStore::calibKey(uint16_t id, char out[8]) {
-    // Clé NVS courte : "c" + hex de l'id, ex. "c3A7C".
+    // Short NVS key: "c" + hex of the id, e.g. "c3A7C".
     snprintf(out, 8, "c%04X", id);
 }
 
@@ -136,7 +136,7 @@ void ConfigStore::setCalib(uint16_t id, const ServoCalib& c) {
 }
 
 void ConfigStore::adoptKey(uint16_t id, char out[8]) {
-    // Clé NVS courte : "a" + hex de l'id, ex. "a3A7C".
+    // Short NVS key: "a" + hex of the id, e.g. "a3A7C".
     snprintf(out, 8, "a%04X", id);
 }
 

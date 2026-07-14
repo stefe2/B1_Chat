@@ -3,9 +3,9 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Border Style="{StaticResource CardBorderStyle}">
         <StackPanel>
-            <TextBlock Text="SÉQUENCEUR D'ANIMATION" Style="{StaticResource CardTitleStyle}" />
+            <TextBlock Text="ANIMATION SEQUENCER" Style="{StaticResource CardTitleStyle}" />
 
-            <TextBlock Text="CATALOGUE (8 SLOTS ESP32)" Style="{StaticResource SectionSubtitleStyle}" />
+            <TextBlock Text="CATALOG (8 ESP32 SLOTS)" Style="{StaticResource SectionSubtitleStyle}" />
             <ItemsControl ItemsSource="{Binding Catalog}" Margin="0,0,0,10">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
@@ -19,11 +19,11 @@
                                     <ColumnDefinition Width="70" />
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center" />
-                                <TextBlock Grid.Column="1" Text="{Binding StepCount, StringFormat='{}{0} étapes'}" FontSize="10" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" />
-                                <TextBlock Grid.Column="2" Text="{Binding Loop, StringFormat='boucle:{0}'}" FontSize="10" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" />
-                                <Button Grid.Column="3" Content="Charger" Style="{StaticResource MiniButtonStyle}"
+                                <TextBlock Grid.Column="1" Text="{Binding StepCount, StringFormat='{}{0} steps'}" FontSize="10" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="2" Text="{Binding Loop, StringFormat='loop:{0}'}" FontSize="10" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" />
+                                <Button Grid.Column="3" Content="Load" Style="{StaticResource MiniButtonStyle}"
                                         Command="{Binding DataContext.LoadSlotCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}" Margin="0,0,4,0" />
-                                <Button Grid.Column="4" Content="Suppr." Style="{StaticResource MiniButtonStyle}"
+                                <Button Grid.Column="4" Content="Del." Style="{StaticResource MiniButtonStyle}"
                                         Command="{Binding DataContext.DeleteSlotCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}" />
                             </Grid>
                         </Border>
@@ -40,20 +40,20 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <TextBox Grid.Column="0" Style="{StaticResource RecessedTextBoxStyle}" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,8,0" />
-                <CheckBox Grid.Column="1" Content="Répéter" IsChecked="{Binding Loop}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                <CheckBox Grid.Column="1" Content="Loop" IsChecked="{Binding Loop}" VerticalAlignment="Center" Margin="0,0,8,0" />
                 <StackPanel Grid.Column="2" Orientation="Horizontal">
-                    <TextBlock Text="Piste " VerticalAlignment="Center" FontSize="11" />
+                    <TextBlock Text="Track " VerticalAlignment="Center" FontSize="11" />
                     <TextBox Width="40" Style="{StaticResource RecessedTextBoxStyle}" Text="{Binding AudioTrack}" />
                 </StackPanel>
             </Grid>
 
             <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                <Button Content="Annuler" Style="{StaticResource MiniButtonStyle}" Command="{Binding UndoCommand}" Margin="0,0,4,0" />
-                <Button Content="Rétablir" Style="{StaticResource MiniButtonStyle}" Command="{Binding RedoCommand}" Margin="0,0,4,0" />
-                <Button Content="+ Étape" Style="{StaticResource MiniButtonStyle}" Command="{Binding AddStepCommand}" Margin="0,0,4,0" />
-                <Button Content="Nouvelle" Style="{StaticResource MiniButtonStyle}" Command="{Binding NewSequenceCommand}" Margin="0,0,4,0" />
-                <Button Content="Sauver (ESP32)" Style="{StaticResource MiniButtonStyle}" Command="{Binding SaveToSlotCommand}" Margin="0,0,4,0" />
-                <Button Content="→ Biblio" Style="{StaticResource MiniButtonStyle}" Command="{Binding SaveToLibraryCommand}" />
+                <Button Content="Undo" Style="{StaticResource MiniButtonStyle}" Command="{Binding UndoCommand}" Margin="0,0,4,0" />
+                <Button Content="Redo" Style="{StaticResource MiniButtonStyle}" Command="{Binding RedoCommand}" Margin="0,0,4,0" />
+                <Button Content="+ Step" Style="{StaticResource MiniButtonStyle}" Command="{Binding AddStepCommand}" Margin="0,0,4,0" />
+                <Button Content="New" Style="{StaticResource MiniButtonStyle}" Command="{Binding NewSequenceCommand}" Margin="0,0,4,0" />
+                <Button Content="Save (ESP32)" Style="{StaticResource MiniButtonStyle}" Command="{Binding SaveToSlotCommand}" Margin="0,0,4,0" />
+                <Button Content="→ Library" Style="{StaticResource MiniButtonStyle}" Command="{Binding SaveToLibraryCommand}" />
             </StackPanel>
 
             <ItemsControl ItemsSource="{Binding Steps}" Margin="0,0,0,10">
@@ -70,14 +70,14 @@
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <TextBox Grid.Column="0" Style="{StaticResource RecessedTextBoxStyle}" Text="{Binding AnimId}" Margin="0,0,4,0" ToolTip="ID animation" />
-                                <TextBox Grid.Column="1" Style="{StaticResource RecessedTextBoxStyle}" Text="{Binding Target}" Margin="0,0,4,0" ToolTip="Cible (0xFFFF = tous)" />
-                                <TextBox Grid.Column="2" Style="{StaticResource RecessedTextBoxStyle}" Text="{Binding DelayMs}" Margin="0,0,4,0" ToolTip="Délai (ms)" />
+                                <TextBox Grid.Column="0" Style="{StaticResource RecessedTextBoxStyle}" Text="{Binding AnimId}" Margin="0,0,4,0" ToolTip="Animation ID" />
+                                <TextBox Grid.Column="1" Style="{StaticResource RecessedTextBoxStyle}" Text="{Binding Target}" Margin="0,0,4,0" ToolTip="Target (0xFFFF = all)" />
+                                <TextBox Grid.Column="2" Style="{StaticResource RecessedTextBoxStyle}" Text="{Binding DelayMs}" Margin="0,0,4,0" ToolTip="Delay (ms)" />
                                 <Button Grid.Column="3" Content="↑" Style="{StaticResource MiniButtonStyle}" Margin="0,0,2,0"
                                         Command="{Binding DataContext.MoveStepUpCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}" />
                                 <Button Grid.Column="4" Content="↓" Style="{StaticResource MiniButtonStyle}" Margin="0,0,4,0"
                                         Command="{Binding DataContext.MoveStepDownCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}" />
-                                <Button Grid.Column="5" Content="Dupliquer" Style="{StaticResource MiniButtonStyle}" Margin="0,0,4,0"
+                                <Button Grid.Column="5" Content="Duplicate" Style="{StaticResource MiniButtonStyle}" Margin="0,0,4,0"
                                         Command="{Binding DataContext.DuplicateStepCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}" />
                                 <Button Grid.Column="6" Content="✕" Style="{StaticResource MiniButtonStyle}"
                                         Command="{Binding DataContext.DeleteStepCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}" />
@@ -88,19 +88,19 @@
             </ItemsControl>
 
             <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
-                <Button Content="Jouer" Style="{StaticResource PrimaryButtonStyle}" Command="{Binding PlayCommand}" Margin="0,0,4,0" />
+                <Button Content="Play" Style="{StaticResource PrimaryButtonStyle}" Command="{Binding PlayCommand}" Margin="0,0,4,0" />
                 <Button Content="Stop" Style="{StaticResource MiniButtonStyle}" Command="{Binding StopCommand}" Margin="0,0,4,0" />
                 <Button Content="Pause" Style="{StaticResource MiniButtonStyle}" Command="{Binding PauseCommand}" Margin="0,0,4,0" />
-                <Button Content="Reprendre" Style="{StaticResource MiniButtonStyle}" Command="{Binding ResumeCommand}" Margin="0,0,4,0" />
+                <Button Content="Resume" Style="{StaticResource MiniButtonStyle}" Command="{Binding ResumeCommand}" Margin="0,0,4,0" />
                 <Button Style="{StaticResource MiniButtonStyle}" Command="{Binding ToggleRehearsalCommand}">
-                    <TextBlock Text="{Binding IsRehearsing, Converter={StaticResource BoolToTextConv}, ConverterParameter='Arrêter la répétition|Répéter (local)'}" />
+                    <TextBlock Text="{Binding IsRehearsing, Converter={StaticResource BoolToTextConv}, ConverterParameter='Stop rehearsal|Rehearse (local)'}" />
                 </Button>
-                <Button Content="Exporter" Style="{StaticResource MiniButtonStyle}" Command="{Binding ExportCommand}" Margin="8,0,4,0" />
-                <Button Content="Importer" Style="{StaticResource MiniButtonStyle}" Command="{Binding ImportCommand}" />
+                <Button Content="Export" Style="{StaticResource MiniButtonStyle}" Command="{Binding ExportCommand}" Margin="8,0,4,0" />
+                <Button Content="Import" Style="{StaticResource MiniButtonStyle}" Command="{Binding ImportCommand}" />
             </StackPanel>
 
             <Separator Margin="0,0,0,8" />
-            <TextBlock Text="BIBLIOTHÈQUE LOCALE" Style="{StaticResource SectionSubtitleStyle}" />
+            <TextBlock Text="LOCAL LIBRARY" Style="{StaticResource SectionSubtitleStyle}" />
             <ItemsControl ItemsSource="{Binding Library}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
@@ -113,11 +113,11 @@
                                     <ColumnDefinition Width="70" />
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center" />
-                                <Button Grid.Column="1" Content="Charger" Style="{StaticResource MiniButtonStyle}"
+                                <Button Grid.Column="1" Content="Load" Style="{StaticResource MiniButtonStyle}"
                                         Command="{Binding DataContext.LoadFromLibraryCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}" Margin="0,0,4,0" />
                                 <Button Grid.Column="2" Content="→ ESP32" Style="{StaticResource MiniButtonStyle}"
                                         Command="{Binding DataContext.PushToMasterCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}" Margin="0,0,4,0" />
-                                <Button Grid.Column="3" Content="Suppr." Style="{StaticResource MiniButtonStyle}"
+                                <Button Grid.Column="3" Content="Del." Style="{StaticResource MiniButtonStyle}"
                                         Command="{Binding DataContext.DeleteFromLibraryCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}" />
                             </Grid>
                         </Border>

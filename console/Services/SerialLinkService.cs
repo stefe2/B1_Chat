@@ -5,20 +5,20 @@ using System.Windows.Threading;
 namespace b1_chat_console.Services;
 
 /// <summary>
-/// Porte de OpenPort/ClosePort/ReadLoop (ex-MainWindow.xaml.cs) : meme comportement (boucle
-/// bloquante sur un Task, ReadTimeout 500ms traite comme un poll normal), plus la logique de
-/// reconnexion automatique qui vivait uniquement cote JS dans index.html (absente cote C# avant
-/// ce portage) : re-scan toutes les 3s apres une deconnexion inattendue, jusqu'a ce que le port
-/// reapparaisse ou qu'une fermeture volontaire (Close()/PrepareForExternalClose()) l'arrete.
-/// Les evenements sont leves depuis la boucle de lecture (thread arriere-plan) ou un minuteur :
-/// c'est a l'appelant (ViewModel) de re-marshaler sur le thread UI si necessaire.
+/// Port of OpenPort/ClosePort/ReadLoop (formerly MainWindow.xaml.cs): same behavior (blocking
+/// loop on a Task, 500ms ReadTimeout treated as a normal poll), plus the automatic reconnect
+/// logic that used to live only in JS in index.html (absent on the C# side before this port):
+/// re-scans every 3s after an unexpected disconnect, until the port reappears or a voluntary
+/// close (Close()/PrepareForExternalClose()) stops it.
+/// Events are raised from the read loop (background thread) or a timer: it's up to the caller
+/// (ViewModel) to remarshal onto the UI thread if needed.
 /// </summary>
 public class SerialLinkService : IDisposable
 {
     public event Action<string>? LineReceived;
     public event Action? Opened;
     public event Action<string>? OpenFailed;
-    public event Action<bool>? Closed; // true = deconnexion inattendue
+    public event Action<bool>? Closed; // true = unexpected disconnect
     public event Action<string>? ErrorOccurred;
 
     public bool AutoReconnect { get; set; } = true;
@@ -33,10 +33,10 @@ public class SerialLinkService : IDisposable
 
     public static string[] GetPortNames() => SerialPort.GetPortNames();
 
-    /// <summary>Les evenements sont leves depuis des threads arriere-plan (lecture serie, minuteur
-    /// de reconnexion) ; on les remarshale systematiquement sur le thread UI ici (meme reflexe que
-    /// Dispatcher.Invoke dans l'ancien ReadLoop) pour que les ObservableCollection liees en aval
-    /// n'explosent jamais avec une exception inter-thread.</summary>
+    /// <summary>Events are raised from background threads (serial read, reconnect timer); they're
+    /// systematically remarshaled onto the UI thread here (same reflex as Dispatcher.Invoke in the
+    /// old ReadLoop) so downstream bound ObservableCollections never blow up with a cross-thread
+    /// exception.</summary>
     private static void RunOnUi(Action a)
     {
         var dispatcher = Application.Current?.Dispatcher;
@@ -51,13 +51,13 @@ public class SerialLinkService : IDisposable
         _manualClose = false;
         try
         {
-            // WriteTimeout explicite : par defaut SerialPort.Write() bloque indefiniment si le
-            // tampon ne se vide pas assez vite (ex. lien instable) — sans ca, un chunk OTA bloque
-            // gele le thread UI (Write() est appele en synchrone depuis SendCmdRaw) sans jamais
-            // lever d'exception qu'on pourrait rattraper.
+            // Explicit WriteTimeout: by default SerialPort.Write() blocks indefinitely if the
+            // buffer doesn't drain fast enough (e.g. unstable link) — without this, a stuck OTA
+            // chunk freezes the UI thread (Write() is called synchronously from SendCmdRaw)
+            // without ever throwing an exception that could be caught.
             var port = new SerialPort(portName, 115200) { NewLine = "\n", Encoding = System.Text.Encoding.UTF8, ReadTimeout = 500, WriteTimeout = 3000 };
             port.Open();
-            TraceLog.Write("SYS", "port ouvert : " + portName);
+            TraceLog.Write("SYS", "port opened: " + portName);
             _port = port;
             PortName = portName;
             _readCts = new CancellationTokenSource();
@@ -73,7 +73,7 @@ public class SerialLinkService : IDisposable
         }
     }
 
-    /// <summary>Fermeture volontaire demandee par l'utilisateur : pas de reconnexion auto.</summary>
+    /// <summary>Voluntary close requested by the user: no auto-reconnect.</summary>
     public void Close()
     {
         _manualClose = true;
@@ -85,17 +85,17 @@ public class SerialLinkService : IDisposable
     }
 
     /// <summary>
-    /// Fermeture volontaire pour un besoin externe (flash espflash) : ne tente pas de reconnecter
-    /// automatiquement (l'appelant rouvrira lui-meme le port apres coup si besoin, meme contrat
-    /// que l'ancien StartFlash) mais leve quand meme "Closed" (comme Close()) pour que l'etat
-    /// Connected en amont reste synchrone avec la realite du port — sinon un consommateur qui n'a
-    /// jamais ete notifie de la fermeture reste bloque a "connecte" alors que le port est deja
-    /// ferme, sans aucun moyen de redemarrer la connexion depuis l'UI.
-    /// Attend (borne a 1s) que le thread de lecture arriere-plan ait vraiment fini avant de
-    /// fermer/disposer le SerialPort : sans cette attente, un process externe (espflash) qui
-    /// tente d'ouvrir le meme port juste apres peut se heurter a une course avec la liberation
-    /// du handle Windows encore en cours cote thread de lecture — echec "Error while connecting
-    /// to device" cote espflash, meme si Close()/Dispose() ont deja ete appeles ici.
+    /// Voluntary close for an external need (espflash flashing): doesn't attempt to auto-reconnect
+    /// (the caller reopens the port itself afterward if needed, same contract as the old
+    /// StartFlash) but still raises "Closed" (like Close()) so the upstream Connected state stays
+    /// in sync with the port's actual state — otherwise a consumer that was never notified of the
+    /// close stays stuck on "connected" while the port is already closed, with no way to restart
+    /// the connection from the UI.
+    /// Waits (capped at 1s) for the background read thread to actually finish before
+    /// closing/disposing the SerialPort: without this wait, an external process (espflash) trying
+    /// to open the same port right after can race against the Windows handle release still in
+    /// progress on the read thread's side — "Error while connecting to device" on espflash's side,
+    /// even though Close()/Dispose() were already called here.
     /// </summary>
     public void PrepareForExternalClose()
     {
@@ -110,7 +110,7 @@ public class SerialLinkService : IDisposable
     private void CancelAndWaitReadLoop()
     {
         _readCts?.Cancel();
-        try { _readTask?.Wait(1000); } catch { /* thread deja termine/exception attendue, sans importance ici */ }
+        try { _readTask?.Wait(1000); } catch { /* thread already finished/expected exception, doesn't matter here */ }
     }
 
     public void Write(string data)
@@ -118,17 +118,17 @@ public class SerialLinkService : IDisposable
         var port = _port;
         if (port == null)
         {
-            // Sans ce signalement, ecrire sur un port ferme etait un no-op muet : le chien
-            // de garde OTA retentait ses chunks dans le vide sans que rien ne le previenne.
-            TraceLog.Write("TX!", "port fermé — " + TraceLog.Trunc(data));
-            RunOnUi(() => ErrorOccurred?.Invoke("port fermé (écriture impossible)"));
+            // Without this signal, writing to a closed port was a silent no-op: the OTA
+            // watchdog kept retrying its chunks into the void with nothing to warn it.
+            TraceLog.Write("TX!", "port closed — " + TraceLog.Trunc(data));
+            RunOnUi(() => ErrorOccurred?.Invoke("port closed (write impossible)"));
             return;
         }
         TraceLog.Write("TX", TraceLog.Trunc(data));
         try { port.Write(data); }
         catch (Exception ex)
         {
-            TraceLog.Write("ERR", "Write : " + ex.Message);
+            TraceLog.Write("ERR", "Write: " + ex.Message);
             RunOnUi(() => ErrorOccurred?.Invoke(ex.Message));
         }
     }
@@ -142,19 +142,19 @@ public class SerialLinkService : IDisposable
             catch (TimeoutException) { continue; }
             catch (Exception ex)
             {
-                // La cause de la mort de la boucle de lecture etait avalee ici : le lien
-                // mourait dans le sens maitre->console sans aucun indice exploitable.
-                TraceLog.Write("ERR", "ReadLoop : " + ex.GetType().Name + " — " + ex.Message);
+                // The cause of the read loop's death used to be swallowed here: the link
+                // would die in the master->console direction with no actionable clue.
+                TraceLog.Write("ERR", "ReadLoop: " + ex.GetType().Name + " — " + ex.Message);
                 break;
             }
             if (line != null)
             {
                 var l = line;
                 TraceLog.Write("RX", TraceLog.Trunc(l));
-                // BeginInvoke (asynchrone, ordre preserve) plutot qu'Invoke : un Invoke
-                // synchrone suspend CE thread de lecture pendant tout le traitement UI de la
-                // ligne (qui peut lui-meme faire un port.Write bloquant jusqu'a 3 s) — le
-                // tampon RX de l'OS peut alors deborder et perdre des lignes sans exception.
+                // BeginInvoke (async, order-preserving) rather than Invoke: a synchronous
+                // Invoke would suspend THIS read thread for the entire UI processing of the
+                // line (which can itself do a port.Write blocking for up to 3s) — the OS's RX
+                // buffer could then overflow and lose lines with no exception.
                 var dispatcher = Application.Current?.Dispatcher;
                 if (dispatcher == null || dispatcher.CheckAccess()) LineReceived?.Invoke(l);
                 else dispatcher.BeginInvoke(() => LineReceived?.Invoke(l));
@@ -163,9 +163,9 @@ public class SerialLinkService : IDisposable
 
         if (!token.IsCancellationRequested)
         {
-            // Deconnexion non demandee (cable debranche, etc.).
+            // Unrequested disconnect (cable unplugged, etc.).
             var disconnectedPort = PortName;
-            TraceLog.Write("SYS", "déconnexion inattendue de " + (disconnectedPort ?? "?"));
+            TraceLog.Write("SYS", "unexpected disconnect from " + (disconnectedPort ?? "?"));
             ClosePortOnly();
             RunOnUi(() => Closed?.Invoke(true));
             if (!_manualClose && AutoReconnect && disconnectedPort != null)
@@ -200,7 +200,7 @@ public class SerialLinkService : IDisposable
         _readTask = null;
         if (_port != null)
         {
-            try { _port.Close(); } catch { /* deja ferme/deconnecte */ }
+            try { _port.Close(); } catch { /* already closed/disconnected */ }
             _port.Dispose();
             _port = null;
         }

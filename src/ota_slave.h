@@ -1,21 +1,21 @@
 #pragma once
 
 // ============================================================================
-//  OtaSlave — réception d'une image OTA relayée par le mesh (esclave uniquement)
+//  OtaSlave — receives an OTA image relayed by the mesh (slave only)
 //
-//  Machine à états minimale : un seul transfert à la fois, réception
-//  strictement séquentielle (Update.write() est append-only, aucune reprise
-//  de désordre n'est tentée). Voir CLAUDE.md pour le protocole complet.
+//  Minimal state machine: one transfer at a time, strictly sequential
+//  reception (Update.write() is append-only, no out-of-order handling is
+//  attempted). See CLAUDE.md for the full protocol.
 //
-//  Architecture callback -> loop() : les on*() s'exécutent depuis le callback
-//  ESP-NOW (tâche Wi-Fi interne) et ne touchent JAMAIS ni la flash ni la
-//  machine à états — ils déposent le message brut dans une boîte aux lettres
-//  d'un seul emplacement, que update() (loop()) dépile, valide et traite.
-//  Raison : Update.begin/write/end font de vrais accès SPI flash (effacement
-//  de secteur ~tous les 21 chunks de 190 o, MD5 sur toute l'image au end) —
-//  interdits depuis la tâche Wi-Fi et a fortiori sous portENTER_CRITICAL
-//  (gel/panic observé systématiquement au chunk 21, premier débordement du
-//  tampon de secteur 4 Ko d'Update).
+//  Callback -> loop() architecture: the on*() run from the ESP-NOW callback
+//  (internal Wi-Fi task) and NEVER touch flash or the state machine — they
+//  drop the raw message into a single-slot mailbox, which update() (loop())
+//  pops, validates, and processes.
+//  Reason: Update.begin/write/end perform real SPI flash access (sector
+//  erase ~every 21 chunks of 190 B, MD5 over the whole image at end) —
+//  forbidden from the Wi-Fi task and even more so under portENTER_CRITICAL
+//  (freeze/panic observed systematically at chunk 21, the first overflow of
+//  Update's 4 KB sector buffer).
 // ============================================================================
 
 #include "config.h"
@@ -25,17 +25,17 @@
 
 class OtaSlave {
 public:
-    // Appelés depuis le callback ESP-NOW : filtrage targetId + dépôt en boîte
-    // aux lettres uniquement (aucun accès flash, aucun état muté).
+    // Called from the ESP-NOW callback: targetId filtering + mailbox drop
+    // only (no flash access, no state mutated).
     void onStart(uint16_t srcId, const OtaStartPayload& p);
     void onChunk(uint16_t srcId, const OtaChunkPayload& p);
     void onEnd(uint16_t srcId, const OtaEndPayload& p);
     void onAbort(uint16_t srcId, const OtaAbortPayload& p);
 
-    // Dépile la boîte aux lettres (validation + Update.* + ack, hors verrou)
-    // puis gère l'auto-abandon si plus aucune activité pendant
-    // OTA_SESSION_TIMEOUT_MS (filet si un MSG_OTA_ABORT est perdu).
-    // Appelé depuis loop().
+    // Pops the mailbox (validation + Update.* + ack, outside the lock)
+    // then handles auto-abort if there's no more activity for
+    // OTA_SESSION_TIMEOUT_MS (safety net if a MSG_OTA_ABORT is lost).
+    // Called from loop().
     void update(uint32_t nowMs);
 
 private:
@@ -45,16 +45,16 @@ private:
     uint16_t _totalChunks = 0;
     uint32_t _lastActivityMs = 0;
 
-    // Boîte aux lettres callback -> loop(). Un seul emplacement suffit
-    // (stop-and-wait : un message en vol) ; un nouveau dépôt écrase l'ancien —
-    // perdre un doublon est sans effet (le maître retransmet), et garder le
-    // plus récent garantit qu'un ABORT n'est jamais coincé derrière un CHUNK.
+    // Callback -> loop() mailbox. A single slot is enough (stop-and-wait:
+    // one message in flight); a new post overwrites the old one — losing a
+    // duplicate has no effect (the master retransmits), and keeping the
+    // most recent one guarantees an ABORT is never stuck behind a CHUNK.
     enum PendingType : uint8_t { PEND_NONE, PEND_START, PEND_CHUNK, PEND_END, PEND_ABORT };
     PendingType _pendingType = PEND_NONE;
-    uint8_t _pendingBuf[sizeof(OtaChunkPayload)];   // dimensionné sur le plus gros payload
+    uint8_t _pendingBuf[sizeof(OtaChunkPayload)];   // sized for the largest payload
 
-    // Protège uniquement la boîte aux lettres : le reste de l'état ci-dessus
-    // n'est plus touché que par loop(), donc plus de course possible dessus.
+    // Only protects the mailbox: everything else in the state above is
+    // only ever touched by loop(), so no race is possible on it.
     portMUX_TYPE _mux = portMUX_INITIALIZER_UNLOCKED;
 
     void post(PendingType type, const void* payload, size_t len);

@@ -6,10 +6,10 @@ using System.Text.RegularExpressions;
 namespace b1_chat_console.Services;
 
 /// <summary>
-/// Porte de FindEspflash/StartFlash (ex-MainWindow.xaml.cs) : meme recherche de l'outil,
-/// mêmes arguments espflash. Ne touche pas au port serie — l'appelant (ViewModel) doit le
-/// fermer avant d'appeler Start() et le rouvrir lui-meme apres reception de Completed
-/// (meme contrat que l'ancien StartFlash, qui ne rouvrait jamais le port non plus).
+/// Port of FindEspflash/StartFlash (formerly MainWindow.xaml.cs): same tool lookup, same
+/// espflash arguments. Doesn't touch the serial port — the caller (ViewModel) must close it
+/// before calling Start() and reopen it itself after receiving Completed (same contract as
+/// the old StartFlash, which never reopened the port either).
 /// </summary>
 public class FlashService
 {
@@ -17,9 +17,9 @@ public class FlashService
     public event Action<int>? Progress; // 0..100
     public event Action<bool, int?, string?>? Completed; // ok, exitCode, error
 
-    // La barre de progression d'espflash (indicatif, redessinee via \r sans \n) arrive comme
-    // des "lignes" separees (StreamReader.ReadLine() coupe aussi sur un \r seul) : on l'extrait
-    // ici plutot que de la laisser noyer FlashLog de dizaines de mises a jour quasi identiques.
+    // espflash's progress bar (redrawn in place via \r with no \n) arrives as separate
+    // "lines" (StreamReader.ReadLine() also splits on a lone \r): it's extracted here
+    // rather than left to flood FlashLog with dozens of near-identical updates.
     private static readonly Regex ProgressPercentRegex = new(@"(\d{1,3})\s*%", RegexOptions.Compiled);
     private static readonly Regex ProgressFractionRegex = new(@"([\d.]+)\s*(K|M)?i?B\s*/\s*([\d.]+)\s*(K|M)?i?B", RegexOptions.Compiled);
 
@@ -52,7 +52,7 @@ public class FlashService
         foreach (var dir in (Environment.GetEnvironmentVariable("PATH") ?? "").Split(';'))
         {
             var p = Path.Combine(dir.Trim(), "espflash.exe");
-            try { if (dir.Length > 0 && File.Exists(p)) return p; } catch { /* segment de PATH invalide */ }
+            try { if (dir.Length > 0 && File.Exists(p)) return p; } catch { /* invalid PATH segment */ }
         }
         return null;
     }
@@ -62,17 +62,17 @@ public class FlashService
         var tool = FindEspflash();
         if (tool == null)
         {
-            Completed?.Invoke(false, null, "espflash.exe introuvable — dépose-le dans le dossier tools\\ à côté de l'application (voir CLAUDE.md).");
+            Completed?.Invoke(false, null, "espflash.exe not found — drop it into the tools\\ folder next to the application (see CLAUDE.md).");
             return;
         }
         if (!File.Exists(binPath))
         {
-            Completed?.Invoke(false, null, "fichier .bin introuvable : " + binPath);
+            Completed?.Invoke(false, null, ".bin file not found: " + binPath);
             return;
         }
         if (string.IsNullOrWhiteSpace(portName))
         {
-            Completed?.Invoke(false, null, "aucun port série choisi.");
+            Completed?.Invoke(false, null, "no serial port selected.");
             return;
         }
 
@@ -109,12 +109,12 @@ public class FlashService
             {
                 if (proc.ExitCode == 0)
                 {
-                    LogLine?.Invoke("— Puce effacée —");
+                    LogLine?.Invoke("— Chip erased —");
                     onSuccess();
                 }
                 else
                 {
-                    Completed?.Invoke(false, proc.ExitCode, "échec de l'effacement complet");
+                    Completed?.Invoke(false, proc.ExitCode, "full chip erase failed");
                 }
                 proc.Dispose();
             };

@@ -1,11 +1,11 @@
 #pragma once
 
 // ============================================================================
-//  MeshTopology — agrégateur d'arêtes du graphe de voisinage radio (maître)
+//  MeshTopology — aggregates edges of the radio neighborhood graph (master)
 //
-//  Alimenté par les rapports MSG_NEIGHBORS reçus de chaque droïde (voir
-//  mesh_comm.h) et par le propre voisinage direct du maître. Chaque arête est
-//  dirigée : {from} a entendu {to} directement, à {rssi}. Voir project.md §5.
+//  Fed by the MSG_NEIGHBORS reports received from each droid (see
+//  mesh_comm.h) and by the master's own direct neighborhood. Each edge is
+//  directed: {from} heard {to} directly, at {rssi}. See project.md §5.
 // ============================================================================
 
 #include <Arduino.h>
@@ -16,7 +16,7 @@ public:
 
     struct Edge { uint16_t from, to; int8_t rssi; uint32_t lastSeen; };
 
-    // Enregistre/actualise le lien dirigé from→to (from a entendu to à rssi).
+    // Registers/refreshes the directed link from→to (from heard to at rssi).
     void seen(uint16_t from, uint16_t to, int8_t rssi, uint32_t now);
 
     uint8_t count() const { return _count; }

@@ -1,35 +1,35 @@
 #pragma once
 
 // ============================================================================
-//  OtaGuard — sécurité anti-brick pour l'OTA (tous rôles)
+//  OtaGuard — anti-brick safety net for OTA (all roles)
 //
-//  Avant de rebooter sur une image fraîchement écrite, on arme un flag NVS
-//  ("pending" + compteur de tentatives). Au boot suivant, si ce flag est
-//  présent, on incrémente le compteur ; au-delà de OTA_MAX_BOOT_ATTEMPTS on
-//  bascule manuellement esp_ota_set_boot_partition() vers l'AUTRE partition
-//  (esp_ota_get_next_update_partition alterne forcément app0/app1) et on
-//  redémarre — un rollback fait "à la main" avec l'API esp_ota_ops standard,
-//  sans dépendre du rollback bootloader d'ESP-IDF (non exposé simplement en
-//  framework Arduino). Si le firmware tourne sans reset pendant
-//  OTA_VERIFY_UPTIME_MS, le flag est effacé : l'image est confirmée bonne.
+//  Before rebooting into a freshly written image, an NVS flag is armed
+//  ("pending" + attempt counter). On the next boot, if this flag is
+//  present, the counter is incremented; past OTA_MAX_BOOT_ATTEMPTS, it
+//  manually switches esp_ota_set_boot_partition() to the OTHER partition
+//  (esp_ota_get_next_update_partition necessarily alternates app0/app1) and
+//  reboots — a rollback done "by hand" with the standard esp_ota_ops API,
+//  without relying on ESP-IDF's bootloader rollback (not simply exposed
+//  under the Arduino framework). If the firmware runs without a reset for
+//  OTA_VERIFY_UPTIME_MS, the flag is cleared: the image is confirmed good.
 //
-//  earlyCheck() DOIT être la toute première ligne de setup(), avant tout
-//  autre code : un crash survenant avant cet appel ne serait jamais compté
-//  (risque résiduel assumé, voir CLAUDE.md).
+//  earlyCheck() MUST be the very first line of setup(), before any other
+//  code: a crash occurring before this call would never be counted
+//  (residual risk accepted, see CLAUDE.md).
 // ============================================================================
 
 #include <Arduino.h>
 
 class OtaGuard {
 public:
-    // Retourne true si un rollback a été déclenché (ne revient jamais en
-    // pratique : esp_restart() est appelé avant le retour).
+    // Returns true if a rollback was triggered (never actually returns in
+    // practice: esp_restart() is called before returning).
     bool earlyCheck();
 
-    // À appeler à chaque tour de loop().
+    // To be called on every loop() iteration.
     void confirmIfPending(uint32_t nowMs);
 
-    // À appeler juste avant Update.end(true) réussi, avant ESP.restart().
+    // To be called right before a successful Update.end(true), before ESP.restart().
     void armPendingReboot();
 
 private:

@@ -1,15 +1,15 @@
-# Banc de test OTA : pilote le maître B1 par le port série (console fermée),
-# rejoue le protocole JSON de la console (hello/ping/otaStart/otaChunk) et
-# permet d'injecter des fautes : chunk corrompu, abandon en plein transfert,
-# double otaStart. Voir CLAUDE.md section OTA pour le protocole.
+# OTA test bench: drives the B1 master over the serial port (console closed),
+# replays the console's JSON protocol (hello/ping/otaStart/otaChunk), and lets
+# you inject faults: corrupted chunk, mid-transfer abort, double otaStart.
+# See the CLAUDE.md OTA section for the protocol.
 param(
     [Parameter(Mandatory=$true)][string]$Bin,
-    [int]$Target = 18872,          # B1-Rouge (0x49B8)
-    [int]$CorruptChunk = -1,       # index de chunk à corrompre en vol (-1 = aucun)
-    [int]$StopAtChunk = -1,        # ferme brutalement le port à ce chunk (-1 = jamais)
-    [int]$SecondStartAt = -1,      # envoie un 2e otaStart à ce chunk (-1 = jamais)
+    [int]$Target = 18872,          # B1-Red (0x49B8)
+    [int]$CorruptChunk = -1,       # chunk index to corrupt in flight (-1 = none)
+    [int]$StopAtChunk = -1,        # abruptly closes the port at this chunk (-1 = never)
+    [int]$SecondStartAt = -1,      # sends a 2nd otaStart at this chunk (-1 = never)
     [string]$ComPort = "COM3",
-    [string]$LogFile = "$env:TEMP\ota-test.log"   # trace complète TX/RX (hors dépôt)
+    [string]$LogFile = "$env:TEMP\ota-test.log"   # full TX/RX trace (outside the repo)
 )
 
 $ErrorActionPreference = 'Stop'
@@ -21,7 +21,7 @@ function Say([string]$msg) { Write-Output ("{0:HH:mm:ss} {1}" -f (Get-Date), $ms
 
 $image = [System.IO.File]::ReadAllBytes($Bin)
 $md5 = ([System.Security.Cryptography.MD5]::Create().ComputeHash($image) | ForEach-Object { $_.ToString("x2") }) -join ''
-Say "image $Bin ($($image.Length) o, md5 $md5)"
+Say "image $Bin ($($image.Length) B, md5 $md5)"
 
 $port = New-Object System.IO.Ports.SerialPort($ComPort, 115200)
 $port.NewLine = "`n"
@@ -49,7 +49,7 @@ function SendChunk([int]$idx) {
     [Array]::Copy($image, $offset, $data, 0, $len)
     if ($idx -eq $CorruptChunk) {
         $data[0] = $data[0] -bxor 0xFF
-        Say "chunk $idx CORROMPU en vol (octet 0 inversé)"
+        Say "chunk $idx CORRUPTED in flight (byte 0 flipped)"
     }
     $b64 = [Convert]::ToBase64String($data)
     Send ('{"cmd":"otaChunk","seq":' + $idx + ',"data":"' + $b64 + '"}')
@@ -69,42 +69,42 @@ while ((Get-Date) -lt $deadline -and -not $done -and -not $stopped) {
         'hello' {
             if (-not $helloOk) {
                 $helloOk = $true
-                Say "hello ok (maître fw $($j.fw))"
+                Say "hello ok (master fw $($j.fw))"
                 Send ('{"cmd":"otaStart","target":' + $Target + ',"size":' + $image.Length + ',"md5":"' + $md5 + '"}')
             }
         }
         'otaReady' {
             $chunkSize = $j.chunkSize
             $totalChunks = $j.totalChunks
-            Say "otaReady : $totalChunks chunks de $chunkSize o (session $($j.sessionId))"
+            Say "otaReady: $totalChunks chunks of $chunkSize B (session $($j.sessionId))"
             SendChunk 0
         }
         'otaChunkAck' {
             $sent = [int]$j.sent
-            if ($sent % 500 -eq 0) { Say "progression $sent/$totalChunks" }
+            if ($sent % 500 -eq 0) { Say "progress $sent/$totalChunks" }
             if ($SecondStartAt -ge 0 -and $sent -ge $SecondStartAt -and -not $secondStartSent) {
                 $secondStartSent = $true
-                Say "2e otaStart injecté (attendu : otaError « occupé »)"
+                Say 'expecting otaError "busy": 2nd otaStart injected'
                 Send ('{"cmd":"otaStart","target":' + $Target + ',"size":' + $image.Length + ',"md5":"' + $md5 + '"}')
             }
             if ($StopAtChunk -ge 0 -and $sent -ge $StopAtChunk) {
-                Say "ABANDON VOLONTAIRE au chunk $sent (simulation console fermée)"
+                Say "VOLUNTARY ABORT at chunk $sent (simulating console closed)"
                 $stopped = $true
                 break
             }
             if ($sent -lt $totalChunks) { SendChunk $sent }
         }
-        'otaDone' { Say "otaDone — l'esclave redémarre, attente du verdict…" }
+        'otaDone' { Say "otaDone -- slave rebooting, awaiting verdict..." }
         'otaResult' {
             Say ("otaResult ok=$($j.ok) fw=$($j.fw) reason=$($j.reason)")
             $done = $true
         }
         'otaError' {
-            if ("$($j.reason)" -like '*occup*') {
+            if ("$($j.reason)" -like '*busy*') {
                 $busySeen = $true
-                Say "otaError « occupé » reçu — garde anti-double-session OK, la session continue"
+                Say 'otaError "busy" received -- anti-double-session guard OK, session continues'
             } else {
-                Say ("otaError : $($j.reason)")
+                Say ("otaError: $($j.reason)")
                 $done = $true
             }
         }
@@ -112,6 +112,6 @@ while ((Get-Date) -lt $deadline -and -not $done -and -not $stopped) {
     }
 }
 $port.Close()
-if ($SecondStartAt -ge 0) { Say ("verdict garde busy : " + $(if ($busySeen) { "VUE (attendu)" } else { "NON VUE (ÉCHEC du test)" })) }
-if (-not $done -and -not $stopped) { Say "TIMEOUT global du script" }
-Say "fin"
+if ($SecondStartAt -ge 0) { Say ("busy guard verdict: " + $(if ($busySeen) { "SEEN (expected)" } else { "NOT SEEN (test FAILED)" })) }
+if (-not $done -and -not $stopped) { Say "global script TIMEOUT" }
+Say "done"

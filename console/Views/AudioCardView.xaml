@@ -3,7 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Border Style="{StaticResource CardBorderStyle}">
         <StackPanel>
-            <TextBlock Text="AUDIO (MAÎTRE)" Style="{StaticResource CardTitleStyle}" />
+            <TextBlock Text="AUDIO (MASTER)" Style="{StaticResource CardTitleStyle}" />
 
             <Grid Margin="0,0,0,12">
                 <Grid.ColumnDefinitions>
@@ -16,10 +16,10 @@
                 <Border Grid.Column="2" Style="{StaticResource ValuePillStyle}"><TextBlock Text="{Binding Volume}" Style="{StaticResource ValuePillTextStyle}" /></Border>
             </Grid>
 
-            <TextBlock Text="PISTE DE TEST" Style="{StaticResource FieldLabelStyle}" Margin="0,0,0,4" />
+            <TextBlock Text="TEST TRACK" Style="{StaticResource FieldLabelStyle}" Margin="0,0,0,4" />
             <StackPanel Orientation="Horizontal">
                 <TextBox Width="50" Style="{StaticResource RecessedTextBoxStyle}" Text="{Binding Track}" Margin="0,0,8,0" />
-                <Button Content="Tester" Style="{StaticResource MiniButtonStyle}" Command="{Binding PlayTrackCommand}" />
+                <Button Content="Test" Style="{StaticResource MiniButtonStyle}" Command="{Binding PlayTrackCommand}" />
             </StackPanel>
         </StackPanel>
     </Border>

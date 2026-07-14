@@ -4,12 +4,12 @@ using System.IO;
 namespace b1_chat_console.Services;
 
 /// <summary>
-/// Trace de diagnostic du lien série : chaque ligne TX/RX (tronquée) et chaque
-/// événement de lien (ouverture, fermeture, erreur, mort de la boucle de
-/// lecture) horodatés, dans %LOCALAPPDATA%\B1ChatConsole\serial-trace.log.
-/// Toujours actif : volume modeste (quelques Mo pour un OTA complet), fichier
-/// recréé à chaque lancement. Ne doit JAMAIS bloquer ni faire échouer quoi que
-/// ce soit — toute erreur d'écriture de la trace est avalée.
+/// Serial link diagnostic trace: every TX/RX line (truncated) and every link
+/// event (open, close, error, read-loop death), timestamped, written to
+/// %LOCALAPPDATA%\B1ChatConsole\serial-trace.log.
+/// Always active: modest volume (a few MB for a full OTA), file recreated on
+/// every launch. Must NEVER block or fail anything — any trace write error is
+/// swallowed.
 /// </summary>
 public static class TraceLog
 {
@@ -25,7 +25,7 @@ public static class TraceLog
             Writer = new StreamWriter(Path.Combine(dir, "serial-trace.log"), append: false) { AutoFlush = true };
         }
         catch { Writer = null; }
-        Write("SYS", "trace démarrée");
+        Write("SYS", "trace started");
     }
 
     public static void Write(string tag, string message)
@@ -37,11 +37,11 @@ public static class TraceLog
         }
     }
 
-    /// <summary>Tronque une ligne de protocole pour la trace (les otaChunk font ~330 caractères
-    /// de base64 : le début + la longueur suffisent au diagnostic).</summary>
+    /// <summary>Truncates a protocol line for the trace (otaChunk lines are ~330 base64
+    /// characters: the start + the length are enough for diagnosis).</summary>
     public static string Trunc(string s)
     {
         s = s.TrimEnd('\r', '\n');
-        return s.Length <= 120 ? s : s[..120] + $"…({s.Length} car.)";
+        return s.Length <= 120 ? s : s[..120] + $"…({s.Length} chars)";
     }
 }

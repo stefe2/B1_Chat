@@ -1,23 +1,23 @@
 #pragma once
 
 // ============================================================================
-//  ConfigStore — persistance des réglages en NVS (Preferences)
+//  ConfigStore — settings persistence in NVS (Preferences)
 //
-//  Stocke le volume audio, les paramètres d'animation et les noms attribués
-//  aux droïdes (association srcId -> nom). Survit aux redémarrages.
+//  Stores the audio volume, animation parameters, and names assigned to
+//  droids (srcId -> name mapping). Survives reboots.
 //
-//  Modèle commit/revert (inspiré de KyberEditor) pour volume / params d'anim /
-//  noms : les setters écrivent une surcouche RAM (« pending », l'effet est
-//  immédiat via les getters) et la NVS n'est touchée qu'au commitPending() ;
-//  revertPending() jette la surcouche et revient aux valeurs persistées.
-//  La calibration servo (setCalib) reste à persistance IMMÉDIATE : c'est un
-//  réglage physique fait en direct sur le droïde ciblé.
+//  Commit/revert model (inspired by KyberEditor) for volume / anim params /
+//  names: setters write to a RAM overlay ("pending", the effect is
+//  immediate via the getters) and NVS is only touched on commitPending();
+//  revertPending() discards the overlay and reverts to the persisted
+//  values. Servo calibration (setCalib) stays IMMEDIATELY persisted: it's
+//  a physical adjustment made live on the targeted droid.
 // ============================================================================
 
 #include <Arduino.h>
 #include <Preferences.h>
 
-// Bornes mécaniques (degrés) d'un droïde, persistées individuellement.
+// A droid's mechanical limits (degrees), persisted individually.
 struct ServoCalib {
     uint8_t panMin, panCenter, panMax;
     uint8_t tiltMin, tiltCenter, tiltMax;
@@ -27,33 +27,33 @@ class ConfigStore {
 public:
     void begin();
 
-    // Volume audio (0..30).
+    // Audio volume (0..30).
     uint8_t volume();
     void    setVolume(uint8_t v);
 
-    // Paramètres d'animation (0..100 chacun).
+    // Animation parameters (0..100 each).
     void animParams(uint8_t& freq, uint8_t& amp, uint8_t& speed);
     void setAnimParams(uint8_t freq, uint8_t amp, uint8_t speed);
 
-    // Nom d'un droïde (vide si non défini).
+    // A droid's name (empty if unset).
     String getName(uint16_t id);
     void   setName(uint16_t id, const String& name);
 
-    // Calibration servo d'un droïde (bornes de config.h si jamais réglée).
-    // Persistance immédiate — hors du modèle commit/revert.
+    // A droid's servo calibration (config.h limits if never set).
+    // Immediate persistence — outside the commit/revert model.
     ServoCalib getCalib(uint16_t id);
     void       setCalib(uint16_t id, const ServoCalib& c);
 
-    // Statut d'adoption d'un droïde (false = jamais adopté). Persistance
-    // immédiate, hors du modèle commit/revert : setAdopted(id, false) efface
-    // la clé plutôt que d'écrire false, pour repartir de zéro proprement.
+    // A droid's adoption status (false = never adopted). Immediate
+    // persistence, outside the commit/revert model: setAdopted(id, false)
+    // erases the key rather than writing false, to start fresh cleanly.
     bool isAdopted(uint16_t id);
     void setAdopted(uint16_t id, bool adopted);
 
-    // Modèle commit/revert (volume, params d'anim, noms).
+    // Commit/revert model (volume, anim params, names).
     bool dirty() const { return _dirty; }
-    void commitPending();   // écrit la surcouche RAM en NVS puis la vide
-    void revertPending();   // jette la surcouche RAM (la NVS fait foi)
+    void commitPending();   // writes the RAM overlay to NVS then clears it
+    void revertPending();   // discards the RAM overlay (NVS is authoritative)
 
 private:
     Preferences _p;
@@ -61,7 +61,7 @@ private:
     static void calibKey(uint16_t id, char out[8]);
     static void adoptKey(uint16_t id, char out[8]);
 
-    // Surcouche RAM des modifications non engagées.
+    // RAM overlay of uncommitted changes.
     bool    _dirty = false;
     bool    _pendVolSet = false;
     uint8_t _pendVol = 0;

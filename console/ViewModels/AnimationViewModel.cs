@@ -25,9 +25,9 @@ public partial class AnimationViewModel : ObservableObject
     [ObservableProperty] private Droid? _selectedTarget;
     [ObservableProperty] private int _selectedAnimIndex;
 
-    // Ces 3 curseurs n'ont, a ce jour, aucun effet firmware (hook onConfig non
-    // branche dans main.cpp — voir CLAUDE.md) : on reproduit fidelement ce vide,
-    // ce n'est pas un bug de la console.
+    // These 3 sliders have, as of today, no firmware effect (onConfig hook not
+    // wired up in main.cpp — see CLAUDE.md): this faithfully reproduces that gap,
+    // it's not a console bug.
     [ObservableProperty] private int _freq = 50;
     [ObservableProperty] private int _amp = 50;
     [ObservableProperty] private int _speed = 50;

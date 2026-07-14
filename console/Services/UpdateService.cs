@@ -7,10 +7,10 @@ using b1_chat_console.Models;
 namespace b1_chat_console.Services;
 
 /// <summary>
-/// Porte de GetLatestReleaseAsync/CheckUpdatesAsync/DownloadAssetAsync/InstallAppUpdateAsync
-/// (ex-MainWindow.xaml.cs) : meme depot unique avec filtrage par prefixe de tag ("v*" hors
-/// "fw-*" pour l'app, "fw-*" pour le firmware, jamais /releases/latest qui melangerait les
-/// deux trains), meme verification SHA-256 via firmware_manifest.json.
+/// Port of GetLatestReleaseAsync/CheckUpdatesAsync/DownloadAssetAsync/InstallAppUpdateAsync
+/// (formerly MainWindow.xaml.cs): same single repo with tag-prefix filtering ("v*" excluding
+/// "fw-*" for the app, "fw-*" for the firmware, never /releases/latest which would mix the
+/// two release trains), same SHA-256 verification via firmware_manifest.json.
 /// </summary>
 public class UpdateService
 {
@@ -36,10 +36,10 @@ public class UpdateService
         resp.EnsureSuccessStatusCode();
         var list = JsonSerializer.Deserialize<JsonElement>(await resp.Content.ReadAsStringAsync());
 
-        // Ne JAMAIS se fier a l'ordre de la liste /releases : observe en pratique trie
-        // LEXICOGRAPHIQUEMENT par tag ("fw-v1.3.9" devant "fw-v1.3.11"/"fw-v1.3.10"),
-        // pas chronologiquement — la console a deja flashe un 1.3.9 en croyant prendre
-        // le plus recent. On parse les versions et on garde le maximum semantique.
+        // NEVER trust the /releases list order: observed in practice to be sorted
+        // LEXICOGRAPHICALLY by tag ("fw-v1.3.9" before "fw-v1.3.11"/"fw-v1.3.10"), not
+        // chronologically — the console already flashed a 1.3.9 thinking it was the
+        // latest. Parse the versions and keep the semantic maximum.
         JsonElement? best = null;
         Version? bestVersion = null;
         foreach (var rel in list.EnumerateArray())
@@ -110,7 +110,7 @@ public class UpdateService
                             else if (role == "slave") fw.Sha256Slave = sha;
                         }
                     }
-                    catch { /* manifeste absent/illisible : telechargement sans verification */ }
+                    catch { /* manifest missing/unreadable: download without verification */ }
                 }
                 fw.UrlMaster = AssetUrl(fr, n => n.Contains("master") && n.EndsWith(".bin"));
                 fw.UrlSlave = AssetUrl(fr, n => n.Contains("slave") && n.EndsWith(".bin"));
@@ -129,7 +129,7 @@ public class UpdateService
     {
         try
         {
-            if (string.IsNullOrWhiteSpace(url)) throw new ArgumentException("URL manquante");
+            if (string.IsNullOrWhiteSpace(url)) throw new ArgumentException("Missing URL");
             Directory.CreateDirectory(UpdatesDir);
             var name = Path.GetFileName(new Uri(url).LocalPath);
             var path = Path.Combine(UpdatesDir, name);
@@ -139,7 +139,7 @@ public class UpdateService
             {
                 var actual = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
                 if (!string.Equals(actual, sha256.ToLowerInvariant(), StringComparison.Ordinal))
-                    throw new InvalidOperationException($"SHA-256 invalide (attendu {sha256[..12]}…, obtenu {actual[..12]}…) — fichier rejeté");
+                    throw new InvalidOperationException($"Invalid SHA-256 (expected {sha256[..12]}…, got {actual[..12]}…) — file rejected");
             }
 
             await File.WriteAllBytesAsync(path, bytes);
@@ -151,12 +151,12 @@ public class UpdateService
         }
     }
 
-    /// <summary>Telecharge l'installeur ; c'est a l'appelant de lancer le processus et de fermer l'app.</summary>
+    /// <summary>Downloads the installer; it's up to the caller to launch the process and close the app.</summary>
     public async Task<(bool Ok, string? Path, string? Error)> DownloadAppInstallerAsync(string url)
     {
         try
         {
-            if (string.IsNullOrWhiteSpace(url)) throw new ArgumentException("URL manquante");
+            if (string.IsNullOrWhiteSpace(url)) throw new ArgumentException("Missing URL");
             Directory.CreateDirectory(UpdatesDir);
             var path = Path.Combine(UpdatesDir, Path.GetFileName(new Uri(url).LocalPath));
             await File.WriteAllBytesAsync(path, await Http.GetByteArrayAsync(url));

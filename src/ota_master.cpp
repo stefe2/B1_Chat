@@ -6,10 +6,10 @@
 OtaMaster OtaM;
 
 namespace {
-// RAII : verrouille l'etat partage d'OtaMaster. Ne JAMAIS appeler Mesh.send()/
-// esp_now_send() a l'interieur d'une section ainsi verrouillee (l'API ESP-NOW ne doit
-// pas etre invoquee avec les interruptions desactivees) — chaque methode ci-dessous
-// mute l'etat sous verrou puis envoie hors verrou, une fois celui-ci relache.
+// RAII: locks OtaMaster's shared state. NEVER call Mesh.send()/esp_now_send()
+// inside a section locked this way (the ESP-NOW API must not be invoked with
+// interrupts disabled) — each method below mutates state under the lock then
+// sends outside the lock, once it's released.
 struct CriticalGuard {
     portMUX_TYPE& mux;
     explicit CriticalGuard(portMUX_TYPE& m) : mux(m) { portENTER_CRITICAL(&mux); }
@@ -61,7 +61,7 @@ bool OtaMaster::begin(uint16_t target, uint32_t size, const char* md5Hex32) {
         if (!known) return false;
 
         _target = target;
-        _sessionId++;   // u8, le wrap est sans conséquence (une seule session à la fois)
+        _sessionId++;   // u8, wraparound has no consequence (only one session at a time)
         _totalSize = size;
         _totalChunks = (uint16_t)((size + OTA_CHUNK_DATA_MAX - 1) / OTA_CHUNK_DATA_MAX);
         _retryCount = 0;
@@ -95,18 +95,19 @@ void OtaMaster::onSerialChunk(uint16_t index, const uint8_t* data, uint8_t len) 
             send = true;
         } else if (_state == OM_AWAIT_SERIAL_CHUNK && _nextChunkIndex > 0
                    && index == _nextChunkIndex - 1) {
-            // La console retente le chunk précédent : notre evt:otaChunkAck s'est
-            // perdu sur le lien série. Le chunk est déjà écrit chez l'esclave —
-            // on ré-émet seulement l'ack (rien à renvoyer sur le mesh), la
-            // console reprendra au bon index.
+            // The console is retrying the previous chunk: our evt:otaChunkAck
+            // was lost on the serial link. The chunk is already written on
+            // the slave — just re-emit the ack (nothing to resend on the
+            // mesh), the console will resume at the right index.
             _pending = Event{};
             _pending.type = EV_CHUNK_ACK;
             _pending.chunkIndex = index;
             _pending.sent = _nextChunkIndex;
             _pending.total = _totalChunks;
         }
-        // Tout autre cas (session inactive, index inattendu, chunk courant déjà
-        // en vol sur le mesh) : ignoré, les mécanismes de retry existants suffisent.
+        // Any other case (inactive session, unexpected index, current chunk
+        // already in flight on the mesh): ignored, the existing retry
+        // mechanisms are enough.
     }
     if (send) sendFrame(MSG_OTA_CHUNK, &p, sizeof(p));
 }
@@ -122,17 +123,17 @@ void OtaMaster::abort() {
         _pending.type = EV_ERROR;
         _pending.target = _target;
         _pending.sessionId = _sessionId;
-        snprintf(_pending.reason, sizeof(_pending.reason), "annule");
+        snprintf(_pending.reason, sizeof(_pending.reason), "cancelled");
         _state = OM_IDLE;
     }
     OtaAbortPayload ab{target, sessionId, OTA_ABORT_USER};
     Mesh.send(MSG_OTA_ABORT, &ab, sizeof(ab), OTA_MESH_TTL);
 }
 
-// Appelee uniquement depuis l'interieur d'une section deja verrouillee par l'appelant
-// (onAck()/update()) : ne fait que muter l'etat. Si un MSG_OTA_ABORT doit partir sur le
-// mesh, l'appelant le voit via _pendingAbortNeeded et l'envoie lui-meme apres avoir
-// relache le verrou.
+// Only called from inside a section already locked by the caller
+// (onAck()/update()): only mutates state. If a MSG_OTA_ABORT needs to go out
+// on the mesh, the caller sees it via _pendingAbortNeeded and sends it itself
+// after releasing the lock.
 void OtaMaster::fail(const char* reason) {
     if (_state != OM_IDLE) {
         _pendingAbortNeeded = true;
@@ -153,7 +154,7 @@ void OtaMaster::onAck(uint16_t srcId, const OtaAckPayload& p) {
 
     {
         CriticalGuard guard(_mux);
-        if (srcId != _target || p.sessionId != _sessionId) return; // session étrangère/périmée
+        if (srcId != _target || p.sessionId != _sessionId) return; // foreign/stale session
 
         if (p.status != OTA_OK) {
             fail(p.kind == 0 ? "start" : p.kind == 1 ? "chunk" : "end");
@@ -223,13 +224,14 @@ void OtaMaster::update(uint32_t nowMs) {
 
     {
         CriticalGuard guard(_mux);
-        // Comparaisons SIGNEES obligatoires : _lastSendMs/_serialWaitSince/
-        // _rebootStartMs sont horodates avec un millis() frais depuis onAck()
-        // (tache Wi-Fi) ou sendFrame() (appele par Console.update() PLUS TOT
-        // dans la meme iteration de loop()) — ils peuvent donc etre POSTERIEURS
-        // au nowMs capture en debut de loop(). En non signe, la difference
-        // negative deborde et declenche retransmissions et faux "timeout"
-        // instantanes (meme bug que cote esclave, voir ota_slave.cpp).
+        // SIGNED comparisons are mandatory: _lastSendMs/_serialWaitSince/
+        // _rebootStartMs are timestamped with a fresh millis() from onAck()
+        // (Wi-Fi task) or sendFrame() (called by Console.update() EARLIER in
+        // the same loop() iteration) — they can therefore be LATER than the
+        // nowMs captured at the start of loop(). In unsigned math, the
+        // negative difference overflows and triggers retransmissions and
+        // false instant "timeouts" (same bug as on the slave side, see
+        // ota_slave.cpp).
         switch (_state) {
         case OM_AWAIT_START_ACK:
         case OM_AWAIT_CHUNK_ACK:
@@ -247,7 +249,7 @@ void OtaMaster::update(uint32_t nowMs) {
 
         case OM_AWAIT_SERIAL_CHUNK:
             if ((int32_t)(nowMs - _serialWaitSince) > (int32_t)OTA_SERIAL_IDLE_TIMEOUT_MS) {
-                fail("console injoignable");
+                fail("console unreachable");
                 needAbort = _pendingAbortNeeded;
                 if (needAbort) { abortTarget = _pendingAbortTarget; abortSession = _pendingAbortSession; _pendingAbortNeeded = false; }
             }
@@ -260,14 +262,14 @@ void OtaMaster::update(uint32_t nowMs) {
                 if (e.id != _target) continue;
                 found = true;
                 if (e.lastSeen != _lastSeenAtRebootStart) {
-                    // Succès = la version a changé par rapport à avant l'OTA (on ne peut
-                    // pas comparer à une version "annoncée" fiable, voir ota_master.h).
+                    // Success = the version changed relative to before the OTA (we
+                    // can't compare to a reliable "announced" version, see ota_master.h).
                     const bool changed = (e.fwMajor != _prevFwMajor || e.fwMinor != _prevFwMinor || e.fwPatch != _prevFwPatch);
-                    // Version inchangée DANS la fenêtre de grâce : signe de vie émis
-                    // AVANT le reboot réel (l'esclave ne redémarre que ~250 ms après
-                    // son ack de END, un heartbeat de l'ancienne image peut être en
-                    // vol) — attendre, ne surtout pas conclure "rolledBack". Un vrai
-                    // rollback (boots ratés + bascule de partition) prend >= 10-30 s.
+                    // Unchanged version WITHIN the grace window: sign of life emitted
+                    // BEFORE the actual reboot (the slave only restarts ~250 ms after
+                    // its END ack, a heartbeat from the old image can still be in
+                    // flight) — wait, absolutely do not conclude "rolledBack". A real
+                    // rollback (failed boots + partition switch) takes >= 10-30 s.
                     if (changed || (int32_t)(nowMs - _rebootStartMs) > (int32_t)OTA_REBOOT_GRACE_MS) {
                         _pending = Event{};
                         _pending.type = EV_RESULT;
@@ -286,7 +288,7 @@ void OtaMaster::update(uint32_t nowMs) {
                 _pending.type = EV_RESULT;
                 _pending.target = _target;
                 _pending.ok = false;
-                snprintf(_pending.reason, sizeof(_pending.reason), "injoignable");
+                snprintf(_pending.reason, sizeof(_pending.reason), "unreachable");
                 _state = OM_IDLE;
             }
             break;

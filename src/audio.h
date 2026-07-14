@@ -1,11 +1,11 @@
 #pragma once
 
 // ============================================================================
-//  AudioPlayer — pilotage DFPlayer Mini (maître)
+//  AudioPlayer — DFPlayer Mini driver (master)
 //
-//  - Lecture des pistes /mp3/0001.mp3 ... /mp3/00NN.mp3
-//  - Volume persistant (0..30)
-//  - Mapping animation -> plage de pistes avec variation pseudo-aléatoire
+//  - Plays tracks /mp3/0001.mp3 ... /mp3/00NN.mp3
+//  - Persistent volume (0..30)
+//  - Animation -> track-range mapping with pseudo-random variation
 // ============================================================================
 
 #include <Arduino.h>
@@ -25,7 +25,7 @@ public:
     bool playTrack(uint8_t track);
     bool playForAnim(uint8_t animId, uint32_t seed);
 
-    // Pause/reprise de la piste en cours (trame audio d'une séquence).
+    // Pause/resume of the current track (a sequence's audio track).
     void pause();
     void resume();
 

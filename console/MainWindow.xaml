@@ -6,10 +6,11 @@
         xmlns:local="clr-namespace:b1_chat_console"
         xmlns:views="clr-namespace:b1_chat_console.Views"
         mc:Ignorable="d"
-        Title="B1 Chat — Console de supervision" Height="900" Width="1500"
+        Title="B1 Chat — Supervision Console" Height="900" Width="1500"
+        Icon="Assets/AppIcon.ico"
         Background="{StaticResource PageBackgroundBrush}">
     <Grid>
-        <!-- Texture de bruit diagonale par-dessus le fond, sur toute la fenetre. -->
+        <!-- Diagonal noise texture over the background, across the whole window. -->
         <Rectangle Fill="{StaticResource NoiseTileBrush}" IsHitTestVisible="False" />
 
         <Grid>
@@ -18,7 +19,7 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- En-tete : logo + titre, statut/port, commit/revert -->
+        <!-- Header: logo + title, status/port, commit/revert -->
         <Border Grid.Row="0" Background="{StaticResource Bg2Brush}" BorderBrush="{StaticResource BevelBorderBrush}" BorderThickness="0,0,0,1.5" Padding="18,12">
             <Border.Effect>
                 <DropShadowEffect Color="Black" Direction="270" ShadowDepth="3" BlurRadius="8" Opacity="0.4" />
@@ -41,18 +42,39 @@
                 </StackPanel>
 
                 <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
+                    <!-- Cluster 1: pending local changes -->
                     <Border Style="{Binding ShowCommitUi, Converter={StaticResource BoolToStyleConv}, ConverterParameter='HaloBadgeWarnStyle|HaloBadgeBaseStyle'}"
                             Visibility="{Binding ShowCommitUi, Converter={StaticResource BoolToVisConv}}" Margin="0,0,8,0" VerticalAlignment="Center">
-                        <TextBlock Text="● non enregistré" FontSize="11" />
+                        <TextBlock Text="● unsaved" FontSize="11" />
                     </Border>
-                    <Button Content="Enregistrer" Style="{StaticResource MiniButtonStyle}" Command="{Binding CommitChangesCommand}"
+                    <Button Content="Save" Style="{StaticResource MiniButtonStyle}" Command="{Binding CommitChangesCommand}"
                             Visibility="{Binding ShowCommitUi, Converter={StaticResource BoolToVisConv}}" Margin="0,0,4,0" />
-                    <Button Content="Annuler" Style="{StaticResource MiniButtonStyle}" Command="{Binding RevertChangesCommand}"
+                    <Button Content="Revert" Style="{StaticResource MiniButtonStyle}" Command="{Binding RevertChangesCommand}"
                             Visibility="{Binding ShowCommitUi, Converter={StaticResource BoolToVisConv}}" Margin="0,0,20,0" />
 
-                    <Button Content="Firmware…" Style="{StaticResource MiniButtonStyle}" Click="OpenFirmwareWindow_Click"
-                            Margin="0,0,16,0" VerticalAlignment="Center" ToolTip="Ouvrir la fenêtre de flash firmware et des mises à jour" />
+                    <Border Width="1" Height="20" Background="{StaticResource BevelBorderBrush}" Margin="0,0,16,0" VerticalAlignment="Center" />
 
+                    <!-- Cluster 2: manual/dev firmware entry point (always available, unlike the
+                         per-droid row buttons which hide once a droid is confirmed up to date). -->
+                    <Button Style="{StaticResource MiniButtonStyle}" Click="OpenFirmwareWindow_Click"
+                            Margin="0,0,16,0" VerticalAlignment="Center" ToolTip="Open the firmware flash and update window">
+                        <StackPanel Orientation="Horizontal">
+                            <Canvas Width="13" Height="13" Margin="0,0,6,0" VerticalAlignment="Center">
+                                <Rectangle Canvas.Left="3" Canvas.Top="3" Width="7" Height="7" RadiusX="1" RadiusY="1" Stroke="{StaticResource AccentBrush}" StrokeThickness="1.2" />
+                                <Line X1="5" Y1="0" X2="5" Y2="3" Stroke="{StaticResource AccentBrush}" StrokeThickness="1.2" />
+                                <Line X1="8" Y1="0" X2="8" Y2="3" Stroke="{StaticResource AccentBrush}" StrokeThickness="1.2" />
+                                <Line X1="5" Y1="10" X2="5" Y2="13" Stroke="{StaticResource AccentBrush}" StrokeThickness="1.2" />
+                                <Line X1="8" Y1="10" X2="8" Y2="13" Stroke="{StaticResource AccentBrush}" StrokeThickness="1.2" />
+                                <Line X1="0" Y1="5" X2="3" Y2="5" Stroke="{StaticResource AccentBrush}" StrokeThickness="1.2" />
+                                <Line X1="10" Y1="5" X2="13" Y2="5" Stroke="{StaticResource AccentBrush}" StrokeThickness="1.2" />
+                            </Canvas>
+                            <TextBlock Text="Firmware…" />
+                        </StackPanel>
+                    </Button>
+
+                    <Border Width="1" Height="20" Background="{StaticResource BevelBorderBrush}" Margin="0,0,16,0" VerticalAlignment="Center" />
+
+                    <!-- Cluster 3: serial connection -->
                     <Border Style="{StaticResource HeaderPillStyle}" Margin="0,0,12,0">
                         <StackPanel Orientation="Horizontal">
                             <Ellipse Style="{Binding Connected, Converter={StaticResource BoolToStyleConv}, ConverterParameter='LedDotOnStyle|LedDotOffStyle'}"
@@ -61,10 +83,10 @@
                         </StackPanel>
                     </Border>
                     <ComboBox Width="100" Style="{StaticResource DarkComboBoxStyle}" ItemsSource="{Binding AvailablePorts}" SelectedItem="{Binding SelectedPort}" Margin="0,0,6,0" />
-                    <Button Content="Rescan" Style="{StaticResource MiniButtonStyle}" Command="{Binding RefreshPortsCommand}" Margin="0,0,8,0" ToolTip="Rafraîchir la liste des ports" />
-                    <Button Content="Connecter" Style="{StaticResource AccentButtonStyle}" Command="{Binding ConnectCommand}"
+                    <Button Content="Rescan" Style="{StaticResource MiniButtonStyle}" Command="{Binding RefreshPortsCommand}" Margin="0,0,8,0" ToolTip="Refresh the port list" />
+                    <Button Content="Connect" Style="{StaticResource AccentButtonStyle}" Command="{Binding ConnectCommand}"
                             Visibility="{Binding Connected, Converter={StaticResource BoolToVisConv}, ConverterParameter=Invert}" />
-                    <Button Content="Déconnecter" Style="{StaticResource AccentButtonStyle}" Command="{Binding DisconnectCommand}"
+                    <Button Content="Disconnect" Style="{StaticResource AccentButtonStyle}" Command="{Binding DisconnectCommand}"
                             Visibility="{Binding Connected, Converter={StaticResource BoolToVisConv}}" />
                 </StackPanel>
             </DockPanel>
