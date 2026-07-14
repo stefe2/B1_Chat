@@ -45,6 +45,10 @@ public partial class DroidsViewModel : ObservableObject
         // maitre abandonne tout seul ~45s plus tard (timeout "console injoignable") : ici on le
         // sait tout de suite et on annule proprement des deux cotes plutot que d'attendre.
         _protocol.LinkError += OnLinkError;
+        _protocol.LinkClosed += unexpected =>
+        {
+            if (_otaDroid != null) OnLinkError(unexpected ? "liaison série coupée" : "liaison série fermée");
+        };
         Droids.CollectionChanged += (_, e) =>
         {
             if (e.NewItems == null) return;
@@ -77,9 +81,11 @@ public partial class DroidsViewModel : ObservableObject
         _ota.Abort(); // previent le maitre tout de suite au lieu de le laisser attendre le timeout
         var droid = _otaDroid;
         droid.OtaInProgress = false;
-        droid.OtaStatusText = "Erreur d'écriture série : " + message;
+        droid.OtaStatusText = "Erreur de liaison série : " + message;
         _otaDroid = null;
         AnyOtaActive = false;
+        MessageBox.Show("Mise à jour OTA interrompue — " + message, "OTA — " + droid.Name,
+                        MessageBoxButton.OK, MessageBoxImage.Error);
     }
 
     private void OnOtaCompleted(bool ok, string message)

@@ -67,6 +67,10 @@ public partial class ProtocolClient : ObservableObject
     // d'ecriture totalement silencieux (ex. un chunk OTA qui ne part jamais).
     public event Action<string>? LinkError;
 
+    // Fermeture du port (volontaire ou non) : une session OTA en cours doit etre
+    // annulee tout de suite plutot que de retenter des chunks sur un port ferme.
+    public event Action<bool>? LinkClosed; // true = deconnexion inattendue
+
     public ProtocolClient(SerialLinkService link)
     {
         _link = link;
@@ -97,6 +101,7 @@ public partial class ProtocolClient : ObservableObject
         // peut plus garantir que ces donnees (en ligne/RSSI/liens mesh) sont encore a jour, on les
         // vide plutot que de laisser un etat fige et potentiellement trompeur a l'ecran.
         if (!unexpected) ClearLiveState();
+        LinkClosed?.Invoke(unexpected);
     }
 
     private void ClearLiveState()

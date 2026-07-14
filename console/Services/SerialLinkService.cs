@@ -57,6 +57,7 @@ public class SerialLinkService : IDisposable
             // lever d'exception qu'on pourrait rattraper.
             var port = new SerialPort(portName, 115200) { NewLine = "\n", Encoding = System.Text.Encoding.UTF8, ReadTimeout = 500, WriteTimeout = 3000 };
             port.Open();
+            TraceLog.Write("SYS", "port ouvert : " + portName);
             _port = port;
             PortName = portName;
             _readCts = new CancellationTokenSource();
@@ -114,8 +115,22 @@ public class SerialLinkService : IDisposable
 
     public void Write(string data)
     {
-        try { _port?.Write(data); }
-        catch (Exception ex) { RunOnUi(() => ErrorOccurred?.Invoke(ex.Message)); }
+        var port = _port;
+        if (port == null)
+        {
+            // Sans ce signalement, ecrire sur un port ferme etait un no-op muet : le chien
+            // de garde OTA retentait ses chunks dans le vide sans que rien ne le previenne.
+            TraceLog.Write("TX!", "port fermé — " + TraceLog.Trunc(data));
+            RunOnUi(() => ErrorOccurred?.Invoke("port fermé (écriture impossible)"));
+            return;
+        }
+        TraceLog.Write("TX", TraceLog.Trunc(data));
+        try { port.Write(data); }
+        catch (Exception ex)
+        {
+            TraceLog.Write("ERR", "Write : " + ex.Message);
+            RunOnUi(() => ErrorOccurred?.Invoke(ex.Message));
+        }
     }
 
     private void ReadLoop(SerialPort port, CancellationToken token)
@@ -125,14 +140,32 @@ public class SerialLinkService : IDisposable
             string? line;
             try { line = port.ReadLine(); }
             catch (TimeoutException) { continue; }
-            catch { break; }
-            if (line != null) { var l = line; RunOnUi(() => LineReceived?.Invoke(l)); }
+            catch (Exception ex)
+            {
+                // La cause de la mort de la boucle de lecture etait avalee ici : le lien
+                // mourait dans le sens maitre->console sans aucun indice exploitable.
+                TraceLog.Write("ERR", "ReadLoop : " + ex.GetType().Name + " — " + ex.Message);
+                break;
+            }
+            if (line != null)
+            {
+                var l = line;
+                TraceLog.Write("RX", TraceLog.Trunc(l));
+                // BeginInvoke (asynchrone, ordre preserve) plutot qu'Invoke : un Invoke
+                // synchrone suspend CE thread de lecture pendant tout le traitement UI de la
+                // ligne (qui peut lui-meme faire un port.Write bloquant jusqu'a 3 s) — le
+                // tampon RX de l'OS peut alors deborder et perdre des lignes sans exception.
+                var dispatcher = Application.Current?.Dispatcher;
+                if (dispatcher == null || dispatcher.CheckAccess()) LineReceived?.Invoke(l);
+                else dispatcher.BeginInvoke(() => LineReceived?.Invoke(l));
+            }
         }
 
         if (!token.IsCancellationRequested)
         {
             // Deconnexion non demandee (cable debranche, etc.).
             var disconnectedPort = PortName;
+            TraceLog.Write("SYS", "déconnexion inattendue de " + (disconnectedPort ?? "?"));
             ClosePortOnly();
             RunOnUi(() => Closed?.Invoke(true));
             if (!_manualClose && AutoReconnect && disconnectedPort != null)
