@@ -204,7 +204,11 @@ version intégrée dans un `.bin` arbitraire, le succès est déterminé en comp
 la version rapportée **après** redémarrage à celle d'**avant** l'OTA (capturée
 au moment de `otaStart`) plutôt qu'à une version annoncée — `ok:true` si elle a
 changé, `reason:"rolledBack"` si elle est identique, `reason:"injoignable"` si
-aucun heartbeat n'arrive dans le délai.
+aucun heartbeat n'arrive dans le délai. Fenêtre de grâce (`OTA_REBOOT_GRACE_MS`,
+5 s) : un signe de vie à version inchangée dans les premières secondes est
+ignoré — l'esclave ne reboote que ~250 ms après son ack de END, un dernier
+heartbeat de l'ancienne image peut encore arriver (faux « rolledBack » rendu
+940 ms après `otaDone`, observé au banc) ; un vrai rollback prend ≥ 10-30 s.
 
 Sécurité anti-brick (`ota_guard.{h,cpp}`) : avant de finaliser (`Update.end(true)`,
 qui vérifie déjà taille/MD5 et refuse de rebooter sur une image invalide),

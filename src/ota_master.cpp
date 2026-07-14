@@ -263,13 +263,20 @@ void OtaMaster::update(uint32_t nowMs) {
                     // Succès = la version a changé par rapport à avant l'OTA (on ne peut
                     // pas comparer à une version "annoncée" fiable, voir ota_master.h).
                     const bool changed = (e.fwMajor != _prevFwMajor || e.fwMinor != _prevFwMinor || e.fwPatch != _prevFwPatch);
-                    _pending = Event{};
-                    _pending.type = EV_RESULT;
-                    _pending.target = _target;
-                    _pending.ok = changed;
-                    snprintf(_pending.fw, sizeof(_pending.fw), "%u.%u.%u", e.fwMajor, e.fwMinor, e.fwPatch);
-                    if (!changed) snprintf(_pending.reason, sizeof(_pending.reason), "rolledBack");
-                    _state = OM_IDLE;
+                    // Version inchangée DANS la fenêtre de grâce : signe de vie émis
+                    // AVANT le reboot réel (l'esclave ne redémarre que ~250 ms après
+                    // son ack de END, un heartbeat de l'ancienne image peut être en
+                    // vol) — attendre, ne surtout pas conclure "rolledBack". Un vrai
+                    // rollback (boots ratés + bascule de partition) prend >= 10-30 s.
+                    if (changed || (int32_t)(nowMs - _rebootStartMs) > (int32_t)OTA_REBOOT_GRACE_MS) {
+                        _pending = Event{};
+                        _pending.type = EV_RESULT;
+                        _pending.target = _target;
+                        _pending.ok = changed;
+                        snprintf(_pending.fw, sizeof(_pending.fw), "%u.%u.%u", e.fwMajor, e.fwMinor, e.fwPatch);
+                        if (!changed) snprintf(_pending.reason, sizeof(_pending.reason), "rolledBack");
+                        _state = OM_IDLE;
+                    }
                 }
                 break;
             }

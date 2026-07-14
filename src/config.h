@@ -13,7 +13,7 @@
 //  compare à la derniere release de stefe2/B1_Chat pour proposer une mise a
 //  jour. Bump a chaque release (tools/release.ps1 s'appuie dessus).
 // ---------------------------------------------------------------------------
-#define FW_VERSION "1.3.10"
+#define FW_VERSION "1.3.11"
 
 // Version du protocole série console<->maître (incrementée quand un changement
 // n'est pas retro-compatible; les ajouts de champs/commandes n'en ont pas besoin).
@@ -118,3 +118,10 @@ static const uint32_t OTA_SERIAL_IDLE_TIMEOUT_MS = 45000; // inactivité max cô
 static const uint8_t  OTA_MAX_BOOT_ATTEMPTS = 3;        // tentatives de boot avant rollback (OtaGuard)
 static const uint32_t OTA_VERIFY_UPTIME_MS  = 20000;    // uptime requis pour confirmer un nouveau firmware
 static const uint32_t OTA_REBOOT_WAIT_MS    = 90000;    // délai max pour confirmer un heartbeat post-OTA
+static const uint32_t OTA_REBOOT_GRACE_MS   = 5000;     // fenêtre pendant laquelle un signe de vie à
+                                                         // version INCHANGÉE est ignoré : l'esclave ne
+                                                         // reboote que ~250 ms après son ack de END, un
+                                                         // dernier heartbeat de l'ancienne image peut
+                                                         // encore arriver (faux "rolledBack" observé
+                                                         // 940 ms après otaDone). Un vrai rollback prend
+                                                         // >= 10-30 s (boots ratés + bascule de partition).
