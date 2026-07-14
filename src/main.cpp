@@ -358,6 +358,19 @@ void setup() {
     // CLAUDE.md, pièges connus).
     if (Guard.earlyCheck()) return;
 
+#ifdef OTA_TEST_FORCE_CRASH
+    // Build de test du rollback anti-brick (jamais défini en release) : plante
+    // volontairement juste APRÈS earlyCheck() — chaque boot incrémente donc le
+    // compteur de tentatives d'OtaGuard, qui doit basculer tout seul sur
+    // l'ancienne partition après OTA_MAX_BOOT_ATTEMPTS. À pousser par OTA sur
+    // une carte de test UNIQUEMENT (voir CLAUDE.md, Vérification pt 7) :
+    //   $env:PLATFORMIO_BUILD_FLAGS='-D OTA_TEST_FORCE_CRASH'; pio run -e b1_slave
+    Serial.begin(115200);
+    Serial.println("OTA_TEST_FORCE_CRASH: plantage volontaire");
+    delay(50);
+    *(volatile int*)0 = 0; // LoadStoreError -> panic -> reboot
+#endif
+
     // Filet de sécurité : un nouveau firmware qui plante/boucle sans céder la
     // main après le passage d'OtaGuard doit quand même finir par redémarrer
     // (sans compter uniquement sur le watchdog par défaut d'Arduino).

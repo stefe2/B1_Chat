@@ -7,6 +7,16 @@
 //  droïde : srcId, RSSI, date de dernière vue. Permet de détecter les
 //  nouvelles connexions et les droïdes hors ligne (timeout).
 //  Voir project.md (§10).
+//
+//  Concurrence : les setters « réception » (seen/setServos/setAutoAnim/
+//  setFwVersion) sont appelés depuis le callback ESP-NOW (tâche Wi-Fi interne)
+//  alors que tout le reste (lectures de pushDroids/OtaMaster/loop, adopt/
+//  forget) tourne sur la tâche loop(). Chaque méthode publique est donc
+//  atomique (spinlock portMUX) et at() retourne une COPIE de l'entrée plutôt
+//  qu'une référence sur un tableau mutable. Les retraits (forget) n'ayant
+//  lieu que côté loop(), une itération count()/at() depuis loop() ne peut pas
+//  voir d'entrée décalée sous ses pieds — au pire elle manque un droïde
+//  fraîchement inséré par la tâche Wi-Fi, sans conséquence.
 // ============================================================================
 
 #include <Arduino.h>
@@ -44,17 +54,23 @@ public:
     // true s'il a été trouvé et retiré.
     bool forget(uint16_t id);
 
-    uint8_t count() const { return _count; }
-    const Entry& at(uint8_t i) const { return _e[i]; }
+    uint8_t count() const;
+
+    // Copie de l'entrée i (jamais une référence : le tableau sous-jacent est
+    // muté par la tâche Wi-Fi).
+    Entry at(uint8_t i) const;
 
     // Droïde considéré en ligne s'il a été vu depuis moins de `timeoutMs`.
-    bool online(uint8_t i, uint32_t now, uint32_t timeoutMs) const {
-        return (now - _e[i].lastSeen) < timeoutMs;
-    }
+    // Différence SIGNÉE : lastSeen (horodaté par la tâche Wi-Fi) peut être
+    // postérieur à `now` capturé en début de loop() — en non signé, le droïde
+    // clignoterait « hors ligne » (même famille de bug que l'age de
+    // pushDroids, voir CLAUDE.md pièges).
+    bool online(uint8_t i, uint32_t now, uint32_t timeoutMs) const;
 
 private:
     Entry   _e[MAX];
     uint8_t _count = 0;
+    mutable portMUX_TYPE _mux = portMUX_INITIALIZER_UNLOCKED;
 };
 
 extern Registry Droids;
