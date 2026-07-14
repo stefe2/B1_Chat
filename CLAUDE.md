@@ -376,6 +376,24 @@ largeur en bas. Carte Firmware sortie de la grille (fenêtre séparée).
       fois) + `ota_guard` (rollback manuel anti-brick, voir section OTA
       ci-dessus). Testé uniquement sur carte de rechange dédiée pour l'instant
       (voir Vérification) — pas encore validé sur un vrai droïde du parc.
+- [x] Chemin nominal OTA **validé au banc** (2026-07-14, fw 1.3.11) : transfert
+      complet 1.3.9 → 1.3.11 (~4 min, 5111 chunks à ~22/s, un seul saut),
+      reboot propre, verdict `otaResult{ok:true}` correct, colonne FW à jour.
+      A nécessité une longue traque de bugs (fw 1.3.2 → 1.3.11 + console) :
+      accès flash sous `portENTER_CRITICAL` dans le callback ESP-NOW (gel au
+      chunk 21 → boîte aux lettres callback→loop), débordements non signés
+      `now - horodatage` (timeouts instantanés, faux `age` ~4e9 qui crashait
+      `HandleDroids` et tuait la boucle de lecture — les « gels » aux chunks
+      716/848/859), segment série sans retry (chien de garde console 3 s ×5 +
+      re-ack maître + tampons UART 2 Ko + timeout esclave 60 s > maître 45 s),
+      faux `rolledBack` (verdict rendu sur un heartbeat pré-reboot → fenêtre
+      de grâce 5 s), et tri lexicographique de l'API GitHub `/releases` (la
+      console flashait 1.3.9 en croyant prendre le plus récent → max
+      sémantique). Trace série permanente ajoutée
+      (`%LOCALAPPDATA%\B1ChatConsole\serial-trace.log`).
+      Restent à faire (Vérification pt 7) : `.bin` corrompu, rollback forcé,
+      abandon console en cours de transfert, garde anti-double-session,
+      multi-sauts.
 
 ## Pièges connus
 
