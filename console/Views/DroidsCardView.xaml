@@ -33,23 +33,23 @@
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="130" />
                             <ColumnDefinition Width="55" />
-                            <ColumnDefinition Width="60" />
                             <ColumnDefinition Width="70" />
                             <ColumnDefinition Width="80" />
                             <ColumnDefinition Width="70" />
-                            <ColumnDefinition Width="90" />
-                            <ColumnDefinition Width="90" />
+                            <ColumnDefinition Width="60" />
+                            <ColumnDefinition Width="70" />
+                            <ColumnDefinition Width="70" />
                             <ColumnDefinition Width="150" />
                             <ColumnDefinition Width="44" />
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0" Text="NAME" Style="{StaticResource TableHeaderTextStyle}" />
                         <TextBlock Grid.Column="1" Text="VERSION" Style="{StaticResource TableHeaderTextStyle}" />
-                        <TextBlock Grid.Column="2" Text="ID" Style="{StaticResource TableHeaderTextStyle}" />
-                        <TextBlock Grid.Column="3" Text="RSSI" Style="{StaticResource TableHeaderTextStyle}" />
-                        <TextBlock Grid.Column="4" Text="STATE" Style="{StaticResource TableHeaderTextStyle}" Margin="9,0,0,0" />
-                        <TextBlock Grid.Column="5" Text="ROLE" Style="{StaticResource TableHeaderTextStyle}" Margin="9,0,0,0" />
-                        <TextBlock Grid.Column="6" Text="SERVOS" Style="{StaticResource TableHeaderTextStyle}" TextAlignment="Center" />
-                        <TextBlock Grid.Column="7" Text="AUTO ANIMS" Style="{StaticResource TableHeaderTextStyle}" TextAlignment="Center" />
+                        <TextBlock Grid.Column="2" Text="RSSI" Style="{StaticResource TableHeaderTextStyle}" />
+                        <TextBlock Grid.Column="3" Text="STATE" Style="{StaticResource TableHeaderTextStyle}" Margin="9,0,0,0" />
+                        <TextBlock Grid.Column="4" Text="ROLE" Style="{StaticResource TableHeaderTextStyle}" Margin="9,0,0,0" />
+                        <TextBlock Grid.Column="5" Text="SERVOS" Style="{StaticResource TableHeaderTextStyle}" TextAlignment="Center" />
+                        <TextBlock Grid.Column="6" Text="AUTO ANIMS" Style="{StaticResource TableHeaderTextStyle}" TextAlignment="Center" />
+                        <TextBlock Grid.Column="7" Text="LOCATE" Style="{StaticResource TableHeaderTextStyle}" TextAlignment="Center" />
                         <TextBlock Grid.Column="8" Text="UPDATE" Style="{StaticResource TableHeaderTextStyle}" TextAlignment="Center" />
                     </Grid>
                     <Border BorderBrush="#5C000000" BorderThickness="0,0,0,1" Margin="0,0,0,2" />
@@ -62,12 +62,12 @@
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="130" />
                                             <ColumnDefinition Width="55" />
-                                            <ColumnDefinition Width="60" />
                                             <ColumnDefinition Width="70" />
                                             <ColumnDefinition Width="80" />
                                             <ColumnDefinition Width="70" />
-                                            <ColumnDefinition Width="90" />
-                                            <ColumnDefinition Width="90" />
+                                            <ColumnDefinition Width="60" />
+                                            <ColumnDefinition Width="70" />
+                                            <ColumnDefinition Width="70" />
                                             <ColumnDefinition Width="150" />
                                             <ColumnDefinition Width="44" />
                                         </Grid.ColumnDefinitions>
@@ -85,34 +85,32 @@
                                                    ToolTip="{Binding FwUpToDate, Converter={StaticResource FwStatusToTextConv}}"
                                                    FontFamily="{StaticResource MonoFont}" FontSize="10.5" VerticalAlignment="Center" />
 
-                                        <TextBlock Grid.Column="2" Text="{Binding IdHex}" Foreground="{StaticResource AccentBrush}"
-                                                   FontFamily="{StaticResource MonoFont}" FontSize="11.5" VerticalAlignment="Center" />
-                                        <TextBlock Grid.Column="3" Text="{Binding RssiLabel}" Foreground="{StaticResource MutedBrush}"
+                                        <TextBlock Grid.Column="2" Text="{Binding RssiLabel}" Foreground="{StaticResource MutedBrush}"
                                                    FontFamily="{StaticResource MonoFont}" FontSize="11" VerticalAlignment="Center" />
 
-                                        <Border Grid.Column="4" Style="{Binding Online, Converter={StaticResource BoolToStyleConv}, ConverterParameter='HaloBadgeOkStyle|HaloBadgeBadStyle'}" VerticalAlignment="Center" HorizontalAlignment="Left" MinWidth="66">
+                                        <Border Grid.Column="3" Style="{Binding Online, Converter={StaticResource BoolToStyleConv}, ConverterParameter='HaloBadgeOkStyle|HaloBadgeBadStyle'}" VerticalAlignment="Center" HorizontalAlignment="Left" MinWidth="66">
                                             <TextBlock Text="{Binding Online, Converter={StaticResource BoolToTextConv}, ConverterParameter='online|lost'}" FontSize="11" Foreground="{StaticResource TextStrongBrush}" TextAlignment="Center" />
                                         </Border>
 
-                                        <Border Grid.Column="5" Style="{Binding IsMaster, Converter={StaticResource BoolToStyleConv}, ConverterParameter='HaloBadgeOkStyle|HaloBadgeWarnStyle'}"
+                                        <Border Grid.Column="4" Style="{Binding IsMaster, Converter={StaticResource BoolToStyleConv}, ConverterParameter='HaloBadgeOkStyle|HaloBadgeWarnStyle'}"
                                                 VerticalAlignment="Center" HorizontalAlignment="Left" MinWidth="66"
                                                 Visibility="{Binding IsPending, Converter={StaticResource BoolToVisConv}, ConverterParameter=Invert}">
                                             <TextBlock Text="{Binding IsMaster, Converter={StaticResource BoolToTextConv}, ConverterParameter='master|slave'}"
                                                        FontSize="11" Foreground="{StaticResource TextStrongBrush}" TextAlignment="Center" />
                                         </Border>
-                                        <Border Grid.Column="5" Style="{StaticResource HaloBadgeWarnStyle}" VerticalAlignment="Center" HorizontalAlignment="Left" MinWidth="66"
+                                        <Border Grid.Column="4" Style="{StaticResource HaloBadgeWarnStyle}" VerticalAlignment="Center" HorizontalAlignment="Left" MinWidth="66"
                                                 Visibility="{Binding IsPending, Converter={StaticResource BoolToVisConv}}">
                                             <TextBlock Text="new" FontSize="11" Foreground="{StaticResource TextStrongBrush}" TextAlignment="Center" />
                                         </Border>
 
-                                        <ToggleButton Grid.Column="6" Style="{StaticResource OnOffSwitchStyle}"
+                                        <ToggleButton Grid.Column="5" Style="{StaticResource OnOffSwitchStyle}"
                                                       IsChecked="{Binding ServosOn, Mode=OneWay}"
                                                       Command="{Binding DataContext.ToggleServosCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                       CommandParameter="{Binding}"
                                                       HorizontalAlignment="Center" VerticalAlignment="Center"
                                                       ToolTip="Servos"
                                                       Visibility="{Binding IsPending, Converter={StaticResource BoolToVisConv}, ConverterParameter=Invert}" />
-                                        <Button Grid.Column="6" Style="{StaticResource MiniButtonStyle}"
+                                        <Button Grid.Column="5" Style="{StaticResource MiniButtonStyle}"
                                                 Command="{Binding DataContext.AdoptDroidCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                 CommandParameter="{Binding}"
                                                 HorizontalAlignment="Center"
@@ -120,20 +118,30 @@
                                             <TextBlock Text="Adopt" FontSize="11" />
                                         </Button>
 
-                                        <ToggleButton Grid.Column="7" Style="{StaticResource OnOffSwitchStyle}"
+                                        <ToggleButton Grid.Column="6" Style="{StaticResource OnOffSwitchStyle}"
                                                       IsChecked="{Binding AutoAnimOn, Mode=OneWay}"
                                                       Command="{Binding DataContext.ToggleAutoAnimCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                       CommandParameter="{Binding}"
                                                       HorizontalAlignment="Center" VerticalAlignment="Center"
                                                       ToolTip="Auto anims"
                                                       Visibility="{Binding IsPending, Converter={StaticResource BoolToVisConv}, ConverterParameter=Invert}" />
-                                        <Button Grid.Column="7" Style="{StaticResource MiniButtonStyle}"
+                                        <Button Grid.Column="6" Style="{StaticResource MiniButtonStyle}"
                                                 Command="{Binding DataContext.ForgetDroidCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                 CommandParameter="{Binding}"
                                                 HorizontalAlignment="Center"
                                                 Visibility="{Binding IsPending, Converter={StaticResource BoolToVisConv}}">
                                             <TextBlock Text="Ignore" FontSize="11" />
                                         </Button>
+
+                                        <ToggleButton Grid.Column="7" Style="{StaticResource HaloToggleButtonStyle}"
+                                                      IsChecked="{Binding LocateOn, Mode=OneWay}"
+                                                      Command="{Binding DataContext.ToggleLocateCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                      CommandParameter="{Binding}"
+                                                      HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                      ToolTip="Blink this droid's onboard LED solid to find it physically"
+                                                      Visibility="{Binding IsPending, Converter={StaticResource BoolToVisConv}, ConverterParameter=Invert}">
+                                            <TextBlock Text="Locate" FontSize="11" />
+                                        </ToggleButton>
 
                                         <Button Grid.Column="8" Style="{StaticResource MiniButtonStyle}"
                                                 Command="{Binding DataContext.OpenFirmwareCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"

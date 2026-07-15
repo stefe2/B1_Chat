@@ -6,7 +6,7 @@
 //  Protocol: one line = one JSON message (see project.md §10).
 //  - PC → master: {cmd:"list"|"anim"|"config"|"volume"|"name"|"playTrack"|
 //                   "getConfig"|"calib"|"preview"|"getCalib"|"getAnimDurations"|
-//                   "seqState"|"servo"|"autoAnim"|"getMeshTopology"|"getAll"|
+//                   "seqState"|"servo"|"autoAnim"|"locate"|"getMeshTopology"|"getAll"|
 //                   "setMulti"|"commit"|"revert"|"seqPause"|"seqResume", ...}
 //  - master → PC: {evt:"droids"|"log"|"config"|"meshTopology"|"err"|"allDone"|
 //                   "setMultiDone"|"dirty", ...}
@@ -64,6 +64,7 @@ public:
     void onConfig(void (*cb)(uint8_t freq, uint8_t amp, uint8_t speed)) { _cfgCb = cb; }
     void onServo(void (*cb)(uint16_t target, bool enabled)) { _servoCb = cb; }
     void onAutoAnim(void (*cb)(uint16_t target, bool enabled)) { _autoAnimCb = cb; }
+    void onLocate(void (*cb)(uint16_t target, bool enabled)) { _locateCb = cb; }
     void onSeqSave(bool (*cb)(uint8_t slot, const StoredSequence& seq)) { _seqSaveCb = cb; }
     void onSeqList(uint8_t (*cb)(StoredSequenceMeta* out, uint8_t maxOut)) { _seqListCb = cb; }
     void onSeqLoad(bool (*cb)(uint8_t slot, StoredSequence& out)) { _seqLoadCb = cb; }
@@ -107,6 +108,7 @@ private:
     void (*_cfgCb)(uint8_t, uint8_t, uint8_t) = nullptr;
     void (*_servoCb)(uint16_t, bool) = nullptr;
     void (*_autoAnimCb)(uint16_t, bool) = nullptr;
+    void (*_locateCb)(uint16_t, bool) = nullptr;
     bool (*_seqSaveCb)(uint8_t, const StoredSequence&) = nullptr;
     uint8_t (*_seqListCb)(StoredSequenceMeta*, uint8_t) = nullptr;
     bool (*_seqLoadCb)(uint8_t, StoredSequence&) = nullptr;

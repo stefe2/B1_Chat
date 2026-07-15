@@ -15,6 +15,7 @@ public class PacketKindToBrushConverter : IValueConverter
         ["config"] = (Color)ColorConverter.ConvertFromString("#FFCC4D")!,
         ["calib"] = (Color)ColorConverter.ConvertFromString("#B39DDB")!,
         ["preview"] = (Color)ColorConverter.ConvertFromString("#7E9CFF")!,
+        ["locate"] = (Color)ColorConverter.ConvertFromString("#C6FF4D")!,
         ["ota"] = (Color)ColorConverter.ConvertFromString("#FF5B52")!,
         ["heartbeat"] = (Color)ColorConverter.ConvertFromString("#A9ADB3")!,
     };

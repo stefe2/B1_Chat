@@ -35,9 +35,14 @@ static bool gServos = true;
 // Doesn't affect Play (anim) or the Sequencer: only the random idle draw.
 static bool gAutoAnim = true;
 
-// Life LED (execution indicator) — non-blocking blink.
+// Life LED (execution indicator) — non-blocking blink, overridden solid by "locate".
 static uint32_t lastBlink = 0;
 static bool ledOn = false;
+
+// "Locate" (find-me) override of THIS droid's onboard LED — solid on while
+// active, resumes the normal execution-indicator blink once cleared. Not
+// persisted (console-driven, ephemeral like preview positioning).
+static bool gLocateOn = false;
 
 // Mesh test / timers
 static uint32_t nextMeshSend = 0;
@@ -95,6 +100,12 @@ static void applyAutoAnim(bool en) {
     LOGF("auto anims %s", en ? "ON" : "PAUSED");
 }
 
+// Applies a "locate" request for THIS droid (master or slave) — see gLocateOn.
+static void applyLocate(bool en) {
+    gLocateOn = en;
+    LOGF("locate %s", en ? "ON" : "OFF");
+}
+
 // Persists and applies a received calibration for THIS droid (master or slave).
 static void applyCalib(const CalibPayload& p) {
     const ServoCalib c{p.panMin, p.panCenter, p.panMax, p.tiltMin, p.tiltCenter, p.tiltMax};
@@ -126,6 +137,13 @@ static void onAutoAnimCmd(uint16_t target, bool en) {
     AutoAnimPayload p{target, (uint8_t)(en ? 1 : 0)};
     Mesh.send(MSG_AUTOANIM, &p, sizeof(p));
     if (target == MESH_TARGET_ALL || target == Mesh.myId()) applyAutoAnim(en);
+}
+
+// Console hook: toggle a target's "locate" LED (master).
+static void onLocateCmd(uint16_t target, bool en) {
+    LocatePayload p{target, (uint8_t)(en ? 1 : 0)};
+    Mesh.send(MSG_LOCATE, &p, sizeof(p));
+    if (target == MESH_TARGET_ALL || target == Mesh.myId()) applyLocate(en);
 }
 
 static void onVolumeCmd(uint8_t v) {
@@ -251,6 +269,11 @@ static void onMeshMessage(uint8_t type, const uint8_t* payload, uint8_t len,
         memcpy(&p, payload, sizeof(p));
         if (p.targetId == MESH_TARGET_ALL || p.targetId == Mesh.myId())
             applyAutoAnim(p.enabled != 0);
+    } else if (type == MSG_LOCATE && len == sizeof(LocatePayload)) {
+        LocatePayload p;
+        memcpy(&p, payload, sizeof(p));
+        if (p.targetId == MESH_TARGET_ALL || p.targetId == Mesh.myId())
+            applyLocate(p.enabled != 0);
     } else if (type == MSG_CALIB && len == sizeof(CalibPayload)) {
         CalibPayload p;
         memcpy(&p, payload, sizeof(p));
@@ -415,6 +438,7 @@ void setup() {
     Console.onTrack(onTrackCmd);
     Console.onServo(onServoCmd);
     Console.onAutoAnim(onAutoAnimCmd);
+    Console.onLocate(onLocateCmd);
     Console.onSeqSave(onSeqSave);
     Console.onSeqList(onSeqList);
     Console.onSeqLoad(onSeqLoad);
@@ -463,8 +487,10 @@ void loop() {
     OtaS.update(now);
 #endif
 
-    // Life LED.
-    if (now - lastBlink >= LED_BLINK_MS) {
+    // Life LED — "locate" override: solid on instead of the normal blink.
+    if (gLocateOn) {
+        digitalWrite(PIN_LED_ONBOARD, HIGH);
+    } else if (now - lastBlink >= LED_BLINK_MS) {
         lastBlink = now;
         ledOn = !ledOn;
         digitalWrite(PIN_LED_ONBOARD, ledOn ? HIGH : LOW);

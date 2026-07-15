@@ -596,6 +596,12 @@ void SerialConsole::handleLine(const char* line) {
         if (_autoAnimCb) _autoAnimCb(target, en);
         log("anims auto %s -> %04X", en ? "ON" : "OFF", target);
 
+    } else if (!strcmp(cmd, "locate")) {
+        const uint16_t target = doc["target"] | (uint16_t)MESH_TARGET_ALL;
+        const bool en = doc["enabled"] | false;
+        if (_locateCb) _locateCb(target, en);
+        log("locate %s -> %04X", en ? "ON" : "OFF", target);
+
     } else if (!strcmp(cmd, "adopt")) {
         const uint16_t target = doc["target"] | 0;
         Droids.setAdopted(target, true);

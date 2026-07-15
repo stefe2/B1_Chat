@@ -190,6 +190,14 @@ public partial class DroidsViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void ToggleLocate(Droid? droid)
+    {
+        if (droid == null) return;
+        droid.LocateOn = !droid.LocateOn;
+        _protocol.SetLocate(droid.Id, droid.LocateOn);
+    }
+
+    [RelayCommand]
     private void AdoptDroid(Droid? droid)
     {
         if (droid == null) return;

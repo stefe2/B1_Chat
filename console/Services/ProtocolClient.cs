@@ -171,6 +171,11 @@ public partial class ProtocolClient : ObservableObject
         SendCmd(new JsonObject { ["cmd"] = "autoAnim", ["target"] = target, ["enabled"] = enabled });
         PacketSent?.Invoke(target, "autoAnim");
     }
+    public void SetLocate(ushort target, bool enabled)
+    {
+        SendCmd(new JsonObject { ["cmd"] = "locate", ["target"] = target, ["enabled"] = enabled });
+        PacketSent?.Invoke(target, "locate");
+    }
     public void Adopt(ushort target) => SendCmd(new JsonObject { ["cmd"] = "adopt", ["target"] = target });
     public void Forget(ushort target) => SendCmd(new JsonObject { ["cmd"] = "forget", ["target"] = target });
 

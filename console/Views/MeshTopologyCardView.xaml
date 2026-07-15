@@ -58,6 +58,10 @@
                     <TextBlock Text="Preview" FontSize="9.5" Foreground="{StaticResource Muted2Brush}" Margin="3,0,0,0" VerticalAlignment="Center" />
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Margin="0,0,10,2">
+                    <Ellipse Width="6" Height="6" Fill="#C6FF4D" VerticalAlignment="Center" />
+                    <TextBlock Text="Locate" FontSize="9.5" Foreground="{StaticResource Muted2Brush}" Margin="3,0,0,0" VerticalAlignment="Center" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,10,2">
                     <Ellipse Width="6" Height="6" Fill="#FF5B52" VerticalAlignment="Center" />
                     <TextBlock Text="OTA" FontSize="9.5" Foreground="{StaticResource Muted2Brush}" Margin="3,0,0,0" VerticalAlignment="Center" />
                 </StackPanel>

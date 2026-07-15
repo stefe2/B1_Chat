@@ -13,6 +13,7 @@ public partial class Droid : ObservableObject
     [ObservableProperty] private bool _online;
     [ObservableProperty] private bool _servosOn;
     [ObservableProperty] private bool _autoAnimOn;
+    [ObservableProperty] private bool _locateOn;
     [ObservableProperty] private bool _adopted = true;
     [ObservableProperty] private string? _portName;
     [ObservableProperty] private string _fwVersion = "";

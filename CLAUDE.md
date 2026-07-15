@@ -122,6 +122,7 @@ cryptographic guarantee).
 | `MSG_OTA_ACK` = 12 | (slave→master) sessionId, kind (0=start/1=chunk/2=end), chunkIndex, status |
 | `MSG_OTA_END` = 13 | (master→targeted slave) targetId, sessionId, totalChunks — finalizes (`Update.end()`) if all expected chunks were received |
 | `MSG_OTA_ABORT` = 14 | (master→targeted slave) targetId, sessionId, reason — cancels the ongoing session |
+| `MSG_LOCATE` = 15 | targetId, enabled — overrides the onboard LED's execution-indicator blink with solid on/off ("find me" physically), not persisted |
 
 ## Animations (18, aligned firmware ↔ `ANIMS` table in index.html)
 
@@ -145,6 +146,7 @@ Session guarded by a handshake: `hello` → `{evt:"hello",ok,id}`, then keepaliv
 - **Console → master** (`cmd`): `hello` · `ping` · `list` · `getConfig` · `getAll` ·
   `config {target,freq,amp,speed}` · `volume {value}` · `name {id,name}` ·
   `playTrack {track}` · `servo {target,enabled}` · `autoAnim {target,enabled}` ·
+  `locate {target,enabled}` ·
   `adopt {target}` · `forget {target}` ·
   `anim {target,animId,seed}` · `preview {target,pan,tilt}` ·
   `calib {target,+6 limits}` · `getCalib {target}` · `getAnimDurations` ·
@@ -514,6 +516,30 @@ width at the bottom. Firmware card taken out of the grid (separate window).
       (heartbeat dot caught mid-flight on a link). Drawing canvas enlarged
       260 → 300 (disc unchanged at 260, offset inner canvas at 20,20) so
       the rim's green glow and edge labels are no longer clipped.
+- [x] Droids card: "Locate" button (2026-07-15, fw 1.4.0, `MSG_LOCATE` = 15):
+      a per-droid toggle overrides the onboard LED's normal execution-indicator
+      blink with solid on/off, so a physical droid can be matched to its row
+      — a mesh round-trip (console → master → relayed to the targeted slave),
+      not a local-only master feature, same target/broadcast semantics as
+      `MSG_SERVO`/`MSG_AUTOANIM` (`applyLocate()`, `gLocateOn` in
+      `main.cpp`, checked first in the life-LED block of `loop()`). Ephemeral
+      by design — not persisted in NVS, not carried in the heartbeat: a
+      reboot or console restart silently drops back to the normal blink,
+      consistent with `MSG_PREVIEW`'s "transient, not persisted" precedent.
+      Console: `Droid.LocateOn`, `ProtocolClient.SetLocate`,
+      `DroidsViewModel.ToggleLocateCommand`, styled as a `HaloToggleButtonStyle`
+      `ToggleButton` (red border off / green on, matching the Master/Slave
+      role selector in the Firmware card) rather than the sliding
+      `OnOffSwitchStyle` used for Servos/Auto anims, since it's a momentary
+      "identify" action, not a persistent setting. Also wired into the mesh
+      topology's live packet-dot visualization (`PacketSent` event, lime
+      `#C6FF4D`, legend row) for consistency with every other targeted
+      command. Same Droids-card pass: the ID column was dropped (RSSI now
+      follows VERSION directly — the hex id was rarely load-bearing once a
+      droid has a name), the Servos/Auto anims columns were narrowed
+      (90/90 → 60/70 px) to sit closer together, and the row-end "✕"
+      (forget) button — briefly moved next to Auto anims in an earlier pass
+      — was moved back after Update, at the row's end.
 
 ## Full flash (virgin board support)
 
