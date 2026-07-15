@@ -100,6 +100,14 @@ static void applyAutoAnim(bool en) {
     LOGF("auto anims %s", en ? "ON" : "PAUSED");
 }
 
+// Persists THIS droid's OWN name (master or slave), received via MSG_NAME —
+// bypasses the master's commit/revert draft (setNameImmediate), so a droid
+// keeps its own name even if the master's own copy is ever lost or reset.
+static void applyName(const char* name) {
+    Config.setNameImmediate(Mesh.myId(), name);
+    LOGF("name persisted locally: %s", name);
+}
+
 // Applies a "locate" request for THIS droid (master or slave) — see gLocateOn.
 static void applyLocate(bool en) {
     gLocateOn = en;
@@ -274,6 +282,11 @@ static void onMeshMessage(uint8_t type, const uint8_t* payload, uint8_t len,
         memcpy(&p, payload, sizeof(p));
         if (p.targetId == MESH_TARGET_ALL || p.targetId == Mesh.myId())
             applyLocate(p.enabled != 0);
+    } else if (type == MSG_NAME && len == sizeof(NamePayload)) {
+        NamePayload p;
+        memcpy(&p, payload, sizeof(p));
+        p.name[sizeof(p.name) - 1] = '\0'; // defensive: guarantee NUL-termination
+        if (p.targetId == Mesh.myId()) applyName(p.name);
     } else if (type == MSG_CALIB && len == sizeof(CalibPayload)) {
         CalibPayload p;
         memcpy(&p, payload, sizeof(p));

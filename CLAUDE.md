@@ -123,6 +123,7 @@ cryptographic guarantee).
 | `MSG_OTA_END` = 13 | (master→targeted slave) targetId, sessionId, totalChunks — finalizes (`Update.end()`) if all expected chunks were received |
 | `MSG_OTA_ABORT` = 14 | (master→targeted slave) targetId, sessionId, reason — cancels the ongoing session |
 | `MSG_LOCATE` = 15 | targetId, enabled — overrides the onboard LED's execution-indicator blink with solid on/off ("find me" physically), not persisted |
+| `MSG_NAME` = 16 | targetId, name[24] — persists the targeted droid's own name in its own NVS (mirrors `MSG_CALIB`), never `MESH_TARGET_ALL` |
 
 ## Animations (18, aligned firmware ↔ `ANIMS` table in index.html)
 
@@ -550,30 +551,90 @@ at 0x10000 — which boots only if the board already carries our bootloader +
 partition table. A **virgin ESP32** (or one erased / with a different
 partition scheme) flashed app-only appears to flash fine but never runs.
 
-Fix (2026-07-15): the console does a **full flash** (all three offsets) when
-the two support images are available, falling back to app-only otherwise —
-no user choice, no detection round-trips (rewriting an identical
-bootloader/partition table on a board that already has them is harmless):
+First fix (2026-07-15) auto-armed a full flash whenever the two support
+images happened to be available (next to the picked `firmware.bin`, or
+downloaded from GitHub), on the theory that "rewriting an identical
+bootloader/partition table on a board that already has them is harmless".
+**That assumption was wrong and cost a droid's saved names**: `.pio/build/b1/`
+*always* contains `bootloader.bin` + `partitions.bin` next to `firmware.bin`,
+so every routine dev reflash silently became a full flash — including a
+partition-table rewrite. On this occasion the freshly-written partition table
+wasn't byte-identical to the one already on the board (drift from an earlier
+PlatformIO/esp-idf default, from before this feature existed), which shifted
+the *physical window* the NVS driver reads as "current" — the master's
+`config_store` (which holds **every** droid's name, all in the master's own
+NVS, see the Storage table) fell back to years-old pages, resurrecting a
+name ("B1-Bleu") from long before it was renamed "B1-Maitre", and losing the
+other droids' names outright. NVS wasn't erased — the partition table's
+window onto it moved.
 
-- **Local file…**: if `bootloader.bin` + `partitions.bin` sit next to the
-  picked `firmware.bin` (as in `.pio/build/b1/`), full flash is armed
-  automatically (`FirmwareViewModel.DetectSupportImagesBeside`).
-- **From GitHub**: the firmware release now ships one **shared**
-  `bootloader.bin` + `partitions.bin` (role-independent — `IS_MASTER` only
-  affects the app, so ~26 KB once, not per role); the console downloads all
-  three. Chosen over a single merged 0x0 image because OTA independently
-  needs the bare app bin, so separate files reuse it instead of shipping the
-  app twice. Wired in `firmware-release.yml` + `tools/release.ps1` (manifest
-  roles `bootloader`/`partitions`), `UpdateService`, `FlashService`
-  (`Start(IReadOnlyList<FlashImage>)`, sequential byte-weighted progress),
-  `FirmwareViewModel` (`FullFlashReady`). Older releases without the two
-  files → app-only (backward compatible). `boot_app0`/otadata (0xe000) is
-  deliberately NOT shipped (a virgin chip's otadata is blank → boots app0);
-  a board previously OTA'd to app1 then re-USB-flashed is the one residual
-  edge case, handled by the "erase chip first" option.
+Corrected design (2026-07-15, same day): full flash is now **tied to the
+existing "Fully erase the chip" checkbox** (relabeled "New / erased board
+(full erase + flash)" in `FirmwareCardView.xaml`), instead of auto-arming
+from file presence:
+
+- Unchecked (default): **app-only** at `Address` (0x10000) — the partition
+  table is never touched, so this failure mode can't recur. This is also the
+  correct fix for a *second*, pre-existing latent bug: checking "erase chip"
+  used to combine a full chip erase (which wipes the bootloader/partition
+  table too) with an **app-only** write — leaving a board with nothing to
+  boot into. Tying erase to a full 3-image write fixes both bugs with one
+  change.
+- Checked: full flash (bootloader + partitions + app) — but only if the two
+  support images are actually available (`FirmwareViewModel.
+  SupportImagesAvailable`); otherwise `Flash()` blocks with an explanatory
+  error instead of proceeding (`NeedsSupportImagesWarning` also shows an
+  inline warning in the card). This is the only path that ever rewrites the
+  partition table, and it's also the only path that already discards NVS
+  (via the chip erase) — so there's no longer a scenario where the
+  partition table changes while NVS is expected to survive.
+
+Support-image sourcing is unchanged: **Local file…** looks beside the picked
+`.bin` (`DetectSupportImagesBeside`, e.g. `.pio/build/b1/`); **From GitHub**
+downloads the release's shared `bootloader.bin` + `partitions.bin`
+(role-independent — `IS_MASTER` only affects the app, so ~26 KB once, not per
+role; chosen over a single merged 0x0 image because OTA independently needs
+the bare app bin, so separate files reuse it instead of shipping the app
+twice). Wired in `firmware-release.yml` + `tools/release.ps1` (manifest roles
+`bootloader`/`partitions`), `UpdateService`, `FlashService`
+(`Start(IReadOnlyList<FlashImage>)`, sequential byte-weighted progress).
+Older releases without the two files → app-only stays the only option.
+`boot_app0`/otadata (0xe000) is deliberately NOT shipped (a virgin chip's
+otadata is blank → boots app0); a board previously OTA'd to app1 then
+re-USB-flashed is the one residual edge case, handled by the same "erase"
+checkbox.
+
+## Per-droid name resilience (`MSG_NAME`)
+
+Prompted directly by the incident above: droid **names** were the one piece
+of per-droid configuration that lived ONLY in the master's own NVS
+(`config_store`, keyed by srcId) — never relayed to the droid itself, unlike
+servo calibration (`MSG_CALIB`), which a droid already persists in its own
+NVS on receipt. A slave therefore had no memory of its own name; only the
+master's cache did, and that cache is exactly what a partition-table mismatch
+or an intentional full erase can wipe.
+
+Fix (2026-07-15): renaming a droid (`cmd:"name"` and the `setMulti`/restore
+path in `applyOp`) now ALSO relays `MSG_NAME` (targetId + name[24]) over the
+mesh; the targeted droid persists it immediately in its own NVS via the new
+`ConfigStore::setNameImmediate()` — bypassing the master's own commit/revert
+draft entirely (that draft is a master-side UI concern for its own display
+cache, unrelated to what a remote droid should keep). The master's own
+name-editing UX (the "unsaved / Save / Revert" header badge) is unchanged;
+only the mesh-received copy on the OTHER droid is immediate, mirroring how
+`applyCalib` already behaves. Additive mesh message — an older slave simply
+ignores `MSG_NAME`, no fleet-wide reflash required (unlike a `HeartbeatPayload`
+change).
 
 ## Known pitfalls
 
+- **Never rewrite the partition table on a board whose NVS must survive**,
+  even with bytes that look identical to what's already there — see "Full
+  flash" above. A generation/offset mismatch between the new table and the
+  old one shifts the physical window the NVS driver treats as current,
+  silently resurrecting stale data or losing recent data, with no error.
+  Only ever pair a partition-table write with a full chip erase (which
+  discards NVS anyway) — never as a "harmless" side effect of an app update.
 - `serial_console`: 256-byte line buffer (see the bug above).
 - `IS_MASTER` lives in `config.h`: check its value before every flash (it
   goes into commits with whatever value was last used).

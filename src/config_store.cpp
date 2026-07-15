@@ -80,6 +80,12 @@ void ConfigStore::setName(uint16_t id, const String& name) {
     _p.putString(key, name);
 }
 
+void ConfigStore::setNameImmediate(uint16_t id, const String& name) {
+    char key[8];
+    nameKey(id, key);
+    _p.putString(key, name);
+}
+
 void ConfigStore::refreshDirty() {
     _dirty = _pendVolSet || _pendAnimSet;
     for (uint8_t i = 0; !_dirty && i < PENDING_NAMES_MAX; i++) {

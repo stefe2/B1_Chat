@@ -31,6 +31,7 @@ enum MeshMsgType : uint8_t {
     MSG_OTA_END   = 13,  // master -> targeted slave: end of transfer, finalizes
     MSG_OTA_ABORT = 14,  // master -> targeted slave: cancels the ongoing session
     MSG_LOCATE    = 15,  // toggles the targeted droid's onboard LED solid (physical "find me")
+    MSG_NAME      = 16,  // persists the targeted droid's own name in its own NVS
 };
 
 // Status/reason codes for OTA messages (OtaAckPayload.status, OtaAbortPayload.reason).
@@ -95,6 +96,17 @@ struct AutoAnimPayload {
 struct LocatePayload {
     uint16_t targetId;   // MESH_TARGET_ALL or a specific srcId
     uint8_t  enabled;    // 1 = LED solid on, 0 = resume the normal blink
+};
+
+// Persists the targeted droid's OWN name in its own NVS — mirrors MSG_CALIB
+// (mesh-pushed, immediately/directly persisted on receipt, no commit/revert)
+// so a droid keeps its name even if the master's own copy is ever lost or
+// reset. Never MESH_TARGET_ALL (renaming every droid identically makes no
+// sense). Zero-initialized + strncpy'd on the sender side so `name` is
+// always NUL-terminated; the receiver re-enforces this defensively anyway.
+struct NamePayload {
+    uint16_t targetId;
+    char     name[24];
 };
 
 // Mechanical limits (degrees) persisted by the targeted droid.

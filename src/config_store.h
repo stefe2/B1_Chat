@@ -11,7 +11,11 @@
 //  immediate via the getters) and NVS is only touched on commitPending();
 //  revertPending() discards the overlay and reverts to the persisted
 //  values. Servo calibration (setCalib) stays IMMEDIATELY persisted: it's
-//  a physical adjustment made live on the targeted droid.
+//  a physical adjustment made live on the targeted droid. setNameImmediate()
+//  is the same kind of exception, used when a droid persists its OWN name
+//  upon receiving MSG_NAME (mesh-pushed) — bypassing the master's own
+//  commit/revert draft entirely, since that draft is a master-side UI
+//  concern that doesn't apply to a remote droid's local copy.
 // ============================================================================
 
 #include <Arduino.h>
@@ -38,6 +42,10 @@ public:
     // A droid's name (empty if unset).
     String getName(uint16_t id);
     void   setName(uint16_t id, const String& name);
+
+    // Immediately persists a droid's OWN name (see class comment) — bypasses
+    // the RAM overlay/commit-revert draft entirely.
+    void   setNameImmediate(uint16_t id, const String& name);
 
     // A droid's servo calibration (config.h limits if never set).
     // Immediate persistence — outside the commit/revert model.

@@ -392,7 +392,14 @@ bool SerialConsole::applyOp(JsonObjectConst op) {
     const char* c = op["cmd"] | "";
 
     if (!strcmp(c, "name")) {
-        Config.setName(op["id"] | 0, op["name"] | "");
+        const uint16_t id = op["id"] | 0;
+        const char* name = op["name"] | "";
+        Config.setName(id, name);
+        // Same relay as the plain "name" cmd (see there) — keeps a restored
+        // backup's names resilient on each droid too, not just the master.
+        NamePayload np{id, {0}};
+        strncpy(np.name, name, sizeof(np.name) - 1);
+        Mesh.send(MSG_NAME, &np, sizeof(np));
         return true;
     }
     if (!strcmp(c, "volume")) {
@@ -571,6 +578,11 @@ void SerialConsole::handleLine(const char* line) {
         const uint16_t id = doc["id"] | 0;
         const char* name = doc["name"] | "";
         Config.setName(id, name);
+        // Relayed so the targeted droid persists its OWN name locally too (see
+        // MSG_NAME/applyName in main.cpp) — survives a master NVS reset.
+        NamePayload np{id, {0}};
+        strncpy(np.name, name, sizeof(np.name) - 1);
+        Mesh.send(MSG_NAME, &np, sizeof(np));
         log("name %04X = %s", id, name);
         pushDroids();
         syncDirty();
