@@ -22,9 +22,15 @@ public partial class FirmwareViewModel : ObservableObject
     [ObservableProperty] private string? _selectedFlashPort;
     [ObservableProperty] private string? _binPath;
     [ObservableProperty] private bool _binVerified;
-    // Role-independent support images for a full flash of a virgin board (bootloader at 0x1000,
-    // partition table at 0x8000). Both non-null => full flash; otherwise app-only (which only
-    // boots on a board that already carries our bootloader + partition table).
+    // Role-independent support images (bootloader at 0x1000, partition table at 0x8000), used
+    // ONLY when EraseChipFirst is checked (see SupportImagesAvailable/Flash()) — a full chip
+    // erase wipes the bootloader/partition table too, so without these the board would be left
+    // unable to boot at all. Otherwise the flash is always app-only, which is what keeps a
+    // board's saved settings (NVS) intact — see CLAUDE.md, "Full flash" pitfall (2026-07-15):
+    // silently rewriting the partition table on a board that DIDN'T need it once corrupted a
+    // droid's NVS (a partition-table generation mismatch shifted the NVS window, resurrecting a
+    // years-old droid name). Tying the two together removes that failure mode entirely: the
+    // only path that touches the partition table is the one that already discards NVS anyway.
     [ObservableProperty] private string? _bootloaderPath;
     [ObservableProperty] private string? _partitionsPath;
     [ObservableProperty] private string _address = "0x10000";
@@ -43,12 +49,17 @@ public partial class FirmwareViewModel : ObservableObject
     public bool IsSlaveRole => !IsMasterRole;
     public string RoleLabel => IsMasterRole ? "MASTER" : "SLAVE";
     public string FlashLabel => $"Flash {RoleLabel}";
-    public bool FullFlashReady => BootloaderPath != null && PartitionsPath != null;
+    // Whether the bootloader/partition-table images are on hand — availability only, NOT a
+    // decision to write them (that's EraseChipFirst's job, see Flash()).
+    public bool SupportImagesAvailable => BootloaderPath != null && PartitionsPath != null;
+    // Checking "erase" without the support images would wipe the board's bootloader/partition
+    // table with nothing to replace them — shown as an inline warning, blocked at Flash() time.
+    public bool NeedsSupportImagesWarning => EraseChipFirst && !SupportImagesAvailable;
     public string ReadyStatus => BinPath == null
         ? "No binary loaded."
         : System.IO.Path.GetFileName(BinPath)
           + (BinVerified ? " — SHA-256 verified ✓" : " — unverified (local file)")
-          + (FullFlashReady ? " · full flash (bootloader + partitions + app)" : " · app-only flash");
+          + (SupportImagesAvailable ? " · bootloader + partitions available (for a full erase+flash)" : " · app-only");
 
     partial void OnIsMasterRoleChanged(bool value)
     {
@@ -59,8 +70,19 @@ public partial class FirmwareViewModel : ObservableObject
 
     partial void OnBinPathChanged(string? value) => OnPropertyChanged(nameof(ReadyStatus));
     partial void OnBinVerifiedChanged(bool value) => OnPropertyChanged(nameof(ReadyStatus));
-    partial void OnBootloaderPathChanged(string? value) { OnPropertyChanged(nameof(FullFlashReady)); OnPropertyChanged(nameof(ReadyStatus)); }
-    partial void OnPartitionsPathChanged(string? value) { OnPropertyChanged(nameof(FullFlashReady)); OnPropertyChanged(nameof(ReadyStatus)); }
+    partial void OnBootloaderPathChanged(string? value)
+    {
+        OnPropertyChanged(nameof(SupportImagesAvailable));
+        OnPropertyChanged(nameof(NeedsSupportImagesWarning));
+        OnPropertyChanged(nameof(ReadyStatus));
+    }
+    partial void OnPartitionsPathChanged(string? value)
+    {
+        OnPropertyChanged(nameof(SupportImagesAvailable));
+        OnPropertyChanged(nameof(NeedsSupportImagesWarning));
+        OnPropertyChanged(nameof(ReadyStatus));
+    }
+    partial void OnEraseChipFirstChanged(bool value) => OnPropertyChanged(nameof(NeedsSupportImagesWarning));
 
     [ObservableProperty] private string _updateStatus = "";
     [ObservableProperty] private string? _appLatest;
@@ -140,7 +162,9 @@ public partial class FirmwareViewModel : ObservableObject
     }
 
     // A pio build drops bootloader.bin + partitions.bin next to firmware.bin: if both are there,
-    // arm a full flash automatically (works on a virgin board). Otherwise app-only.
+    // make them available for a full erase+flash (see EraseChipFirst/Flash()) — not armed on
+    // their own, since writing them on a board that didn't need it risks the NVS-corruption
+    // pitfall documented in CLAUDE.md.
     private void DetectSupportImagesBeside(string binPath)
     {
         var dir = System.IO.Path.GetDirectoryName(binPath);
@@ -149,7 +173,7 @@ public partial class FirmwareViewModel : ObservableObject
         var found = boot != null && part != null && System.IO.File.Exists(boot) && System.IO.File.Exists(part);
         BootloaderPath = found ? boot : null;
         PartitionsPath = found ? part : null;
-        if (found) FlashLog.Add("Found bootloader.bin + partitions.bin beside the binary — full flash armed (works on a fresh board).");
+        if (found) FlashLog.Add("Found bootloader.bin + partitions.bin beside the binary — check \"New/erased board\" below for a full flash.");
     }
 
     [RelayCommand]
@@ -163,8 +187,22 @@ public partial class FirmwareViewModel : ObservableObject
             return;
         }
 
+        // Erase without the support images would wipe the bootloader/partition table with
+        // nothing to replace them — the board would never boot again. Block before confirming.
+        if (EraseChipFirst && !SupportImagesAvailable)
+        {
+            System.Windows.MessageBox.Show(
+                "A full chip erase also wipes the bootloader and partition table — without " +
+                "bootloader.bin + partitions.bin to rewrite them, the board would be left unable to boot at all.\n\n" +
+                "Pick a firmware.bin from a folder that also has bootloader.bin + partitions.bin " +
+                "(a plain \"pio run\" build output, e.g. .pio\\build\\b1\\, has all three), or use " +
+                "\"From GitHub\" — recent releases ship them.",
+                "Missing bootloader/partitions", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+            return;
+        }
+
         var port = SelectedFlashPort;
-        var what = FullFlashReady
+        var what = EraseChipFirst
             ? $"bootloader + partition table + {RoleLabel} firmware « {System.IO.Path.GetFileName(BinPath)} » (full flash)"
             : $"the {RoleLabel} firmware « {System.IO.Path.GetFileName(BinPath)} » at {Address}";
         var message = $"Write {what} on {port}?\n\nThe current firmware will be replaced. Do not unplug anything during the operation.";
@@ -192,10 +230,10 @@ public partial class FirmwareViewModel : ObservableObject
             _link.PrepareForExternalClose();
         }
         FlashLog.Add(EraseChipFirst ? $"— Full erase then flash started on {port} —" : $"— Flash started on {port} —");
-        if (FullFlashReady)
+        if (EraseChipFirst)
         {
-            // App always at 0x10000 for a full flash — the advanced Address field only applies
-            // to the app-only path below.
+            // Guaranteed SupportImagesAvailable at this point (checked above). App always at
+            // 0x10000 for a full flash — the advanced Address field only applies to app-only.
             _flash.Start(new[]
             {
                 new FlashService.FlashImage("0x1000", BootloaderPath!),
@@ -280,9 +318,9 @@ public partial class FirmwareViewModel : ObservableObject
         Address = "0x10000";
         CanFlash = true;
 
-        // Also fetch the shared bootloader + partition table so a virgin board can be fully
-        // flashed. Absent from older releases → app-only flash (still works on a board that
-        // already runs our firmware).
+        // Also fetch the shared bootloader + partition table, made available for a full
+        // erase+flash (see EraseChipFirst/Flash()) if the user needs to bring up a virgin
+        // board. Absent from older releases → app-only remains the only option.
         BootloaderPath = null;
         PartitionsPath = null;
         if (!string.IsNullOrEmpty(FwUrlBootloader) && !string.IsNullOrEmpty(FwUrlPartitions))
@@ -294,8 +332,8 @@ public partial class FirmwareViewModel : ObservableObject
             else { UpdateStatus = $"Bootloader/partitions download failed ({berr ?? perr}) — app-only flash."; return; }
         }
 
-        UpdateStatus = FullFlashReady
-            ? $"{name} + bootloader + partitions downloaded, verified — ready for full flash (fresh board OK)."
+        UpdateStatus = SupportImagesAvailable
+            ? $"{name} + bootloader + partitions downloaded, verified — check \"New/erased board\" below for a virgin-board flash."
             : $"{name} downloaded, SHA-256 verified — ready to flash (app-only).";
     }
 

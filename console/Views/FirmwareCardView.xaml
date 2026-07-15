@@ -44,10 +44,14 @@
             <Border Background="{StaticResource RecessBrush}" CornerRadius="4" Padding="10,8" Margin="0,0,0,10"
                     BorderBrush="{StaticResource WarnBrush}" BorderThickness="1">
                 <StackPanel>
-                    <CheckBox Content="Fully erase the chip before flashing" Style="{StaticResource DangerCheckBoxStyle}"
+                    <CheckBox Content="New / erased board (full erase + flash)" Style="{StaticResource DangerCheckBoxStyle}"
                               IsChecked="{Binding EraseChipFirst}" />
                     <TextBlock Style="{StaticResource HintTextStyle}" TextWrapping="Wrap" Margin="24,4,0,0"
-                               Text="Also erases all saved settings (NVS) — irreversible. A normal flash never touches this." />
+                               Text="Erases everything (all saved settings — irreversible) then writes bootloader + partition table + app: the only way to bring up a virgin ESP32, or to fully reset one. Unchecked (normal update): only the app is rewritten, keeping every saved setting — needs a board that already runs our firmware." />
+                    <TextBlock Style="{StaticResource HintTextStyle}" TextWrapping="Wrap" Margin="24,4,0,0"
+                               Foreground="{StaticResource WarnBrush}"
+                               Visibility="{Binding NeedsSupportImagesWarning, Converter={StaticResource BoolToVisConv}}"
+                               Text="⚠ bootloader.bin + partitions.bin aren't available for this binary — pick one from a folder that has all three (e.g. .pio\build\b1\), or use &quot;From GitHub&quot;." />
                 </StackPanel>
             </Border>
 
