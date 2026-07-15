@@ -31,7 +31,7 @@ by tag prefix: `vX.Y.Z` for the console app, `fw-vX.Y.Z` for the firmware
 
 - `pio run -e b1` — builds the firmware (pio.exe: `%USERPROFILE%\.platformio\penv\Scripts\pio.exe`)
 - `pio run -e b1 -t upload` — flashes a board (role chosen via `IS_MASTER` in `src/config.h` **before** flashing: 1 = master, only one per network; 0 = slave)
-- `tools\espflash.exe write-bin --port COMx -B 460800 0x10000 .pio\build\b1\firmware.bin` — flash without PlatformIO (espflash 4.4.0, also used by the console's Firmware card)
+- `tools\espflash.exe write-bin --port COMx -B 460800 0x10000 .pio\build\b1\firmware.bin` — flash the app **only** without PlatformIO (espflash 4.4.0, also used by the console's Firmware card). This assumes the board already carries our bootloader + partition table; a **virgin** board needs the full flash: `... 0x1000 bootloader.bin` + `... 0x8000 partitions.bin` + `... 0x10000 firmware.bin` (the console does this automatically, see "Full flash" below)
 - `dotnet build` (from `console/`) — builds the WPF console
 - `.\tools\release.ps1 [-Publish]` — manual firmware release (2 roles + SHA-256 manifest, tag `fw-vX.Y.Z`); in normal use, prefer bumping `FW_VERSION` (`src/config.h`) and pushing to `main` — CI publishes on its own (see below)
 - `.\console\installer\release.ps1 [-Publish]` — console release (publish + NSIS installer, tag `vX.Y.Z`)
@@ -514,6 +514,37 @@ width at the bottom. Firmware card taken out of the grid (separate window).
       (heartbeat dot caught mid-flight on a link). Drawing canvas enlarged
       260 → 300 (disc unchanged at 260, offset inner canvas at 20,20) so
       the rim's green glow and edge labels are no longer clipped.
+
+## Full flash (virgin board support)
+
+A PlatformIO build emits three images: `bootloader.bin` (0x1000),
+`partitions.bin` (0x8000), `firmware.bin` (0x10000, the app). The console's
+Firmware card and the espflash one-liner historically wrote **only the app**
+at 0x10000 — which boots only if the board already carries our bootloader +
+partition table. A **virgin ESP32** (or one erased / with a different
+partition scheme) flashed app-only appears to flash fine but never runs.
+
+Fix (2026-07-15): the console does a **full flash** (all three offsets) when
+the two support images are available, falling back to app-only otherwise —
+no user choice, no detection round-trips (rewriting an identical
+bootloader/partition table on a board that already has them is harmless):
+
+- **Local file…**: if `bootloader.bin` + `partitions.bin` sit next to the
+  picked `firmware.bin` (as in `.pio/build/b1/`), full flash is armed
+  automatically (`FirmwareViewModel.DetectSupportImagesBeside`).
+- **From GitHub**: the firmware release now ships one **shared**
+  `bootloader.bin` + `partitions.bin` (role-independent — `IS_MASTER` only
+  affects the app, so ~26 KB once, not per role); the console downloads all
+  three. Chosen over a single merged 0x0 image because OTA independently
+  needs the bare app bin, so separate files reuse it instead of shipping the
+  app twice. Wired in `firmware-release.yml` + `tools/release.ps1` (manifest
+  roles `bootloader`/`partitions`), `UpdateService`, `FlashService`
+  (`Start(IReadOnlyList<FlashImage>)`, sequential byte-weighted progress),
+  `FirmwareViewModel` (`FullFlashReady`). Older releases without the two
+  files → app-only (backward compatible). `boot_app0`/otadata (0xe000) is
+  deliberately NOT shipped (a virgin chip's otadata is blank → boots app0);
+  a board previously OTA'd to app1 then re-USB-flashed is the one residual
+  edge case, handled by the "erase chip first" option.
 
 ## Known pitfalls
 

@@ -66,6 +66,14 @@ try {
     Set-Content $configH $c -NoNewline
 }
 
+# bootloader + partition table are role-independent (IS_MASTER only affects the app): ship ONE
+# shared copy of each — needed to flash a virgin board (offsets 0x1000/0x8000), since the
+# app-only flash at 0x10000 assumes they're already present. Taken from the last build.
+$bootloaderBin = Join-Path $dist "bootloader.bin"
+$partitionsBin = Join-Path $dist "partitions.bin"
+Copy-Item ".pio/build/b1/bootloader.bin" $bootloaderBin -Force
+Copy-Item ".pio/build/b1/partitions.bin" $partitionsBin -Force
+
 # --- Manifest (KyberEditor-style: version, files, sha256, sizes) -----
 function FileEntry([string]$path, [string]$role) {
     $f = Get-Item $path
@@ -81,7 +89,12 @@ $manifest = [ordered]@{
     version = $version
     date    = (Get-Date -Format "yyyy-MM-dd")
     notes   = $Notes
-    files   = @((FileEntry $masterBin "master"), (FileEntry $slaveBin "slave"))
+    files   = @(
+        (FileEntry $masterBin "master"),
+        (FileEntry $slaveBin "slave"),
+        (FileEntry $bootloaderBin "bootloader"),
+        (FileEntry $partitionsBin "partitions")
+    )
 }
 $manifestPath = Join-Path $dist "firmware_manifest.json"
 $manifest | ConvertTo-Json -Depth 4 | Set-Content $manifestPath -Encoding utf8
@@ -94,7 +107,7 @@ if ($Publish) {
     git tag $tag 2>$null
     git push origin main --tags
     $relNotes = if ($Notes) { $Notes } else { "B1 firmware release v$version (master + slave)." }
-    gh release create $tag $masterBin $slaveBin $manifestPath `
+    gh release create $tag $masterBin $slaveBin $bootloaderBin $partitionsBin $manifestPath `
         --title "Firmware B1 v$version" `
         --notes $relNotes
     Write-Host "Release $tag published to GitHub." -ForegroundColor Green

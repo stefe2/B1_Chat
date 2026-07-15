@@ -24,9 +24,9 @@
             <TextBlock Text="BINARY SOURCE" Style="{StaticResource FieldLabelStyle}" Margin="0,0,0,4" />
             <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                 <Button Content="From GitHub" Style="{StaticResource MiniButtonStyle}" Command="{Binding PrepareFromGithubCommand}" Margin="0,0,8,0"
-                        ToolTip="Downloads and verifies (SHA-256) the latest release published for the role selected above." />
+                        ToolTip="Downloads and verifies (SHA-256) the latest release for the role selected above, plus the shared bootloader + partition table so a fresh board can be fully flashed." />
                 <Button Content="Local file…" Style="{StaticResource MiniButtonStyle}" Command="{Binding PickBinCommand}"
-                        ToolTip="Pick any .bin (e.g. a local pio run build) — unverified." />
+                        ToolTip="Pick any .bin (e.g. a local pio run build) — unverified. If bootloader.bin + partitions.bin sit beside it, a full flash (fresh-board OK) is armed automatically." />
             </StackPanel>
 
             <Border Background="{StaticResource RecessBrush}" CornerRadius="4" Padding="8,6" Margin="0,0,0,8">

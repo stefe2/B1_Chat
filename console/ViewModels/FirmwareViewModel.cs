@@ -22,6 +22,11 @@ public partial class FirmwareViewModel : ObservableObject
     [ObservableProperty] private string? _selectedFlashPort;
     [ObservableProperty] private string? _binPath;
     [ObservableProperty] private bool _binVerified;
+    // Role-independent support images for a full flash of a virgin board (bootloader at 0x1000,
+    // partition table at 0x8000). Both non-null => full flash; otherwise app-only (which only
+    // boots on a board that already carries our bootloader + partition table).
+    [ObservableProperty] private string? _bootloaderPath;
+    [ObservableProperty] private string? _partitionsPath;
     [ObservableProperty] private string _address = "0x10000";
     [ObservableProperty] private bool _flashing;
     [ObservableProperty] private bool _canFlash;
@@ -38,9 +43,12 @@ public partial class FirmwareViewModel : ObservableObject
     public bool IsSlaveRole => !IsMasterRole;
     public string RoleLabel => IsMasterRole ? "MASTER" : "SLAVE";
     public string FlashLabel => $"Flash {RoleLabel}";
+    public bool FullFlashReady => BootloaderPath != null && PartitionsPath != null;
     public string ReadyStatus => BinPath == null
         ? "No binary loaded."
-        : System.IO.Path.GetFileName(BinPath) + (BinVerified ? " — SHA-256 verified ✓" : " — unverified (local file)");
+        : System.IO.Path.GetFileName(BinPath)
+          + (BinVerified ? " — SHA-256 verified ✓" : " — unverified (local file)")
+          + (FullFlashReady ? " · full flash (bootloader + partitions + app)" : " · app-only flash");
 
     partial void OnIsMasterRoleChanged(bool value)
     {
@@ -51,6 +59,8 @@ public partial class FirmwareViewModel : ObservableObject
 
     partial void OnBinPathChanged(string? value) => OnPropertyChanged(nameof(ReadyStatus));
     partial void OnBinVerifiedChanged(bool value) => OnPropertyChanged(nameof(ReadyStatus));
+    partial void OnBootloaderPathChanged(string? value) { OnPropertyChanged(nameof(FullFlashReady)); OnPropertyChanged(nameof(ReadyStatus)); }
+    partial void OnPartitionsPathChanged(string? value) { OnPropertyChanged(nameof(FullFlashReady)); OnPropertyChanged(nameof(ReadyStatus)); }
 
     [ObservableProperty] private string _updateStatus = "";
     [ObservableProperty] private string? _appLatest;
@@ -60,6 +70,10 @@ public partial class FirmwareViewModel : ObservableObject
     [ObservableProperty] private string? _fwUrlSlave;
     [ObservableProperty] private string? _fwShaMaster;
     [ObservableProperty] private string? _fwShaSlave;
+    [ObservableProperty] private string? _fwUrlBootloader;
+    [ObservableProperty] private string? _fwUrlPartitions;
+    [ObservableProperty] private string? _fwShaBootloader;
+    [ObservableProperty] private string? _fwShaPartitions;
 
     public bool HasAppUpdate => !string.IsNullOrEmpty(AppLatest);
     public bool HasFwUpdate => !string.IsNullOrEmpty(FwLatest);
@@ -122,6 +136,20 @@ public partial class FirmwareViewModel : ObservableObject
         BinPath = dlg.FileName;
         BinVerified = false;
         CanFlash = true;
+        DetectSupportImagesBeside(dlg.FileName);
+    }
+
+    // A pio build drops bootloader.bin + partitions.bin next to firmware.bin: if both are there,
+    // arm a full flash automatically (works on a virgin board). Otherwise app-only.
+    private void DetectSupportImagesBeside(string binPath)
+    {
+        var dir = System.IO.Path.GetDirectoryName(binPath);
+        var boot = dir != null ? System.IO.Path.Combine(dir, "bootloader.bin") : null;
+        var part = dir != null ? System.IO.Path.Combine(dir, "partitions.bin") : null;
+        var found = boot != null && part != null && System.IO.File.Exists(boot) && System.IO.File.Exists(part);
+        BootloaderPath = found ? boot : null;
+        PartitionsPath = found ? part : null;
+        if (found) FlashLog.Add("Found bootloader.bin + partitions.bin beside the binary — full flash armed (works on a fresh board).");
     }
 
     [RelayCommand]
@@ -136,9 +164,12 @@ public partial class FirmwareViewModel : ObservableObject
         }
 
         var port = SelectedFlashPort;
-        var message = $"Write the {RoleLabel} firmware « {System.IO.Path.GetFileName(BinPath)} » at {Address} on {port}?\n\nThe current firmware will be replaced. Do not unplug anything during the operation.";
+        var what = FullFlashReady
+            ? $"bootloader + partition table + {RoleLabel} firmware « {System.IO.Path.GetFileName(BinPath)} » (full flash)"
+            : $"the {RoleLabel} firmware « {System.IO.Path.GetFileName(BinPath)} » at {Address}";
+        var message = $"Write {what} on {port}?\n\nThe current firmware will be replaced. Do not unplug anything during the operation.";
         if (EraseChipFirst)
-            message = $"⚠ FULL CHIP ERASE, then writing the {RoleLabel} firmware « {System.IO.Path.GetFileName(BinPath)} » on {port}.\n\n" +
+            message = $"⚠ FULL CHIP ERASE, then writing {what} on {port}.\n\n" +
                        "All settings saved on THIS droid (name, servo calibration, and if master: volume, sequences, anim parameters) will be permanently lost — not just the firmware.\n\n" +
                        "Continue?";
 
@@ -161,7 +192,21 @@ public partial class FirmwareViewModel : ObservableObject
             _link.PrepareForExternalClose();
         }
         FlashLog.Add(EraseChipFirst ? $"— Full erase then flash started on {port} —" : $"— Flash started on {port} —");
-        _flash.Start(BinPath, Address, port, EraseChipFirst);
+        if (FullFlashReady)
+        {
+            // App always at 0x10000 for a full flash — the advanced Address field only applies
+            // to the app-only path below.
+            _flash.Start(new[]
+            {
+                new FlashService.FlashImage("0x1000", BootloaderPath!),
+                new FlashService.FlashImage("0x8000", PartitionsPath!),
+                new FlashService.FlashImage("0x10000", BinPath),
+            }, port, EraseChipFirst);
+        }
+        else
+        {
+            _flash.Start(BinPath, Address, port, EraseChipFirst);
+        }
     }
 
     private void OnFlashCompleted(bool ok, int? exitCode, string? error)
@@ -199,6 +244,10 @@ public partial class FirmwareViewModel : ObservableObject
         FwUrlSlave = result.Fw.UrlSlave;
         FwShaMaster = result.Fw.Sha256Master;
         FwShaSlave = result.Fw.Sha256Slave;
+        FwUrlBootloader = result.Fw.UrlBootloader;
+        FwUrlPartitions = result.Fw.UrlPartitions;
+        FwShaBootloader = result.Fw.Sha256Bootloader;
+        FwShaPartitions = result.Fw.Sha256Partitions;
         return (true, null);
     }
 
@@ -230,7 +279,24 @@ public partial class FirmwareViewModel : ObservableObject
         BinVerified = true;
         Address = "0x10000";
         CanFlash = true;
-        UpdateStatus = $"{name} downloaded, SHA-256 verified — ready to flash.";
+
+        // Also fetch the shared bootloader + partition table so a virgin board can be fully
+        // flashed. Absent from older releases → app-only flash (still works on a board that
+        // already runs our firmware).
+        BootloaderPath = null;
+        PartitionsPath = null;
+        if (!string.IsNullOrEmpty(FwUrlBootloader) && !string.IsNullOrEmpty(FwUrlPartitions))
+        {
+            UpdateStatus = "Downloading bootloader + partition table…";
+            var (bok, bpath, _, _, berr) = await _update.DownloadAssetAsync(FwUrlBootloader, FwShaBootloader);
+            var (pok, ppath, _, _, perr) = await _update.DownloadAssetAsync(FwUrlPartitions, FwShaPartitions);
+            if (bok && pok) { BootloaderPath = bpath; PartitionsPath = ppath; }
+            else { UpdateStatus = $"Bootloader/partitions download failed ({berr ?? perr}) — app-only flash."; return; }
+        }
+
+        UpdateStatus = FullFlashReady
+            ? $"{name} + bootloader + partitions downloaded, verified — ready for full flash (fresh board OK)."
+            : $"{name} downloaded, SHA-256 verified — ready to flash (app-only).";
     }
 
     [RelayCommand]

@@ -108,12 +108,16 @@ public class UpdateService
                             var sha = f.GetProperty("sha256").GetString();
                             if (role == "master") fw.Sha256Master = sha;
                             else if (role == "slave") fw.Sha256Slave = sha;
+                            else if (role == "bootloader") fw.Sha256Bootloader = sha;
+                            else if (role == "partitions") fw.Sha256Partitions = sha;
                         }
                     }
                     catch { /* manifest missing/unreadable: download without verification */ }
                 }
                 fw.UrlMaster = AssetUrl(fr, n => n.Contains("master") && n.EndsWith(".bin"));
                 fw.UrlSlave = AssetUrl(fr, n => n.Contains("slave") && n.EndsWith(".bin"));
+                fw.UrlBootloader = AssetUrl(fr, n => n == "bootloader.bin");
+                fw.UrlPartitions = AssetUrl(fr, n => n == "partitions.bin");
                 fw.Notes = fr.TryGetProperty("body", out var fb) ? fb.GetString() : null;
             }
 

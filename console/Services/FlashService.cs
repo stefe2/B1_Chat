@@ -57,7 +57,16 @@ public class FlashService
         return null;
     }
 
+    // One (address, image) pair to write. A full flash of a fresh board is bootloader (0x1000)
+    // + partitions (0x8000) + app (0x10000); a plain reflash of a working board is just the app.
+    public readonly record struct FlashImage(string Address, string Path);
+
     public void Start(string binPath, string address, string portName, bool eraseFirst = false)
+        => Start(new[] { new FlashImage(address, binPath) }, portName, eraseFirst);
+
+    // Writes each image in sequence (bootloader/partitions/app), sharing one erase (if any).
+    // Completed fires once, after the last image succeeds or at the first failure.
+    public void Start(IReadOnlyList<FlashImage> images, string portName, bool eraseFirst = false)
     {
         var tool = FindEspflash();
         if (tool == null)
@@ -65,20 +74,52 @@ public class FlashService
             Completed?.Invoke(false, null, "espflash.exe not found — drop it into the tools\\ folder next to the application (see CLAUDE.md).");
             return;
         }
-        if (!File.Exists(binPath))
+        if (images.Count == 0)
         {
-            Completed?.Invoke(false, null, ".bin file not found: " + binPath);
+            Completed?.Invoke(false, null, "no image to flash.");
             return;
         }
+        foreach (var img in images)
+            if (!File.Exists(img.Path))
+            {
+                Completed?.Invoke(false, null, ".bin file not found: " + img.Path);
+                return;
+            }
         if (string.IsNullOrWhiteSpace(portName))
         {
             Completed?.Invoke(false, null, "no serial port selected.");
             return;
         }
 
-        if (eraseFirst) RunErase(tool, portName, () => RunWrite(tool, binPath, address, portName));
-        else RunWrite(tool, binPath, address, portName);
+        // Byte-weighted progress: each image's percent maps into a slice of the overall bar
+        // proportional to its size, so the tiny bootloader/partitions don't each look like 1/3.
+        var sizes = images.Select(i => (double)new FileInfo(i.Path).Length).ToArray();
+        var total = Math.Max(sizes.Sum(), 1);
+
+        var index = 0;
+        var doneBytes = 0.0;
+        void RunNext()
+        {
+            if (index >= images.Count) { Completed?.Invoke(true, 0, null); return; }
+            var img = images[index];
+            _progressBase = 100.0 * doneBytes / total;
+            _progressSpan = 100.0 * sizes[index] / total;
+            RunWrite(tool, img.Path, img.Address, portName, () =>
+            {
+                doneBytes += sizes[index];
+                index++;
+                RunNext();
+            });
+        }
+
+        if (eraseFirst) RunErase(tool, portName, RunNext);
+        else RunNext();
     }
+
+    // Set before each image so the Line handler can map espflash's per-file percent into the
+    // image's slice of the overall bar (see Start above). Full bar for a single-image flash.
+    private double _progressBase;
+    private double _progressSpan = 100;
 
     private void RunErase(string tool, string portName, Action onSuccess)
     {
@@ -129,7 +170,7 @@ public class FlashService
         }
     }
 
-    private void RunWrite(string tool, string binPath, string address, string portName)
+    private void RunWrite(string tool, string binPath, string address, string portName, Action onSuccess)
     {
         var psi = new ProcessStartInfo
         {
@@ -152,15 +193,17 @@ public class FlashService
             {
                 if (s == null) return;
                 var pct = TryParseProgressPercent(s);
-                if (pct.HasValue) Progress?.Invoke(pct.Value);
+                if (pct.HasValue) Progress?.Invoke((int)Math.Round(_progressBase + pct.Value * _progressSpan / 100.0));
                 else LogLine?.Invoke(s);
             }
             proc.OutputDataReceived += (_, a) => Line(a.Data);
             proc.ErrorDataReceived += (_, a) => Line(a.Data);
             proc.Exited += (_, _) =>
             {
-                Completed?.Invoke(proc.ExitCode == 0, proc.ExitCode, null);
+                var code = proc.ExitCode;
                 proc.Dispose();
+                if (code == 0) onSuccess();
+                else Completed?.Invoke(false, code, null);
             };
             proc.Start();
             proc.BeginOutputReadLine();

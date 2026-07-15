@@ -61,16 +61,29 @@ jobs:
           mkdir -p dist
           cp .pio/build/b1_master/firmware.bin "dist/b1-master-v$VERSION.bin"
           cp .pio/build/b1_slave/firmware.bin "dist/b1-slave-v$VERSION.bin"
+          # bootloader + partition table are role-independent (IS_MASTER only affects the app):
+          # ship ONE shared copy of each, needed to flash a virgin board (offsets 0x1000/0x8000)
+          # since the app-only flash at 0x10000 assumes they're already present.
+          cp .pio/build/b1_master/bootloader.bin "dist/bootloader.bin"
+          cp .pio/build/b1_master/partitions.bin "dist/partitions.bin"
           MASTER_SHA=$(sha256sum "dist/b1-master-v$VERSION.bin" | cut -d' ' -f1)
           SLAVE_SHA=$(sha256sum "dist/b1-slave-v$VERSION.bin" | cut -d' ' -f1)
+          BOOT_SHA=$(sha256sum "dist/bootloader.bin" | cut -d' ' -f1)
+          PART_SHA=$(sha256sum "dist/partitions.bin" | cut -d' ' -f1)
           MASTER_SIZE=$(stat -c%s "dist/b1-master-v$VERSION.bin")
           SLAVE_SIZE=$(stat -c%s "dist/b1-slave-v$VERSION.bin")
+          BOOT_SIZE=$(stat -c%s "dist/bootloader.bin")
+          PART_SIZE=$(stat -c%s "dist/partitions.bin")
           jq -n --arg version "$VERSION" --arg date "$(date -u +%Y-%m-%d)" \
              --arg mfile "b1-master-v$VERSION.bin" --arg msha "$MASTER_SHA" --argjson msize "$MASTER_SIZE" \
              --arg sfile "b1-slave-v$VERSION.bin" --arg ssha "$SLAVE_SHA" --argjson ssize "$SLAVE_SIZE" \
+             --arg bfile "bootloader.bin" --arg bsha "$BOOT_SHA" --argjson bsize "$BOOT_SIZE" \
+             --arg pfile "partitions.bin" --arg psha "$PART_SHA" --argjson psize "$PART_SIZE" \
              '{version:$version, date:$date, notes:"", files:[
                 {role:"master", file:$mfile, sha256:$msha, size:$msize},
-                {role:"slave", file:$sfile, sha256:$ssha, size:$ssize}
+                {role:"slave", file:$sfile, sha256:$ssha, size:$ssize},
+                {role:"bootloader", file:$bfile, sha256:$bsha, size:$bsize},
+                {role:"partitions", file:$pfile, sha256:$psha, size:$psize}
              ]}' > dist/firmware_manifest.json
 
       - name: Create and push the tag
@@ -88,4 +101,6 @@ jobs:
           files: |
             dist/b1-master-v${{ steps.version.outputs.version }}.bin
             dist/b1-slave-v${{ steps.version.outputs.version }}.bin
+            dist/bootloader.bin
+            dist/partitions.bin
             dist/firmware_manifest.json
