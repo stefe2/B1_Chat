@@ -604,6 +604,19 @@ otadata is blank → boots app0); a board previously OTA'd to app1 then
 re-USB-flashed is the one residual edge case, handled by the same "erase"
 checkbox.
 
+**Confirmed at the bench (2026-07-15)**: a slave OTA'd earlier in the same
+session (otadata now pointing at app1) was then USB-flashed app-only
+(erase unchecked) with a newer build — the write succeeded with no error,
+but the console kept reporting the OLD version after reboot. Root cause:
+app-only writes a fixed address (0x10000 = app0) without touching otadata,
+so the bootloader kept booting app1, silently running the old image the
+whole time. Checking "New / erased board (full erase + flash)" for that
+board's next USB flash (which resets otadata to blank → boots app0) fixed
+it. Lesson: **a USB flash's app-only mode is only a safe "update" path for
+a board never touched by OTA** — any board that has ever done even one OTA
+session needs the full-erase path for its next USB flash, not just a
+virgin/never-flashed board.
+
 ## Per-droid name resilience (`MSG_NAME`)
 
 Prompted directly by the incident above: droid **names** were the one piece

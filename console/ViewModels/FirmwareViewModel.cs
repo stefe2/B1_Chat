@@ -99,8 +99,17 @@ public partial class FirmwareViewModel : ObservableObject
 
     public bool HasAppUpdate => !string.IsNullOrEmpty(AppLatest);
     public bool HasFwUpdate => !string.IsNullOrEmpty(FwLatest);
-    partial void OnAppLatestChanged(string? value) => OnPropertyChanged(nameof(HasAppUpdate));
-    partial void OnFwLatestChanged(string? value) => OnPropertyChanged(nameof(HasFwUpdate));
+    public bool HasAnyUpdate => HasAppUpdate || HasFwUpdate;
+    partial void OnAppLatestChanged(string? value)
+    {
+        OnPropertyChanged(nameof(HasAppUpdate));
+        OnPropertyChanged(nameof(HasAnyUpdate));
+    }
+    partial void OnFwLatestChanged(string? value)
+    {
+        OnPropertyChanged(nameof(HasFwUpdate));
+        OnPropertyChanged(nameof(HasAnyUpdate));
+    }
 
     private static void RunOnUi(Action a)
     {

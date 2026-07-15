@@ -57,7 +57,7 @@
                     <!-- Cluster 2: manual/dev firmware entry point (always available, unlike the
                          per-droid row buttons which hide once a droid is confirmed up to date). -->
                     <Button Style="{StaticResource MiniButtonStyle}" Click="OpenFirmwareWindow_Click"
-                            Margin="0,0,16,0" VerticalAlignment="Center" ToolTip="Open the firmware flash and update window">
+                            Margin="0,0,8,0" VerticalAlignment="Center" ToolTip="Open the firmware flash and update window">
                         <StackPanel Orientation="Horizontal">
                             <Canvas Width="13" Height="13" Margin="0,0,6,0" VerticalAlignment="Center">
                                 <Rectangle Canvas.Left="3" Canvas.Top="3" Width="7" Height="7" RadiusX="1" RadiusY="1" Stroke="{StaticResource AccentBrush}" StrokeThickness="1.2" />
@@ -71,6 +71,12 @@
                             <TextBlock Text="Firmware…" />
                         </StackPanel>
                     </Button>
+                    <Border Style="{StaticResource HaloBadgeOkStyle}"
+                            Visibility="{Binding Firmware.HasAnyUpdate, Converter={StaticResource BoolToVisConv}}"
+                            Margin="0,0,16,0" VerticalAlignment="Center"
+                            ToolTip="{Binding Firmware.UpdateStatus}">
+                        <TextBlock Text="● update available" FontSize="11" Foreground="White" />
+                    </Border>
 
                     <Border Width="1" Height="20" Background="{StaticResource BevelBorderBrush}" Margin="0,0,16,0" VerticalAlignment="Center" />
 

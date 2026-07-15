@@ -73,6 +73,16 @@ public partial class MainViewModel : ObservableObject
         Protocol.LogSys += line => AddLog(LogKind.Sys, line);
         Protocol.LogErr += line => AddLog(LogKind.Err, line);
 
+        // Single source of truth for "what's the latest GitHub firmware release":
+        // whenever the shared Firmware view-model learns of one (at startup, or after a
+        // manual refresh in the Firmware window), push it into the Droids card so its
+        // per-droid version column/badge reflects it too, instead of each doing its own check.
+        Firmware.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(FirmwareViewModel.FwLatest)) Droids.UpdateLatestFwVersion(Firmware.FwLatest);
+        };
+        Firmware.CheckUpdatesCommand.Execute(null);
+
         RefreshPorts();
         if (!string.IsNullOrEmpty(_settings.LastPort)) SelectedPort = _settings.LastPort;
     }

@@ -54,17 +54,15 @@ public partial class DroidsViewModel : ObservableObject
             if (e.NewItems == null) return;
             foreach (Droid d in e.NewItems) d.LatestFwVersion = _latestFwVersion;
         };
-        _ = RefreshLatestFwVersionAsync();
     }
 
-    // Checks the latest GitHub firmware release ("fw-" prefix) at startup to color
-    // each droid's version column (green = up to date, red = update available).
-    private async Task RefreshLatestFwVersionAsync()
+    // Called by MainViewModel whenever the shared FirmwareViewModel learns of a new
+    // GitHub release (at startup, or after a manual refresh in the Firmware window) —
+    // colors each droid's version column (green = up to date, red = update available).
+    public void UpdateLatestFwVersion(string? latest)
     {
-        var result = await _update.CheckUpdatesAsync();
-        if (!result.Ok || string.IsNullOrEmpty(result.Fw.Latest)) return;
-        _latestFwVersion = result.Fw.Latest;
-        foreach (var d in Droids) d.LatestFwVersion = _latestFwVersion;
+        _latestFwVersion = latest;
+        foreach (var d in Droids) d.LatestFwVersion = latest;
     }
 
     private void OnOtaProgress(int sent, int total)
