@@ -13,7 +13,7 @@
 //  compares it to the latest stefe2/B1_Chat release to offer an update. Bump
 //  on every release (tools/release.ps1 relies on it).
 // ---------------------------------------------------------------------------
-#define FW_VERSION "1.4.1"
+#define FW_VERSION "1.4.2"
 
 // Console<->master serial protocol version (bumped when a change isn't
 // backward-compatible; adding fields/commands doesn't require it).

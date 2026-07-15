@@ -47,6 +47,16 @@ public:
     // the RAM overlay/commit-revert draft entirely.
     void   setNameImmediate(uint16_t id, const String& name);
 
+    // Immediately persists THIS droid's OWN servos/auto-anim enabled state —
+    // same immediate-persistence pattern as setNameImmediate/setCalib, so a
+    // droid remembers these across a reboot instead of always resetting to
+    // its compile-time default. `defaultValue` is only used the first time
+    // (key never written yet).
+    bool servosEnabled(bool defaultValue);
+    void setServosEnabledImmediate(bool enabled);
+    bool autoAnimEnabled(bool defaultValue);
+    void setAutoAnimEnabledImmediate(bool enabled);
+
     // A droid's servo calibration (config.h limits if never set).
     // Immediate persistence — outside the commit/revert model.
     ServoCalib getCalib(uint16_t id);

@@ -86,6 +86,22 @@ void ConfigStore::setNameImmediate(uint16_t id, const String& name) {
     _p.putString(key, name);
 }
 
+bool ConfigStore::servosEnabled(bool defaultValue) {
+    return _p.getBool("srvOn", defaultValue);
+}
+
+void ConfigStore::setServosEnabledImmediate(bool enabled) {
+    _p.putBool("srvOn", enabled);
+}
+
+bool ConfigStore::autoAnimEnabled(bool defaultValue) {
+    return _p.getBool("autoOn", defaultValue);
+}
+
+void ConfigStore::setAutoAnimEnabledImmediate(bool enabled) {
+    _p.putBool("autoOn", enabled);
+}
+
 void ConfigStore::refreshDirty() {
     _dirty = _pendVolSet || _pendAnimSet;
     for (uint8_t i = 0; !_dirty && i < PENDING_NAMES_MAX; i++) {

@@ -80,20 +80,24 @@ static const uint32_t DROID_TIMEOUT_MS = 4000;
 static bool wasOnline[Registry::MAX];
 #endif
 
-// Enables/disables this droid's servos (hardware protection).
+// Enables/disables this droid's servos (hardware protection). Persisted
+// immediately so it survives a reboot (see ConfigStore::setServosEnabledImmediate).
 static void applyServos(bool en) {
     gServos = en;
     head.setEnabled(en);
     if (!en) anim.stop();
+    Config.setServosEnabledImmediate(en);
 #if IS_MASTER
     Console.setMasterServos(en);
 #endif
     LOGF("servos %s", en ? "ON" : "OFF");
 }
 
-// Pauses/resumes THIS droid's spontaneous idle animation.
+// Pauses/resumes THIS droid's spontaneous idle animation. Persisted
+// immediately, same reasoning as applyServos.
 static void applyAutoAnim(bool en) {
     gAutoAnim = en;
+    Config.setAutoAnimEnabledImmediate(en);
 #if IS_MASTER
     Console.setMasterAutoAnim(en);
 #endif
@@ -436,12 +440,15 @@ void setup() {
     head.setIdleNoise(true);
     anim.begin(&head);
 
-    // Initial servo state: master paused if MASTER_ANIM_PAUSED.
+    // Initial servo/auto-anim state: NVS-persisted value if this droid has
+    // ever been toggled before; the compile-time default (master paused if
+    // MASTER_ANIM_PAUSED) only applies on a never-configured board.
 #if IS_MASTER && MASTER_ANIM_PAUSED
-    gServos = false;
+    gServos = Config.servosEnabled(false);
 #else
-    gServos = true;
+    gServos = Config.servosEnabled(true);
 #endif
+    gAutoAnim = Config.autoAnimEnabled(true);
     head.setEnabled(gServos);
 
 #if IS_MASTER
