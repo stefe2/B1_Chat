@@ -57,6 +57,7 @@ public partial class ProtocolClient : ObservableObject
     public event Action? MeshTopologyChanged;
     public event Action? DroidsChanged;
     public event Action<ushort, int>? AnimSent; // target, animId — used to drive the mesh topology's broadcast ripple
+    public event Action<ushort, string>? PacketSent; // target, kind — every other command with a real mesh frame (see MeshTopologyViewModel's traveling-packet dots)
     public event Action<ushort, int, int, int>? OtaReadyReceived;      // target, sessionId, chunkSize, totalChunks
     public event Action<int, int, int>? OtaChunkAckReceived;           // seq, sent, total
     public event Action<ushort, int>? OtaDoneReceived;                 // target, sessionId
@@ -160,8 +161,16 @@ public partial class ProtocolClient : ObservableObject
     public void RequestCalib(ushort target) => SendCmd(new JsonObject { ["cmd"] = "getCalib", ["target"] = target });
 
     public void SetName(ushort id, string name) => SendCmd(new JsonObject { ["cmd"] = "name", ["id"] = id, ["name"] = name });
-    public void SetServo(ushort target, bool enabled) => SendCmd(new JsonObject { ["cmd"] = "servo", ["target"] = target, ["enabled"] = enabled });
-    public void SetAutoAnim(ushort target, bool enabled) => SendCmd(new JsonObject { ["cmd"] = "autoAnim", ["target"] = target, ["enabled"] = enabled });
+    public void SetServo(ushort target, bool enabled)
+    {
+        SendCmd(new JsonObject { ["cmd"] = "servo", ["target"] = target, ["enabled"] = enabled });
+        PacketSent?.Invoke(target, "servo");
+    }
+    public void SetAutoAnim(ushort target, bool enabled)
+    {
+        SendCmd(new JsonObject { ["cmd"] = "autoAnim", ["target"] = target, ["enabled"] = enabled });
+        PacketSent?.Invoke(target, "autoAnim");
+    }
     public void Adopt(ushort target) => SendCmd(new JsonObject { ["cmd"] = "adopt", ["target"] = target });
     public void Forget(ushort target) => SendCmd(new JsonObject { ["cmd"] = "forget", ["target"] = target });
 
@@ -174,16 +183,26 @@ public partial class ProtocolClient : ObservableObject
         SendCmd(new JsonObject { ["cmd"] = "anim", ["target"] = target, ["animId"] = animId, ["seed"] = seed });
         AnimSent?.Invoke(target, animId);
     }
-    public void Preview(ushort target, int pan, int tilt) => SendCmd(new JsonObject { ["cmd"] = "preview", ["target"] = target, ["pan"] = pan, ["tilt"] = tilt });
-    public void SetCalib(ushort target, int panMin, int panCenter, int panMax, int tiltMin, int tiltCenter, int tiltMax) =>
+    public void Preview(ushort target, int pan, int tilt)
+    {
+        SendCmd(new JsonObject { ["cmd"] = "preview", ["target"] = target, ["pan"] = pan, ["tilt"] = tilt });
+        PacketSent?.Invoke(target, "preview");
+    }
+    public void SetCalib(ushort target, int panMin, int panCenter, int panMax, int tiltMin, int tiltCenter, int tiltMax)
+    {
         SendCmd(new JsonObject
         {
             ["cmd"] = "calib", ["target"] = target,
             ["panMin"] = panMin, ["panCenter"] = panCenter, ["panMax"] = panMax,
             ["tiltMin"] = tiltMin, ["tiltCenter"] = tiltCenter, ["tiltMax"] = tiltMax,
         });
-    public void SetConfig(ushort target, int freq, int amp, int speed) =>
+        PacketSent?.Invoke(target, "calib");
+    }
+    public void SetConfig(ushort target, int freq, int amp, int speed)
+    {
         SendCmd(new JsonObject { ["cmd"] = "config", ["target"] = target, ["freq"] = freq, ["amp"] = amp, ["speed"] = speed });
+        PacketSent?.Invoke(target, "config");
+    }
     public void SetVolume(int value) => SendCmd(new JsonObject { ["cmd"] = "volume", ["value"] = value });
     public void PlayTrack(int track) => SendCmd(new JsonObject { ["cmd"] = "playTrack", ["track"] = track });
     public void Commit() => SendCmd(new JsonObject { ["cmd"] = "commit" });

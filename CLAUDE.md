@@ -438,6 +438,82 @@ width at the bottom. Firmware card taken out of the grid (separate window).
       (`XamlParseException` → `Cannot animate '(0).(1)' on an object
       instance that cannot be modified`) — see the new Known pitfalls
       entry below for the root cause and fix.
+- [x] Mesh Topology: force-directed layout + live packet visualization
+      (2026-07-14): node placement replaced the old fixed circular layout
+      with a force-directed simulation (`MeshTopologyViewModel.ComputeForceLayout`,
+      120 iterations per render, warm-started from the previous frame's
+      positions) — master pinned at the canvas center, repulsion between
+      all nodes, springs along real links whose rest length now encodes
+      RSSI (strong signal pulls a node in, weak signal lets it drift out,
+      on top of the existing thickness/opacity encoding), weak gravity so
+      unreachable nodes don't drift off-canvas. Added small colored dots
+      (`Packets` collection, ~30 fps ticker, `MeshPacketVisual`) that
+      travel hop-by-hop along the real BFS-derived master↔node path for
+      every mesh frame the console can actually observe: outgoing
+      `anim`/`servo`/`autoAnim`/`config`/`calib`/`preview` (new
+      `ProtocolClient.PacketSent` event), OTA chunks (one dot per
+      `evt:otaChunkAck`, riding the existing dashed travel line), and an
+      inbound droid→master dot standing in for heartbeat/neighbor-report
+      refreshes (the console never sees individual `MSG_HEARTBEAT`/
+      `MSG_NEIGHBORS` frames or any inter-slave relay traffic — only
+      what the master reports over serial — so this is a faithful
+      visualization of what's observable, not a packet capture). Legend
+      row added below the Master/Slave legend. Colors registered in
+      `Converters/PacketKindToBrushConverter.cs`.
+- [x] Mesh Topology: classic green radar screen skin (2026-07-14, from a
+      user-provided `radar.html` mockup): the old dark-square recess +
+      orange rings + white starfield background was replaced with a
+      circular green-phosphor radar disc (dark green→black radial
+      gradient, glowing `#2DFF6F` rim, 3 concentric range rings, 12
+      angular spokes, a faster 4s rotating sweep beam, plus a subtle
+      vignette + CRT scanline overlay — both implemented as circular
+      `Ellipse` fills so they self-clip without an explicit
+      `Canvas.Clip`). Scoped entirely to this card via local XAML
+      resources, not the global orange `AccentBrush` theme. Node
+      placement is now radially clamped (`MeshTopologyViewModel.
+      ComputeForceLayout`, `MaxNodeRadius`) instead of per-axis, so a
+      node never renders outside the visible disc. Functional accent
+      indicators (master ring, heartbeat pulse, hop-wave ripple, TALK
+      pulse) were deliberately left orange for contrast against the
+      green backdrop. Verified visually with temporary seeded test data
+      (canvas is otherwise hidden until droids are present) then reverted.
+- [x] Mesh Topology: radar skin brought to full radar.html fidelity
+      (2026-07-15, user-approved via an HTML preview artifact before any code
+      change): range rings made solid (dashes removed), crosshair brightened
+      to .22 vs the .11 diagonal spokes (hierarchy matching the mockup's
+      conic ticks), and the old narrow ~13° sweep triangle replaced by a
+      wide ~42° beam — WPF has no conic gradient, so the falloff is stepped
+      into twelve 3.5° pie slices of increasing alpha plus a glowing
+      full-brightness leading-edge radius, all rotating together (4s) in one
+      Canvas. Second fidelity pass after user comparison against the HTML
+      preview: disc base made an opaque phosphor gradient (#0A3016 →
+      #021006 at 62% → black, exactly radar.html's bottom layer) instead
+      of a translucent glow over black (read grey, not green), scanline
+      overlay dropped 0.06 → 0.02, and the three 25/50/75 % rings replaced
+      by two at r ≈ 45/91 px — the CSS color-stop percentages resolve
+      against the farthest-corner ray (130·√2), so the mockup really shows
+      two rings, the third falling outside the disc. Verified visually
+      (seeded test data + automated window screenshot, then reverted):
+      smooth falloff, no visible banding, green phosphor look matching the
+      approved HTML preview.
+- [x] Mesh Topology: fixed-bearing polar layout + packet-dot fix + 300 px
+      canvas (2026-07-15): the force-directed simulation was replaced by a
+      deterministic polar layout — master pinned at center, each slave at a
+      fixed evenly-spaced bearing (3 slaves = 120° apart, assigned by
+      ascending id, first at 12 o'clock, reshuffled only when the slave set
+      changes) and **only the radius moves with RSSI** (strong ≈ 42 px,
+      weak ≈ 122 px; multi-hop child = parent radius + RSSI-scaled hop
+      segment; unreachable = rim). Radius changes are eased by a ~30 fps
+      exponential lerp (`LayoutTick`, `RadiusLerpRate` 3 s⁻¹) so RSSI
+      jitter glides instead of jumping — `MeshNodeVisual`/`MeshEdgeVisual`
+      became mutable ObservableObjects so the ticker drags nodes, edges,
+      packet paths and the OTA line without rebuilding collections. Fixed
+      along the way: the traveling packet dots had NEVER rendered on links
+      — they all piled up at the canvas origin (see the new ItemsControl/
+      Canvas pitfall below); verified live on the real 4-droid fleet
+      (heartbeat dot caught mid-flight on a link). Drawing canvas enlarged
+      260 → 300 (disc unchanged at 260, offset inner canvas at 20,20) so
+      the rim's green glow and edge labels are no longer clipped.
 
 ## Known pitfalls
 
@@ -490,6 +566,20 @@ width at the bottom. Firmware card taken out of the grid (separate window).
   (`fw-v1.3.9` before `fw-v1.3.10`/`fw-v1.3.11`), not chronologically — the
   console flashed a 1.3.9 thinking it was the latest. Parse the
   versions and take the semantic maximum.
+- In an `ItemsControl` whose `ItemsPanel` is a `Canvas`, `Canvas.Left`/
+  `Canvas.Top` bound inside the `DataTemplate` only work if they sit on the
+  **template root** — each item gets wrapped in a `ContentPresenter`, which
+  is the Canvas's real direct child, so the attached properties set on a
+  deeper element are silently ignored and every item renders at the canvas
+  origin (0,0). Fix: make the template root a `Canvas` (position children
+  absolutely inside it) — the Nodes template always did this; the packet
+  dots didn't and piled up invisible in the corner until 2026-07-15.
+- WPF named color `Transparent` is **transparent white** (`#00FFFFFF`), not
+  transparent black like CSS's `transparent`. In a gradient toward an opaque
+  dark color, the interpolation passes through semi-transparent greys and
+  paints a visible grey haze (seen as a grey ring over the radar disc's
+  vignette). Always spell out `#00RRGGBB` matching the opaque stop's RGB
+  (e.g. `#00000000` → `#94000000`).
 - WPF `Setter.TargetName` can't target a named `Freezable` nested inside
   a property (e.g. a `TranslateTransform` in `Border.RenderTransform`, a
   `DropShadowEffect` in `Border.Effect`): the `Trigger` must replace the whole

@@ -15,6 +15,7 @@
             <conv:BoolToVisibilityConverter x:Key="BoolToVisConv" />
             <conv:BoolToBrushConverter x:Key="BoolToBrushConv" />
             <conv:StrengthToBrushConverter x:Key="StrengthToBrushConv" />
+            <conv:PacketKindToBrushConverter x:Key="PacketKindToBrushConv" />
             <conv:FwStatusToBrushConverter x:Key="FwStatusToBrushConv" />
             <conv:FwStatusToTextConverter x:Key="FwStatusToTextConv" />
         </ResourceDictionary>

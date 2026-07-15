@@ -20,183 +20,172 @@
                 </TextBlock>
             </DockPanel>
 
-            <TextBlock Text="Who hears whom directly over the mesh radio — thickness/opacity track signal strength."
+            <TextBlock Text="Node distance and link thickness/opacity both track signal strength; colored dots are live mesh traffic."
                        Style="{StaticResource HintTextStyle}" Margin="0,0,0,6" TextWrapping="Wrap" />
 
-            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                 <Ellipse Width="8" Height="8" Fill="{StaticResource MeshMasterNodeBrush}" VerticalAlignment="Center" />
                 <TextBlock Text="Master" FontSize="10.5" Foreground="{StaticResource MutedBrush}" Margin="4,0,14,0" VerticalAlignment="Center" />
                 <Ellipse Width="8" Height="8" Fill="{StaticResource MeshSlaveNodeBrush}" VerticalAlignment="Center" />
                 <TextBlock Text="Slave" FontSize="10.5" Foreground="{StaticResource MutedBrush}" Margin="4,0,0,0" VerticalAlignment="Center" />
             </StackPanel>
 
+            <!-- Static legend for the packet-kind colors — mirrors PacketKindToBrushConverter's
+                 palette by hand since a fixed string literal isn't a natural Binding target. -->
+            <WrapPanel Orientation="Horizontal" Margin="0,0,0,10">
+                <StackPanel Orientation="Horizontal" Margin="0,0,10,2">
+                    <Ellipse Width="6" Height="6" Fill="#FF9D2E" VerticalAlignment="Center" />
+                    <TextBlock Text="Anim" FontSize="9.5" Foreground="{StaticResource Muted2Brush}" Margin="3,0,0,0" VerticalAlignment="Center" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,10,2">
+                    <Ellipse Width="6" Height="6" Fill="#3DDC84" VerticalAlignment="Center" />
+                    <TextBlock Text="Servo" FontSize="9.5" Foreground="{StaticResource Muted2Brush}" Margin="3,0,0,0" VerticalAlignment="Center" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,10,2">
+                    <Ellipse Width="6" Height="6" Fill="#4DD0E1" VerticalAlignment="Center" />
+                    <TextBlock Text="Auto anim" FontSize="9.5" Foreground="{StaticResource Muted2Brush}" Margin="3,0,0,0" VerticalAlignment="Center" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,10,2">
+                    <Ellipse Width="6" Height="6" Fill="#FFCC4D" VerticalAlignment="Center" />
+                    <TextBlock Text="Config" FontSize="9.5" Foreground="{StaticResource Muted2Brush}" Margin="3,0,0,0" VerticalAlignment="Center" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,10,2">
+                    <Ellipse Width="6" Height="6" Fill="#B39DDB" VerticalAlignment="Center" />
+                    <TextBlock Text="Calib" FontSize="9.5" Foreground="{StaticResource Muted2Brush}" Margin="3,0,0,0" VerticalAlignment="Center" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,10,2">
+                    <Ellipse Width="6" Height="6" Fill="#7E9CFF" VerticalAlignment="Center" />
+                    <TextBlock Text="Preview" FontSize="9.5" Foreground="{StaticResource Muted2Brush}" Margin="3,0,0,0" VerticalAlignment="Center" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,10,2">
+                    <Ellipse Width="6" Height="6" Fill="#FF5B52" VerticalAlignment="Center" />
+                    <TextBlock Text="OTA" FontSize="9.5" Foreground="{StaticResource Muted2Brush}" Margin="3,0,0,0" VerticalAlignment="Center" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,10,2">
+                    <Ellipse Width="6" Height="6" Fill="#A9ADB3" VerticalAlignment="Center" />
+                    <TextBlock Text="Heartbeat" FontSize="9.5" Foreground="{StaticResource Muted2Brush}" Margin="3,0,0,0" VerticalAlignment="Center" />
+                </StackPanel>
+            </WrapPanel>
+
             <TextBlock Text="No droid detected." Foreground="{StaticResource MutedBrush}" FontSize="12"
                        Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisConv}}" Margin="0,30" HorizontalAlignment="Center" />
 
-            <Border Background="{StaticResource RecessBrush}" CornerRadius="10" Width="260" Height="260" HorizontalAlignment="Center"
+            <!-- 300×300 canvas around the 260 disc: the 20 px margin keeps the rim's green
+                 glow (BlurRadius 20) and edge labels from being clipped. All drawing stays in
+                 260-space (center 130,130) inside the offset inner canvas below. -->
+            <Border Width="300" Height="300" HorizontalAlignment="Center"
                     Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisConv}, ConverterParameter=Invert}">
                 <Border.Effect>
                     <DropShadowEffect Color="Black" Direction="270" ShadowDepth="1" BlurRadius="6" Opacity="0.6" />
                 </Border.Effect>
-                <Canvas Width="260" Height="260" ClipToBounds="True">
+                <Canvas Width="300" Height="300" ClipToBounds="True">
                     <Canvas.Resources>
-                        <Style x:Key="StarDotStyle" TargetType="Ellipse">
-                            <Setter Property="Fill" Value="White" />
+                        <!-- Solid thin range rings, like radar.html's radial-gradient rings. -->
+                        <Style x:Key="RadarRingStyle" TargetType="Ellipse">
+                            <Setter Property="Stroke" Value="#382DFF6F" />
+                            <Setter Property="StrokeThickness" Value="1" />
                             <Setter Property="IsHitTestVisible" Value="False" />
-                            <Setter Property="RenderTransform">
-                                <Setter.Value>
-                                    <TranslateTransform />
-                                </Setter.Value>
-                            </Setter>
                         </Style>
+                        <!-- Faint horizontal scanlines (CRT look), tiled to stay lightweight — same
+                             technique as Theme.xaml's NoiseTileBrush. -->
+                        <DrawingBrush x:Key="RadarScanlineBrush" TileMode="Tile" Viewport="0,0,4,4" ViewportUnits="Absolute" Opacity="0.02">
+                            <DrawingBrush.Drawing>
+                                <GeometryDrawing Brush="White">
+                                    <GeometryDrawing.Geometry>
+                                        <RectangleGeometry Rect="0,0,4,1" />
+                                    </GeometryDrawing.Geometry>
+                                </GeometryDrawing>
+                            </DrawingBrush.Drawing>
+                        </DrawingBrush>
                     </Canvas.Resources>
-                    <Ellipse Style="{StaticResource MeshRadarRingStyle}" Canvas.Left="40" Canvas.Top="40" Width="180" Height="180" />
-                    <Ellipse Style="{StaticResource MeshRadarRingStyle}" Canvas.Left="80" Canvas.Top="80" Width="100" Height="100" />
 
-                    <!-- Ambient starfield: purely decorative, no VM binding. Small dots drifting
-                         slowly at staggered rates behind the graph. -->
-                    <Ellipse Style="{StaticResource StarDotStyle}" Canvas.Left="18" Canvas.Top="38" Width="1.6" Height="1.6" Opacity="0.22">
-                        <Ellipse.Triggers>
-                            <EventTrigger RoutedEvent="FrameworkElement.Loaded">
-                                <BeginStoryboard>
-                                    <Storyboard>
-                                        <DoubleAnimation Storyboard.TargetProperty="(Ellipse.RenderTransform).(TranslateTransform.Y)" From="0" To="4" Duration="0:0:4" AutoReverse="True" RepeatBehavior="Forever" />
-                                    </Storyboard>
-                                </BeginStoryboard>
-                            </EventTrigger>
-                        </Ellipse.Triggers>
-                    </Ellipse>
-                    <Ellipse Style="{StaticResource StarDotStyle}" Canvas.Left="230" Canvas.Top="25" Width="2" Height="2" Opacity="0.18">
-                        <Ellipse.Triggers>
-                            <EventTrigger RoutedEvent="FrameworkElement.Loaded">
-                                <BeginStoryboard>
-                                    <Storyboard BeginTime="0:0:0.6">
-                                        <DoubleAnimation Storyboard.TargetProperty="(Ellipse.RenderTransform).(TranslateTransform.Y)" From="0" To="-5" Duration="0:0:5" AutoReverse="True" RepeatBehavior="Forever" />
-                                    </Storyboard>
-                                </BeginStoryboard>
-                            </EventTrigger>
-                        </Ellipse.Triggers>
-                    </Ellipse>
-                    <Ellipse Style="{StaticResource StarDotStyle}" Canvas.Left="248" Canvas.Top="95" Width="1.4" Height="1.4" Opacity="0.28">
-                        <Ellipse.Triggers>
-                            <EventTrigger RoutedEvent="FrameworkElement.Loaded">
-                                <BeginStoryboard>
-                                    <Storyboard BeginTime="0:0:1.2">
-                                        <DoubleAnimation Storyboard.TargetProperty="(Ellipse.RenderTransform).(TranslateTransform.Y)" From="0" To="4" Duration="0:0:3.5" AutoReverse="True" RepeatBehavior="Forever" />
-                                    </Storyboard>
-                                </BeginStoryboard>
-                            </EventTrigger>
-                        </Ellipse.Triggers>
-                    </Ellipse>
-                    <Ellipse Style="{StaticResource StarDotStyle}" Canvas.Left="240" Canvas.Top="210" Width="1.8" Height="1.8" Opacity="0.2">
-                        <Ellipse.Triggers>
-                            <EventTrigger RoutedEvent="FrameworkElement.Loaded">
-                                <BeginStoryboard>
-                                    <Storyboard BeginTime="0:0:1.8">
-                                        <DoubleAnimation Storyboard.TargetProperty="(Ellipse.RenderTransform).(TranslateTransform.Y)" From="0" To="-4" Duration="0:0:4.5" AutoReverse="True" RepeatBehavior="Forever" />
-                                    </Storyboard>
-                                </BeginStoryboard>
-                            </EventTrigger>
-                        </Ellipse.Triggers>
-                    </Ellipse>
-                    <Ellipse Style="{StaticResource StarDotStyle}" Canvas.Left="200" Canvas.Top="245" Width="1.5" Height="1.5" Opacity="0.25">
-                        <Ellipse.Triggers>
-                            <EventTrigger RoutedEvent="FrameworkElement.Loaded">
-                                <BeginStoryboard>
-                                    <Storyboard BeginTime="0:0:0.3">
-                                        <DoubleAnimation Storyboard.TargetProperty="(Ellipse.RenderTransform).(TranslateTransform.Y)" From="0" To="4" Duration="0:0:5.5" AutoReverse="True" RepeatBehavior="Forever" />
-                                    </Storyboard>
-                                </BeginStoryboard>
-                            </EventTrigger>
-                        </Ellipse.Triggers>
-                    </Ellipse>
-                    <Ellipse Style="{StaticResource StarDotStyle}" Canvas.Left="60" Canvas.Top="248" Width="2" Height="2" Opacity="0.18">
-                        <Ellipse.Triggers>
-                            <EventTrigger RoutedEvent="FrameworkElement.Loaded">
-                                <BeginStoryboard>
-                                    <Storyboard BeginTime="0:0:2.1">
-                                        <DoubleAnimation Storyboard.TargetProperty="(Ellipse.RenderTransform).(TranslateTransform.Y)" From="0" To="-4" Duration="0:0:4" AutoReverse="True" RepeatBehavior="Forever" />
-                                    </Storyboard>
-                                </BeginStoryboard>
-                            </EventTrigger>
-                        </Ellipse.Triggers>
-                    </Ellipse>
-                    <Ellipse Style="{StaticResource StarDotStyle}" Canvas.Left="12" Canvas.Top="175" Width="1.6" Height="1.6" Opacity="0.24">
-                        <Ellipse.Triggers>
-                            <EventTrigger RoutedEvent="FrameworkElement.Loaded">
-                                <BeginStoryboard>
-                                    <Storyboard BeginTime="0:0:0.9">
-                                        <DoubleAnimation Storyboard.TargetProperty="(Ellipse.RenderTransform).(TranslateTransform.Y)" From="0" To="5" Duration="0:0:6" AutoReverse="True" RepeatBehavior="Forever" />
-                                    </Storyboard>
-                                </BeginStoryboard>
-                            </EventTrigger>
-                        </Ellipse.Triggers>
-                    </Ellipse>
-                    <Ellipse Style="{StaticResource StarDotStyle}" Canvas.Left="20" Canvas.Top="95" Width="1.4" Height="1.4" Opacity="0.3">
-                        <Ellipse.Triggers>
-                            <EventTrigger RoutedEvent="FrameworkElement.Loaded">
-                                <BeginStoryboard>
-                                    <Storyboard BeginTime="0:0:1.5">
-                                        <DoubleAnimation Storyboard.TargetProperty="(Ellipse.RenderTransform).(TranslateTransform.Y)" From="0" To="-3" Duration="0:0:3" AutoReverse="True" RepeatBehavior="Forever" />
-                                    </Storyboard>
-                                </BeginStoryboard>
-                            </EventTrigger>
-                        </Ellipse.Triggers>
-                    </Ellipse>
-                    <Ellipse Style="{StaticResource StarDotStyle}" Canvas.Left="130" Canvas.Top="8" Width="1.8" Height="1.8" Opacity="0.2">
-                        <Ellipse.Triggers>
-                            <EventTrigger RoutedEvent="FrameworkElement.Loaded">
-                                <BeginStoryboard>
-                                    <Storyboard BeginTime="0:0:2.4">
-                                        <DoubleAnimation Storyboard.TargetProperty="(Ellipse.RenderTransform).(TranslateTransform.Y)" From="0" To="4" Duration="0:0:5" AutoReverse="True" RepeatBehavior="Forever" />
-                                    </Storyboard>
-                                </BeginStoryboard>
-                            </EventTrigger>
-                        </Ellipse.Triggers>
-                    </Ellipse>
-                    <Ellipse Style="{StaticResource StarDotStyle}" Canvas.Left="130" Canvas.Top="250" Width="1.5" Height="1.5" Opacity="0.22">
-                        <Ellipse.Triggers>
-                            <EventTrigger RoutedEvent="FrameworkElement.Loaded">
-                                <BeginStoryboard>
-                                    <Storyboard BeginTime="0:0:0.5">
-                                        <DoubleAnimation Storyboard.TargetProperty="(Ellipse.RenderTransform).(TranslateTransform.Y)" From="0" To="-4" Duration="0:0:4.8" AutoReverse="True" RepeatBehavior="Forever" />
-                                    </Storyboard>
-                                </BeginStoryboard>
-                            </EventTrigger>
-                        </Ellipse.Triggers>
+                    <Canvas Canvas.Left="20" Canvas.Top="20">
+
+                    <!-- Radar screen base: opaque dark-green phosphor disc with a glowing green
+                         rim — the exact gradient of radar.html's bottom layer, rgba(12,60,27,.8)
+                         over black at the center → #021006 at 62% → pure black at the rim. Opaque
+                         so the disc reads green like the mockup, not grey over the card panel. -->
+                    <Ellipse Width="260" Height="260" Stroke="#2DFF6F" StrokeThickness="2" IsHitTestVisible="False">
+                        <Ellipse.Fill>
+                            <RadialGradientBrush>
+                                <GradientStop Color="#0A3016" Offset="0" />
+                                <GradientStop Color="#021006" Offset="0.62" />
+                                <GradientStop Color="#000000" Offset="1" />
+                            </RadialGradientBrush>
+                        </Ellipse.Fill>
+                        <Ellipse.Effect>
+                            <DropShadowEffect Color="#2DFF6F" ShadowDepth="0" BlurRadius="20" Opacity="0.45" />
+                        </Ellipse.Effect>
                     </Ellipse>
 
-                    <!-- Rotating radar sweep, purely decorative: a thin wedge fading from
-                         transparent (trailing edge) to a dim accent glow (leading edge),
-                         spinning continuously around the canvas center. -->
-                    <Path IsHitTestVisible="False" RenderTransformOrigin="0.5,0.5">
-                        <Path.Fill>
-                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                <GradientStop Color="#00FF9D2E" Offset="0" />
-                                <GradientStop Color="#40FF9D2E" Offset="1" />
-                            </LinearGradientBrush>
-                        </Path.Fill>
-                        <Path.Data>
-                            <PathGeometry>
-                                <PathFigure StartPoint="130,130" IsClosed="True">
-                                    <LineSegment Point="100.5,11.6" />
-                                    <LineSegment Point="159.5,11.6" />
-                                </PathFigure>
-                            </PathGeometry>
-                        </Path.Data>
-                        <Path.RenderTransform>
+                    <!-- Range rings + crosshair (brighter) + 30° spokes (dimmer), hierarchy
+                         matching radar.html (crosshair .22, ticks .11). Ring radii: the CSS
+                         color-stop percentages resolve against the farthest-corner ray
+                         (130·√2 ≈ 184px), so the mockup's rings land at r ≈ 45 and 91 px and
+                         its third one falls outside the disc — hence only two rings here. -->
+                    <Ellipse Style="{StaticResource RadarRingStyle}" Canvas.Left="84.5" Canvas.Top="84.5" Width="91" Height="91" />
+                    <Ellipse Style="{StaticResource RadarRingStyle}" Canvas.Left="39" Canvas.Top="39" Width="182" Height="182" />
+                    <Line X1="130" Y1="6" X2="130" Y2="254" Stroke="#382DFF6F" StrokeThickness="1" IsHitTestVisible="False" />
+                    <Line X1="6" Y1="130" X2="254" Y2="130" Stroke="#382DFF6F" StrokeThickness="1" IsHitTestVisible="False" />
+                    <Line X1="192" Y1="22.6" X2="68" Y2="237.4" Stroke="#1D2DFF6F" StrokeThickness="1" IsHitTestVisible="False" />
+                    <Line X1="237.4" Y1="68" X2="22.6" Y2="192" Stroke="#1D2DFF6F" StrokeThickness="1" IsHitTestVisible="False" />
+                    <Line X1="237.4" Y1="192" X2="22.6" Y2="68" Stroke="#1D2DFF6F" StrokeThickness="1" IsHitTestVisible="False" />
+                    <Line X1="192" Y1="237.4" X2="68" Y2="22.6" Stroke="#1D2DFF6F" StrokeThickness="1" IsHitTestVisible="False" />
+
+                    <!-- Rotating radar sweep, purely decorative: a wide ~42° beam fading in
+                         behind a bright glowing leading edge, mimicking radar.html's conic
+                         gradient (transparent → .08 → .22 → .58). WPF has no conic gradient,
+                         so the falloff is stepped into twelve 3.5° pie slices of increasing
+                         alpha plus a full-brightness leading-edge radius with a green glow, all
+                         spinning together (safe implicit Storyboard path: static one-off
+                         element, not inside a DataTemplate — see CLAUDE.md pitfall). -->
+                    <Canvas IsHitTestVisible="False">
+                        <Canvas.RenderTransform>
                             <RotateTransform CenterX="130" CenterY="130" />
-                        </Path.RenderTransform>
-                        <Path.Triggers>
+                        </Canvas.RenderTransform>
+                        <Canvas.Triggers>
                             <EventTrigger RoutedEvent="FrameworkElement.Loaded">
                                 <BeginStoryboard>
                                     <Storyboard>
-                                        <DoubleAnimation Storyboard.TargetProperty="(Path.RenderTransform).(RotateTransform.Angle)" From="0" To="360" Duration="0:0:6" RepeatBehavior="Forever" />
+                                        <DoubleAnimation Storyboard.TargetProperty="(Canvas.RenderTransform).(RotateTransform.Angle)" From="0" To="360" Duration="0:0:4" RepeatBehavior="Forever" />
                                     </Storyboard>
                                 </BeginStoryboard>
                             </EventTrigger>
-                        </Path.Triggers>
-                    </Path>
+                        </Canvas.Triggers>
+                        <Path Fill="#022DFF6F" Data="M130,130 L43.0,33.4 A130,130 0 0 1 49.1,28.3 Z" />
+                        <Path Fill="#072DFF6F" Data="M130,130 L49.1,28.3 A130,130 0 0 1 55.4,23.5 Z" />
+                        <Path Fill="#0B2DFF6F" Data="M130,130 L55.4,23.5 A130,130 0 0 1 62.1,19.2 Z" />
+                        <Path Fill="#102DFF6F" Data="M130,130 L62.1,19.2 A130,130 0 0 1 69.0,15.2 Z" />
+                        <Path Fill="#142DFF6F" Data="M130,130 L69.0,15.2 A130,130 0 0 1 76.1,11.7 Z" />
+                        <Path Fill="#1D2DFF6F" Data="M130,130 L76.1,11.7 A130,130 0 0 1 83.4,8.6 Z" />
+                        <Path Fill="#262DFF6F" Data="M130,130 L83.4,8.6 A130,130 0 0 1 90.9,6.0 Z" />
+                        <Path Fill="#2E2DFF6F" Data="M130,130 L90.9,6.0 A130,130 0 0 1 98.6,3.9 Z" />
+                        <Path Fill="#372DFF6F" Data="M130,130 L98.6,3.9 A130,130 0 0 1 106.3,2.2 Z" />
+                        <Path Fill="#512DFF6F" Data="M130,130 L106.3,2.2 A130,130 0 0 1 114.2,1.0 Z" />
+                        <Path Fill="#6C2DFF6F" Data="M130,130 L114.2,1.0 A130,130 0 0 1 122.1,0.2 Z" />
+                        <Path Fill="#872DFF6F" Data="M130,130 L122.1,0.2 A130,130 0 0 1 130,0 Z" />
+                        <Line X1="130" Y1="130" X2="130" Y2="0" Stroke="#942DFF6F" StrokeThickness="2">
+                            <Line.Effect>
+                                <DropShadowEffect Color="#2DFF6F" ShadowDepth="0" BlurRadius="8" Opacity="0.5" />
+                            </Line.Effect>
+                        </Line>
+                    </Canvas>
+
+                    <!-- CRT glass overlay: vignette (darkens toward the rim) + scanlines, both
+                         naturally clipped to the circle since they're Ellipse fills, not Rectangles. -->
+                    <Ellipse Width="260" Height="260" IsHitTestVisible="False">
+                        <Ellipse.Fill>
+                            <!-- Transparent BLACK (#00000000), not WPF's named Transparent
+                                 (#00FFFFFF = clear white): interpolating the latter toward
+                                 opaque black passes through semi-transparent greys and paints
+                                 a grey haze ring over the mid-radius of the disc. -->
+                            <RadialGradientBrush>
+                                <GradientStop Color="#00000000" Offset="0.55" />
+                                <GradientStop Color="#94000000" Offset="1" />
+                            </RadialGradientBrush>
+                        </Ellipse.Fill>
+                    </Ellipse>
+                    <Ellipse Width="260" Height="260" Fill="{StaticResource RadarScanlineBrush}" IsHitTestVisible="False" />
 
                     <ItemsControl ItemsSource="{Binding Edges}">
                         <ItemsControl.ItemsPanel>
@@ -289,11 +278,41 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
 
+                    <!-- Live packet dots: one per observable mesh frame (outgoing commands, OTA
+                         chunks, inbound telemetry refreshes), traveling hop-by-hop along the real
+                         graph edges — see MeshTopologyViewModel's packet ticker. Colored by kind
+                         (legend above). Plain data-bound Ellipses (no Storyboards), so the
+                         DataTemplate/Freezable pitfall documented in CLAUDE.md doesn't apply here. -->
+                    <ItemsControl ItemsSource="{Binding Packets}" IsHitTestVisible="False">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><Canvas /></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <!-- Root MUST be a Canvas (like the Nodes template): ItemsControl
+                                     wraps each item in a ContentPresenter, and Canvas.Left/Top set
+                                     on a deeper element is silently ignored — the dots all pile up
+                                     at the canvas origin (bug fixed 2026-07-15). -->
+                                <Canvas>
+                                    <Ellipse Width="7" Height="7" Canvas.Left="{Binding Left}" Canvas.Top="{Binding Top}"
+                                             Fill="{Binding Kind, Converter={StaticResource PacketKindToBrushConv}}"
+                                             ToolTip="{Binding Tooltip}" IsHitTestVisible="False">
+                                        <Ellipse.Effect>
+                                            <DropShadowEffect Color="{Binding Kind, Converter={StaticResource PacketKindToBrushConv}, ConverterParameter=Color}"
+                                                              ShadowDepth="0" BlurRadius="6" Opacity="0.85" />
+                                        </Ellipse.Effect>
+                                    </Ellipse>
+                                </Canvas>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
                     <!-- OTA travel indicator: "marching ants" dashed line from master to whichever
                          droid currently has an OTA session in flight — a directional approximation
                          (the mesh is a TTL flood-relay, not point-to-point routing), not a literal
                          packet trace. The dash-offset animation loops permanently in the background;
-                         only Visibility gates whether it's seen. -->
+                         only Visibility gates whether it's seen. Real per-chunk packet dots (above)
+                         now ride along this same direction for the actual transfer cadence. -->
                     <Line X1="{Binding OtaX1}" Y1="{Binding OtaY1}" X2="{Binding OtaX2}" Y2="{Binding OtaY2}"
                           Stroke="{StaticResource AccentBrush}" StrokeThickness="2.5" StrokeDashArray="4,3"
                           StrokeStartLineCap="Round" StrokeEndLineCap="Round" IsHitTestVisible="False"
@@ -340,6 +359,8 @@
                             </TransformGroup>
                         </Ellipse.RenderTransform>
                     </Ellipse>
+
+                    </Canvas>
                 </Canvas>
             </Border>
 
