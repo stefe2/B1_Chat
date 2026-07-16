@@ -15,7 +15,8 @@ Written on 2026-07-12, while the firmware source code wasn't yet available.
 | §2 `getTrackDurations` | ⏳ deferred (BUSY-pin approach planned) |
 | §3 `getConfig` response = `{evt:"config",...}` | ✅ implemented |
 | §4 atomic `setMulti` (full validation before application) | ✅ implemented |
-| §5 `seqRun {from}`, `seqPause`/`seqResume`, `seqState.paused` + per-step push | ✅ implemented |
+| §5 `seqRun {from}`, `seqPause`/`seqResume`, `seqState.paused` + per-step push | ✅ implemented, then superseded — see "Absolute-time sequence model" below (fw ≥ 1.5.0, `caps: seqTimeline`) |
+| Absolute-time sequence model (`start`/`totalMs`/`audioStartMs`/`fromMs`/`elapsedMs`) | ✅ implemented (fw 1.5.0) |
 
 **Beyond the contract** (inspired by the KyberEditor protocol): line buffer raised to
 4 KB (`lineMax` announced); `{evt:"err", msg}` for any invalid command; enriched
@@ -47,7 +48,8 @@ persisted in NVS with the sequence.
 ```
 
 - `seqRun` on a slot with a non-null `track`: the master starts the track
-  (equivalent to `playTrack`) **at the first step**, then runs through the steps normally.
+  (equivalent to `playTrack`) at `audioStartMs` (see §6), independently of
+  when any gesture step fires.
 - `seqList` includes `track` in each entry (catalog display).
 - Missing/unknown field = `null` (backward-compatible).
 
@@ -112,11 +114,51 @@ sequences) — slow and interruptible partway through.
 
 ## 5. Enriched playback control (nice-to-have)
 
-- `{"cmd":"seqRun","slot":2,"from":5}` — start at step 6 (the console emulates this
-  in rehearsal mode, but not for standalone playback).
 - `{"cmd":"seqPause"}` / `{"cmd":"seqResume"}` — with `{"evt":"seqState","paused":true,...}`.
 - `seqState` during playback: push the event **on every step** (already seems to
   be the case) and include `track` if there's an audio track.
+- `seqRun {from}` — originally "start at step N"; superseded by `fromMs`, see below.
+
+## 6. Absolute-time sequence model (fw ≥ 1.5.0, breaking change, `caps: seqTimeline`)
+
+The original model was a **chained list**: each step waited `delay` ms after
+the *previous* step before firing — inherently serial, even across droids
+(two droids could never start together, only in relay). Reworked so a
+sequence is a set of steps with **absolute offsets from the sequence's own
+t=0** — several steps due at the same offset fire on the same pass, which is
+what actually enables cross-droid choreography instead of a relay.
+
+```json
+→ {"cmd":"seqSave","slot":2,"name":"Parade","loop":false,"track":3,
+   "totalMs":8000,"audioStartMs":500,
+   "steps":[{"animId":0,"target":513,"start":0},{"animId":5,"target":1279,"start":0}]}
+← {"evt":"seqSaved","ok":true,"slot":2,"name":"Parade"}
+
+→ {"cmd":"seqRun","slot":2,"fromMs":3200}
+← {"evt":"seqState","playing":true,"slot":2,"elapsedMs":3200,"totalMs":8000,"track":3,"paused":false}
+```
+
+- `steps[].start` (was `delay`) — ms from t=0, **not** a delay from the
+  previous step. Two steps sharing the same `start` fire together.
+- `totalMs` — explicit loop/end boundary. Required because, once steps can
+  overlap, "the last step" no longer reliably marks the intended end (e.g. a
+  short gesture on one track finishing well before a longer one on another).
+- `audioStartMs` — when the sequence's audio `track` begins, relative to t=0
+  (ignored if `track` is null). Previously implicit ("starts when step 0
+  fires"); now explicit, since step 0 no longer has to be at `start:0`.
+- `seqRun {fromMs}` (was `{from}`, a step index) — starting offset in ms,
+  i.e. scrub to a point in the timeline rather than skip to a step number.
+- `seqState` reports `elapsedMs`/`totalMs` (was `index`/`total`) — a time
+  position rather than a step count, since several steps can be "current" at
+  once.
+- **Field names changed, not just meaning**, specifically so an old console
+  talking to new firmware (or vice versa) drops the unrecognized field and
+  falls back to a safe default (`start`/`fromMs` absent → 0) instead of a new
+  field being silently misinterpreted under old semantics or vice versa.
+- **Old sequences don't carry over.** The on-flash NVS blob layout changed
+  size, so a sequence saved before fw 1.5.0 reads back as "not found" rather
+  than being replayed with the wrong timing — the 8 slots on a master
+  updated past this point need to be re-saved from the console.
 
 ## Implementation reminders
 

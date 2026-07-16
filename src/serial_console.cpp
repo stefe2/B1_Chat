@@ -141,7 +141,7 @@ void SerialConsole::pushAnimDurations() {
     Serial.print('\n');
 }
 
-void SerialConsole::pushSeqState(bool playing, uint8_t slot, uint8_t index, uint8_t total,
+void SerialConsole::pushSeqState(bool playing, uint8_t slot, uint16_t elapsedMs, uint16_t totalMs,
                                  uint8_t track, bool paused) {
     if (!_clientReady) return;
 
@@ -149,8 +149,8 @@ void SerialConsole::pushSeqState(bool playing, uint8_t slot, uint8_t index, uint
     doc["evt"] = "seqState";
     doc["playing"] = playing;
     doc["slot"] = slot;
-    doc["index"] = index;
-    doc["total"] = total;
+    doc["elapsedMs"] = elapsedMs;
+    doc["totalMs"] = totalMs;
     if (track) doc["track"] = track; else doc["track"] = nullptr;
     doc["paused"] = paused;
     serializeJson(doc, Serial);
@@ -307,13 +307,15 @@ void SerialConsole::pushSeqData(uint8_t slot, const StoredSequence& seq) {
     doc["name"] = seq.name;
     doc["loop"] = seq.loop;
     if (seq.track) doc["track"] = seq.track; else doc["track"] = nullptr;
+    doc["totalMs"] = seq.totalMs;
+    doc["audioStartMs"] = seq.audioStartMs;
 
     JsonArray steps = doc["steps"].to<JsonArray>();
     for (uint8_t i = 0; i < seq.stepCount; i++) {
         JsonObject s = steps.add<JsonObject>();
         s["animId"] = seq.steps[i].animId;
         s["target"] = seq.steps[i].targetId;
-        s["delay"] = seq.steps[i].delayMs;
+        s["start"] = seq.steps[i].startMs;
     }
 
     serializeJson(doc, Serial);
@@ -441,13 +443,15 @@ bool SerialConsole::applyOp(JsonObjectConst op) {
         seq.name[sizeof(seq.name) - 1] = '\0';
         seq.loop = (op["loop"] | false) ? 1 : 0;
         seq.track = op["track"] | 0;
+        seq.totalMs = op["totalMs"] | 0;
+        seq.audioStartMs = op["audioStartMs"] | 0;
         JsonArrayConst steps = op["steps"].as<JsonArrayConst>();
         uint8_t idx = 0;
         for (JsonObjectConst s : steps) {
             if (idx >= StoredSequence::STEP_MAX) break;
             seq.steps[idx].animId = s["animId"] | 0;
             seq.steps[idx].targetId = s["target"] | (uint16_t)MESH_TARGET_ALL;
-            seq.steps[idx].delayMs = s["delay"] | 0;
+            seq.steps[idx].startMs = s["start"] | 0;
             idx++;
         }
         seq.stepCount = idx;
@@ -489,7 +493,12 @@ void SerialConsole::handleLine(const char* line) {
         caps.add("getAll");
         caps.add("config");
         caps.add("seqTrack");
-        caps.add("seqFrom");
+        // Absolute-time sequence model (breaking change from the old chained
+        // relative-delay one): steps carry `start` (ms from t=0, not a
+        // relative delay), seqData/seqSave also carry `totalMs`/
+        // `audioStartMs`, seqRun takes `fromMs` (not a step index), and
+        // seqState reports `elapsedMs`/`totalMs` (not `index`/`total`).
+        caps.add("seqTimeline");
         caps.add("seqPause");
         caps.add("setMulti");
         caps.add("commit");
@@ -674,6 +683,8 @@ void SerialConsole::handleLine(const char* line) {
             return;
         }
         seq.track = track;
+        seq.totalMs = doc["totalMs"] | 0;
+        seq.audioStartMs = doc["audioStartMs"] | 0;
 
         JsonArrayConst steps = doc["steps"].as<JsonArrayConst>();
         uint8_t idx = 0;
@@ -681,7 +692,7 @@ void SerialConsole::handleLine(const char* line) {
             if (idx >= StoredSequence::STEP_MAX) break;
             seq.steps[idx].animId = s["animId"] | 0;
             seq.steps[idx].targetId = s["target"] | (uint16_t)MESH_TARGET_ALL;
-            seq.steps[idx].delayMs = s["delay"] | 0;
+            seq.steps[idx].startMs = s["start"] | 0;
             idx++;
         }
         seq.stepCount = idx;
@@ -718,17 +729,13 @@ void SerialConsole::handleLine(const char* line) {
 
     } else if (!strcmp(cmd, "seqRun")) {
         const uint8_t slot = doc["slot"] | 0;
-        const uint8_t from = doc["from"] | 0;   // starting step (0 = beginning)
+        const uint16_t fromMs = doc["fromMs"] | 0;   // starting offset, ms from t=0 (0 = beginning)
         if (slot >= SequenceStore::SLOT_MAX) {
             pushErr("invalid slot: %u (0-%u)", slot, SequenceStore::SLOT_MAX - 1);
             return;
         }
-        if (from >= StoredSequence::STEP_MAX) {
-            pushErr("invalid starting step: %u (0-%u)", from, StoredSequence::STEP_MAX - 1);
-            return;
-        }
-        if (_seqRunCb) _seqRunCb(slot, from);
-        log("seq run slot=%u from=%u", slot, from);
+        if (_seqRunCb) _seqRunCb(slot, fromMs);
+        log("seq run slot=%u fromMs=%u", slot, fromMs);
 
     } else if (!strcmp(cmd, "seqStop")) {
         if (_seqStopCb) _seqStopCb();

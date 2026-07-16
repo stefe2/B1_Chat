@@ -44,7 +44,7 @@ public:
 
     // Emits a sequence's playback state ({evt:"seqState",...}).
     // track = audio track of the running sequence (0 = none).
-    void pushSeqState(bool playing, uint8_t slot, uint8_t index, uint8_t total,
+    void pushSeqState(bool playing, uint8_t slot, uint16_t elapsedMs, uint16_t totalMs,
                       uint8_t track = 0, bool paused = false);
 
     // Emits the mesh's detected direct links ({evt:"meshTopology",...}).
@@ -68,7 +68,7 @@ public:
     void onSeqSave(bool (*cb)(uint8_t slot, const StoredSequence& seq)) { _seqSaveCb = cb; }
     void onSeqList(uint8_t (*cb)(StoredSequenceMeta* out, uint8_t maxOut)) { _seqListCb = cb; }
     void onSeqLoad(bool (*cb)(uint8_t slot, StoredSequence& out)) { _seqLoadCb = cb; }
-    void onSeqRun(void (*cb)(uint8_t slot, uint8_t from)) { _seqRunCb = cb; }
+    void onSeqRun(void (*cb)(uint8_t slot, uint16_t fromMs)) { _seqRunCb = cb; }
     void onSeqStop(void (*cb)()) { _seqStopCb = cb; }
     void onSeqPause(void (*cb)(bool paused)) { _seqPauseCb = cb; }
     void onSeqDelete(bool (*cb)(uint8_t slot)) { _seqDeleteCb = cb; }
@@ -112,7 +112,7 @@ private:
     bool (*_seqSaveCb)(uint8_t, const StoredSequence&) = nullptr;
     uint8_t (*_seqListCb)(StoredSequenceMeta*, uint8_t) = nullptr;
     bool (*_seqLoadCb)(uint8_t, StoredSequence&) = nullptr;
-    void (*_seqRunCb)(uint8_t, uint8_t) = nullptr;
+    void (*_seqRunCb)(uint8_t, uint16_t) = nullptr;
     void (*_seqStopCb)() = nullptr;
     void (*_seqPauseCb)(bool) = nullptr;
     bool (*_seqDeleteCb)(uint8_t) = nullptr;

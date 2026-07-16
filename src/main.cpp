@@ -59,19 +59,19 @@ static uint32_t nextNeighborReport = 0;
 #if IS_MASTER
 static StoredSequence gSeq;
 static bool gSeqPlaying = false;
-static uint8_t gSeqIndex = 0;
-static uint32_t gSeqNextAt = 0;
+// Index into gSeq.steps (sorted by startMs at seqRun time) of the next step
+// not yet fired. Several steps can fire on the same loop() pass if their
+// startMs coincide — that's the whole point of the absolute-time model
+// (parallel tracks), unlike the old chained one-at-a-time player.
+static uint8_t gSeqNextFireIdx = 0;
+// Anchor: millis() value corresponding to the sequence's own t=0. Elapsed
+// time is always `now - gSeqStartMs` (see seqElapsedMs()); pausing shifts
+// this anchor forward instead of freezing a per-step countdown.
+static uint32_t gSeqStartMs = 0;
 static uint8_t gSeqSlot = 0;
-// Pause: freezes the current step's countdown (remaining delay remembered)
-// and the audio track; resuming picks up exactly where it left off.
 static bool gSeqPaused = false;
-static uint32_t gSeqPauseRemainMs = 0;
-// True if the current step targets this master: in that case we also wait
-// for the local animation to actually finish (anim.isPlaying()) in addition
-// to the delay before advancing. For a step targeting only a remote slave,
-// this information doesn't exist on the master's side (no mesh
-// acknowledgment): it relies on the delay alone.
-static bool gSeqWaitLocal = false;
+static uint32_t gSeqPauseStartedAt = 0;
+static bool gSeqAudioFired = false;
 #endif
 
 // Offline tracking (master): remembers the online state to report losses.
@@ -182,55 +182,74 @@ static bool onSeqDelete(uint8_t slot) {
     return Sequences.remove(slot);
 }
 
-static void onSeqRun(uint8_t slot, uint8_t from) {
+// Small N (<=32), plain array: an insertion sort is simpler and just as
+// fast here as pulling in <algorithm> for std::sort.
+static void sortStepsByStart(StoredSequence& seq) {
+    for (uint8_t i = 1; i < seq.stepCount; i++) {
+        const SeqStep key = seq.steps[i];
+        int8_t j = i - 1;
+        while (j >= 0 && seq.steps[j].startMs > key.startMs) {
+            seq.steps[j + 1] = seq.steps[j];
+            j--;
+        }
+        seq.steps[j + 1] = key;
+    }
+}
+
+// Elapsed time since the running sequence's own t=0 — frozen at the instant
+// pause began (gSeqPauseStartedAt) rather than growing with millis() while
+// paused; onSeqPauseCmd's resume path shifts gSeqStartMs to match.
+static uint32_t seqElapsedMs() {
+    if (!gSeqPlaying) return 0;
+    const uint32_t at = gSeqPaused ? gSeqPauseStartedAt : millis();
+    return at > gSeqStartMs ? at - gSeqStartMs : 0;
+}
+
+static void onSeqRun(uint8_t slot, uint16_t fromMs) {
     if (!Sequences.load(slot, gSeq) || gSeq.stepCount == 0) {
         gSeqPlaying = false;
         Console.pushErr("sequence slot=%u not found/empty", slot);
         Console.pushSeqState(false, slot, 0, 0);
         return;
     }
-    if (from >= gSeq.stepCount) {
-        gSeqPlaying = false;
-        Console.pushErr("starting step %u >= %u steps (slot %u)", from, gSeq.stepCount, slot);
-        Console.pushSeqState(false, slot, 0, gSeq.stepCount, gSeq.track);
-        return;
-    }
+    sortStepsByStart(gSeq);
     gSeqSlot = slot;
     gSeqPlaying = true;
     gSeqPaused = false;
-    // from > 0: gestures only — the audio track can't start mid-file (it will
-    // start on the next loop pass through step 0).
-    gSeqIndex = from;
-    gSeqWaitLocal = false;
-    gSeqNextAt = millis();
-    Console.pushSeqState(true, gSeqSlot, gSeqIndex, gSeq.stepCount, gSeq.track);
+    gSeqStartMs = millis() - fromMs;   // fromMs > now only near boot; harmless (clamped by seqElapsedMs)
+    gSeqNextFireIdx = 0;
+    while (gSeqNextFireIdx < gSeq.stepCount && gSeq.steps[gSeqNextFireIdx].startMs < fromMs) gSeqNextFireIdx++;
+    gSeqAudioFired = gSeq.track && gSeq.audioStartMs < fromMs;
+    Console.pushSeqState(true, gSeqSlot, fromMs, gSeq.totalMs, gSeq.track);
 }
 
 static void onSeqStop() {
+    const uint32_t elapsed = seqElapsedMs();
     gSeqPlaying = false;
     gSeqPaused = false;
-    Console.pushSeqState(false, gSeqSlot, gSeqIndex, gSeq.stepCount, gSeq.track);
+    Console.pushSeqState(false, gSeqSlot, elapsed, gSeq.totalMs, gSeq.track);
 }
 
-// Pause/resume: freezes the current step's remaining delay and the audio track.
+// Pause/resume: shifts the t=0 anchor forward by however long the pause
+// lasted, instead of freezing a per-step countdown (see seqElapsedMs()).
 static void onSeqPauseCmd(bool paused) {
     if (!gSeqPlaying || paused == gSeqPaused) return;
-    const uint32_t now = millis();
-    gSeqPaused = paused;
     if (paused) {
-        gSeqPauseRemainMs = gSeqNextAt > now ? gSeqNextAt - now : 0;
+        gSeqPauseStartedAt = millis();
+        gSeqPaused = true;
         if (gSeq.track) Audio.pause();
     } else {
-        gSeqNextAt = now + gSeqPauseRemainMs;
+        gSeqStartMs += millis() - gSeqPauseStartedAt;
+        gSeqPaused = false;
         if (gSeq.track) Audio.resume();
     }
-    Console.pushSeqState(true, gSeqSlot, gSeqIndex, gSeq.stepCount, gSeq.track, gSeqPaused);
+    Console.pushSeqState(true, gSeqSlot, seqElapsedMs(), gSeq.totalMs, gSeq.track, gSeqPaused);
 }
 
 // Answers a one-off state request (e.g. a dashboard connecting mid-playback,
 // without waiting for the next step transition).
 static void onSeqQueryCmd() {
-    Console.pushSeqState(gSeqPlaying, gSeqSlot, gSeqIndex, gSeq.stepCount, gSeq.track, gSeqPaused);
+    Console.pushSeqState(gSeqPlaying, gSeqSlot, seqElapsedMs(), gSeq.totalMs, gSeq.track, gSeqPaused);
 }
 
 // Console hook: calibration received (already filtered on target == this droid).
@@ -544,43 +563,51 @@ void loop() {
 
 #if IS_MASTER
     // In-progress stored sequence (takes priority over the master's random
-    // idle draw). If the current step targets this master, we also wait for
-    // the local animation to actually finish (gSeqWaitLocal &&
-    // anim.isPlaying()) in addition to the delay, so as not to cut off an
-    // in-progress movement — impossible to guarantee for remote slaves (no
-    // mesh acknowledgment), which rely on the delay alone.
-    if (gSeqPlaying && !gSeqPaused && gServos && now >= gSeqNextAt && !(gSeqWaitLocal && anim.isPlaying())) {
-        if (gSeq.stepCount == 0) {
-            gSeqPlaying = false;
-            Console.pushSeqState(false, gSeqSlot, gSeqIndex, gSeq.stepCount, gSeq.track);
-        } else {
-            if (gSeqIndex >= gSeq.stepCount) {
-                if (gSeq.loop) {
-                    gSeqIndex = 0;
-                } else {
-                    gSeqPlaying = false;
-                    Console.pushSeqState(false, gSeqSlot, gSeqIndex, gSeq.stepCount, gSeq.track);
-                }
+    // idle draw). Absolute-time model: every step whose startMs has come due
+    // fires this pass — possibly several at once, e.g. two droids starting
+    // together — instead of advancing one chained step at a time. Trade-off
+    // accepted along with this: unlike the old chained player, nothing here
+    // still waits for the master's own gesture to finish before the next
+    // event fires (a later local step just interrupts it, same as any live
+    // MSG_ANIM) — remote slaves already worked this way (no mesh ack to know
+    // when a gesture ends), this just makes the master consistent with them.
+    if (gSeqPlaying && !gSeqPaused && gServos) {
+        const uint32_t elapsed = seqElapsedMs();
+        bool fired = false;
+
+        if (gSeq.track && !gSeqAudioFired && elapsed >= gSeq.audioStartMs) {
+            Audio.playTrack(gSeq.track);
+            gSeqAudioFired = true;
+            fired = true;
+        }
+
+        while (gSeqNextFireIdx < gSeq.stepCount && elapsed >= gSeq.steps[gSeqNextFireIdx].startMs) {
+            const SeqStep& st = gSeq.steps[gSeqNextFireIdx];
+            const uint32_t seed = (uint32_t)esp_random();
+            AnimPayload p{st.targetId, st.animId, 0, seed};
+            Mesh.send(MSG_ANIM, &p, sizeof(p));
+            if (st.targetId == MESH_TARGET_ALL || st.targetId == Mesh.myId()) {
+                anim.play(st.animId, seed);
+                // The DFPlayer only plays one track at a time: with an
+                // audio track set, per-gesture sounds would cut it off — so they're skipped.
+                if (!gSeq.track) Audio.playForAnim(st.animId, seed);
             }
-            if (gSeqPlaying) {
-                // Sequence's audio track: started on the first step (and on
-                // every loop back to step 0, like the console's rehearsal mode).
-                if (gSeqIndex == 0 && gSeq.track) Audio.playTrack(gSeq.track);
-                const SeqStep& st = gSeq.steps[gSeqIndex];
-                const uint32_t seed = (uint32_t)esp_random();
-                AnimPayload p{st.targetId, st.animId, 0, seed};
-                Mesh.send(MSG_ANIM, &p, sizeof(p));
-                gSeqWaitLocal = (st.targetId == MESH_TARGET_ALL || st.targetId == Mesh.myId());
-                if (gSeqWaitLocal) {
-                    anim.play(st.animId, seed);
-                    // The DFPlayer only plays one track at a time: with an
-                    // audio track set, per-gesture sounds would cut it off — so they're skipped.
-                    if (!gSeq.track) Audio.playForAnim(st.animId, seed);
-                }
-                gSeqNextAt = now + st.delayMs;
-                gSeqIndex++;
-                Console.pushSeqState(true, gSeqSlot, gSeqIndex, gSeq.stepCount, gSeq.track);
+            gSeqNextFireIdx++;
+            fired = true;
+        }
+
+        if (elapsed >= gSeq.totalMs) {
+            if (gSeq.loop) {
+                gSeqStartMs = now;
+                gSeqNextFireIdx = 0;
+                gSeqAudioFired = false;
+                Console.pushSeqState(true, gSeqSlot, 0, gSeq.totalMs, gSeq.track);
+            } else {
+                gSeqPlaying = false;
+                Console.pushSeqState(false, gSeqSlot, gSeq.totalMs, gSeq.totalMs, gSeq.track);
             }
+        } else if (fired) {
+            Console.pushSeqState(true, gSeqSlot, elapsed, gSeq.totalMs, gSeq.track);
         }
     }
 

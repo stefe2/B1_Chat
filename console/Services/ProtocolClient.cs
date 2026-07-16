@@ -215,24 +215,31 @@ public partial class ProtocolClient : ObservableObject
 
     public void SeqLoad(int slot) => SendCmd(new JsonObject { ["cmd"] = "seqLoad", ["slot"] = slot });
     public void SeqDelete(int slot) => SendCmd(new JsonObject { ["cmd"] = "seqDelete", ["slot"] = slot });
-    public void SeqRun(int slot, int? from = null)
+    public void SeqRun(int slot, int? fromMs = null)
     {
         var o = new JsonObject { ["cmd"] = "seqRun", ["slot"] = slot };
-        if (from.HasValue) o["from"] = from.Value;
+        if (fromMs.HasValue) o["fromMs"] = fromMs.Value;
         SendCmd(o);
     }
     public void SeqStop() => SendCmd(new JsonObject { ["cmd"] = "seqStop" });
     public void SeqPause() => SendCmd(new JsonObject { ["cmd"] = "seqPause" });
     public void SeqResume() => SendCmd(new JsonObject { ["cmd"] = "seqResume" });
 
-    public void SeqSave(int slot, string name, bool loop, int track, IEnumerable<SequenceStep> steps)
+    // totalMs (loop/end boundary) is derived here rather than asked of the caller,
+    // so every save path (slot save, library push) gets a consistent value — see
+    // FIRMWARE-CONTRACT.md §6. audioStartMs stays 0 (audio starts at t=0) until the
+    // UI grows a control for it.
+    public void SeqSave(int slot, string name, bool loop, int track, IEnumerable<SequenceStep> steps, int audioStartMs = 0)
     {
+        var stepList = steps.ToList();
         var stepsArr = new JsonArray();
-        foreach (var s in steps)
-            stepsArr.Add(new JsonObject { ["target"] = s.Target, ["animId"] = s.AnimId, ["delay"] = s.DelayMs });
+        foreach (var s in stepList)
+            stepsArr.Add(new JsonObject { ["target"] = s.Target, ["animId"] = s.AnimId, ["start"] = s.StartMs });
+        var totalMs = stepList.Count == 0 ? 0 : stepList.Max(s => s.StartMs) + 1500;
         SendCmd(new JsonObject
         {
-            ["cmd"] = "seqSave", ["slot"] = slot, ["name"] = name, ["loop"] = loop, ["track"] = track, ["steps"] = stepsArr,
+            ["cmd"] = "seqSave", ["slot"] = slot, ["name"] = name, ["loop"] = loop, ["track"] = track,
+            ["totalMs"] = totalMs, ["audioStartMs"] = audioStartMs, ["steps"] = stepsArr,
         });
     }
 

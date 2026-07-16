@@ -72,7 +72,7 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBox Grid.Column="0" Style="{StaticResource RecessedTextBoxStyle}" Text="{Binding AnimId}" Margin="0,0,4,0" ToolTip="Animation ID" />
                                 <TextBox Grid.Column="1" Style="{StaticResource RecessedTextBoxStyle}" Text="{Binding Target}" Margin="0,0,4,0" ToolTip="Target (0xFFFF = all)" />
-                                <TextBox Grid.Column="2" Style="{StaticResource RecessedTextBoxStyle}" Text="{Binding DelayMs}" Margin="0,0,4,0" ToolTip="Delay (ms)" />
+                                <TextBox Grid.Column="2" Style="{StaticResource RecessedTextBoxStyle}" Text="{Binding StartMs}" Margin="0,0,4,0" ToolTip="Start (ms from sequence start)" />
                                 <Button Grid.Column="3" Content="↑" Style="{StaticResource MiniButtonStyle}" Margin="0,0,2,0"
                                         Command="{Binding DataContext.MoveStepUpCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}" />
                                 <Button Grid.Column="4" Content="↓" Style="{StaticResource MiniButtonStyle}" Margin="0,0,4,0"

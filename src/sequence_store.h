@@ -13,7 +13,9 @@
 struct SeqStep {
     uint16_t targetId;
     uint8_t  animId;
-    uint16_t delayMs;
+    uint16_t startMs;   // absolute offset from the sequence's own t=0 (NOT a
+                         // relative delay from the previous step — several
+                         // steps sharing the same startMs fire together).
 };
 
 struct StoredSequence {
@@ -23,8 +25,13 @@ struct StoredSequence {
     char    name[NAME_LEN];
     uint8_t loop;
     uint8_t stepCount;
-    SeqStep steps[STEP_MAX];
-    uint8_t track;   // master's audio track (1-10), 0 = none
+    SeqStep steps[STEP_MAX];       // NOT guaranteed sorted by startMs on disk —
+                                    // the player sorts once at seqRun time.
+    uint8_t track;                 // master's audio track (1-10), 0 = none
+    uint16_t totalMs;              // explicit loop/end boundary (steps alone
+                                    // don't imply one once they can overlap)
+    uint16_t audioStartMs;         // when `track` starts, relative to t=0
+                                    // (ignored if track == 0)
 };
 
 struct StoredSequenceMeta {

@@ -152,17 +152,18 @@ Session guarded by a handshake: `hello` → `{evt:"hello",ok,id}`, then keepaliv
   `anim {target,animId,seed}` · `preview {target,pan,tilt}` ·
   `calib {target,+6 limits}` · `getCalib {target}` · `getAnimDurations` ·
   `getMeshTopology` · `seqList` · `seqLoad {slot}` ·
-  `seqSave {slot,name,loop,track,steps}` · `seqDelete {slot}` ·
-  `seqRun {slot,from?}` · `seqStop` · `seqPause` · `seqResume` · `seqState` ·
+  `seqSave {slot,name,loop,track,totalMs,audioStartMs,steps:[{animId,target,start}]}` · `seqDelete {slot}` ·
+  `seqRun {slot,fromMs?}` · `seqStop` · `seqPause` · `seqResume` · `seqState` ·
   `setMulti {ops:[...]}` · `commit` · `revert` ·
   `otaStart {target,size,md5}` · `otaChunk {seq,data}` (data = base64) · `otaAbort {}`
 - **Master → console** (`evt`): `hello {ok,id,fw,proto,lineMax,anims,seqSlots,trackCount,caps[],dirty}` ·
   `droids {list:[{id,name,rssi,age,role,servos,autoAnim,adopted,fw}]}` ·
   `log {msg}` · `err {msg}` · `config {volume,freq,amp,speed}` · `calibData {target,+6}` ·
   `meshTopology {links:[{from,to,rssi}]}` · `animDurations {list:[{animId,ms}]}` ·
-  `seqList {list:[{slot,name,stepCount,loop,track}]}` · `seqData {slot,name,loop,track,steps}` ·
+  `seqList {list:[{slot,name,stepCount,loop,track}]}` ·
+  `seqData {slot,name,loop,track,totalMs,audioStartMs,steps:[{animId,target,start}]}` ·
   `seqSaved {ok,slot,name}` · `seqDeleted {ok,slot}` ·
-  `seqState {playing,slot,index,total,track,paused}` ·
+  `seqState {playing,slot,elapsedMs,totalMs,track,paused}` ·
   `setMultiDone {ok,applied,failedAt?,error?}` · `dirty {dirty}` · `allDone` ·
   `otaReady {target,sessionId,chunkSize,totalChunks}` · `otaChunkAck {seq,sent,total}` ·
   `otaDone {target,sessionId}` · `otaResult {target,ok,fw?,reason?}` ·
@@ -541,6 +542,38 @@ width at the bottom. Firmware card taken out of the grid (separate window).
       (90/90 → 60/70 px) to sit closer together, and the row-end "✕"
       (forget) button — briefly moved next to Auto anims in an earlier pass
       — was moved back after Update, at the row's end.
+- [x] Sequencer: absolute-time timeline model (2026-07-16, fw 1.5.0, proto 3,
+      `caps: seqTimeline`), replacing the old chained relay-only player.
+      `SeqStep.delayMs` (relative, chained) → `startMs` (absolute offset from
+      the sequence's own t=0); `StoredSequence` gained `totalMs` (explicit
+      loop/end boundary — no longer implied by "the last step") and
+      `audioStartMs` (the audio track's own cue point, previously implicit
+      at step 0). `main.cpp`'s player (`sortStepsByStart` + `gSeqStartMs`
+      anchor + `gSeqNextFireIdx`) can now fire several steps in the same
+      `loop()` pass — the actual point of the rework: droids can start
+      **together**, not just relayed one after another. Traded away:
+      `gSeqWaitLocal` (the one guarantee that the master's own gesture in a
+      running sequence never got cut short) — a later local step now
+      interrupts it exactly like any live `MSG_ANIM`, matching what already
+      happened to remote slaves (no mesh ack, never had that guarantee).
+      Protocol: `seqSave`/`seqData` steps carry `start` (was `delay`) plus
+      top-level `totalMs`/`audioStartMs`; `seqRun` takes `fromMs` (was
+      `from`, a step index — now a scrub offset); `seqState` reports
+      `elapsedMs`/`totalMs` (was `index`/`total`). Fields renamed, not just
+      reinterpreted, specifically so an old console/firmware pairing drops
+      an unrecognized field instead of misreading it (see Known pitfalls).
+      **Breaking, on purpose**: `SequenceStore`'s NVS blob now requires an
+      exact size match, so a sequence saved before this rework reads back
+      as "not found" rather than replaying with the wrong timing — the 8
+      slots on any master already in service need re-saving from the
+      console after the update. Console (`SequenceStep.StartMs`,
+      `ProtocolClient.SeqSave` computing `totalMs` server-side so every save
+      path — slot save, library push — stays consistent, local rehearsal
+      rewritten from one chained timer to one timer per step so steps
+      sharing a `StartMs` actually fire together) adapted to match; the flat
+      step-list editor itself (raw numeric fields, no visual timeline) is
+      unchanged — a real multi-track visual editor remains a separate,
+      not-yet-scheduled follow-up.
 
 ## Full flash (virgin board support)
 
@@ -648,6 +681,23 @@ change).
   silently resurrecting stale data or losing recent data, with no error.
   Only ever pair a partition-table write with a full chip erase (which
   discards NVS anyway) — never as a "harmless" side effect of an app update.
+- **A stored field can be dangerous to reinterpret even when its size never
+  changes** — same lesson as the partition-table pitfall above, one level
+  up the stack. `SeqStep::startMs` (`sequence_store.h`) used to be a relative
+  delay from the previous step; the fw 1.5.0 timeline rework made it an
+  absolute offset from the sequence's own t=0, same `uint16_t`, same offset
+  in the struct. `SequenceStore`'s blob reader deliberately requires an
+  *exact* size match (`totalMs`/`audioStartMs` were appended alongside, so
+  the overall blob did grow) rather than the old "accept an older, smaller
+  size too" pattern used for the `track` field — that pattern is only safe
+  for a field that's purely *additive* (old data still means what it always
+  meant). Do not resurrect the lenient version for a field whose meaning
+  changes: a pre-rework sequence would otherwise replay with completely
+  wrong timing, silently. Same principle applied at the JSON layer:
+  `seqRun.from` (step index) was renamed to `fromMs` (time offset) instead
+  of keeping the key and changing what the number means — an old console
+  or firmware on either side of the pairing just ignores the unrecognized
+  field (falls back to 0) instead of misreading it.
 - `serial_console`: 256-byte line buffer (see the bug above).
 - `IS_MASTER` lives in `config.h`: check its value before every flash (it
   goes into commits with whatever value was last used).

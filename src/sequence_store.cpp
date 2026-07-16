@@ -10,18 +10,21 @@ struct SequenceBlob {
     uint8_t loop;
     uint8_t stepCount;
     SeqStep steps[StoredSequence::STEP_MAX];
-    uint8_t track;   // added at the end of the blob: old blobs (without this
-                     // field) stay readable, track then defaults to 0 (none)
+    uint8_t track;
+    uint16_t totalMs;
+    uint16_t audioStartMs;
 };
 
-// Blob size before `track` was added (accepted on read, never written).
-const size_t BLOB_LEN_V1 = sizeof(SequenceBlob) - sizeof(uint8_t);
-
-// Reads a blob, accepting both the old and new size. blob must be
-// zero-initialized by the caller (track=0 for an old blob).
+// Unlike the earlier `track` addition (purely additive: an old blob without
+// it just means "no track"), `SeqStep::startMs` changed MEANING (relative
+// delay -> absolute offset) without changing size — a sequence saved before
+// this rework would silently misplay if reinterpreted under the new
+// semantics (see CLAUDE.md "Known pitfalls"). SequenceBlob is deliberately
+// bigger now (totalMs/audioStartMs appended), so requiring an EXACT size
+// match rejects every pre-rework blob instead of reading it wrong; it comes
+// back as "not found", the existing/normal empty-slot path.
 bool readBlob(Preferences& p, const char* key, SequenceBlob& blob) {
-    const size_t got = p.getBytes(key, &blob, sizeof(blob));
-    return got == sizeof(blob) || got == BLOB_LEN_V1;
+    return p.getBytes(key, &blob, sizeof(blob)) == sizeof(blob);
 }
 }
 
@@ -42,6 +45,8 @@ bool SequenceStore::save(uint8_t slot, const StoredSequence& seq) {
     blob.loop = seq.loop ? 1 : 0;
     blob.stepCount = seq.stepCount > StoredSequence::STEP_MAX ? StoredSequence::STEP_MAX : seq.stepCount;
     blob.track = seq.track;
+    blob.totalMs = seq.totalMs;
+    blob.audioStartMs = seq.audioStartMs;
 
     for (uint8_t i = 0; i < blob.stepCount; i++) {
         blob.steps[i] = seq.steps[i];
@@ -67,6 +72,8 @@ bool SequenceStore::load(uint8_t slot, StoredSequence& out) {
     out.loop = blob.loop ? 1 : 0;
     out.stepCount = blob.stepCount > StoredSequence::STEP_MAX ? StoredSequence::STEP_MAX : blob.stepCount;
     out.track = blob.track;
+    out.totalMs = blob.totalMs;
+    out.audioStartMs = blob.audioStartMs;
     for (uint8_t i = 0; i < out.stepCount; i++) {
         out.steps[i] = blob.steps[i];
     }

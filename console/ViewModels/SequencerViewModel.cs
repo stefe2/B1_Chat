@@ -34,8 +34,7 @@ public partial class SequencerViewModel : ObservableObject
 
     private readonly Stack<SequenceSnapshot> _history = new();
     private readonly Stack<SequenceSnapshot> _future = new();
-    private System.Threading.Timer? _rehearsalTimer;
-    private int _rehearsalIndex;
+    private readonly List<System.Threading.Timer> _rehearsalTimers = new();
 
     public SequencerViewModel(ProtocolClient protocol)
     {
@@ -54,7 +53,7 @@ public partial class SequencerViewModel : ObservableObject
     // --- Snapshot / undo-redo --------------------------------------------------
 
     private SequenceSnapshot Snapshot() => new(Name, Loop, AudioTrack,
-        Steps.Select(s => new SequenceStepDto { AnimId = s.AnimId, Target = s.Target, DelayMs = s.DelayMs }).ToList());
+        Steps.Select(s => new SequenceStepDto { AnimId = s.AnimId, Target = s.Target, StartMs = s.StartMs }).ToList());
 
     private void Apply(SequenceSnapshot snap)
     {
@@ -62,7 +61,7 @@ public partial class SequencerViewModel : ObservableObject
         Loop = snap.Loop;
         AudioTrack = snap.Track;
         Steps.Clear();
-        foreach (var s in snap.Steps) Steps.Add(new SequenceStep { AnimId = s.AnimId, Target = s.Target, DelayMs = s.DelayMs });
+        foreach (var s in snap.Steps) Steps.Add(new SequenceStep { AnimId = s.AnimId, Target = s.Target, StartMs = s.StartMs });
         Dirty = true;
         UpdateUndoButtons();
     }
@@ -110,7 +109,10 @@ public partial class SequencerViewModel : ObservableObject
     private void AddStep()
     {
         PushHistory();
-        Steps.Add(new SequenceStep { AnimId = 0, Target = 0xFFFF, DelayMs = 1000 });
+        // Appends 1s after the last step's own start, so building a list top-to-bottom
+        // still "feels" like the old relative-delay chain even though StartMs is absolute.
+        var start = Steps.Count == 0 ? 0 : Steps.Max(s => s.StartMs) + 1000;
+        Steps.Add(new SequenceStep { AnimId = 0, Target = 0xFFFF, StartMs = start });
         Dirty = true;
     }
 
@@ -189,7 +191,7 @@ public partial class SequencerViewModel : ObservableObject
                 {
                     AnimId = st.GetProperty("animId").GetInt32(),
                     Target = (ushort)st.GetProperty("target").GetInt32(),
-                    DelayMs = st.GetProperty("delay").GetInt32(),
+                    StartMs = st.GetProperty("start").GetInt32(),
                 });
         ClearHistory();
         Dirty = false;
@@ -234,7 +236,7 @@ public partial class SequencerViewModel : ObservableObject
         var item = new SequenceLibraryItem
         {
             Id = id, Name = Name, Loop = Loop, AudioTrack = AudioTrack,
-            Steps = Steps.Select(s => new SequenceStepDto { AnimId = s.AnimId, Target = s.Target, DelayMs = s.DelayMs }).ToList(),
+            Steps = Steps.Select(s => new SequenceStepDto { AnimId = s.AnimId, Target = s.Target, StartMs = s.StartMs }).ToList(),
             SavedAt = DateTime.UtcNow,
         };
         _library.Save(id, item);
@@ -250,7 +252,7 @@ public partial class SequencerViewModel : ObservableObject
         Loop = item.Loop;
         AudioTrack = item.AudioTrack;
         Steps.Clear();
-        foreach (var s in item.Steps) Steps.Add(new SequenceStep { AnimId = s.AnimId, Target = s.Target, DelayMs = s.DelayMs });
+        foreach (var s in item.Steps) Steps.Add(new SequenceStep { AnimId = s.AnimId, Target = s.Target, StartMs = s.StartMs });
         ClearHistory();
         Dirty = false;
     }
@@ -269,7 +271,7 @@ public partial class SequencerViewModel : ObservableObject
         if (item == null) return;
         var slot = Catalog.FirstOrDefault(c => c.Name == item.Name)?.Slot ?? FindFreeSlot();
         if (slot < 0) { MessageBox.Show("All 8 slots are occupied.", "Sequencer", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
-        var steps = item.Steps.Select(s => new SequenceStep { AnimId = s.AnimId, Target = s.Target, DelayMs = s.DelayMs });
+        var steps = item.Steps.Select(s => new SequenceStep { AnimId = s.AnimId, Target = s.Target, StartMs = s.StartMs });
         _protocol.SeqSave(slot, item.Name, item.Loop, item.AudioTrack, steps);
     }
 
@@ -296,8 +298,8 @@ public partial class SequencerViewModel : ObservableObject
         if (dlg.ShowDialog() != true) return;
         var obj = new JsonObject
         {
-            ["type"] = "b1-sequence", ["version"] = 1, ["name"] = Name, ["loop"] = Loop, ["audioTrack"] = AudioTrack,
-            ["steps"] = new JsonArray(Steps.Select(s => (JsonNode)new JsonObject { ["animId"] = s.AnimId, ["target"] = s.Target, ["delayMs"] = s.DelayMs }).ToArray()),
+            ["type"] = "b1-sequence", ["version"] = 2, ["name"] = Name, ["loop"] = Loop, ["audioTrack"] = AudioTrack,
+            ["steps"] = new JsonArray(Steps.Select(s => (JsonNode)new JsonObject { ["animId"] = s.AnimId, ["target"] = s.Target, ["startMs"] = s.StartMs }).ToArray()),
         };
         File.WriteAllText(dlg.FileName, obj.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
     }
@@ -319,7 +321,15 @@ public partial class SequencerViewModel : ObservableObject
             if (obj["steps"] is JsonArray arr)
                 foreach (var st in arr)
                     if (st is JsonObject so)
-                        Steps.Add(new SequenceStep { AnimId = so["animId"]?.GetValue<int>() ?? 0, Target = so["target"]?.GetValue<ushort>() ?? 0xFFFF, DelayMs = so["delayMs"]?.GetValue<int>() ?? 1000 });
+                        // "delayMs": pre-timeline export (schema version 1) — read back as a
+                        // start offset, not a relative delay; not equivalent, but a reasonable
+                        // best-effort rather than silently dropping the step.
+                        Steps.Add(new SequenceStep
+                        {
+                            AnimId = so["animId"]?.GetValue<int>() ?? 0,
+                            Target = so["target"]?.GetValue<ushort>() ?? 0xFFFF,
+                            StartMs = so["startMs"]?.GetValue<int>() ?? so["delayMs"]?.GetValue<int>() ?? 0,
+                        });
             ClearHistory();
             Dirty = false;
         }
@@ -341,34 +351,55 @@ public partial class SequencerViewModel : ObservableObject
     {
         if (Steps.Count == 0) return;
         IsRehearsing = true;
-        _rehearsalIndex = 0;
         if (AudioTrack > 0) _protocol.PlayTrack(AudioTrack);
-        FireRehearsalStep();
+        ScheduleRehearsalPass();
     }
 
-    private void FireRehearsalStep()
+    // Absolute-time model (FIRMWARE-CONTRACT.md §6): one one-shot timer per step,
+    // armed at its own StartMs from this pass's t=0, instead of a single chained
+    // timer — steps sharing a StartMs now actually fire together, matching what
+    // the firmware's own player does, rather than always running back-to-back.
+    private void ScheduleRehearsalPass()
     {
-        if (_rehearsalIndex >= Steps.Count)
+        DisposeRehearsalTimers();
+        foreach (var step in Steps)
         {
-            if (Loop) { _rehearsalIndex = 0; }
-            else { StopRehearsal(); return; }
+            var timer = new System.Threading.Timer(_ => RunOnUiThread(() =>
+            {
+                if (!IsRehearsing) return;
+                _protocol.PlayAnim(step.Target, step.AnimId, (uint)Random.Shared.Next());
+            }), null, Math.Max(0, step.StartMs), System.Threading.Timeout.Infinite);
+            _rehearsalTimers.Add(timer);
         }
-        var step = Steps[_rehearsalIndex];
-        _protocol.PlayAnim(step.Target, step.AnimId, (uint)Random.Shared.Next());
-        var delay = Math.Max(200, step.DelayMs);
-        _rehearsalTimer?.Dispose();
-        _rehearsalTimer = new System.Threading.Timer(_ =>
+        var totalMs = Steps.Max(s => s.StartMs) + 1500;
+        var endTimer = new System.Threading.Timer(_ => RunOnUiThread(() =>
         {
-            var dispatcher = Application.Current?.Dispatcher;
-            void Next() { _rehearsalIndex++; FireRehearsalStep(); }
-            if (dispatcher == null || dispatcher.CheckAccess()) Next(); else dispatcher.Invoke(Next);
-        }, null, delay, System.Threading.Timeout.Infinite);
+            if (!IsRehearsing) return;
+            if (Loop)
+            {
+                if (AudioTrack > 0) _protocol.PlayTrack(AudioTrack);
+                ScheduleRehearsalPass();
+            }
+            else StopRehearsal();
+        }), null, totalMs, System.Threading.Timeout.Infinite);
+        _rehearsalTimers.Add(endTimer);
+    }
+
+    private static void RunOnUiThread(Action action)
+    {
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher == null || dispatcher.CheckAccess()) action(); else dispatcher.Invoke(action);
+    }
+
+    private void DisposeRehearsalTimers()
+    {
+        foreach (var t in _rehearsalTimers) t.Dispose();
+        _rehearsalTimers.Clear();
     }
 
     private void StopRehearsal()
     {
         IsRehearsing = false;
-        _rehearsalTimer?.Dispose();
-        _rehearsalTimer = null;
+        DisposeRehearsalTimers();
     }
 }
