@@ -8,7 +8,6 @@
 #include "config_store.h"
 #include "serial_console.h"
 #include "sequence_store.h"
-#include "audio.h"
 #include "ota_guard.h"
 #include "ota_master.h"
 #include "ota_slave.h"
@@ -71,7 +70,6 @@ static uint32_t gSeqStartMs = 0;
 static uint8_t gSeqSlot = 0;
 static bool gSeqPaused = false;
 static uint32_t gSeqPauseStartedAt = 0;
-static bool gSeqAudioFired = false;
 #endif
 
 // Offline tracking (master): remembers the online state to report losses.
@@ -133,7 +131,6 @@ static void applyCalib(const CalibPayload& p) {
 static void playLocalAnim(uint8_t animId, uint32_t seed) {
     if (gServos) {
         anim.play(animId, seed);
-        Audio.playForAnim(animId, seed);
     }
 }
 
@@ -156,14 +153,6 @@ static void onLocateCmd(uint16_t target, bool en) {
     LocatePayload p{target, (uint8_t)(en ? 1 : 0)};
     Mesh.send(MSG_LOCATE, &p, sizeof(p));
     if (target == MESH_TARGET_ALL || target == Mesh.myId()) applyLocate(en);
-}
-
-static void onVolumeCmd(uint8_t v) {
-    Audio.setVolume(v);
-}
-
-static void onTrackCmd(uint8_t track) {
-    if (!Audio.playTrack(track)) LOGF("audio unavailable (track %u)", track);
 }
 
 static bool onSeqSave(uint8_t slot, const StoredSequence& seq) {
@@ -219,15 +208,14 @@ static void onSeqRun(uint8_t slot, uint16_t fromMs) {
     gSeqStartMs = millis() - fromMs;   // fromMs > now only near boot; harmless (clamped by seqElapsedMs)
     gSeqNextFireIdx = 0;
     while (gSeqNextFireIdx < gSeq.stepCount && gSeq.steps[gSeqNextFireIdx].startMs < fromMs) gSeqNextFireIdx++;
-    gSeqAudioFired = gSeq.track && gSeq.audioStartMs < fromMs;
-    Console.pushSeqState(true, gSeqSlot, fromMs, gSeq.totalMs, gSeq.track);
+    Console.pushSeqState(true, gSeqSlot, fromMs, gSeq.totalMs);
 }
 
 static void onSeqStop() {
     const uint32_t elapsed = seqElapsedMs();
     gSeqPlaying = false;
     gSeqPaused = false;
-    Console.pushSeqState(false, gSeqSlot, elapsed, gSeq.totalMs, gSeq.track);
+    Console.pushSeqState(false, gSeqSlot, elapsed, gSeq.totalMs);
 }
 
 // Pause/resume: shifts the t=0 anchor forward by however long the pause
@@ -237,19 +225,17 @@ static void onSeqPauseCmd(bool paused) {
     if (paused) {
         gSeqPauseStartedAt = millis();
         gSeqPaused = true;
-        if (gSeq.track) Audio.pause();
     } else {
         gSeqStartMs += millis() - gSeqPauseStartedAt;
         gSeqPaused = false;
-        if (gSeq.track) Audio.resume();
     }
-    Console.pushSeqState(true, gSeqSlot, seqElapsedMs(), gSeq.totalMs, gSeq.track, gSeqPaused);
+    Console.pushSeqState(true, gSeqSlot, seqElapsedMs(), gSeq.totalMs, gSeqPaused);
 }
 
 // Answers a one-off state request (e.g. a dashboard connecting mid-playback,
 // without waiting for the next step transition).
 static void onSeqQueryCmd() {
-    Console.pushSeqState(gSeqPlaying, gSeqSlot, seqElapsedMs(), gSeq.totalMs, gSeq.track, gSeqPaused);
+    Console.pushSeqState(gSeqPlaying, gSeqSlot, seqElapsedMs(), gSeq.totalMs, gSeqPaused);
 }
 
 // Console hook: calibration received (already filtered on target == this droid).
@@ -286,9 +272,6 @@ static void onMeshMessage(uint8_t type, const uint8_t* payload, uint8_t len,
         LOGF("ANIM from %04X (rssi %d) target=%04X anim=%u", srcId, rssi, p.targetId, p.animId);
         if (p.targetId == MESH_TARGET_ALL || p.targetId == Mesh.myId()) {
             if (gServos) anim.play(p.animId, p.seed);
-#if IS_MASTER
-            Audio.playForAnim(p.animId, p.seed);
-#endif
         }
     } else if (type == MSG_SERVO && len == sizeof(ServoPayload)) {
         ServoPayload p;
@@ -473,8 +456,6 @@ void setup() {
 #if IS_MASTER
     Console.begin();
     Console.onAnim(playLocalAnim);
-    Console.onVolume(onVolumeCmd);
-    Console.onTrack(onTrackCmd);
     Console.onServo(onServoCmd);
     Console.onAutoAnim(onAutoAnimCmd);
     Console.onLocate(onLocateCmd);
@@ -493,10 +474,6 @@ void setup() {
     Console.onOtaAbort(onOtaAbortCmd);
     Console.setMasterServos(gServos);
     Console.setMasterAutoAnim(gAutoAnim);
-
-    Audio.begin();
-    Audio.setVolume(Config.volume());
-    LOGF("audio %s (vol %u)", Audio.ready() ? "OK" : "OFF", Audio.volume());
 #endif
 
     if (Mesh.begin(GROUP_KEY)) {
@@ -575,12 +552,6 @@ void loop() {
         const uint32_t elapsed = seqElapsedMs();
         bool fired = false;
 
-        if (gSeq.track && !gSeqAudioFired && elapsed >= gSeq.audioStartMs) {
-            Audio.playTrack(gSeq.track);
-            gSeqAudioFired = true;
-            fired = true;
-        }
-
         while (gSeqNextFireIdx < gSeq.stepCount && elapsed >= gSeq.steps[gSeqNextFireIdx].startMs) {
             const SeqStep& st = gSeq.steps[gSeqNextFireIdx];
             const uint32_t seed = (uint32_t)esp_random();
@@ -588,9 +559,6 @@ void loop() {
             Mesh.send(MSG_ANIM, &p, sizeof(p));
             if (st.targetId == MESH_TARGET_ALL || st.targetId == Mesh.myId()) {
                 anim.play(st.animId, seed);
-                // The DFPlayer only plays one track at a time: with an
-                // audio track set, per-gesture sounds would cut it off — so they're skipped.
-                if (!gSeq.track) Audio.playForAnim(st.animId, seed);
             }
             gSeqNextFireIdx++;
             fired = true;
@@ -600,14 +568,13 @@ void loop() {
             if (gSeq.loop) {
                 gSeqStartMs = now;
                 gSeqNextFireIdx = 0;
-                gSeqAudioFired = false;
-                Console.pushSeqState(true, gSeqSlot, 0, gSeq.totalMs, gSeq.track);
+                Console.pushSeqState(true, gSeqSlot, 0, gSeq.totalMs);
             } else {
                 gSeqPlaying = false;
-                Console.pushSeqState(false, gSeqSlot, gSeq.totalMs, gSeq.totalMs, gSeq.track);
+                Console.pushSeqState(false, gSeqSlot, gSeq.totalMs, gSeq.totalMs);
             }
         } else if (fired) {
-            Console.pushSeqState(true, gSeqSlot, elapsed, gSeq.totalMs, gSeq.track);
+            Console.pushSeqState(true, gSeqSlot, elapsed, gSeq.totalMs);
         }
     }
 
@@ -640,7 +607,6 @@ void loop() {
         AnimPayload p{MESH_TARGET_ALL, animId, 0, seed};
         Mesh.send(MSG_ANIM, &p, sizeof(p));
         anim.play(animId, seed);
-        Audio.playForAnim(animId, seed);
     }
 #else
     // An isolated slave (no master) also animates itself on its own.

@@ -4,7 +4,7 @@
 //  SerialConsole — JSON bridge over USB for the web console (master)
 //
 //  Protocol: one line = one JSON message (see project.md §10).
-//  - PC → master: {cmd:"list"|"anim"|"config"|"volume"|"name"|"playTrack"|
+//  - PC → master: {cmd:"list"|"anim"|"config"|"name"|
 //                   "getConfig"|"calib"|"preview"|"getCalib"|"getAnimDurations"|
 //                   "seqState"|"servo"|"autoAnim"|"locate"|"getMeshTopology"|"getAll"|
 //                   "setMulti"|"commit"|"revert"|"seqPause"|"seqResume", ...}
@@ -12,8 +12,7 @@
 //                   "setMultiDone"|"dirty", ...}
 //
 //  Application logs go through log() to stay in JSON format and not pollute
-//  the protocol. Hooks let the firmware act on commands (play an anim, set
-//  the volume, etc.).
+//  the protocol. Hooks let the firmware act on commands (play an anim, etc.).
 // ============================================================================
 
 #include <Arduino.h>
@@ -43,9 +42,8 @@ public:
     void pushAnimDurations();
 
     // Emits a sequence's playback state ({evt:"seqState",...}).
-    // track = audio track of the running sequence (0 = none).
     void pushSeqState(bool playing, uint8_t slot, uint16_t elapsedMs, uint16_t totalMs,
-                      uint8_t track = 0, bool paused = false);
+                      bool paused = false);
 
     // Emits the mesh's detected direct links ({evt:"meshTopology",...}).
     void pushMeshTopology();
@@ -59,8 +57,6 @@ public:
 
     // Optional hooks triggered by incoming commands.
     void onAnim(void (*cb)(uint8_t animId, uint32_t seed)) { _animCb = cb; }
-    void onVolume(void (*cb)(uint8_t volume)) { _volCb = cb; }
-    void onTrack(void (*cb)(uint8_t track)) { _trackCb = cb; }
     void onConfig(void (*cb)(uint8_t freq, uint8_t amp, uint8_t speed)) { _cfgCb = cb; }
     void onServo(void (*cb)(uint16_t target, bool enabled)) { _servoCb = cb; }
     void onAutoAnim(void (*cb)(uint16_t target, bool enabled)) { _autoAnimCb = cb; }
@@ -103,8 +99,6 @@ private:
     static const uint32_t CLIENT_TIMEOUT_MS = 5000;
 
     void (*_animCb)(uint8_t, uint32_t) = nullptr;
-    void (*_volCb)(uint8_t) = nullptr;
-    void (*_trackCb)(uint8_t) = nullptr;
     void (*_cfgCb)(uint8_t, uint8_t, uint8_t) = nullptr;
     void (*_servoCb)(uint16_t, bool) = nullptr;
     void (*_autoAnimCb)(uint16_t, bool) = nullptr;

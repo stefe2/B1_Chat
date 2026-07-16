@@ -1,13 +1,12 @@
 namespace b1_chat_console.Models;
 
-public record SequenceSlotMeta(int Slot, string Name, int StepCount, bool Loop, int Track);
+public record SequenceSlotMeta(int Slot, string Name, int StepCount, bool Loop);
 
 public class SequenceLibraryItem
 {
     public string Id { get; set; } = "";
     public string Name { get; set; } = "";
     public bool Loop { get; set; }
-    public int AudioTrack { get; set; }
     public List<AudioLaneDto> AudioLanes { get; set; } = new();
     public List<SequenceStepDto> Steps { get; set; } = new();
     public DateTime SavedAt { get; set; }

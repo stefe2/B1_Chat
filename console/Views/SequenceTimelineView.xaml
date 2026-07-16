@@ -1,6 +1,7 @@
 <UserControl x:Class="b1_chat_console.Views.SequenceTimelineView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:Models="clr-namespace:b1_chat_console.Models">
     <Grid x:Name="RootGrid">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -8,21 +9,63 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- Toolbar: zoom, snap, live indicator, add audio lane -->
-        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
-            <TextBlock Text="ZOOM" Style="{StaticResource FieldLabelStyle}" Margin="0,0,6,0" VerticalAlignment="Center" />
-            <Slider Style="{StaticResource MetalSliderStyle}" Width="110" Minimum="20" Maximum="300"
-                    Value="{Binding PxPerSecond}" Margin="0,0,14,0" />
-            <CheckBox Content="Snap (100ms)" IsChecked="{Binding SnapToGrid}" Foreground="{StaticResource MutedBrush}"
-                      VerticalAlignment="Center" Margin="0,0,14,0" />
-            <Button Content="+ Add audio lane" Style="{StaticResource MiniButtonStyle}"
-                    Command="{Binding AddAudioLaneCommand}" Margin="0,0,14,0" />
-            <Border Style="{StaticResource ValuePillStyle}" BorderBrush="{StaticResource OkBrush}"
-                    Visibility="{Binding IsLiveTracking, Converter={StaticResource BoolToVisConv}}">
-                <TextBlock Text="● LIVE" Foreground="{StaticResource OkBrush}" FontFamily="{StaticResource MonoFont}"
-                           FontWeight="Bold" FontSize="11" />
-            </Border>
-        </StackPanel>
+        <!-- Transport bar: recessed dark bar (mockup-matched) — Play/Stop/Pause/Resume, Loop,
+             timecode readout, zoom/snap/fit, undo/redo/export/import, add audio lane,
+             live indicator. Play is entirely console-driven (real anim/audio commands, no NVS
+             slot required) — Pause/Resume auto-disable via their CanExecute (IsPlaying/IsPaused).
+             Everything here binds directly to SequencerViewModel (this view's own DataContext,
+             inherited from SequencerCardView — no AncestorType lookups needed at this top level,
+             only inside the nested item DataTemplates below). -->
+        <Border Grid.Row="0" Margin="0,0,0,8" Padding="10,7" CornerRadius="7"
+                Background="{StaticResource RecessBrush}" BorderBrush="{StaticResource BorderLoBrush}" BorderThickness="1">
+            <StackPanel Orientation="Horizontal">
+                <Button Style="{StaticResource IconTransportButtonStyle}" Command="{Binding PlayCommand}" ToolTip="Play" Margin="0,0,4,0">
+                    <TextBlock Text="▶" />
+                </Button>
+                <Button Style="{StaticResource IconTransportButtonStyle}" Command="{Binding StopCommand}" ToolTip="Stop" Margin="0,0,4,0">
+                    <TextBlock Text="■" />
+                </Button>
+                <Button Style="{StaticResource IconTransportButtonStyle}" Command="{Binding PauseCommand}" ToolTip="Pause" Margin="0,0,4,0">
+                    <TextBlock Text="⏸" />
+                </Button>
+                <Button Style="{StaticResource IconTransportButtonStyle}" Command="{Binding ResumeCommand}" ToolTip="Resume" Margin="0,0,10,0">
+                    <TextBlock Text="⏵" />
+                </Button>
+                <ToggleButton Style="{StaticResource HaloToggleButtonStyle}" IsChecked="{Binding Loop}"
+                              ToolTip="Loop the whole sequence" Margin="0,0,10,0" VerticalAlignment="Center">
+                    <TextBlock Text="⟲ Loop" FontSize="10.5" />
+                </ToggleButton>
+
+                <Border Style="{StaticResource ValuePillStyle}" MinWidth="0" Padding="8,5" Margin="0,0,10,0">
+                    <TextBlock Text="{Binding TimecodeText}" Style="{StaticResource ValuePillTextStyle}" FontSize="12" />
+                </Border>
+
+                <Rectangle Width="1" Fill="{StaticResource BorderHiBrush}" Opacity="0.5" Margin="0,2,10,2" />
+
+                <TextBlock Text="ZOOM" Style="{StaticResource FieldLabelStyle}" Margin="0,0,6,0" />
+                <Slider Style="{StaticResource MetalSliderStyle}" Width="100" Minimum="20" Maximum="300"
+                        Value="{Binding PxPerSecond}" Margin="0,0,10,0" />
+                <CheckBox Content="Snap" IsChecked="{Binding SnapToGrid}" Foreground="{StaticResource MutedBrush}"
+                          VerticalAlignment="Center" Margin="0,0,10,0" />
+                <Button Content="Fit" Style="{StaticResource MiniButtonStyle}" Click="BtnFit_Click" Margin="0,0,10,0" />
+
+                <Rectangle Width="1" Fill="{StaticResource BorderHiBrush}" Opacity="0.5" Margin="0,2,10,2" />
+
+                <Button Content="Undo" Style="{StaticResource MiniButtonStyle}" Command="{Binding UndoCommand}" Margin="0,0,4,0" />
+                <Button Content="Redo" Style="{StaticResource MiniButtonStyle}" Command="{Binding RedoCommand}" Margin="0,0,4,0" />
+                <Button Content="Export" Style="{StaticResource MiniButtonStyle}" Command="{Binding ExportCommand}" Margin="0,0,4,0" />
+                <Button Content="Import" Style="{StaticResource MiniButtonStyle}" Command="{Binding ImportCommand}" Margin="0,0,10,0" />
+
+                <Button Content="+ Add audio lane" Style="{StaticResource MiniButtonStyle}"
+                        Command="{Binding AddAudioLaneCommand}" Margin="0,0,10,0" />
+
+                <Border Style="{StaticResource ValuePillStyle}" BorderBrush="{StaticResource OkBrush}"
+                        Visibility="{Binding IsLiveTracking, Converter={StaticResource BoolToVisConv}}">
+                    <TextBlock Text="● LIVE" Foreground="{StaticResource OkBrush}" FontFamily="{StaticResource MonoFont}"
+                               FontWeight="Bold" FontSize="11" />
+                </Border>
+            </StackPanel>
+        </Border>
 
         <!-- Body: track gutter | scrollable ruler+audio+tracks | inspector -->
         <Grid Grid.Row="1">
@@ -36,7 +79,10 @@
                  one row per droid (click to arm — insertion target for the gesture library —
                  plus a mute toggle for Rehearse (local), see CLAUDE.md's mute limitation). -->
             <StackPanel Grid.Column="0" Margin="0,0,6,0">
-                <Border Height="24" />
+                <Border Height="24" BorderThickness="0,0,0,1" BorderBrush="{StaticResource BorderLoBrush}">
+                    <TextBlock Text="TRACKS" FontSize="9.5" FontWeight="Bold" Foreground="{StaticResource Muted2Brush}"
+                               VerticalAlignment="Center" Margin="8,0,0,0" />
+                </Border>
                 <ItemsControl ItemsSource="{Binding AudioLanes}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
@@ -87,6 +133,16 @@
                                             <DataTrigger Binding="{Binding Muted}" Value="True">
                                                 <Setter Property="Opacity" Value="0.4" />
                                             </DataTrigger>
+                                            <!-- Active/audible highlight: soft green glow on the whole row, echoing
+                                                 the toggle's own on=green state so it reads at a glance, not just
+                                                 on the small switch. -->
+                                            <DataTrigger Binding="{Binding Muted}" Value="False">
+                                                <Setter Property="Effect">
+                                                    <Setter.Value>
+                                                        <DropShadowEffect Color="#3DDC84" ShadowDepth="0" BlurRadius="10" Opacity="0.45" />
+                                                    </Setter.Value>
+                                                </Setter>
+                                            </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
                                 </Border.Style>
@@ -95,16 +151,29 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="{Binding Label}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
-                                               Foreground="{StaticResource TextBrush}" FontSize="11" FontWeight="SemiBold" />
-                                    <!-- Real Button (not Border+MouseBinding like the row's own arm-click): ButtonBase
-                                         marks its Click handled, which stops it bubbling to the row's MouseBinding —
-                                         otherwise a click on the mute icon would also arm the track underneath it. -->
-                                    <Button Grid.Column="1" Style="{StaticResource MiniButtonStyle}" Padding="4,1" FontSize="10"
-                                            Command="{Binding DataContext.ToggleMuteCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                            CommandParameter="{Binding}" ToolTip="Mute this track for Rehearse (local) only">
-                                        <TextBlock FontSize="10" Text="{Binding Muted, Converter={StaticResource BoolToTextConv}, ConverterParameter='🔇|🔊'}" />
-                                    </Button>
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis"
+                                                   Foreground="{StaticResource TextBrush}" FontSize="11" FontWeight="SemiBold" />
+                                        <TextBlock Text="{Binding Role}" FontSize="8.5" FontWeight="Bold"
+                                                   Foreground="{StaticResource Muted2Brush}" Margin="0,1,0,0" />
+                                    </StackPanel>
+                                    <!-- Real ToggleButton (not Border+MouseBinding like the row's own arm-click):
+                                         ButtonBase marks its Click handled, which stops it bubbling to the row's
+                                         MouseBinding — otherwise a click on the switch would also arm the track
+                                         underneath it. IsChecked shows "audible" (inverse of Muted) so ON/green
+                                         matches this app's existing on=green/active convention (Servos, Auto anims). -->
+                                    <ToggleButton Grid.Column="1" Style="{StaticResource OnOffSwitchStyle}"
+                                                  IsChecked="{Binding Muted, Converter={StaticResource BoolInvertConv}, Mode=OneWay}"
+                                                  Command="{Binding DataContext.ToggleMuteCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                  CommandParameter="{Binding}" ToolTip="Audible in Rehearse (local) — off mutes this track">
+                                        <!-- LayoutTransform (not RenderTransform): shrinks the column's Auto-sized
+                                             allocation along with the visual, so nothing overlaps/leaves a gap.
+                                             Scoped to this row only — the shared OnOffSwitchStyle (Servos/Auto
+                                             anims/Locate in the Droids card) stays full-size. -->
+                                        <ToggleButton.LayoutTransform>
+                                            <ScaleTransform ScaleX="0.5" ScaleY="0.5" />
+                                        </ToggleButton.LayoutTransform>
+                                    </ToggleButton>
                                 </Grid>
                             </Border>
                         </DataTemplate>
@@ -113,9 +182,14 @@
             </StackPanel>
 
             <!-- Ruler + audio lanes + tracks, scrolling together horizontally -->
-            <ScrollViewer Grid.Column="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"
+            <ScrollViewer x:Name="ScrollArea" Grid.Column="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"
                           Background="{StaticResource RecessBrush}">
-                <StackPanel>
+                <!-- HorizontalAlignment="Left" is load-bearing: without it, when the sequence is
+                     short/zoomed out (content narrower than the viewport), ScrollViewer's default
+                     content stretching centers this StackPanel instead of pinning it flush against
+                     the gutter — the ruler's "0.0s" origin then floats away from x=0 with a wide
+                     gap in between (pre-existing, not new to this session's changes). -->
+                <StackPanel HorizontalAlignment="Left">
                     <Canvas x:Name="RulerCanvas" Height="24" Background="Transparent" Cursor="SizeWE"
                             Width="{Binding TimelineWidthPx}"
                             MouseLeftButtonDown="Ruler_MouseLeftButtonDown"
@@ -164,13 +238,46 @@
                     </Canvas>
 
                     <!-- Audio lanes: one 48px Canvas per lane, each holding its own clips. Clips
-                         within a lane may overlap (no collision handling, by design) and only
-                         move horizontally — there's no cross-lane drag. -->
-                    <ItemsControl ItemsSource="{Binding AudioLanes}">
+                         within a lane may overlap (no collision handling, by design); dragging
+                         past a lane boundary re-parents the clip to that lane (ghost-drag, see
+                         AudioClip_MouseMove in the code-behind). -->
+                    <ItemsControl x:Name="AudioLanesItemsControl" ItemsSource="{Binding AudioLanes}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
                                 <Canvas Height="48" Margin="0,0,0,4" Background="Transparent"
                                         Width="{Binding DataContext.TimelineWidthPx, RelativeSource={RelativeSource AncestorType=ItemsControl}}">
+                                    <!-- Row background + bottom separator, matching the track rows below. -->
+                                    <Border Height="48" BorderThickness="0,0,0,1" BorderBrush="#59000000"
+                                            Width="{Binding DataContext.TimelineWidthPx, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                            IsHitTestVisible="False">
+                                        <Border.Background>
+                                            <SolidColorBrush Color="#FF9D2E" Opacity="0.03" />
+                                        </Border.Background>
+                                    </Border>
+                                    <!-- Vertical gridlines, synced to the same RulerTicks as the ruler/tracks. -->
+                                    <ItemsControl ItemsSource="{Binding DataContext.RulerTicks, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                  IsHitTestVisible="False">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate><Canvas /></ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Rectangle Width="1" Height="48" Canvas.Left="{Binding Left}">
+                                                    <Rectangle.Style>
+                                                        <Style TargetType="Rectangle">
+                                                            <Setter Property="Fill" Value="{StaticResource BorderHiBrush}" />
+                                                            <Setter Property="Opacity" Value="0.05" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding Major}" Value="True">
+                                                                    <Setter Property="Opacity" Value="0.12" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Rectangle.Style>
+                                                </Rectangle>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
                                     <ItemsControl ItemsSource="{Binding Clips}">
                                         <ItemsControl.ItemsPanel>
                                             <ItemsPanelTemplate><Canvas /></ItemsPanelTemplate>
@@ -180,11 +287,23 @@
                                                 <Canvas>
                                                     <Border Height="44" CornerRadius="4" Padding="6,2" BorderThickness="1"
                                                             Background="{StaticResource AccentBrush}" BorderBrush="#66FFFFFF"
-                                                            Opacity="0.88" Cursor="SizeWE"
+                                                            Cursor="SizeWE"
                                                             Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=ItemsControl, AncestorLevel=2}}"
                                                             MouseLeftButtonDown="AudioClip_MouseLeftButtonDown"
                                                             MouseMove="AudioClip_MouseMove"
                                                             MouseLeftButtonUp="AudioClip_MouseLeftButtonUp">
+                                                        <Border.Style>
+                                                            <Style TargetType="Border">
+                                                                <Setter Property="Opacity" Value="0.88" />
+                                                                <Style.Triggers>
+                                                                    <!-- Dimmed while this clip is the source of a cross-lane drag —
+                                                                         a ghost follows the cursor instead (see code-behind). -->
+                                                                    <DataTrigger Binding="{Binding Dragging}" Value="True">
+                                                                        <Setter Property="Opacity" Value="0.25" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Border.Style>
                                                         <Border.ContextMenu>
                                                             <ContextMenu Style="{StaticResource DarkContextMenuStyle}">
                                                                 <MenuItem Header="Replace file…" Style="{StaticResource DarkMenuItemStyle}"
@@ -210,12 +329,19 @@
                                                                 <Binding Path="DataContext.PxPerMs" RelativeSource="{RelativeSource AncestorType=ItemsControl, AncestorLevel=2}" />
                                                             </MultiBinding>
                                                         </Border.Width>
-                                                        <StackPanel Orientation="Horizontal" IsHitTestVisible="False">
-                                                            <TextBlock Text="🔁" FontSize="9" Margin="0,0,3,0"
-                                                                       Visibility="{Binding Loop, Converter={StaticResource BoolToVisConv}}" />
-                                                            <TextBlock Text="{Binding FileName}" FontSize="10" FontWeight="Bold"
-                                                                       Foreground="#1C1206" TextTrimming="CharacterEllipsis" />
-                                                        </StackPanel>
+                                                        <Grid>
+                                                            <!-- Waveform preview (WaveformService): fixed-domain geometry stretched
+                                                                 to fill via Viewbox, so it rescales with zoom/drag for free. -->
+                                                            <Viewbox Stretch="Fill" Opacity="0.5" IsHitTestVisible="False">
+                                                                <Path Fill="#1C1206" Data="{Binding Peaks, Converter={StaticResource WaveformToGeometryConv}}" />
+                                                            </Viewbox>
+                                                            <StackPanel Orientation="Horizontal" IsHitTestVisible="False">
+                                                                <TextBlock Text="🔁" FontSize="9" Margin="0,0,3,0"
+                                                                           Visibility="{Binding Loop, Converter={StaticResource BoolToVisConv}}" />
+                                                                <TextBlock Text="{Binding FileName}" FontSize="10" FontWeight="Bold"
+                                                                           Foreground="#1C1206" TextTrimming="CharacterEllipsis" />
+                                                            </StackPanel>
+                                                        </Grid>
                                                     </Border>
                                                 </Canvas>
                                             </DataTemplate>
@@ -228,6 +354,74 @@
 
                     <Canvas x:Name="TracksCanvas" Background="Transparent"
                             Width="{Binding TimelineWidthPx}" Height="{Binding TracksHeightPx}">
+                        <!-- Row backgrounds + thin bottom separators, one per track — purely
+                             visual, drawn behind the grid/clips (mockup's .track-lane). -->
+                        <ItemsControl ItemsSource="{Binding Tracks}" IsHitTestVisible="False">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><Canvas /></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Height="{x:Static Models:TimelineTrack.RowHeight}" BorderThickness="0,0,0,1"
+                                            BorderBrush="#59000000">
+                                        <Border.Width>
+                                            <Binding Path="DataContext.TimelineWidthPx" RelativeSource="{RelativeSource AncestorType=ItemsControl}" />
+                                        </Border.Width>
+                                        <Border.Background>
+                                            <SolidColorBrush Color="White" Opacity="0.015" />
+                                        </Border.Background>
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsBroadcast}" Value="True">
+                                                        <Setter Property="Background">
+                                                            <Setter.Value>
+                                                                <SolidColorBrush Color="#FF9D2E" Opacity="0.04" />
+                                                            </Setter.Value>
+                                                        </Setter>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <Canvas.Top>
+                                            <MultiBinding Converter="{StaticResource TimelineGeometryConv}" ConverterParameter="Top">
+                                                <Binding Path="Id" />
+                                                <Binding Path="DataContext.Tracks" RelativeSource="{RelativeSource AncestorType=ItemsControl}" />
+                                            </MultiBinding>
+                                        </Canvas.Top>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <!-- Vertical gridlines, synced to the ruler's own ticks (same RulerTicks
+                             collection) so they always line up exactly with the time labels above. -->
+                        <ItemsControl ItemsSource="{Binding RulerTicks}" IsHitTestVisible="False">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><Canvas /></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Rectangle Width="1" Canvas.Left="{Binding Left}">
+                                        <Rectangle.Height>
+                                            <Binding Path="DataContext.TracksHeightPx" RelativeSource="{RelativeSource AncestorType=ItemsControl}" />
+                                        </Rectangle.Height>
+                                        <Rectangle.Style>
+                                            <Style TargetType="Rectangle">
+                                                <Setter Property="Fill" Value="{StaticResource BorderHiBrush}" />
+                                                <Setter Property="Opacity" Value="0.05" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Major}" Value="True">
+                                                        <Setter Property="Opacity" Value="0.12" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Rectangle.Style>
+                                    </Rectangle>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
                         <ItemsControl ItemsSource="{Binding Steps}">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate><Canvas /></ItemsPanelTemplate>
@@ -370,25 +564,40 @@
         </Grid>
 
         <!-- Gesture library: click a chip to insert on the armed track at the playhead, or
-             drag it straight onto a specific droid+time cell of the timeline. -->
+             drag it straight onto a specific droid+time cell of the timeline. Grouped into
+             labeled family rows (mockup-matched), same grouping/colors as every timeline clip
+             (Converters/AnimFamilyToBrushConverter.Families, single source of truth). -->
         <StackPanel Grid.Row="2" Margin="0,10,0,0">
             <TextBlock Text="GESTURE LIBRARY — CLICK TO INSERT, OR DRAG ONTO A SPECIFIC CELL" Style="{StaticResource SectionSubtitleStyle}" />
-            <ItemsControl ItemsSource="{Binding GestureLibrary}">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
+            <ItemsControl ItemsSource="{Binding GestureFamilies}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
-                        <!-- Border+raw mouse events, not a Button: BeveledButtonStyle's template hardcodes
-                             its own Background (not a TemplateBinding), so it can't show per-gesture
-                             family color — same pattern already used for arming a track. Raw events
-                             (not MouseBinding) so code-behind can distinguish a click from a drag. -->
-                        <Border Margin="0,0,6,6" Padding="9,5" CornerRadius="12" Cursor="Hand"
-                                Background="{Binding Id, Converter={StaticResource AnimFamilyToBrushConv}}"
-                                MouseLeftButtonDown="GestureChip_MouseLeftButtonDown"
-                                MouseMove="GestureChip_MouseMove"
-                                MouseLeftButtonUp="GestureChip_MouseLeftButtonUp">
-                            <TextBlock Text="{Binding Name}" FontSize="10.5" FontWeight="SemiBold" Foreground="#1C1206" IsHitTestVisible="False" />
+                        <Border BorderThickness="0,0,0,1" BorderBrush="{StaticResource BorderLoBrush}" Padding="0,6">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding Label}" Width="118" FontSize="9.5" FontWeight="Bold"
+                                           Foreground="{StaticResource Muted2Brush}" VerticalAlignment="Top" Margin="0,6,8,0" />
+                                <ItemsControl ItemsSource="{Binding Gestures}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <!-- Border+raw mouse events, not a Button: BeveledButtonStyle's template
+                                                 hardcodes its own Background (not a TemplateBinding), so it can't show
+                                                 per-gesture family color — same pattern already used for arming a
+                                                 track. Raw events (not MouseBinding) so code-behind can distinguish a
+                                                 click from a drag. -->
+                                            <Border Margin="0,0,6,6" Padding="9,5" CornerRadius="12" Cursor="Hand"
+                                                    Background="{Binding Id, Converter={StaticResource AnimFamilyToBrushConv}}"
+                                                    MouseLeftButtonDown="GestureChip_MouseLeftButtonDown"
+                                                    MouseMove="GestureChip_MouseMove"
+                                                    MouseLeftButtonUp="GestureChip_MouseLeftButtonUp">
+                                                <TextBlock Text="{Binding Name}" FontSize="10.5" FontWeight="SemiBold" Foreground="#1C1206" IsHitTestVisible="False" />
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
                         </Border>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>

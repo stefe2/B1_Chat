@@ -71,6 +71,15 @@
         <Setter Property="FontSize" Value="11" />
     </Style>
 
+    <!-- Small square icon button (Sequencer transport bar: Play/Stop/Pause/Resume) — same
+         beveled chrome, fixed size, centered glyph instead of text. -->
+    <Style x:Key="IconTransportButtonStyle" TargetType="Button" BasedOn="{StaticResource BeveledButtonStyle}">
+        <Setter Property="Width" Value="30" />
+        <Setter Property="Height" Value="30" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="FontSize" Value="12" />
+    </Style>
+
     <!-- Dark-themed ContextMenu (Sequencer audio clips) — no prior ContextMenu use in this
          app, so the default white Windows menu would otherwise clash with the whole palette. -->
     <Style x:Key="DarkContextMenuStyle" TargetType="ContextMenu">

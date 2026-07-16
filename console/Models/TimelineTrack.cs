@@ -18,6 +18,8 @@ public partial class TimelineTrack : ObservableObject
 
     public ushort Id { get; init; }
     public string Label { get; init; } = "";
+    // "MASTER"/"SLAVE"/"BROADCAST" — small caps caption under the name in the gutter row.
+    public string Role { get; init; } = "";
     public bool IsBroadcast { get; init; }
     public int RowIndex { get; init; }
 

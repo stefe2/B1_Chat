@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using b1_chat_console.Converters;
 using b1_chat_console.Models;
 using b1_chat_console.Services;
 using Microsoft.Win32;
@@ -42,6 +43,16 @@ public partial class SequencerViewModel : ObservableObject
     public IReadOnlyList<GestureLibraryEntry> GestureLibrary { get; } =
         AnimationViewModel.AnimNames.Select((n, i) => new GestureLibraryEntry { Id = i, Name = n }).ToList();
 
+    // Same 18 gestures, grouped into labeled rows (mockup-matched "GESTURE LIBRARY" layout) —
+    // grouping/labels come from AnimFamilyToBrushConverter.Families, the single source of truth
+    // also used to color every clip/chip, so the two can't drift apart.
+    public IReadOnlyList<GestureFamily> GestureFamilies { get; } = AnimFamilyToBrushConverter.Families
+        .Select(f => new GestureFamily
+        {
+            Label = f.Label,
+            Gestures = f.AnimIds.Select(id => new GestureLibraryEntry { Id = id, Name = AnimationViewModel.AnimNames[id] }).ToList(),
+        }).ToList();
+
     public IReadOnlyDictionary<int, int> AnimDurationMsLookup => _protocol.AnimDurationMs;
 
     [ObservableProperty] private TimelineTrack? _armedTrack;
@@ -57,6 +68,16 @@ public partial class SequencerViewModel : ObservableObject
         RebuildRulerTicks();
     }
 
+    // Transport bar readout ("00:03.400 / 00:15.800") — mirrors the mockup's timecode pill.
+    public string TimecodeText => $"{FormatTimecode(PlayheadMs)} / {FormatTimecode(TotalDurationMs())}";
+    partial void OnPlayheadMsChanged(double value) => OnPropertyChanged(nameof(TimecodeText));
+
+    private static string FormatTimecode(double ms)
+    {
+        var t = TimeSpan.FromMilliseconds(Math.Max(0, ms));
+        return $"{(int)t.TotalMinutes:00}:{t.Seconds:00}.{t.Milliseconds:000}";
+    }
+
     private DispatcherTimer? _playheadTimer;
     private DateTime _liveAnchorUtc;
     private double _liveAnchorElapsedMs;
@@ -65,12 +86,20 @@ public partial class SequencerViewModel : ObservableObject
 
     [ObservableProperty] private string _name = "";
     [ObservableProperty] private bool _loop;
-    [ObservableProperty] private int _audioTrack;
     [ObservableProperty] private int? _currentSlot;
     [ObservableProperty] private bool _dirty;
+
+    // Card header badge (mockup's "SLOT 2 · “PARADE”"), kept in sync with whichever of the two
+    // source properties last changed.
+    public string SequenceBadgeText => CurrentSlot.HasValue
+        ? $"SLOT {CurrentSlot} · \"{(string.IsNullOrWhiteSpace(Name) ? "UNNAMED" : Name.ToUpperInvariant())}\""
+        : "UNSAVED · NEW SEQUENCE";
+    partial void OnCurrentSlotChanged(int? value) => OnPropertyChanged(nameof(SequenceBadgeText));
+    partial void OnNameChanged(string value) => OnPropertyChanged(nameof(SequenceBadgeText));
     [ObservableProperty] private bool _canUndo;
     [ObservableProperty] private bool _canRedo;
-    [ObservableProperty] private bool _isRehearsing;
+    [ObservableProperty] private bool _isPlaying;
+    [ObservableProperty] private bool _isPaused;
     [ObservableProperty] private SequenceStep? _selectedStep;
 
     // SelectedStep.Target as a TimelineTrack, for the inspector's Target ComboBox.
@@ -87,7 +116,8 @@ public partial class SequencerViewModel : ObservableObject
 
     private readonly Stack<SequenceSnapshot> _history = new();
     private readonly Stack<SequenceSnapshot> _future = new();
-    private readonly List<System.Threading.Timer> _rehearsalTimers = new();
+    private readonly List<System.Threading.Timer> _playbackTimers = new();
+    private int _elapsedAtPauseMs;
 
     public SequencerViewModel(ProtocolClient protocol)
     {
@@ -119,10 +149,14 @@ public partial class SequencerViewModel : ObservableObject
         // that already applies to ArmedTrack below.
         var mutedIds = Tracks.Where(t => t.Muted).Select(t => t.Id).ToHashSet();
         Tracks.Clear();
-        Tracks.Add(new TimelineTrack { Id = 0xFFFF, Label = "All droids", IsBroadcast = true, RowIndex = 0, Muted = mutedIds.Contains(0xFFFF) });
+        Tracks.Add(new TimelineTrack { Id = 0xFFFF, Label = "All droids", Role = "BROADCAST", IsBroadcast = true, RowIndex = 0, Muted = mutedIds.Contains(0xFFFF) });
         var row = 1;
         foreach (var d in Targets.OrderByDescending(d => d.IsMaster).ThenBy(d => d.Id))
-            Tracks.Add(new TimelineTrack { Id = d.Id, Label = d.Name.Length > 0 ? d.Name : d.IdHex, RowIndex = row++, Muted = mutedIds.Contains(d.Id) });
+            Tracks.Add(new TimelineTrack
+            {
+                Id = d.Id, Label = d.Name.Length > 0 ? d.Name : d.IdHex, Role = d.IsMaster ? "MASTER" : "SLAVE",
+                RowIndex = row++, Muted = mutedIds.Contains(d.Id),
+            });
         ArmedTrack = armedId.HasValue ? Tracks.FirstOrDefault(t => t.Id == armedId.Value) : null;
         OnPropertyChanged(nameof(TracksHeightPx));
         // Tracks are wholesale-replaced (new instances) — the inspector's Target combo holds a
@@ -134,9 +168,10 @@ public partial class SequencerViewModel : ObservableObject
     [RelayCommand]
     private void ArmTrack(TimelineTrack? track) => ArmedTrack = track;
 
-    // Rehearse (local) only — a live hardware Play cannot honor a console-only mute: seqRun
-    // just tells the master to start, the master replays its own NVS-stored steps from its
-    // own loop(), the console has no per-step veto over that once it's been sent.
+    // Play only affects this — there's no other playback path left. (Historical note: when a
+    // separate hardware-`seqRun`-backed Play still existed, mute couldn't touch it — the master
+    // replayed its own NVS-stored steps from its own loop() with no per-step veto from the
+    // console. That path is gone; Play is now entirely console-driven, so mute applies cleanly.)
     [RelayCommand]
     private void ToggleMute(TimelineTrack? track)
     {
@@ -156,7 +191,31 @@ public partial class SequencerViewModel : ObservableObject
         return Tracks.ElementAtOrDefault(idx) ?? Tracks.FirstOrDefault();
     }
 
-    private double TotalDurationMs()
+    // Maps a Y pixel inside the audio-lanes ItemsControl to the lane under it — used for
+    // dragging an audio clip from one lane to another (SequenceTimelineView.xaml.cs).
+    public AudioLane? AudioLaneAtY(double y)
+    {
+        if (AudioLanes.Count == 0) return null;
+        var idx = (int)Math.Floor(y / (AudioLane.RowHeight + AudioLane.RowGap));
+        idx = Math.Clamp(idx, 0, AudioLanes.Count - 1);
+        return AudioLanes.ElementAtOrDefault(idx) ?? AudioLanes.FirstOrDefault();
+    }
+
+    // Moves a clip from whichever lane currently holds it to targetLane, preserving its StartMs
+    // (already live-updated by the drag) — a no-op if it's already there. Called once at
+    // drag-end, not per MouseMove: each lane's clips render in that lane's own Canvas, so a
+    // mid-drag move would mean re-parenting the visual element every pixel.
+    public void MoveAudioClipToLane(AudioClip clip, AudioLane targetLane)
+    {
+        var currentLane = AudioLanes.FirstOrDefault(l => l.Clips.Contains(clip));
+        if (currentLane == null || ReferenceEquals(currentLane, targetLane)) return;
+        currentLane.Clips.Remove(clip);
+        targetLane.Clips.Add(clip);
+        Dirty = true;
+    }
+
+    // Public: also read by the view's "Fit" zoom handler (SequenceTimelineView.xaml.cs).
+    public double TotalDurationMs()
     {
         var stepsEnd = Steps.Count == 0 ? 0 : Steps.Max(s => s.StartMs) + 1500;
         var audioEnd = AudioLanes.SelectMany(l => l.Clips)
@@ -184,6 +243,7 @@ public partial class SequencerViewModel : ObservableObject
             }
         }
         OnPropertyChanged(nameof(TimelineWidthPx));
+        OnPropertyChanged(nameof(TimecodeText));
     }
 
     // Called by the view once at drag-end (not per MouseMove — recomputing ticks under the
@@ -250,9 +310,11 @@ public partial class SequencerViewModel : ObservableObject
         PushHistory();
         var durationMs = await AudioPlaybackService.ProbeDurationMsAsync(dlg.FileName);
         var start = Math.Max(0, RoundToGrid(PlayheadMs));
-        lane.Clips.Add(new AudioClip { FilePath = dlg.FileName, DurationMs = durationMs, StartMs = start });
+        var clip = new AudioClip { FilePath = dlg.FileName, DurationMs = durationMs, StartMs = start };
+        lane.Clips.Add(clip);
         Dirty = true;
         RebuildRulerTicks();
+        _ = LoadWaveformAsync(clip);
     }
 
     [RelayCommand]
@@ -263,9 +325,19 @@ public partial class SequencerViewModel : ObservableObject
         if (dlg.ShowDialog() != true) return;
         PushHistory();
         clip.FilePath = dlg.FileName;
+        clip.Peaks = null; // stale for the new file until the fresh decode below completes
         clip.DurationMs = await AudioPlaybackService.ProbeDurationMsAsync(dlg.FileName);
         Dirty = true;
         RebuildRulerTicks();
+        _ = LoadWaveformAsync(clip);
+    }
+
+    // Fire-and-forget from every clip-creation path (Add/Replace/load) — decoding happens off
+    // the UI thread in WaveformService; only the final property write is marshalled back.
+    private async Task LoadWaveformAsync(AudioClip clip)
+    {
+        var peaks = await WaveformService.GetPeaksAsync(clip.FilePath);
+        RunOnUiThread(() => clip.Peaks = peaks);
     }
 
     [RelayCommand]
@@ -293,8 +365,8 @@ public partial class SequencerViewModel : ObservableObject
         AudioLanes.Clear();
         if (dtos == null || dtos.Count == 0)
         {
-            AudioLanes.Add(new AudioLane { Label = "AUDIO", RowIndex = 0 });
-            AudioLanes.Add(new AudioLane { Label = "AMBIENT", RowIndex = 1 });
+            AudioLanes.Add(new AudioLane { Label = "AMBIENT", RowIndex = 0 });
+            AudioLanes.Add(new AudioLane { Label = "AUDIO", RowIndex = 1 });
             return;
         }
         var row = 0;
@@ -302,7 +374,11 @@ public partial class SequencerViewModel : ObservableObject
         {
             var lane = new AudioLane { Label = dto.Label, RowIndex = row++ };
             foreach (var c in dto.Clips)
-                lane.Clips.Add(new AudioClip { FilePath = c.FilePath, DurationMs = c.DurationMs, StartMs = c.StartMs, Loop = c.Loop });
+            {
+                var clip = new AudioClip { FilePath = c.FilePath, DurationMs = c.DurationMs, StartMs = c.StartMs, Loop = c.Loop };
+                lane.Clips.Add(clip);
+                _ = LoadWaveformAsync(clip);
+            }
             AudioLanes.Add(lane);
         }
     }
@@ -315,6 +391,12 @@ public partial class SequencerViewModel : ObservableObject
         PlayheadMs = Math.Max(0, x / PxPerMs);
     }
 
+    // Passive reflection of the firmware's OWN sequence player (`seqRun`/`seqState`) — realistically
+    // never fires `playing:true` anymore since nothing in this app's UI sends `seqRun` (Play is
+    // entirely console-driven now, see the Playback region below), but kept in case something
+    // else ever triggers it (e.g. tools/ota-test.ps1-style direct serial use). Shares the same
+    // playhead/LIVE-badge state (StartPlayheadTicker) as the console-driven path so both sources
+    // drive identical visuals.
     private void OnSeqState(JsonElement root)
     {
         var slot = root.TryGetProperty("slot", out var s) ? s.GetInt32() : -1;
@@ -332,17 +414,26 @@ public partial class SequencerViewModel : ObservableObject
             return;
         }
 
-        IsLiveTracking = true;
-        _liveAnchorUtc = DateTime.UtcNow;
-        _liveAnchorElapsedMs = elapsedMs;
-        PlayheadMs = elapsedMs;
-
         if (paused)
         {
             StopPlayheadTimer();
+            IsLiveTracking = true;
+            PlayheadMs = elapsedMs;
             return;
         }
 
+        StartPlayheadTicker(elapsedMs);
+    }
+
+    // Anchors the playhead ticker at fromElapsedMs and starts advancing it — shared by the
+    // console-driven Play/Resume path below and OnSeqState's hardware reflection above, so
+    // both sources drive the exact same playhead/LIVE-badge/timecode visuals identically.
+    private void StartPlayheadTicker(double fromElapsedMs)
+    {
+        IsLiveTracking = true;
+        _liveAnchorUtc = DateTime.UtcNow;
+        _liveAnchorElapsedMs = fromElapsedMs;
+        PlayheadMs = fromElapsedMs;
         if (_playheadTimer == null)
         {
             _playheadTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(30) };
@@ -364,14 +455,13 @@ public partial class SequencerViewModel : ObservableObject
 
     // --- Snapshot / undo-redo --------------------------------------------------
 
-    private SequenceSnapshot Snapshot() => new(Name, Loop, AudioTrack, AudioLanesToDto(),
+    private SequenceSnapshot Snapshot() => new(Name, Loop, AudioLanesToDto(),
         Steps.Select(s => new SequenceStepDto { AnimId = s.AnimId, Target = s.Target, StartMs = s.StartMs }).ToList());
 
     private void Apply(SequenceSnapshot snap)
     {
         Name = snap.Name;
         Loop = snap.Loop;
-        AudioTrack = snap.Track;
         ApplyAudioLanesFromDto(snap.AudioLanes);
         Steps.Clear();
         foreach (var s in snap.Steps) Steps.Add(new SequenceStep { AnimId = s.AnimId, Target = s.Target, StartMs = s.StartMs });
@@ -445,7 +535,6 @@ public partial class SequencerViewModel : ObservableObject
         CurrentSlot = null;
         Name = "";
         Loop = false;
-        AudioTrack = 0;
         ApplyAudioLanesFromDto(null);
         Steps.Clear();
         SelectedStep = null;
@@ -467,7 +556,6 @@ public partial class SequencerViewModel : ObservableObject
         CurrentSlot = root.TryGetProperty("slot", out var s) ? s.GetInt32() : null;
         Name = root.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
         Loop = root.TryGetProperty("loop", out var l) && l.GetBoolean();
-        AudioTrack = root.TryGetProperty("track", out var t) ? t.GetInt32() : 0;
         Steps.Clear();
         if (root.TryGetProperty("steps", out var steps) && steps.ValueKind == JsonValueKind.Array)
             foreach (var st in steps.EnumerateArray())
@@ -488,7 +576,7 @@ public partial class SequencerViewModel : ObservableObject
     {
         var slot = CurrentSlot ?? FindFreeSlot();
         if (slot < 0) { MessageBox.Show("All 8 slots are occupied.", "Sequencer", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
-        _protocol.SeqSave(slot, Name, Loop, AudioTrack, Steps);
+        _protocol.SeqSave(slot, Name, Loop, Steps);
         _audioStore.Set(slot, AudioLanesToDto());
         CurrentSlot = slot;
         Dirty = false;
@@ -510,11 +598,6 @@ public partial class SequencerViewModel : ObservableObject
         if (CurrentSlot == meta.Slot) NewSequence();
     }
 
-    [RelayCommand] private void Play() { if (CurrentSlot.HasValue) _protocol.SeqRun(CurrentSlot.Value); }
-    [RelayCommand] private void Stop() => _protocol.SeqStop();
-    [RelayCommand] private void Pause() => _protocol.SeqPause();
-    [RelayCommand] private void Resume() => _protocol.SeqResume();
-
     // --- Local library ------------------------------------------------------
 
     [RelayCommand]
@@ -523,7 +606,7 @@ public partial class SequencerViewModel : ObservableObject
         var id = Guid.NewGuid().ToString("N");
         var item = new SequenceLibraryItem
         {
-            Id = id, Name = Name, Loop = Loop, AudioTrack = AudioTrack,
+            Id = id, Name = Name, Loop = Loop,
             AudioLanes = AudioLanesToDto(),
             Steps = Steps.Select(s => new SequenceStepDto { AnimId = s.AnimId, Target = s.Target, StartMs = s.StartMs }).ToList(),
             SavedAt = DateTime.UtcNow,
@@ -539,7 +622,6 @@ public partial class SequencerViewModel : ObservableObject
         CurrentSlot = null;
         Name = item.Name;
         Loop = item.Loop;
-        AudioTrack = item.AudioTrack;
         ApplyAudioLanesFromDto(item.AudioLanes);
         Steps.Clear();
         foreach (var s in item.Steps) Steps.Add(new SequenceStep { AnimId = s.AnimId, Target = s.Target, StartMs = s.StartMs });
@@ -563,7 +645,7 @@ public partial class SequencerViewModel : ObservableObject
         var slot = Catalog.FirstOrDefault(c => c.Name == item.Name)?.Slot ?? FindFreeSlot();
         if (slot < 0) { MessageBox.Show("All 8 slots are occupied.", "Sequencer", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
         var steps = item.Steps.Select(s => new SequenceStep { AnimId = s.AnimId, Target = s.Target, StartMs = s.StartMs });
-        _protocol.SeqSave(slot, item.Name, item.Loop, item.AudioTrack, steps);
+        _protocol.SeqSave(slot, item.Name, item.Loop, steps);
         _audioStore.Set(slot, item.AudioLanes);
     }
 
@@ -590,7 +672,7 @@ public partial class SequencerViewModel : ObservableObject
         if (dlg.ShowDialog() != true) return;
         var obj = new JsonObject
         {
-            ["type"] = "b1-sequence", ["version"] = 3, ["name"] = Name, ["loop"] = Loop, ["audioTrack"] = AudioTrack,
+            ["type"] = "b1-sequence", ["version"] = 3, ["name"] = Name, ["loop"] = Loop,
             // Local-machine paths only (no audio bytes travel with the export) — a reasonable
             // best-effort round-trip on the same console install, per CLAUDE.md's console-side
             // audio decision; harmless dangling reference if imported elsewhere.
@@ -619,7 +701,6 @@ public partial class SequencerViewModel : ObservableObject
             CurrentSlot = null;
             Name = obj["name"]?.GetValue<string>() ?? "";
             Loop = obj["loop"]?.GetValue<bool>() ?? false;
-            AudioTrack = obj["audioTrack"]?.GetValue<int>() ?? 0;
             List<AudioLaneDto>? lanes = null;
             if (obj["audioLanes"] is JsonArray laneArr)
             {
@@ -665,64 +746,113 @@ public partial class SequencerViewModel : ObservableObject
         }
     }
 
-    // --- Rehearsal (client-side, persists nothing) --------------------------------
+    // --- Playback (client-side: real anim/audio commands, nothing stored) --------
+    //
+    // Unifies what used to be two separate paths — a hardware-`seqRun`-backed Play/Stop/
+    // Pause/Resume (told the master to replay its own NVS-stored sequence) and a separate
+    // "Rehearse (local)" toggle (the console scheduled its own timers, no NVS save needed,
+    // firing real per-step `anim` mesh commands plus local audio, but no pause/resume and no
+    // playhead feedback). Play now works directly on whatever's in the editor (no CurrentSlot/
+    // save required, like Rehearse did) and drives the exact same real commands + audio, with
+    // genuine pause/resume on top.
 
     [RelayCommand]
-    private void ToggleRehearsal()
-    {
-        if (IsRehearsing) StopRehearsal(); else StartRehearsal();
-    }
-
-    private void StartRehearsal()
+    private void Play()
     {
         if (Steps.Count == 0 && AudioLanes.All(l => l.Clips.Count == 0)) return;
-        IsRehearsing = true;
-        ScheduleRehearsalPass();
+        IsPlaying = true;
+        IsPaused = false;
+        _elapsedAtPauseMs = 0;
+        ScheduleTimers(0);
+        StartPlayheadTicker(0);
     }
 
-    // Absolute-time model (FIRMWARE-CONTRACT.md §6): one one-shot timer per step and per audio
-    // clip, armed at its own StartMs from this pass's t=0, instead of a single chained timer —
-    // steps/clips sharing a StartMs now actually fire together, matching what the firmware's
-    // own player does, rather than always running back-to-back. Muted droids' steps are simply
-    // skipped (see ToggleMute) — this only affects Rehearse, a real hardware Play always runs
-    // every step, the console has no way to veto one once seqRun has been sent.
-    private void ScheduleRehearsalPass()
+    [RelayCommand]
+    private void Stop()
     {
-        DisposeRehearsalTimers();
+        IsPlaying = false;
+        IsPaused = false;
+        DisposePlaybackTimers();
+        _audioPlayer.StopAll();
+        StopPlayheadTimer();
+        PlayheadMs = 0;
+        IsLiveTracking = false;
+    }
+
+    [RelayCommand(CanExecute = nameof(CanPause))]
+    private void Pause()
+    {
+        if (!CanPause()) return;
+        var elapsed = _liveAnchorElapsedMs + (DateTime.UtcNow - _liveAnchorUtc).TotalMilliseconds;
+        DisposePlaybackTimers();
+        _audioPlayer.PauseAll(); // clips already mid-playback keep their position natively
+        _elapsedAtPauseMs = (int)elapsed;
+        StopPlayheadTimer();
+        PlayheadMs = elapsed;
+        IsPaused = true;
+        IsLiveTracking = false;
+    }
+
+    [RelayCommand(CanExecute = nameof(CanResume))]
+    private void Resume()
+    {
+        if (!CanResume()) return;
+        _audioPlayer.ResumeAll(); // continues from each clip's retained position, no seek math
+        ScheduleTimers(_elapsedAtPauseMs);
+        StartPlayheadTicker(_elapsedAtPauseMs);
+        IsPaused = false;
+    }
+
+    private bool CanPause() => IsPlaying && !IsPaused;
+    private bool CanResume() => IsPlaying && IsPaused;
+
+    // Absolute-time model (FIRMWARE-CONTRACT.md §6): one one-shot timer per step and per audio
+    // clip, armed at its own StartMs relative to fromMs — steps/clips sharing a StartMs fire
+    // together, matching what the firmware's own player does. Only items whose StartMs >=
+    // fromMs are armed, so Resume() (fromMs = elapsed at the moment of pause) never replays
+    // anything that already fired before the pause. Muted droids' steps are simply skipped (see
+    // ToggleMute) — unconditional now, since Play is the only playback path there is.
+    private void ScheduleTimers(int fromMs)
+    {
+        DisposePlaybackTimers();
         foreach (var step in Steps)
         {
-            if (IsTrackMuted(step.Target)) continue;
+            if (step.StartMs < fromMs || IsTrackMuted(step.Target)) continue;
             var timer = new System.Threading.Timer(_ => RunOnUiThread(() =>
             {
-                if (!IsRehearsing) return;
+                if (!IsPlaying || IsPaused) return;
                 _protocol.PlayAnim(step.Target, step.AnimId, (uint)Random.Shared.Next());
-            }), null, Math.Max(0, step.StartMs), System.Threading.Timeout.Infinite);
-            _rehearsalTimers.Add(timer);
+            }), null, step.StartMs - fromMs, System.Threading.Timeout.Infinite);
+            _playbackTimers.Add(timer);
         }
         foreach (var clip in AudioLanes.SelectMany(l => l.Clips))
         {
+            if (clip.StartMs < fromMs) continue;
             var timer = new System.Threading.Timer(_ => RunOnUiThread(() =>
             {
-                if (!IsRehearsing) return;
+                if (!IsPlaying || IsPaused) return;
                 _audioPlayer.Play(clip.FilePath, clip.Loop);
-            }), null, Math.Max(0, clip.StartMs), System.Threading.Timeout.Infinite);
-            _rehearsalTimers.Add(timer);
+            }), null, clip.StartMs - fromMs, System.Threading.Timeout.Infinite);
+            _playbackTimers.Add(timer);
         }
         var totalMs = (int)TotalDurationMs();
+        var endDelay = Math.Max(0, totalMs - fromMs);
         var endTimer = new System.Threading.Timer(_ => RunOnUiThread(() =>
         {
-            if (!IsRehearsing) return;
+            if (!IsPlaying || IsPaused) return;
             if (Loop)
             {
                 // Stop every player (including a looping ambient clip) before rearming the next
                 // pass, or it would keep stacking a fresh MediaPlayer on top of the still-running
                 // one every time the sequence loops.
                 _audioPlayer.StopAll();
-                ScheduleRehearsalPass();
+                _elapsedAtPauseMs = 0;
+                ScheduleTimers(0);
+                StartPlayheadTicker(0);
             }
-            else StopRehearsal();
-        }), null, totalMs, System.Threading.Timeout.Infinite);
-        _rehearsalTimers.Add(endTimer);
+            else Stop();
+        }), null, endDelay, System.Threading.Timeout.Infinite);
+        _playbackTimers.Add(endTimer);
     }
 
     private static void RunOnUiThread(Action action)
@@ -731,16 +861,9 @@ public partial class SequencerViewModel : ObservableObject
         if (dispatcher == null || dispatcher.CheckAccess()) action(); else dispatcher.Invoke(action);
     }
 
-    private void DisposeRehearsalTimers()
+    private void DisposePlaybackTimers()
     {
-        foreach (var t in _rehearsalTimers) t.Dispose();
-        _rehearsalTimers.Clear();
-    }
-
-    private void StopRehearsal()
-    {
-        IsRehearsing = false;
-        DisposeRehearsalTimers();
-        _audioPlayer.StopAll();
+        foreach (var t in _playbackTimers) t.Dispose();
+        _playbackTimers.Clear();
     }
 }

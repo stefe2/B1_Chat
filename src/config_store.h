@@ -3,11 +3,11 @@
 // ============================================================================
 //  ConfigStore — settings persistence in NVS (Preferences)
 //
-//  Stores the audio volume, animation parameters, and names assigned to
-//  droids (srcId -> name mapping). Survives reboots.
+//  Stores animation parameters and names assigned to droids (srcId -> name
+//  mapping). Survives reboots.
 //
-//  Commit/revert model (inspired by KyberEditor) for volume / anim params /
-//  names: setters write to a RAM overlay ("pending", the effect is
+//  Commit/revert model (inspired by KyberEditor) for anim params / names:
+//  setters write to a RAM overlay ("pending", the effect is
 //  immediate via the getters) and NVS is only touched on commitPending();
 //  revertPending() discards the overlay and reverts to the persisted
 //  values. Servo calibration (setCalib) stays IMMEDIATELY persisted: it's
@@ -30,10 +30,6 @@ struct ServoCalib {
 class ConfigStore {
 public:
     void begin();
-
-    // Audio volume (0..30).
-    uint8_t volume();
-    void    setVolume(uint8_t v);
 
     // Animation parameters (0..100 each).
     void animParams(uint8_t& freq, uint8_t& amp, uint8_t& speed);
@@ -81,8 +77,6 @@ private:
 
     // RAM overlay of uncommitted changes.
     bool    _dirty = false;
-    bool    _pendVolSet = false;
-    uint8_t _pendVol = 0;
     bool    _pendAnimSet = false;
     uint8_t _pendFreq = 0, _pendAmp = 0, _pendSpeed = 0;
     static const uint8_t PENDING_NAMES_MAX = 32;   // = Registry::MAX

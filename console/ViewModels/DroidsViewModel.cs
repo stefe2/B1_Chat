@@ -233,7 +233,6 @@ public partial class DroidsViewModel : ObservableObject
             ["type"] = "b1-config-backup",
             ["version"] = 1,
             ["savedAt"] = DateTime.UtcNow.ToString("O"),
-            ["volume"] = _protocol.LastVolume,
             ["freq"] = _protocol.LastFreq,
             ["amp"] = _protocol.LastAmp,
             ["speed"] = _protocol.LastSpeed,
@@ -259,7 +258,7 @@ public partial class DroidsViewModel : ObservableObject
         if (backup == null) return;
 
         var confirm = MessageBox.Show(
-            $"Restore the configuration from « {Path.GetFileName(dlg.FileName)} »?\n\nNames, volume, and animation settings will be overwritten.",
+            $"Restore the configuration from « {Path.GetFileName(dlg.FileName)} »?\n\nNames and animation settings will be overwritten.",
             "Confirm restore", MessageBoxButton.YesNo, MessageBoxImage.Warning);
         if (confirm != MessageBoxResult.Yes) return;
 
@@ -268,9 +267,6 @@ public partial class DroidsViewModel : ObservableObject
             foreach (var (idStr, nameNode) in names)
                 if (ushort.TryParse(idStr, out var id) && nameNode != null)
                     ops.Add(new JsonObject { ["cmd"] = "name", ["id"] = id, ["name"] = nameNode.GetValue<string>() });
-
-        if (backup.TryGetPropertyValue("volume", out var vol) && vol != null)
-            ops.Add(new JsonObject { ["cmd"] = "volume", ["value"] = vol.GetValue<int>() });
 
         if (backup.TryGetPropertyValue("freq", out var freq) && backup.TryGetPropertyValue("amp", out var amp) && backup.TryGetPropertyValue("speed", out var speed))
             ops.Add(new JsonObject
@@ -292,7 +288,6 @@ public partial class DroidsViewModel : ObservableObject
                 switch (o["cmd"]?.GetValue<string>())
                 {
                     case "name": _protocol.SetName((ushort)o["id"]!.GetValue<int>(), o["name"]!.GetValue<string>()); break;
-                    case "volume": _protocol.SetVolume(o["value"]!.GetValue<int>()); break;
                     case "config": _protocol.SetConfig(0xFFFF, o["freq"]!.GetValue<int>(), o["amp"]!.GetValue<int>(), o["speed"]!.GetValue<int>()); break;
                 }
             }

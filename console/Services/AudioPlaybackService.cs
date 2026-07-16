@@ -33,6 +33,19 @@ public class AudioPlaybackService
         player.Play();
     }
 
+    // Pauses every currently-tracked player in place — MediaPlayer retains its Position while
+    // paused, so ResumeAll() below needs no manual seek/position bookkeeping. Clips whose timer
+    // hasn't fired yet (not yet in _players) are simply cancelled by the caller, not paused.
+    public void PauseAll()
+    {
+        foreach (var player in _players) player.Pause();
+    }
+
+    public void ResumeAll()
+    {
+        foreach (var player in _players) player.Play();
+    }
+
     public void StopAll()
     {
         foreach (var player in _players)

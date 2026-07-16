@@ -13,7 +13,7 @@
 //  compares it to the latest stefe2/B1_Chat release to offer an update. Bump
 //  on every release (tools/release.ps1 relies on it).
 // ---------------------------------------------------------------------------
-#define FW_VERSION "1.5.0"
+#define FW_VERSION "1.6.0"
 
 // Console<->master serial protocol version (bumped when a change isn't
 // backward-compatible; adding fields/commands doesn't require it).
@@ -73,16 +73,6 @@ static const uint16_t SERVO_MAX_US = 2400;
 
 // Motion engine update frequency.
 static const uint16_t SERVO_UPDATE_HZ = 50;
-
-// ---------------------------------------------------------------------------
-//  DFPlayer Mini audio (master only) — UART2
-// ---------------------------------------------------------------------------
-static const uint8_t PIN_DFPLAYER_RX = 16;  // ESP RX2  <- DFPlayer TX
-static const uint8_t PIN_DFPLAYER_TX = 17;  // ESP TX2  -> DFPlayer RX (via 1k)
-static const uint8_t PIN_DFPLAYER_BUSY = 4; // BUSY (optional)
-
-static const uint8_t  AUDIO_TRACK_COUNT   = 10;   // tracks 0001..0010 on SD
-static const uint8_t  AUDIO_VOLUME_DEFAULT = 20;  // 0..30
 
 // ---------------------------------------------------------------------------
 //  ESP-NOW network

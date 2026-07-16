@@ -4,7 +4,23 @@
              xmlns:views="clr-namespace:b1_chat_console.Views">
     <Border Style="{StaticResource CardBorderStyle}">
         <StackPanel>
-            <TextBlock Text="ANIMATION SEQUENCER" Style="{StaticResource CardTitleStyle}" />
+            <DockPanel LastChildFill="False" Margin="0,0,0,12">
+                <Border Style="{StaticResource CardIconBoxStyle}" DockPanel.Dock="Left" Margin="0,0,10,0">
+                    <Canvas Width="15" Height="15">
+                        <Rectangle Canvas.Left="0" Canvas.Top="1" Width="10" Height="2.6" RadiusX="1.3" RadiusY="1.3" Stroke="{StaticResource AccentBrush}" StrokeThickness="1.3" />
+                        <Rectangle Canvas.Left="0" Canvas.Top="6" Width="15" Height="2.6" RadiusX="1.3" RadiusY="1.3" Stroke="{StaticResource AccentBrush}" StrokeThickness="1.3" />
+                        <Rectangle Canvas.Left="0" Canvas.Top="11" Width="7" Height="2.6" RadiusX="1.3" RadiusY="1.3" Stroke="{StaticResource AccentBrush}" StrokeThickness="1.3" />
+                    </Canvas>
+                </Border>
+                <StackPanel DockPanel.Dock="Left" VerticalAlignment="Center">
+                    <TextBlock Text="ANIMATION SEQUENCER" Style="{StaticResource CardTitleStyle}" FontSize="13" Margin="0" />
+                    <TextBlock Text="Multi-track timeline — parallel per-droid lanes, absolute start times"
+                               Style="{StaticResource MetaTextStyle}" Margin="0,1,0,0" />
+                </StackPanel>
+                <Border DockPanel.Dock="Right" Style="{StaticResource ValuePillStyle}" VerticalAlignment="Center" MinWidth="0">
+                    <TextBlock Text="{Binding SequenceBadgeText}" Style="{StaticResource ValuePillTextStyle}" FontSize="10.5" />
+                </Border>
+            </DockPanel>
 
             <TextBlock Text="CATALOG (8 ESP32 SLOTS)" Style="{StaticResource SectionSubtitleStyle}" />
             <ItemsControl ItemsSource="{Binding Catalog}" Margin="0,0,0,10">
@@ -34,36 +50,18 @@
 
             <Separator Margin="0,0,0,8" />
 
-            <Grid Margin="0,0,0,6">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <TextBox Grid.Column="0" Style="{StaticResource RecessedTextBoxStyle}" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,8,0" />
-                <CheckBox Grid.Column="1" Content="Loop" IsChecked="{Binding Loop}" VerticalAlignment="Center" />
-            </Grid>
+            <!-- Loop moved into SequenceTimelineView's transport bar (⟲ Loop toggle, mockup-matched). -->
+            <TextBox Style="{StaticResource RecessedTextBoxStyle}" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,6" />
 
             <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                <Button Content="Undo" Style="{StaticResource MiniButtonStyle}" Command="{Binding UndoCommand}" Margin="0,0,4,0" />
-                <Button Content="Redo" Style="{StaticResource MiniButtonStyle}" Command="{Binding RedoCommand}" Margin="0,0,4,0" />
                 <Button Content="New" Style="{StaticResource MiniButtonStyle}" Command="{Binding NewSequenceCommand}" Margin="0,0,4,0" />
                 <Button Content="Save (ESP32)" Style="{StaticResource MiniButtonStyle}" Command="{Binding SaveToSlotCommand}" Margin="0,0,4,0" />
                 <Button Content="→ Library" Style="{StaticResource MiniButtonStyle}" Command="{Binding SaveToLibraryCommand}" />
             </StackPanel>
 
+            <!-- Play/Stop/Pause/Resume/Loop/Undo/Redo/Rehearse/Export/Import/zoom/snap all live
+                 in SequenceTimelineView's own unified transport bar now (mockup-matched). -->
             <views:SequenceTimelineView Margin="0,0,0,10" />
-
-            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
-                <Button Content="Play" Style="{StaticResource PrimaryButtonStyle}" Command="{Binding PlayCommand}" Margin="0,0,4,0" />
-                <Button Content="Stop" Style="{StaticResource MiniButtonStyle}" Command="{Binding StopCommand}" Margin="0,0,4,0" />
-                <Button Content="Pause" Style="{StaticResource MiniButtonStyle}" Command="{Binding PauseCommand}" Margin="0,0,4,0" />
-                <Button Content="Resume" Style="{StaticResource MiniButtonStyle}" Command="{Binding ResumeCommand}" Margin="0,0,4,0" />
-                <Button Style="{StaticResource MiniButtonStyle}" Command="{Binding ToggleRehearsalCommand}">
-                    <TextBlock Text="{Binding IsRehearsing, Converter={StaticResource BoolToTextConv}, ConverterParameter='Stop rehearsal|Rehearse (local)'}" />
-                </Button>
-                <Button Content="Export" Style="{StaticResource MiniButtonStyle}" Command="{Binding ExportCommand}" Margin="8,0,4,0" />
-                <Button Content="Import" Style="{StaticResource MiniButtonStyle}" Command="{Binding ImportCommand}" />
-            </StackPanel>
 
             <Separator Margin="0,0,0,8" />
             <TextBlock Text="LOCAL LIBRARY" Style="{StaticResource SectionSubtitleStyle}" />

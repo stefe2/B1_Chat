@@ -43,6 +43,18 @@ public class AnimFamilyToBrushConverter : IValueConverter
         Accent, // 17 TALK
     };
 
+    // Family grouping/labels, single source of truth reused by SequencerViewModel.GestureFamilies
+    // (mockup-matched "GESTURE LIBRARY" rows) so the two never drift apart.
+    public static readonly (string Label, int[] AnimIds)[] Families =
+    {
+        ("IDLE & REST", new[] { 0, 11, 16 }),
+        ("LOOK & CURIOSITY", new[] { 1, 4, 9, 10 }),
+        ("AFFIRMATION", new[] { 2, 3, 15 }),
+        ("SCAN & TRACK", new[] { 5, 7, 12, 13 }),
+        ("ALERT & GLITCH", new[] { 6, 8, 14 }),
+        ("TALK (AUDIO-SYNCED, LOOPS)", new[] { 17 }),
+    };
+
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
     {
         var id = value switch { int i => i, double d => (int)d, _ => -1 };

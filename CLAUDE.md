@@ -10,8 +10,9 @@ A single git repo (`stefe2/B1_Chat`), two halves:
 
 1. **ESP32 firmware** (repo root, PlatformIO/Arduino): drives several B1
    droid heads (2 pan/tilt servos each) over a **multi-hop ESP-NOW mesh**
-   network, with smooth/organic animations coordinated by a **master** that
-   also plays sound (DFPlayer Mini + amp). Settings persisted in NVS.
+   network, with smooth/organic animations coordinated by a **master**
+   (sound is played by the **console**, client-side — the master's own
+   DFPlayer was retired, see the Progress log). Settings persisted in NVS.
 2. **Supervision console** (`console/`, WPF net8.0-windows, v0.9.x): a
    **100% native WPF** desktop app (XAML/MVVM, `CommunityToolkit.Mvvm`) that
    owns the serial port (`System.IO.Ports`) and reproduces the old web
@@ -56,13 +57,14 @@ CI for the same version — duplicate tag/release).
 | --- | --- |
 | Servo PAN | GPIO25 |
 | Servo TILT | GPIO26 |
-| DFPlayer RX (master) | GPIO17 (TX2), via 1 kΩ |
-| DFPlayer TX (master) | GPIO16 (RX2) |
-| DFPlayer BUSY (master) | GPIO4 (wired, **not yet used**) |
 | Life LED | GPIO2 (onboard) |
 
 - Servos on external 5V (BEC), common ground, ≥ 470 µF capacitor recommended.
-- Audio: DFPlayer's DAC_L/DAC_R → external amp (PAM8403) → 1 speaker (master).
+- Audio (DFPlayer Mini + PAM8403 amp on GPIO16/17/4) was **retired from the
+  firmware** (fw 1.6.0, see Progress log) — the console now owns audio
+  entirely client-side. The wiring itself is unaffected (physically
+  unplugging it is a separate, optional hardware task, out of scope for the
+  firmware change).
 - Pins to avoid: strapping GPIO0/2/5/12/15; input-only GPIO34-39.
 - 4-6 droids planned (extensible), SG90/MG996R servos.
 
@@ -79,9 +81,8 @@ last 2 bytes of the MAC — plug in → flash → done, no ID to manage).
 | `mesh_topology.{h,cpp}` | (master) aggregator of directed {from,to,rssi} edges of the neighborhood graph |
 | `servo_engine.{h,cpp}` | native 50 Hz LEDC PWM, smootherstep easing, idle noise, calibratable limits |
 | `animation.{h,cpp}` | 18 keyframe anims, non-blocking player, variation seed, `totalDurationMs()` |
-| `audio.{h,cpp}` | (master) DFPlayer wrapper, anim → track-range mapping (10 tracks `/mp3/0001..0010.mp3`) |
 | `registry.{h,cpp}` | (master) live inventory: srcId, RSSI, lastSeen, servos, autoAnim (synchronized access, see pitfalls) |
-| `config_store.{h,cpp}` | NVS: names, volume, anim params, per-droid servo calibration |
+| `config_store.{h,cpp}` | NVS: names, anim params, per-droid servo calibration |
 | `sequence_store.{h,cpp}` | (master) NVS: 8 named sequence slots, ≤ 32 steps {targetId,animId,delayMs} |
 | `serial_console.{h,cpp}` | (master) USB JSON ↔ mesh bridge for the console |
 | `ota_guard.{h,cpp}` | (all roles) anti-brick: NVS flag + manual rollback to the other partition if the new firmware doesn't start correctly |
@@ -89,7 +90,7 @@ last 2 bytes of the MAC — plug in → flash → done, no ID to manage).
 | `ota_slave.{h,cpp}` | (slave) receives an OTA image relayed by the mesh, writes via `Update` |
 | `droid.{h,cpp}` | high-level state machine (step 6, **not done yet**) |
 
-Dependencies: `DFRobotDFPlayerMini`, `ArduinoJson`. Build flags: `-D MESH_TTL=4`,
+Dependencies: `ArduinoJson`. Build flags: `-D MESH_TTL=4`,
 `-D GROUP_KEY="changeme"` (**compile-time-only** key, no re-keying at runtime).
 
 PlatformIO environments (`platformio.ini`): `[env:b1]` — role decided by `#define
@@ -145,25 +146,25 @@ Session guarded by a handshake: `hello` → `{evt:"hello",ok,id}`, then keepaliv
 `ping` (5s timeout on the firmware side, `_clientReady`).
 
 - **Console → master** (`cmd`): `hello` · `ping` · `list` · `getConfig` · `getAll` ·
-  `config {target,freq,amp,speed}` · `volume {value}` · `name {id,name}` ·
-  `playTrack {track}` · `servo {target,enabled}` · `autoAnim {target,enabled}` ·
+  `config {target,freq,amp,speed}` · `name {id,name}` ·
+  `servo {target,enabled}` · `autoAnim {target,enabled}` ·
   `locate {target,enabled}` ·
   `adopt {target}` · `forget {target}` ·
   `anim {target,animId,seed}` · `preview {target,pan,tilt}` ·
   `calib {target,+6 limits}` · `getCalib {target}` · `getAnimDurations` ·
   `getMeshTopology` · `seqList` · `seqLoad {slot}` ·
-  `seqSave {slot,name,loop,track,totalMs,audioStartMs,steps:[{animId,target,start}]}` · `seqDelete {slot}` ·
+  `seqSave {slot,name,loop,totalMs,steps:[{animId,target,start}]}` · `seqDelete {slot}` ·
   `seqRun {slot,fromMs?}` · `seqStop` · `seqPause` · `seqResume` · `seqState` ·
   `setMulti {ops:[...]}` · `commit` · `revert` ·
   `otaStart {target,size,md5}` · `otaChunk {seq,data}` (data = base64) · `otaAbort {}`
-- **Master → console** (`evt`): `hello {ok,id,fw,proto,lineMax,anims,seqSlots,trackCount,caps[],dirty}` ·
+- **Master → console** (`evt`): `hello {ok,id,fw,proto,lineMax,anims,seqSlots,caps[],dirty}` ·
   `droids {list:[{id,name,rssi,age,role,servos,autoAnim,adopted,fw}]}` ·
-  `log {msg}` · `err {msg}` · `config {volume,freq,amp,speed}` · `calibData {target,+6}` ·
+  `log {msg}` · `err {msg}` · `config {freq,amp,speed}` · `calibData {target,+6}` ·
   `meshTopology {links:[{from,to,rssi}]}` · `animDurations {list:[{animId,ms}]}` ·
-  `seqList {list:[{slot,name,stepCount,loop,track}]}` ·
-  `seqData {slot,name,loop,track,totalMs,audioStartMs,steps:[{animId,target,start}]}` ·
+  `seqList {list:[{slot,name,stepCount,loop}]}` ·
+  `seqData {slot,name,loop,totalMs,steps:[{animId,target,start}]}` ·
   `seqSaved {ok,slot,name}` · `seqDeleted {ok,slot}` ·
-  `seqState {playing,slot,elapsedMs,totalMs,track,paused}` ·
+  `seqState {playing,slot,elapsedMs,totalMs,paused}` ·
   `setMultiDone {ok,applied,failedAt?,error?}` · `dirty {dirty}` · `allDone` ·
   `otaReady {target,sessionId,chunkSize,totalChunks}` · `otaChunkAck {seq,sent,total}` ·
   `otaDone {target,sessionId}` · `otaResult {target,ok,fw?,reason?}` ·
@@ -173,12 +174,20 @@ Unknown fields in a command: ignored (the console may be newer than the
 firmware). Responses routed exclusively on `evt`. Line buffer: 4 KB
 (`lineMax` announced at handshake; any longer line → `err`).
 
-**Commit/revert** (volume, anim params, names — not calibration or
+**No audio in this protocol** (fw 1.6.0): `volume`/`playTrack` (console→master)
+and `config`'s `volume` field, plus `track`/`audioStartMs` on
+`seqSave`/`seqData`/`seqList`/`seqState`, were all removed when the DFPlayer
+was retired — see the Progress log. `seqRun`/`seqStop`/`seqPause`/`seqResume`
+and the master's own onboard sequence player are unaffected (still fully
+functional), just no longer triggered from the console's Sequencer UI (Play
+is console-driven now, see that Progress entry).
+
+**Commit/revert** (anim params, names — not calibration or
 sequences): setters are "live" (RAM overlay), NVS is only written on
 `commit`; `revert` reloads the persisted state. The console must send `commit`
 after a restore `setMulti`. [FIRMWARE-CONTRACT.md](FIRMWARE-CONTRACT.md)
-tracks the implementation status (§1/§3/§4/§5 done; §2 track durations deferred —
-BUSY-pin approach).
+tracks the implementation status (§3/§4/§5 done; §1/§2 removed fw 1.6.0 —
+audio track, retired with the DFPlayer).
 
 **Droid adoption** (`registry`/`config_store`): a droid never seen before
 (`adopted:false` in `evt:droids`) stays in the mesh (broadcast anims received
@@ -285,7 +294,7 @@ loaded by the application.
 | `Services/ProtocolClient.cs` | central state: parses incoming JSON `evt`, builds outgoing `cmd` (C# equivalent of JS's `sendCmd()`/`handleEvent()`) |
 | `Services/UpdateService.cs` / `FlashService.cs` / `LibraryService.cs` / `SettingsService.cs` | GitHub updates, espflash flashing, local sequence library, `settings.json` |
 | `Services/OtaService.cs` | drives an OTA session (one slave at a time): reads the `.bin`, computes the MD5, sends one fragment per `evt:otaChunkAck` received |
-| `Services/AudioPlaybackService.cs` | console-side Sequencer audio (DFPlayer set aside "for now"): tracks several concurrent `MediaPlayer`s (one per active clip, optionally looping), plus a one-off probe for a picked file's duration |
+| `Services/AudioPlaybackService.cs` | console-side Sequencer audio (the master's DFPlayer was retired fw 1.6.0 — this is the only audio source now): tracks several concurrent `MediaPlayer`s (one per active clip, optionally looping), `PauseAll`/`ResumeAll` for real Play pause/resume, plus a one-off probe for a picked file's duration |
 | `Services/SequenceAudioStore.cs` | client-only slot→audio-lanes (each a label + clip list) association for the 8 NVS slots (`slot-audio.json`) — the master's NVS has no room for a filesystem path |
 | `Converters/` | `BoolToStyleConverter`, `BoolToTextConverter`, `BoolToVisibilityConverter`, `BoolToBrushConverter`, `StrengthToBrushConverter` (mesh link color by RSSI), `TimelineGeometryConverter`/`TimelineActiveConverter`/`AnimFamilyToBrushConverter` (Sequencer timeline) |
 | `b1-chat-console.csproj` | auto-incremented build number, version from `VersionPrefix`, `IncludeNativeLibrariesForSelfExtract`, `tools/` (espflash) excluded from the single-file but copied on publish |
@@ -300,9 +309,8 @@ width at the bottom. Firmware card taken out of the grid (separate window).
 
 | What | Where |
 | --- | --- |
-| Names, volume, anim params, calibrations, adoption status | Master's NVS (`config_store`) |
+| Names, anim params, calibrations, adoption status | Master's NVS (`config_store`) |
 | Sequences (8 slots, ≤ 32 steps) | Master's NVS (`sequence_store`) |
-| Track durations + slot→audio-track | Page's `localStorage` (temporary, see contract §1-2) |
 | Sequence library, last port | `%LOCALAPPDATA%\B1ChatConsole\` (console side) |
 | Per-slot console-side audio lanes (label + clips, each a file path/duration/start/loop) | `%LOCALAPPDATA%\B1ChatConsole\slot-audio.json` (console side, keyed by NVS slot number — see the Sequencer audio Progress entries below) |
 | OTA anti-brick flag (pending/attempts) | NVS of **each droid** flashed via OTA, separate `"ota"` namespace (`ota_guard`) |
@@ -372,7 +380,6 @@ width at the bottom. Firmware card taken out of the grid (separate window).
       lowered to 4s (`DROID_TIMEOUT_MS` + console-side threshold), sliding
       on/off switches (`OnOffSwitchStyle`) for Servos/Auto anims.
 - [ ] Step 6: `droid.{h,cpp}` state machine.
-- [ ] Contract §2: track durations measured via the BUSY pin (GPIO4) — deferred.
 - [ ] Anim freq/amp/speed params: received + persisted but **no effect**
       (`onConfig` hook never wired up in main.cpp; sliders marked "coming
       soon" in the UI).
@@ -718,6 +725,245 @@ width at the bottom. Firmware card taken out of the grid (separate window).
       click), a track muted and dimmed, and a full `Rehearse (local)` pass
       with all of the above active at once — ran cleanly, stopped exactly at
       the computed total duration, no exceptions.
+- [x] Sequencer: waveform preview + cross-lane audio drag (2026-07-16), two
+      more additions to the same batch above. **Waveform**: new `NAudio`
+      NuGet dependency (`console/Services/WaveformService.cs`) — the only
+      decoder in this app with raw sample access, `AudioPlaybackService`'s
+      `MediaPlayer` has none. Decodes a clip's file to a fixed 120-point
+      min/max-style peak envelope (0..1) off the UI thread, cached by file
+      path (`ConcurrentDictionary`, shared across every clip that happens to
+      reference the same file) so re-showing or duplicating a clip never
+      re-decodes. `AudioClip.Peaks` (new, nullable `float[]`) is populated
+      asynchronously from every clip-creation path (`AddAudioClip`,
+      `ReplaceAudioClip`, `ApplyAudioLanesFromDto` on load/import/library
+      pull). Rendered via `Converters/WaveformToGeometryConverter.cs`
+      (`Peaks` → a filled `PathGeometry` in a fixed `x:[0,119] y:[0,2]`
+      domain) hosted inside a `Viewbox Stretch="Fill"` layered behind the
+      clip's label — the fixed-domain geometry rescales to whatever pixel
+      width the clip currently has (zoom, drag) without ever recomputing
+      peaks. Not persisted (`Peaks` is derived, not part of `AudioClipDto`)
+      — reloading a sequence just re-decodes from the stored file path.
+      **Cross-lane drag**: audio clips previously only moved horizontally
+      within their own lane's `Canvas` — a live re-parent into another
+      lane's `Canvas` mid-drag isn't practical the way it is for gesture
+      clips (which all share one flat `TracksCanvas`, only `Canvas.Top`
+      changes). Reused the app's existing ghost-drag idiom instead (same
+      `DragGhostCanvas`/`GhostBorder` already built for the gesture-library
+      drop): `SequencerViewModel.AudioLaneAtY(double)` (mirrors `TrackAtY`,
+      new `AudioLane.RowHeight`/`RowGap` consts alongside the pre-existing
+      `TimelineTrack` ones) is checked on every `AudioClip_MouseMove`; once
+      the cursor crosses into a different lane's row, the real clip dims
+      (new transient `AudioClip.Dragging` bool, not persisted) and a ghost
+      follows the cursor instead, snapping back the moment it re-enters its
+      origin lane. The actual move (`SequencerViewModel.
+      MoveAudioClipToLane` — remove from the source lane's `Clips`, add to
+      the target's, `StartMs` carried over from the live horizontal drag)
+      only happens once, at `MouseUp`, inside the same `BeginAudioClipDrag()`
+      `PushHistory()` already armed at `MouseDown` — one Undo restores both
+      the lane and the time position together. **Also**: the two default
+      seeded lanes were reordered to `AMBIENT` then `AUDIO` (was the
+      reverse) per direct request — cosmetic, no data-shape change.
+      Verified live (2026-07-16, once the foreground window matched on a
+      retry): added a real `.wav` file to the AMBIENT lane, waveform
+      rendered correctly; dragged the same clip from AMBIENT into AUDIO,
+      it re-parented cleanly (source lane emptied, waveform intact in the
+      new lane). `dotnet build` clean throughout.
+- [x] Sequencer timeline: visual pass toward the "Sequencer v2" concept mockup
+      (2026-07-16), first batch of 4 purely-visual items picked from the mockup
+      by the user (screenshots + a short back-and-forth, confirmed before
+      coding per this project's standing rule) — no protocol/behavior changes.
+      **Track-gutter rows** (`TimelineTrack.Role`, new "MASTER"/"SLAVE"/
+      "BROADCAST" caption set in `RebuildTracks()`): each row now shows the
+      droid name plus a small caps role line underneath, and the old 🔇/🔊
+      text `Button` was replaced by a real `OnOffSwitchStyle` `ToggleButton`
+      (glossy green/red slider, already used for Servos/Auto anims/Locate) —
+      `IsChecked` bound through the new `Converters/BoolInvertConverter.cs`
+      so ON/green reads as "audible" rather than showing green for "muted",
+      keeping the same green=active convention as everywhere else; still a
+      real `ToggleButton` (not `Border`+`MouseBinding`) for the same
+      click-bubbling reason as the button it replaced. **Timeline grid**:
+      two new `ItemsControl`s added as the first (bottommost-rendered)
+      children of `TracksCanvas` and of each audio lane's `Canvas` — one
+      bound to `Tracks`/`AudioLanes` drawing a full-width row background +
+      1px bottom separator (`#59000000`) per row, one bound to the *same*
+      `RulerTicks` collection the ruler itself uses (so grid lines can never
+      drift out of sync with the time labels) drawing 1px vertical
+      `Rectangle`s at each tick, dimmer for minor ticks than major —
+      broadcast row and audio lanes get a faint accent tint (`#FF9D2E` at
+      3-4% opacity) matching the mockup's `.track-lane.audio`/`.broadcast`.
+      **Transport bar**: the two previously-separate button rows
+      (Undo/Redo/New/Save/→Library above the timeline, and
+      Play/Stop/Pause/Resume/Rehearse/Export/Import below it, both in
+      `SequencerCardView.xaml`) are consolidated into *one* recessed dark
+      bar now living in `SequenceTimelineView.xaml`'s own toolbar row —
+      round icon buttons (new `IconTransportButtonStyle`, same beveled
+      chrome as every other button, just square+glyph) for Play/Stop/
+      Pause/Resume, a `⟲ Loop` `HaloToggleButtonStyle` toggle (moved off
+      the Name row, which now just has the name field), a live timecode
+      pill (new `SequencerViewModel.TimecodeText`, "mm:ss.mmm /
+      mm:ss.mmm", refreshed on every `PlayheadMs` change and on every
+      ruler-tick rebuild since total duration can change), the existing
+      zoom/snap, a new **Fit** button (`SequenceTimelineView.xaml.cs`,
+      code-behind rather than a ViewModel command since it needs the
+      `ScrollViewer`'s actual pixel width — a view concern —
+      `TotalDurationMs()` made `public` for this one caller), then
+      Undo/Redo/Rehearse/Export/Import/Add-audio-lane/Live-badge. `New`/
+      `Save (ESP32)`/`→ Library` are the only buttons left in
+      `SequencerCardView.xaml` — they don't have a mockup equivalent, so
+      weren't moved. **Gutter header**: the empty 24px spacer above the
+      track rows now reads "TRACKS" (small bold caps, muted gray,
+      bottom-bordered), matching the mockup's `.ruler-spacer`, aligned
+      with the ruler's own 24px height. Verified live (2026-07-16, once the
+      foreground window matched on a later retry) against the real 4-droid
+      fleet: gutter shows correct MASTER/SLAVE/BROADCAST roles and glossy
+      toggles, transport bar renders and its Fit button correctly rescales
+      zoom to the sequence length, "TRACKS" header aligned with the ruler.
+      `dotnet build` clean throughout.
+- [x] Sequencer timeline: 3 follow-up fixes from direct user feedback after
+      seeing the above live (2026-07-16), found and fixed with a temporary
+      red debug-`Rectangle` at canvas origin to pin down the first one
+      empirically rather than guessing from a screenshot:
+      **(1) Pre-existing centering bug** (not caused by this session's other
+      changes — reproduced back through earlier screenshots too): the
+      `ScrollViewer`'s content `StackPanel` (ruler + audio lanes + tracks)
+      had no explicit `HorizontalAlignment`, so whenever the sequence is
+      short/zoomed out (content narrower than the viewport), WPF's default
+      content stretching centered it inside the scroll viewport instead of
+      pinning it flush against the gutter — the ruler's "0.0s" origin then
+      floated away from x=0 with a wide gap that scaled with window width
+      (confirmed via the debug rectangle landing exactly on the gap's far
+      edge, matching the ruler/playhead exactly, not just visually near it).
+      Fixed with one `HorizontalAlignment="Left"` on that `StackPanel`.
+      **(2) Gutter toggles at 50%**: the new `OnOffSwitchStyle` track-row
+      switches (from the batch above) are now wrapped in a `LayoutTransform
+      ScaleTransform 0.5/0.5` — `LayoutTransform`, not `RenderTransform`, so
+      the row's `Auto`-sized column shrinks along with the visual instead of
+      leaving dead space; scoped to just this one `ToggleButton` instance so
+      the shared `OnOffSwitchStyle` (Servos/Auto anims/Locate in the Droids
+      card) stays full-size everywhere else. **(3) Active-row highlight**: a
+      new `DataTrigger` on the row `Border` (`Muted=False` → soft green
+      `DropShadowEffect`, `#3DDC84` at 0.45 opacity) makes an audible/active
+      track's whole row glow, not just its small switch — mirrors the same
+      green already used for the toggle's own on-state. Verified live
+      (screenshot comparison before/after): gap gone (ruler origin flush
+      against the gutter), switches visibly smaller, "All droids" row
+      glowing green while un-muted. `dotnet build` clean.
+- [x] Sequencer: gesture library grouped by family + card header badge
+      (2026-07-16), continuing the same visual pass as the batch above.
+      **Gesture library**: the flat wrapped row of 18 chips became labeled
+      rows (`SequencerViewModel.GestureFamilies`, `Models/GestureFamily.cs`)
+      — "IDLE & REST", "LOOK & CURIOSITY", "AFFIRMATION", "SCAN & TRACK",
+      "ALERT & GLITCH", "TALK (AUDIO-SYNCED, LOOPS)". Grouping/labels come
+      from a new `AnimFamilyToBrushConverter.Families` static table (single
+      source of truth, reused by the ViewModel so the grouping can never
+      drift from the colors every clip/chip already uses) instead of
+      duplicating the animId→family mapping a second time. The flat
+      `GestureLibrary` list stays too (used by the drag-ghost's name lookup
+      in `SequenceTimelineView.xaml.cs`). **Card header**: `SequencerCardView`
+      gained the same icon-box + subtitle + right-aligned badge treatment
+      already used by Droids/Mesh Topology — a small vector "steps" glyph,
+      "Multi-track timeline — parallel per-droid lanes, absolute start
+      times" subtitle, and a live badge (`SequencerViewModel.
+      SequenceBadgeText`, updates on `CurrentSlot`/`Name` change) reading
+      `SLOT 2 · "PARADE"` or `UNSAVED · NEW SEQUENCE`. `dotnet build` clean.
+- [x] DFPlayer retired everywhere, firmware and console (fw 1.6.0,
+      2026-07-16) — the console already owned multi-track audio playback
+      client-side (see the Sequencer-audio entries above); this removes the
+      master's own DFPlayer entirely rather than just leaving it unused.
+      **Firmware**: `src/audio.{h,cpp}` deleted outright (the
+      `AudioPlayer`/`Audio` wrapper, anim→track-range table); every
+      `Audio.*` call site in `main.cpp` removed (`setup()`'s init, the
+      per-gesture sound on `playLocalAnim`/incoming `MSG_ANIM`/the master's
+      own idle-anim draw, the stored-sequence player's audio-cue block and
+      its DFPlayer-only-plays-one-track-at-a-time gesture-sound
+      suppression, `onSeqPauseCmd`'s `Audio.pause()/resume()`) — the
+      sequence *player* itself (step firing via `anim.play()`/mesh
+      broadcast) is untouched, only the DFPlayer calls interleaved with it
+      are gone. `src/serial_console.{h,cpp}`: `playTrack`/`volume` command
+      handlers and their `onVolume`/`onTrack` hook plumbing removed;
+      `track`/`audioStartMs` dropped from `seqSave`/`seqData`/`seqList`/
+      `seqState` (`pushSeqState` lost its `track` parameter entirely);
+      `trackCount` dropped from the `hello` ack; the now-meaningless
+      `seqTrack` capability flag removed from `caps[]`.
+      `src/config_store.{h,cpp}`: `volume()`/`setVolume()` and the `"vol"`
+      NVS key removed, along with their branches in `refreshDirty()`/
+      `commitPending()`/`revertPending()` (volume was part of the
+      commit/revert draft, same machinery as anim params/names).
+      `src/sequence_store.{h,cpp}`: `track`/`audioStartMs` dropped from
+      `StoredSequence`/`SequenceBlob` — the blob shrinks, and the existing
+      **exact-size-match** guard (same one added for the fw 1.5.0 timeline
+      rework) means every slot saved before this update reads back as "not
+      found" rather than being misread — **all 8 slots need re-saving from
+      the console** after updating a master past fw 1.6.0. `platformio.ini`
+      lost the `dfrobot/DFRobotDFPlayerMini` dependency.
+      `FIRMWARE-CONTRACT.md` §1 (audio track) and §2 (`getTrackDurations`,
+      already deferred/unimplemented) marked removed. **Console**:
+      `Views/AudioCardView.xaml(.cs)` + `ViewModels/AudioViewModel.cs`
+      deleted outright (the whole "AUDIO (MASTER)" card — volume slider,
+      test-track button); `MainWindow.xaml`'s Animation/Audio 2-column row
+      collapsed to just `AnimationCardView` at full width;
+      `ProtocolClient.SetVolume`/`PlayTrack`/`LastVolume`/`TrackCount` and
+      the `evt:config` volume parse / `hello` trackCount parse removed;
+      `SeqSave`'s `track`/`audioStartMs` parameters dropped (every caller
+      updated). `SequencerViewModel.AudioTrack` (already vestigial —
+      always 0, no UI control bound to it since the client-side multi-lane
+      audio rework, see above) removed along with every read/write site
+      (`Snapshot`/`Apply`/`NewSequence`/`OnSeqData`/`SaveToSlot`/
+      `SaveToLibrary`/`LoadFromLibrary`/`PushToMaster`/`Export`/`Import`);
+      `SequenceSlotMeta.Track`/`SequenceLibraryItem.AudioTrack`/
+      `SequenceSnapshot.Track` dropped from their model records.
+      `DroidsViewModel`'s Backup/Restore no longer reads/writes a `"volume"`
+      key (old backup files with one are simply ignored on restore, same
+      safe-additive-removal precedent as everywhere else this session).
+      Physically unplugging the DFPlayer/amp is a separate, optional
+      hardware task — out of scope here, the firmware just stops calling
+      into it. Verified: `pio run` clean on `b1`/`b1_master`/`b1_slave`;
+      `dotnet build` clean.
+- [x] Sequencer: Play and Rehearse merged into one console-driven Play, with
+      real Pause/Resume (fw unaffected, console-only — 2026-07-16). Until
+      now the transport had two disconnected paths: hardware `Play`/`Stop`/
+      `Pause`/`Resume` (sent `seqRun`/`seqStop`/`seqPause`/`seqResume` to
+      the master, which replayed its own NVS-stored sequence — required a
+      prior "Save (ESP32)") and a separate "Rehearse (local)" toggle (the
+      console scheduled its own timers straight from the editor — no save
+      needed — firing real per-step `anim` mesh commands plus local audio,
+      but no pause/resume and no playhead feedback). Per direct request
+      ("quand je presse sur Play l'animation joue dans la console avec le
+      son et déclenche en même temps les animations sur les droids"): the
+      old hardware-backed Play/Stop/Pause/Resume are gone, and Play now
+      always works the way Rehearse did — console-driven, no slot required.
+      `SequencerViewModel`: `IsRehearsing` → `IsPlaying`/`IsPaused`;
+      `ScheduleRehearsalPass()` → `ScheduleTimers(int fromMs)`, now taking
+      an offset so only steps/clips whose `StartMs >= fromMs` get armed
+      (delay `StartMs - fromMs`) — this is what makes `Resume()` skip
+      everything that already fired before a pause instead of replaying it.
+      `Pause()` computes elapsed from the same anchor the playhead ticker
+      already used, disposes pending timers (nothing to "pause" about a
+      one-shot trigger that hasn't fired yet) and calls the new
+      `AudioPlaybackService.PauseAll()` (clips already mid-playback keep
+      their position natively via `MediaPlayer.Pause()` — no manual seek
+      math); `Resume()` calls `PauseAll()`'s counterpart `ResumeAll()` and
+      re-arms the remaining timers via `ScheduleTimers(elapsedAtPause)`.
+      The hardware-`seqState`-driven playhead/LIVE-badge logic
+      (`OnSeqState`) and the new console-driven path now share one
+      `StartPlayheadTicker(fromElapsedMs)` helper instead of duplicating
+      the anchor/`DispatcherTimer` setup, so both sources animate the
+      playhead identically. Mute's documented limitation ("only affects
+      Rehearse, a real hardware Play can't honor it") is now moot — Play
+      *is* the console-driven mechanism, so mute applies unconditionally.
+      **Accepted trade-off, confirmed explicitly**: the console no longer
+      has any way to trigger the firmware's own onboard `seqRun` playback
+      (the tested "sequence saved → master reboot → Play works without a
+      PC" path) — the firmware keeps that capability fully intact and
+      working (see fw Verification above), just nothing in the Sequencer UI
+      calls it anymore. `Views/SequenceTimelineView.xaml`: the standalone
+      "Rehearse (local)" button removed; the existing 4 icon buttons (▶ ■
+      ⏸ ⏵) rebound to the new commands, Pause/Resume auto-disable via
+      `[RelayCommand(CanExecute=...)]` (`CanPause`/`CanResume`, same pattern
+      already used for Undo/Redo). Verified: `dotnet build` clean; not yet
+      re-verified live against the real fleet this pass (see the DFPlayer
+      entry above for the build verification already done) — needs a
+      hands-on Play/Pause/Resume/Stop/Loop pass against real hardware.
 
 ## Full flash (virgin board support)
 
@@ -877,8 +1123,6 @@ change).
   Static, one-off elements outside any repeating template (e.g. the
   topology card's starfield/radar-sweep) are unaffected.
 - ESP32Servo abandoned (double-attach bug) → native LEDC only.
-- DFPlayer: can't report a track's duration; the BUSY pin (GPIO4)
-  is the only way to observe when playback ends.
 - KyberEditor (`C:\Program Files\KyberEditor`): UX inspiration source for the
   console and origin of `tools\espflash.exe`; its firmwares/bootloaders are of no
   use to us (PlatformIO generates ours).
@@ -966,13 +1210,19 @@ change).
 ## Verification (reminders)
 
 1. `pio run -e b1` builds (also test `IS_MASTER 0`).
-2. Smooth servo sweep; `MSG_ANIM` relayed ≥ 2 hops without a broadcast storm.
-3. Master anim → associated sound track; 2 different group keys ignore each other.
-4. Console connected: droid list, anim/volume/name, persistence after reboot.
-5. Sequence saved → master reboot → `Play` works without a PC.
-6. Topology: move a slave out of the master's direct range → its direct
+2. Smooth servo sweep; `MSG_ANIM` relayed ≥ 2 hops without a broadcast storm;
+   2 different group keys ignore each other.
+3. Console connected: droid list, anim/name, persistence after reboot.
+4. Sequence saved to a slot, master reboot, then `seqRun` sent directly
+   (e.g. `tools/ota-test.ps1`-style serial) → still plays without a PC — the
+   master's own onboard sequence player is unaffected by the fw 1.6.0 audio
+   removal (**caveat**: the console's own Sequencer `Play` no longer sends
+   `seqRun` at all, see the Progress log — this is no longer exercised from
+   the console UI, only worth re-checking if that firmware capability is
+   ever revived for something else).
+5. Topology: move a slave out of the master's direct range → its direct
    link disappears from the graph, relayed links remain.
-7. OTA — **only on a spare board, never a droid in service** —
+6. OTA — **only on a spare board, never a droid in service** —
    all these points are ✅ validated at the bench (2026-07-14, fw 1.3.12, via
    `tools/ota-test.ps1`, see Progress):
    nominal transfer (progress, `otaResult{ok:true}`, `evt:droids.fw` up

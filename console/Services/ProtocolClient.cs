@@ -33,10 +33,8 @@ public partial class ProtocolClient : ObservableObject
     [ObservableProperty] private int _lineMax;
     [ObservableProperty] private int _animCount = 18;
     [ObservableProperty] private int _seqSlotMax = 8;
-    [ObservableProperty] private int _trackCount = 10;
     [ObservableProperty] private bool _dirty;
 
-    [ObservableProperty] private int _lastVolume;
     [ObservableProperty] private int _lastFreq;
     [ObservableProperty] private int _lastAmp;
     [ObservableProperty] private int _lastSpeed;
@@ -209,8 +207,6 @@ public partial class ProtocolClient : ObservableObject
         SendCmd(new JsonObject { ["cmd"] = "config", ["target"] = target, ["freq"] = freq, ["amp"] = amp, ["speed"] = speed });
         PacketSent?.Invoke(target, "config");
     }
-    public void SetVolume(int value) => SendCmd(new JsonObject { ["cmd"] = "volume", ["value"] = value });
-    public void PlayTrack(int track) => SendCmd(new JsonObject { ["cmd"] = "playTrack", ["track"] = track });
     public void Commit() => SendCmd(new JsonObject { ["cmd"] = "commit" });
     public void Revert() => SendCmd(new JsonObject { ["cmd"] = "revert" });
 
@@ -228,9 +224,8 @@ public partial class ProtocolClient : ObservableObject
 
     // totalMs (loop/end boundary) is derived here rather than asked of the caller,
     // so every save path (slot save, library push) gets a consistent value — see
-    // FIRMWARE-CONTRACT.md §6. audioStartMs stays 0 (audio starts at t=0) until the
-    // UI grows a control for it.
-    public void SeqSave(int slot, string name, bool loop, int track, IEnumerable<SequenceStep> steps, int audioStartMs = 0)
+    // FIRMWARE-CONTRACT.md §6.
+    public void SeqSave(int slot, string name, bool loop, IEnumerable<SequenceStep> steps)
     {
         var stepList = steps.ToList();
         var stepsArr = new JsonArray();
@@ -239,8 +234,8 @@ public partial class ProtocolClient : ObservableObject
         var totalMs = stepList.Count == 0 ? 0 : stepList.Max(s => s.StartMs) + 1500;
         SendCmd(new JsonObject
         {
-            ["cmd"] = "seqSave", ["slot"] = slot, ["name"] = name, ["loop"] = loop, ["track"] = track,
-            ["totalMs"] = totalMs, ["audioStartMs"] = audioStartMs, ["steps"] = stepsArr,
+            ["cmd"] = "seqSave", ["slot"] = slot, ["name"] = name, ["loop"] = loop,
+            ["totalMs"] = totalMs, ["steps"] = stepsArr,
         });
     }
 
@@ -331,7 +326,6 @@ public partial class ProtocolClient : ObservableObject
         LineMax = root.TryGetProperty("lineMax", out var lm) ? lm.GetInt32() : 0;
         AnimCount = root.TryGetProperty("anims", out var an) ? an.GetInt32() : AnimCount;
         SeqSlotMax = root.TryGetProperty("seqSlots", out var ss) ? ss.GetInt32() : SeqSlotMax;
-        TrackCount = root.TryGetProperty("trackCount", out var tc) ? tc.GetInt32() : TrackCount;
         Dirty = root.TryGetProperty("dirty", out var d) && d.GetBoolean();
 
         _caps.Clear();
@@ -398,7 +392,6 @@ public partial class ProtocolClient : ObservableObject
 
     private void HandleConfig(JsonElement root)
     {
-        if (root.TryGetProperty("volume", out var v)) LastVolume = v.GetInt32();
         if (root.TryGetProperty("freq", out var f)) LastFreq = f.GetInt32();
         if (root.TryGetProperty("amp", out var a)) LastAmp = a.GetInt32();
         if (root.TryGetProperty("speed", out var s)) LastSpeed = s.GetInt32();
@@ -425,8 +418,7 @@ public partial class ProtocolClient : ObservableObject
                     item.GetProperty("slot").GetInt32(),
                     item.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "",
                     item.TryGetProperty("stepCount", out var sc) ? sc.GetInt32() : 0,
-                    item.TryGetProperty("loop", out var lp) && lp.GetBoolean(),
-                    item.TryGetProperty("track", out var tr) ? tr.GetInt32() : 0));
+                    item.TryGetProperty("loop", out var lp) && lp.GetBoolean()));
     }
 
     private void HandleAnimDurations(JsonElement root)

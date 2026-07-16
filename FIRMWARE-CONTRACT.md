@@ -11,72 +11,40 @@ Written on 2026-07-12, while the firmware source code wasn't yet available.
 
 | Section | Status |
 | --- | --- |
-| §1 audio track (`track` in seqSave/seqData/seqList/seqState, played by seqRun) | ✅ implemented |
-| §2 `getTrackDurations` | ⏳ deferred (BUSY-pin approach planned) |
-| §3 `getConfig` response = `{evt:"config",...}` | ✅ implemented |
+| §1/§2 audio track / `getTrackDurations` | ❌ removed (fw 1.6.0) — DFPlayer retired firmware-wide, the console now owns multi-track audio playback client-side; see CLAUDE.md |
+| §3 `getConfig` response = `{evt:"config",...}` | ✅ implemented (now `freq`/`amp`/`speed` only — `volume` dropped alongside DFPlayer) |
 | §4 atomic `setMulti` (full validation before application) | ✅ implemented |
 | §5 `seqRun {from}`, `seqPause`/`seqResume`, `seqState.paused` + per-step push | ✅ implemented, then superseded — see "Absolute-time sequence model" below (fw ≥ 1.5.0, `caps: seqTimeline`) |
-| Absolute-time sequence model (`start`/`totalMs`/`audioStartMs`/`fromMs`/`elapsedMs`) | ✅ implemented (fw 1.5.0) |
+| Absolute-time sequence model (`start`/`totalMs`/`fromMs`/`elapsedMs`) | ✅ implemented (fw 1.5.0; `audioStartMs` dropped in fw 1.6.0 alongside the audio track) |
 
 **Beyond the contract** (inspired by the KyberEditor protocol): line buffer raised to
 4 KB (`lineMax` announced); `{evt:"err", msg}` for any invalid command; enriched
-`hello` handshake (`fw`, `proto`, `lineMax`, `anims`, `seqSlots`,
-`trackCount`, `caps[]`, `dirty`); `{cmd:"getAll"}` = full dump (burst of
-existing events ending with `{evt:"allDone"}`); commit/revert model for
-volume/anim params/names (`{cmd:"commit"}` / `{cmd:"revert"}` / `{evt:"dirty"}` —
-setters are "live", NVS is only written on commit; **the console must
-send `commit` after a restore `setMulti`**).
+`hello` handshake (`fw`, `proto`, `lineMax`, `anims`, `seqSlots`, `caps[]`, `dirty`);
+`{cmd:"getAll"}` = full dump (burst of existing events ending with `{evt:"allDone"}`);
+commit/revert model for anim params/names (`{cmd:"commit"}` / `{cmd:"revert"}` /
+`{evt:"dirty"}` — setters are "live", NVS is only written on commit; **the console
+must send `commit` after a restore `setMulti`**).
 
 ---
 
-## 1. Audio track attached to a sequence (high priority)
+## 1-2. Audio track / track duration — removed (fw 1.6.0)
 
-**Today**: the console associates an audio track (1-10) with each sequence slot,
-but only in its own `localStorage` (`b1.audioBySlot`). A `seqRun` triggered
-by the master plays **no** sound at all; only the console's "Rehearse" mode
-syncs the audio (it sends `playTrack` itself).
-
-**Requested**: `seqSave` accepts a `track` field (integer 1-10, or `null` = no audio),
-persisted in NVS with the sequence.
-
-```json
-→ {"cmd":"seqSave","slot":2,"name":"Parade","loop":false,"track":3,"steps":[...]}
-← {"evt":"seqSaved","ok":true,"slot":2,"name":"Parade"}
-
-→ {"cmd":"seqLoad","slot":2}
-← {"evt":"seqData","slot":2,"name":"Parade","loop":false,"track":3,"steps":[...]}
-```
-
-- `seqRun` on a slot with a non-null `track`: the master starts the track
-  (equivalent to `playTrack`) at `audioStartMs` (see §6), independently of
-  when any gesture step fires.
-- `seqList` includes `track` in each entry (catalog display).
-- Missing/unknown field = `null` (backward-compatible).
-
-**Console migration**: once `seqData` carries `track`, the console will use it as
-the source of truth and migrate its `localStorage` to the firmware on the next `seqSave`.
-
-## 2. Audio track duration (high priority)
-
-**Today**: the console times tracks by hand (a "Measure duration" button)
-to draw the audio track to scale on the timeline.
-
-**Requested**: if the audio module supports it (DFPlayer & co. can sometimes read
-the duration, otherwise fall back to a table maintained alongside the files):
-
-```json
-→ {"cmd":"getTrackDurations"}
-← {"evt":"trackDurations","list":[{"track":1,"ms":12400},{"track":2,"ms":8100}]}
-```
-
-Tracks of unknown duration: omitted from the list. The console will keep the
-manual measurement as a fallback for those.
+These two sections proposed attaching a DFPlayer track to a sequence
+(`track`/`audioStartMs` on `seqSave`/`seqData`/`seqList`/`seqState`) and
+measuring track durations. Both were implemented, then **fully removed**
+(fw 1.6.0) when the DFPlayer was retired firmware-wide — the console now
+owns multi-track audio playback entirely client-side (`AudioLane`/
+`AudioClip`/`AudioPlaybackService`) and drives it in sync with real mesh
+`anim` commands from the Sequencer's own `Play`, no firmware audio
+involvement at all. `volume`/`playTrack` (console→master) and the
+`config` evt's `volume` field are gone with it. See CLAUDE.md's Progress
+log for the full removal.
 
 ## 3. Reading the general configuration (medium priority)
 
 **Today**: the console sends `getConfig` at handshake but **doesn't know the
 shape of the response** (it logs it without interpreting it). Consequences: the
-volume/frequency/amplitude/speed sliders show default values on
+frequency/amplitude/speed sliders show default values on
 startup, and backup restore can't compare these settings
 (they're offered "blindly", unchecked by default).
 
@@ -84,7 +52,7 @@ startup, and backup restore can't compare these settings
 
 ```json
 → {"cmd":"getConfig"}
-← {"evt":"config","volume":20,"freq":50,"amp":60,"speed":50}
+← {"evt":"config","freq":50,"amp":60,"speed":50}
 ```
 
 The console will then populate its sliders on connection and do a true
@@ -116,7 +84,7 @@ sequences) — slow and interruptible partway through.
 
 - `{"cmd":"seqPause"}` / `{"cmd":"seqResume"}` — with `{"evt":"seqState","paused":true,...}`.
 - `seqState` during playback: push the event **on every step** (already seems to
-  be the case) and include `track` if there's an audio track.
+  be the case).
 - `seqRun {from}` — originally "start at step N"; superseded by `fromMs`, see below.
 
 ## 6. Absolute-time sequence model (fw ≥ 1.5.0, breaking change, `caps: seqTimeline`)
@@ -129,13 +97,13 @@ t=0** — several steps due at the same offset fire on the same pass, which is
 what actually enables cross-droid choreography instead of a relay.
 
 ```json
-→ {"cmd":"seqSave","slot":2,"name":"Parade","loop":false,"track":3,
-   "totalMs":8000,"audioStartMs":500,
+→ {"cmd":"seqSave","slot":2,"name":"Parade","loop":false,
+   "totalMs":8000,
    "steps":[{"animId":0,"target":513,"start":0},{"animId":5,"target":1279,"start":0}]}
 ← {"evt":"seqSaved","ok":true,"slot":2,"name":"Parade"}
 
 → {"cmd":"seqRun","slot":2,"fromMs":3200}
-← {"evt":"seqState","playing":true,"slot":2,"elapsedMs":3200,"totalMs":8000,"track":3,"paused":false}
+← {"evt":"seqState","playing":true,"slot":2,"elapsedMs":3200,"totalMs":8000,"paused":false}
 ```
 
 - `steps[].start` (was `delay`) — ms from t=0, **not** a delay from the
@@ -143,9 +111,8 @@ what actually enables cross-droid choreography instead of a relay.
 - `totalMs` — explicit loop/end boundary. Required because, once steps can
   overlap, "the last step" no longer reliably marks the intended end (e.g. a
   short gesture on one track finishing well before a longer one on another).
-- `audioStartMs` — when the sequence's audio `track` begins, relative to t=0
-  (ignored if `track` is null). Previously implicit ("starts when step 0
-  fires"); now explicit, since step 0 no longer has to be at `start:0`.
+- `audioStartMs` existed here originally (cue point for the DFPlayer audio
+  `track`) — removed in fw 1.6.0 along with the audio track itself (§1-2).
 - `seqRun {fromMs}` (was `{from}`, a step index) — starting offset in ms,
   i.e. scrub to a point in the timeline rather than skip to a step number.
 - `seqState` reports `elapsedMs`/`totalMs` (was `index`/`total`) — a time

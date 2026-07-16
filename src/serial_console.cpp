@@ -115,10 +115,9 @@ void SerialConsole::pushState() {
     uint8_t f, a, s;
     Config.animParams(f, a, s);
     JsonDocument doc;
-    // "config" (contract §3): the console populates its volume/freq/amp/
-    // speed sliders on connection. (Formerly evt:"state", never interpreted.)
+    // "config" (contract §3): the console populates its freq/amp/speed
+    // sliders on connection. (Formerly evt:"state", never interpreted.)
     doc["evt"] = "config";
-    doc["volume"] = Config.volume();
     doc["freq"] = f;
     doc["amp"] = a;
     doc["speed"] = s;
@@ -142,7 +141,7 @@ void SerialConsole::pushAnimDurations() {
 }
 
 void SerialConsole::pushSeqState(bool playing, uint8_t slot, uint16_t elapsedMs, uint16_t totalMs,
-                                 uint8_t track, bool paused) {
+                                 bool paused) {
     if (!_clientReady) return;
 
     JsonDocument doc;
@@ -151,7 +150,6 @@ void SerialConsole::pushSeqState(bool playing, uint8_t slot, uint16_t elapsedMs,
     doc["slot"] = slot;
     doc["elapsedMs"] = elapsedMs;
     doc["totalMs"] = totalMs;
-    if (track) doc["track"] = track; else doc["track"] = nullptr;
     doc["paused"] = paused;
     serializeJson(doc, Serial);
     Serial.print('\n');
@@ -271,7 +269,6 @@ void SerialConsole::pushSeqList() {
             o["name"] = metas[i].name;
             o["loop"] = metas[i].loop;
             o["stepCount"] = metas[i].stepCount;
-            if (metas[i].track) o["track"] = metas[i].track; else o["track"] = nullptr;
         }
     }
 
@@ -306,9 +303,7 @@ void SerialConsole::pushSeqData(uint8_t slot, const StoredSequence& seq) {
     doc["slot"] = slot;
     doc["name"] = seq.name;
     doc["loop"] = seq.loop;
-    if (seq.track) doc["track"] = seq.track; else doc["track"] = nullptr;
     doc["totalMs"] = seq.totalMs;
-    doc["audioStartMs"] = seq.audioStartMs;
 
     JsonArray steps = doc["steps"].to<JsonArray>();
     for (uint8_t i = 0; i < seq.stepCount; i++) {
@@ -361,19 +356,13 @@ void SerialConsole::update() {
 
 bool SerialConsole::validateOp(JsonObjectConst op, char* why, size_t whyLen) {
     const char* c = op["cmd"] | "";
-    if (!strcmp(c, "name") || !strcmp(c, "calib") || !strcmp(c, "volume") ||
-        !strcmp(c, "config")) {
+    if (!strcmp(c, "name") || !strcmp(c, "calib") || !strcmp(c, "config")) {
         return true;   // fields bounded by nature (uint8/clamp)
     }
     if (!strcmp(c, "seqSave")) {
         const uint8_t slot = op["slot"] | 0;
-        const uint8_t track = op["track"] | 0;
         if (slot >= SequenceStore::SLOT_MAX) {
             snprintf(why, whyLen, "seqSave: invalid slot %u", slot);
-            return false;
-        }
-        if (track > AUDIO_TRACK_COUNT) {
-            snprintf(why, whyLen, "seqSave: invalid track %u", track);
             return false;
         }
         return true;
@@ -402,12 +391,6 @@ bool SerialConsole::applyOp(JsonObjectConst op) {
         NamePayload np{id, {0}};
         strncpy(np.name, name, sizeof(np.name) - 1);
         Mesh.send(MSG_NAME, &np, sizeof(np));
-        return true;
-    }
-    if (!strcmp(c, "volume")) {
-        const uint8_t v = op["value"] | AUDIO_VOLUME_DEFAULT;
-        Config.setVolume(v);
-        if (_volCb) _volCb(v);
         return true;
     }
     if (!strcmp(c, "config")) {
@@ -442,9 +425,7 @@ bool SerialConsole::applyOp(JsonObjectConst op) {
         strncpy(seq.name, op["name"] | "Sequence", sizeof(seq.name) - 1);
         seq.name[sizeof(seq.name) - 1] = '\0';
         seq.loop = (op["loop"] | false) ? 1 : 0;
-        seq.track = op["track"] | 0;
         seq.totalMs = op["totalMs"] | 0;
-        seq.audioStartMs = op["audioStartMs"] | 0;
         JsonArrayConst steps = op["steps"].as<JsonArrayConst>();
         uint8_t idx = 0;
         for (JsonObjectConst s : steps) {
@@ -487,17 +468,15 @@ void SerialConsole::handleLine(const char* line) {
         ack["lineMax"] = SERIAL_LINE_MAX;
         ack["anims"] = ANIM_COUNT;
         ack["seqSlots"] = SequenceStore::SLOT_MAX;
-        ack["trackCount"] = AUDIO_TRACK_COUNT;
         JsonArray caps = ack["caps"].to<JsonArray>();
         caps.add("err");
         caps.add("getAll");
         caps.add("config");
-        caps.add("seqTrack");
         // Absolute-time sequence model (breaking change from the old chained
         // relative-delay one): steps carry `start` (ms from t=0, not a
-        // relative delay), seqData/seqSave also carry `totalMs`/
-        // `audioStartMs`, seqRun takes `fromMs` (not a step index), and
-        // seqState reports `elapsedMs`/`totalMs` (not `index`/`total`).
+        // relative delay), seqData/seqSave also carry `totalMs`, seqRun
+        // takes `fromMs` (not a step index), and seqState reports
+        // `elapsedMs`/`totalMs` (not `index`/`total`).
         caps.add("seqTimeline");
         caps.add("seqPause");
         caps.add("setMulti");
@@ -576,13 +555,6 @@ void SerialConsole::handleLine(const char* line) {
         log("params freq=%u amp=%u speed=%u", freq, amp, speed);
         syncDirty();
 
-    } else if (!strcmp(cmd, "volume")) {
-        const uint8_t v = doc["value"] | AUDIO_VOLUME_DEFAULT;
-        Config.setVolume(v);
-        if (_volCb) _volCb(v);
-        log("volume=%u", v);
-        syncDirty();
-
     } else if (!strcmp(cmd, "name")) {
         const uint16_t id = doc["id"] | 0;
         const char* name = doc["name"] | "";
@@ -595,15 +567,6 @@ void SerialConsole::handleLine(const char* line) {
         log("name %04X = %s", id, name);
         pushDroids();
         syncDirty();
-
-    } else if (!strcmp(cmd, "playTrack")) {
-        const uint8_t track = doc["track"] | 1;
-        if (track < 1 || track > AUDIO_TRACK_COUNT) {
-            pushErr("invalid track: %u (1-%u)", track, AUDIO_TRACK_COUNT);
-            return;
-        }
-        if (_trackCb) _trackCb(track);
-        log("track %u", track);
 
     } else if (!strcmp(cmd, "servo")) {
         const uint16_t target = doc["target"] | (uint16_t)MESH_TARGET_ALL;
@@ -677,14 +640,7 @@ void SerialConsole::handleLine(const char* line) {
         strncpy(seq.name, name, sizeof(seq.name) - 1);
         seq.name[sizeof(seq.name) - 1] = '\0';
         seq.loop = (doc["loop"] | false) ? 1 : 0;
-        const uint8_t track = doc["track"] | 0;   // absent/null = 0 = none
-        if (track > AUDIO_TRACK_COUNT) {
-            pushErr("invalid track: %u (1-%u, or null)", track, AUDIO_TRACK_COUNT);
-            return;
-        }
-        seq.track = track;
         seq.totalMs = doc["totalMs"] | 0;
-        seq.audioStartMs = doc["audioStartMs"] | 0;
 
         JsonArrayConst steps = doc["steps"].as<JsonArrayConst>();
         uint8_t idx = 0;
@@ -840,7 +796,6 @@ void SerialConsole::handleLine(const char* line) {
     } else if (!strcmp(cmd, "revert")) {
         // Discards uncommitted changes and re-applies the persisted state.
         Config.revertPending();
-        if (_volCb) _volCb(Config.volume());
         log("changes reverted");
         pushState();
         pushDroids();

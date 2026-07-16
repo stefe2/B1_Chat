@@ -27,11 +27,8 @@ struct StoredSequence {
     uint8_t stepCount;
     SeqStep steps[STEP_MAX];       // NOT guaranteed sorted by startMs on disk —
                                     // the player sorts once at seqRun time.
-    uint8_t track;                 // master's audio track (1-10), 0 = none
     uint16_t totalMs;              // explicit loop/end boundary (steps alone
                                     // don't imply one once they can overlap)
-    uint16_t audioStartMs;         // when `track` starts, relative to t=0
-                                    // (ignored if track == 0)
 };
 
 struct StoredSequenceMeta {
@@ -39,7 +36,6 @@ struct StoredSequenceMeta {
     char    name[StoredSequence::NAME_LEN];
     uint8_t loop;
     uint8_t stepCount;
-    uint8_t track;   // 0 = none
 };
 
 class SequenceStore {

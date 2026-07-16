@@ -24,6 +24,8 @@
             <conv:ReferenceEqualsConverter x:Key="ReferenceEqualsConv" />
             <conv:AnimIdToNameConverter x:Key="AnimIdToNameConv" />
             <conv:TrackMutedConverter x:Key="TrackMutedConv" />
+            <conv:WaveformToGeometryConverter x:Key="WaveformToGeometryConv" />
+            <conv:BoolInvertConverter x:Key="BoolInvertConv" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>

@@ -12,18 +12,6 @@ void ConfigStore::begin() {
     _p.begin(NVS_NS, false);
 }
 
-uint8_t ConfigStore::volume() {
-    if (_pendVolSet) return _pendVol;
-    return _p.getUChar("vol", AUDIO_VOLUME_DEFAULT);
-}
-
-void ConfigStore::setVolume(uint8_t v) {
-    if (v > 30) v = 30;
-    _pendVol = v;
-    _pendVolSet = true;
-    _dirty = true;
-}
-
 void ConfigStore::animParams(uint8_t& freq, uint8_t& amp, uint8_t& speed) {
     if (_pendAnimSet) {
         freq = _pendFreq; amp = _pendAmp; speed = _pendSpeed;
@@ -103,14 +91,13 @@ void ConfigStore::setAutoAnimEnabledImmediate(bool enabled) {
 }
 
 void ConfigStore::refreshDirty() {
-    _dirty = _pendVolSet || _pendAnimSet;
+    _dirty = _pendAnimSet;
     for (uint8_t i = 0; !_dirty && i < PENDING_NAMES_MAX; i++) {
         if (_pendNames[i].used) _dirty = true;
     }
 }
 
 void ConfigStore::commitPending() {
-    if (_pendVolSet) _p.putUChar("vol", _pendVol);
     if (_pendAnimSet) {
         _p.putUChar("af", _pendFreq);
         _p.putUChar("aa", _pendAmp);
@@ -123,13 +110,11 @@ void ConfigStore::commitPending() {
         _p.putString(key, _pendNames[i].name);
         _pendNames[i] = {false, 0, String()};
     }
-    _pendVolSet = false;
     _pendAnimSet = false;
     refreshDirty();
 }
 
 void ConfigStore::revertPending() {
-    _pendVolSet = false;
     _pendAnimSet = false;
     for (uint8_t i = 0; i < PENDING_NAMES_MAX; i++) {
         _pendNames[i] = {false, 0, String()};

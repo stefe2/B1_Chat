@@ -10,6 +10,12 @@ namespace b1_chat_console.Models;
 /// </summary>
 public class AudioLane
 {
+    // Single source of truth for the per-lane vertical footprint (Canvas Height + bottom
+    // Margin in SequenceTimelineView.xaml) — mirrors TimelineTrack.RowHeight/RowGap, used by
+    // SequencerViewModel.AudioLaneAtY to hit-test a cross-lane audio-clip drag.
+    public const double RowHeight = 48;
+    public const double RowGap = 4;
+
     public string Label { get; set; } = "";
     public int RowIndex { get; set; }
     public ObservableCollection<AudioClip> Clips { get; } = new();
