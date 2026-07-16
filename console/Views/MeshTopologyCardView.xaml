@@ -1,7 +1,7 @@
 <UserControl x:Class="b1_chat_console.Views.MeshTopologyCardView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <Border Style="{StaticResource CardBorderStyle}">
+    <Border Style="{StaticResource CardBorderStyle}" Width="332" HorizontalAlignment="Left">
         <StackPanel>
             <DockPanel LastChildFill="False" Margin="0,0,0,4">
                 <Border Style="{StaticResource CardIconBoxStyle}" DockPanel.Dock="Left" Margin="0,0,10,0">

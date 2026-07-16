@@ -1,10 +1,10 @@
 <UserControl x:Class="b1_chat_console.Views.CalibrationCardView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <Border Style="{StaticResource CardBorderStyle}">
+    <Border Style="{StaticResource CardBorderStyle}" Width="560" HorizontalAlignment="Left">
         <StackPanel>
             <DockPanel LastChildFill="False" Margin="0,0,0,12">
-                <TextBlock Text="CALIBRATION SERVOS" Style="{StaticResource CardTitleStyle}" Margin="0" DockPanel.Dock="Left" />
+                <TextBlock Text="SERVOS CALIBRATION" Style="{StaticResource CardTitleStyle}" Margin="0" DockPanel.Dock="Left" />
                 <TextBlock Text="auto-save" Style="{StaticResource MetaTextStyle}" DockPanel.Dock="Right" VerticalAlignment="Center" />
             </DockPanel>
 

@@ -45,7 +45,7 @@
                     <!-- Cluster 1: pending local changes -->
                     <Border Style="{Binding ShowCommitUi, Converter={StaticResource BoolToStyleConv}, ConverterParameter='HaloBadgeWarnStyle|HaloBadgeBaseStyle'}"
                             Visibility="{Binding ShowCommitUi, Converter={StaticResource BoolToVisConv}}" Margin="0,0,8,0" VerticalAlignment="Center">
-                        <TextBlock Text="● unsaved" FontSize="11" />
+                        <TextBlock Text="● unsaved" FontSize="11" Foreground="White" />
                     </Border>
                     <Button Content="Save" Style="{StaticResource MiniButtonStyle}" Command="{Binding CommitChangesCommand}"
                             Visibility="{Binding ShowCommitUi, Converter={StaticResource BoolToVisConv}}" Margin="0,0,4,0" />
@@ -101,8 +101,8 @@
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
             <Grid Margin="18">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="1.55*" />
-                    <ColumnDefinition Width="1*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
