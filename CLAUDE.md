@@ -285,7 +285,9 @@ loaded by the application.
 | `Services/ProtocolClient.cs` | central state: parses incoming JSON `evt`, builds outgoing `cmd` (C# equivalent of JS's `sendCmd()`/`handleEvent()`) |
 | `Services/UpdateService.cs` / `FlashService.cs` / `LibraryService.cs` / `SettingsService.cs` | GitHub updates, espflash flashing, local sequence library, `settings.json` |
 | `Services/OtaService.cs` | drives an OTA session (one slave at a time): reads the `.bin`, computes the MD5, sends one fragment per `evt:otaChunkAck` received |
-| `Converters/` | `BoolToStyleConverter`, `BoolToTextConverter`, `BoolToVisibilityConverter`, `BoolToBrushConverter`, `StrengthToBrushConverter` (mesh link color by RSSI) |
+| `Services/AudioPlaybackService.cs` | console-side Sequencer audio (DFPlayer set aside "for now"): tracks several concurrent `MediaPlayer`s (one per active clip, optionally looping), plus a one-off probe for a picked file's duration |
+| `Services/SequenceAudioStore.cs` | client-only slot→audio-lanes (each a label + clip list) association for the 8 NVS slots (`slot-audio.json`) — the master's NVS has no room for a filesystem path |
+| `Converters/` | `BoolToStyleConverter`, `BoolToTextConverter`, `BoolToVisibilityConverter`, `BoolToBrushConverter`, `StrengthToBrushConverter` (mesh link color by RSSI), `TimelineGeometryConverter`/`TimelineActiveConverter`/`AnimFamilyToBrushConverter` (Sequencer timeline) |
 | `b1-chat-console.csproj` | auto-incremented build number, version from `VersionPrefix`, `IncludeNativeLibrariesForSelfExtract`, `tools/` (espflash) excluded from the single-file but copied on publish |
 | `installer/b1-chat-console.nsi` + `release.ps1` | NSIS installer + GitHub release script (tag `vX.Y.Z`) |
 
@@ -302,6 +304,7 @@ width at the bottom. Firmware card taken out of the grid (separate window).
 | Sequences (8 slots, ≤ 32 steps) | Master's NVS (`sequence_store`) |
 | Track durations + slot→audio-track | Page's `localStorage` (temporary, see contract §1-2) |
 | Sequence library, last port | `%LOCALAPPDATA%\B1ChatConsole\` (console side) |
+| Per-slot console-side audio lanes (label + clips, each a file path/duration/start/loop) | `%LOCALAPPDATA%\B1ChatConsole\slot-audio.json` (console side, keyed by NVS slot number — see the Sequencer audio Progress entries below) |
 | OTA anti-brick flag (pending/attempts) | NVS of **each droid** flashed via OTA, separate `"ota"` namespace (`ota_guard`) |
 
 ## Progress
@@ -571,9 +574,150 @@ width at the bottom. Firmware card taken out of the grid (separate window).
       path — slot save, library push — stays consistent, local rehearsal
       rewritten from one chained timer to one timer per step so steps
       sharing a `StartMs` actually fire together) adapted to match; the flat
-      step-list editor itself (raw numeric fields, no visual timeline) is
-      unchanged — a real multi-track visual editor remains a separate,
-      not-yet-scheduled follow-up.
+      step-list editor itself (raw numeric fields, no visual timeline) was
+      superseded shortly after by the real multi-track timeline below.
+- [x] Sequencer: real multi-track visual timeline (2026-07-16), replacing the
+      flat step-list editor entirely. New `Views/SequenceTimelineView`
+      (embedded in `SequencerCardView`, `SequencerViewModel` as `DataContext`,
+      no new ViewModel): one horizontal track per droid + a synthetic
+      "All droids" broadcast row (`Models/TimelineTrack`), a ruler with
+      zoomable ticks (`Models/TimelineTick`, 20-300 px/s slider), draggable
+      colored gesture clips positioned/sized via `Converters/
+      TimelineGeometryConverter` (one converter, `Left`/`Width`/`Top`/
+      `Duration` `ConverterParameter` modes) and colored by family via
+      `Converters/AnimFamilyToBrushConverter`, an inspector panel
+      (gesture/target/start-time with ±0.1s nudge, duplicate/delete), and a
+      click-to-insert gesture library row. Clip dragging is raw mouse capture
+      (`SequenceTimelineView.xaml.cs` — first mouse-interaction code in this
+      app, no `Thumb`/native `DragDrop` precedent existed) snapping to 100ms,
+      one `PushHistory()` per drag gesture so Undo restores it in one step.
+      Playhead: local scrub via the ruler when idle, or synced to real
+      hardware playback via `ProtocolClient.SeqStateReceived` (previously
+      unconsumed) — a 30ms `DispatcherTimer` computes position directly from
+      an elapsed-time anchor (no easing, unlike Mesh Topology's telemetry
+      tickers) so it can't be scrubbed while `IsLiveTracking`. Also closed a
+      second previously-flagged gap: `ProtocolClient.AnimDurationMs` (fetched
+      via `getAnimDurations`, previously unconsumed by any UI) now drives
+      clip width, self-correcting once real durations arrive post-handshake
+      (`AnimDurationsReceived` event, new). Verified live against the real
+      4-droid fleet (COM3): correct per-track/per-time placement, drag +
+      snap, zoom rescaling, gesture insertion on the armed track, and the
+      inspector — the last found and fixed three WPF-specific bugs along the
+      way (`ComboBox.SelectedValue`/`SelectedValuePath` unreliable against
+      `DarkComboBoxStyle`'s fully-replaced `ControlTemplate` → replaced with
+      a `SelectedItem`-bound `SelectedStepTrack` wrapper property; that
+      wrapper then went stale across a `DroidsChanged`-triggered track
+      rebuild until explicitly re-`OnPropertyChanged`'d; `TimelineTrack`
+      needed its own `ToString()` since `DarkComboBoxStyle` renders
+      `SelectedItem` via `SelectionBoxItem`, which falls back to
+      `ToString()` rather than `DisplayMemberPath`). Out of scope, parked for
+      a later phase: a local "My Sequences" project bin (distinct from the
+      existing per-item local library) and a live gesture recorder.
+- [x] Sequencer: console-side audio, DFPlayer set aside "for now" (2026-07-16):
+      per explicit decision, a sequence's audio no longer comes from the
+      master's DFPlayer (`AudioTrack`/track-number field kept internally for
+      wire-protocol compatibility — `SeqSave` still sends it, always 0 now —
+      but no longer surfaced in the UI). Instead the **console** plays a
+      local audio file directly during `Rehearse (local)`, via the new
+      `Services/AudioPlaybackService` (thin `System.Windows.Media.MediaPlayer`
+      wrapper, no new NuGet dependency — also used to probe a picked file's
+      exact duration, `ProbeDurationMsAsync`, opening the file just long
+      enough to read `NaturalDuration`). `SequencerViewModel` gained
+      `AudioFilePath`/`AudioDurationMs` (browse/clear commands, undo/redo,
+      export/import, local-library round-trip); `TotalDurationMs()` (ruler
+      extent, rehearsal end timer) now takes `Math.Max` of the steps' span
+      and the audio's real duration, so a long audio-only sequence still
+      gets a correct ruler/loop boundary. The timeline gained a dedicated,
+      non-arm-able "♪ AUDIO" row showing the file as a bar from t=0 (fixed,
+      not draggable — rehearsal always starts it at the pass's own t=0, no
+      offset UI yet). Because the master's 8 NVS slots have no room for a
+      filesystem path, the slot↔file association lives **client-side only**,
+      in the new `Services/SequenceAudioStore` (`slot-audio.json`, see
+      Storage table) — a slot pulled/pushed/deleted from a different console
+      install or after a local cache wipe simply has no audio attached
+      (same "no worse than before" fallback as a missing local-library
+      item). Real-hardware playback sync (starting the file in sync with a
+      live `Play` on the mesh, using the already-wired `audioStartMs`) was
+      explicitly deferred — confirmed with the user as scope for a later
+      pass, current scope is `Rehearse (local)` only. Verified live against
+      the real fleet (COM3): file picked via the new "…"/"✕" controls next
+      to the (now-unused) Loop checkbox, `AudioDurationMs` probed correctly
+      and reflected on the ruler/audio bar, `Rehearse (local)` starts the
+      file (`AudioPlaybackService.Play`) together with the gesture timers and
+      auto-stops it cleanly at the end of the pass with no exceptions.
+      **Superseded the same day** by the multi-lane/multi-clip rework below —
+      the single `AudioFilePath`/`AudioDurationMs` fields and the toolbar's
+      "…"/"✕" picker no longer exist.
+- [x] Sequencer: multi-lane/multi-clip audio, gesture drag-and-drop, per-track
+      mute (2026-07-16), replacing the single-audio-file model above the same
+      day, plus three more editing features requested in the same batch —
+      confirmed via two `AskUserQuestion` rounds and a written plan before
+      any code changed, per this project's confirm-before-coding rule.
+      **Audio**: `AudioFilePath`/`AudioDurationMs` → `Models/AudioLane`
+      (named row, e.g. "AUDIO"/"AMBIENT") each holding an
+      `ObservableCollection<Models/AudioClip>` (`FilePath`, `DurationMs`,
+      `StartMs`, `Loop`). Clips are independently draggable in time and may
+      freely overlap **within** a lane (no collision handling — layered
+      rendering only); a lane's "+" adds a clip via file picker, a clip's
+      right-click `ContextMenu` (new `Themes/Effects.xaml` dark
+      `ContextMenuStyle`/`MenuItemStyle` — first `ContextMenu` use in this
+      app) offers Replace file…/Loop/Delete. `AudioPlaybackService` now
+      tracks a `List<MediaPlayer>` instead of one, so several clips (e.g. an
+      SFX plus a looping ambient bed) play concurrently; `Loop` wires
+      `MediaEnded` to restart the player, torn down by `StopAll()` at the end
+      of a rehearsal pass (never outlives `IsRehearsing`). Persistence
+      (`SequenceAudioStore` → `slot-audio.json`, `SequenceLibraryItem`,
+      `SequenceSnapshot`, export/import) all moved from a single path+
+      duration pair to `List<AudioLaneDto>` (nested `AudioClipDto` list) —
+      breaking, on purpose, same day the singular shape shipped, so no
+      migration path was written (see the sequence-timeline-rework pitfall
+      below on reinterpreting a stored field's meaning — this instead
+      replaced the shape outright before anything depended on the old one).
+      **Gesture retargeting**: dragging an existing clip now also updates
+      `SequenceStep.Target` from the drag's Y position (new
+      `SequencerViewModel.TrackAtY(double)`, `TimelineTrack.RowHeight`/
+      `RowGap` math), alongside the existing horizontal `StartMs` drag —
+      one `Undo` restores both axes together (still a single
+      `BeginStepDrag()`/`PushHistory()` per gesture, not per pixel).
+      **Gesture-library drag-and-drop**: chips gained a click-vs-drag
+      threshold (5px) in `SequenceTimelineView.xaml.cs` — under threshold
+      falls back to the existing click-inserts-on-armed-track-at-playhead
+      behavior unchanged; past it, a floating ghost (`DragGhostCanvas`, a
+      `Panel.ZIndex="999"` overlay Canvas spanning the whole card, positioned
+      every `MouseMove` via `Canvas.SetLeft/Top`) follows the cursor and
+      dropping over `TracksCanvas` calls the new `SequencerViewModel.
+      InsertGestureAt(animId, track, startMs)` with the drop's actual
+      track+time instead of the armed-track/playhead defaults — still no
+      native `DragDrop.DoDragDrop` anywhere in this app, same raw-mouse-
+      capture idiom as every other drag here, just driving a manually
+      positioned ghost element instead of repositioning a real item.
+      **Per-track mute**: `TimelineTrack` gained `[ObservableProperty] bool
+      Muted` (the class itself went from a plain POCO to an `ObservableObject`
+      for this one property) plus a small `Button` in each gutter row
+      (`ToggleMuteCommand`) — deliberately a real `Button`, not a `Border`+
+      `MouseBinding` like the row's own arm-click, because `ButtonBase`
+      marks its `Click` handled and stops it bubbling to the row's
+      `MouseBinding`; a `Border`+`MouseBinding` mute toggle would have also
+      armed the track underneath it on every click. `RebuildTracks()` (fired
+      on every heartbeat-driven `DroidsChanged`, wholesale-replacing
+      `Tracks`) now carries `Muted` forward by `Id` from the previous
+      generation, same pattern already used for `ArmedTrack`, so a mute
+      doesn't silently reset a few seconds later. **Mute only ever affects
+      `Rehearse (local)`** (`ScheduleRehearsalPass()` skips arming a timer
+      for a muted target) — a real hardware `Play` cannot honor it: `seqRun`
+      just starts the master, which then replays its own NVS-stored steps
+      from its own `loop()`, and the console has no per-step veto over that
+      once it's been sent. Mute state is not saved with the sequence (not in
+      `Snapshot()`/export/slot data) — it's a live editing/audition aid, reset
+      whenever a sequence is loaded/created. Verified live against the real
+      4-droid fleet (COM3): two overlapping SFX clips on "AUDIO" dragged
+      independently, a looping clip added to "AMBIENT", an existing gesture
+      clip dragged from one droid's row to another's (retargeted correctly,
+      confirmed in the inspector), a library chip dragged directly onto a
+      specific droid+time cell (landed exactly there, distinct from a plain
+      click), a track muted and dimmed, and a full `Rehearse (local)` pass
+      with all of the above active at once — ran cleanly, stopped exactly at
+      the computed total duration, no exceptions.
 
 ## Full flash (virgin board support)
 
@@ -770,6 +914,14 @@ change).
   for a group meant to stay stuck to an edge (e.g. the header's connection
   controls); set `LastChildFill="False"` if every child must
   respect its `Dock`.
+- A `Button` (or anything deriving `ButtonBase`) inside an element that
+  itself has a `MouseBinding` (e.g. a Sequencer track-gutter row that arms
+  on click) marks its own `Click` handled, which stops the routed event
+  from bubbling to the ancestor's `MouseBinding` — a real `Button` is
+  therefore the correct choice for a "second click target" nested inside a
+  clickable row (the per-track mute toggle uses this). A `Border`+
+  `MouseBinding` for the same purpose would NOT stop the bubble, and the
+  ancestor's click handler (arming the track) would fire too.
 - `IS_MASTER` has two distinct configuration mechanisms, don't confuse them:
   `[env:b1]` (local flash/dev) reads the value hardcoded in `config.h`;
   `[env:b1_master]`/`[env:b1_slave]` (CI release) ignore it and force the role

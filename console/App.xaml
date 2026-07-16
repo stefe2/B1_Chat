@@ -18,6 +18,12 @@
             <conv:PacketKindToBrushConverter x:Key="PacketKindToBrushConv" />
             <conv:FwStatusToBrushConverter x:Key="FwStatusToBrushConv" />
             <conv:FwStatusToTextConverter x:Key="FwStatusToTextConv" />
+            <conv:TimelineGeometryConverter x:Key="TimelineGeometryConv" />
+            <conv:TimelineActiveConverter x:Key="TimelineActiveConv" />
+            <conv:AnimFamilyToBrushConverter x:Key="AnimFamilyToBrushConv" />
+            <conv:ReferenceEqualsConverter x:Key="ReferenceEqualsConv" />
+            <conv:AnimIdToNameConverter x:Key="AnimIdToNameConv" />
+            <conv:TrackMutedConverter x:Key="TrackMutedConv" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>

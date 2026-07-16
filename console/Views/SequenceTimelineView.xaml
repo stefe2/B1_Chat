@@ -1,0 +1,406 @@
+<UserControl x:Class="b1_chat_console.Views.SequenceTimelineView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid x:Name="RootGrid">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Toolbar: zoom, snap, live indicator, add audio lane -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
+            <TextBlock Text="ZOOM" Style="{StaticResource FieldLabelStyle}" Margin="0,0,6,0" VerticalAlignment="Center" />
+            <Slider Style="{StaticResource MetalSliderStyle}" Width="110" Minimum="20" Maximum="300"
+                    Value="{Binding PxPerSecond}" Margin="0,0,14,0" />
+            <CheckBox Content="Snap (100ms)" IsChecked="{Binding SnapToGrid}" Foreground="{StaticResource MutedBrush}"
+                      VerticalAlignment="Center" Margin="0,0,14,0" />
+            <Button Content="+ Add audio lane" Style="{StaticResource MiniButtonStyle}"
+                    Command="{Binding AddAudioLaneCommand}" Margin="0,0,14,0" />
+            <Border Style="{StaticResource ValuePillStyle}" BorderBrush="{StaticResource OkBrush}"
+                    Visibility="{Binding IsLiveTracking, Converter={StaticResource BoolToVisConv}}">
+                <TextBlock Text="● LIVE" Foreground="{StaticResource OkBrush}" FontFamily="{StaticResource MonoFont}"
+                           FontWeight="Bold" FontSize="11" />
+            </Border>
+        </StackPanel>
+
+        <!-- Body: track gutter | scrollable ruler+audio+tracks | inspector -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Gutter: audio lane headers (each with a "+" to add a clip to that lane), then
+                 one row per droid (click to arm — insertion target for the gesture library —
+                 plus a mute toggle for Rehearse (local), see CLAUDE.md's mute limitation). -->
+            <StackPanel Grid.Column="0" Margin="0,0,6,0">
+                <Border Height="24" />
+                <ItemsControl ItemsSource="{Binding AudioLanes}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Width="110" Height="48" Margin="0,0,0,4" Padding="6,0" CornerRadius="4"
+                                    Background="{StaticResource RecessBrush}" BorderThickness="2,0,0,0"
+                                    BorderBrush="{StaticResource AccentBrush}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{Binding Label, StringFormat='♪ {0}'}" VerticalAlignment="Center"
+                                               Foreground="{StaticResource TextBrush}" FontSize="10.5" FontWeight="SemiBold"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <Button Grid.Column="1" Content="+" Style="{StaticResource MiniButtonStyle}" Padding="5,1" FontSize="10"
+                                            Command="{Binding DataContext.AddAudioClipCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                            CommandParameter="{Binding}" ToolTip="Add audio clip to this lane" />
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <ItemsControl ItemsSource="{Binding Tracks}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Width="110" Height="48" Margin="0,0,0,4" Padding="8,0" CornerRadius="4"
+                                    Background="{StaticResource RecessBrush}" BorderThickness="2,0,0,0"
+                                    BorderBrush="Transparent" Cursor="Hand">
+                                <Border.InputBindings>
+                                    <MouseBinding MouseAction="LeftClick"
+                                                  Command="{Binding DataContext.ArmTrackCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                  CommandParameter="{Binding}" />
+                                </Border.InputBindings>
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="BorderBrush" Value="Transparent" />
+                                        <Setter Property="Opacity" Value="1" />
+                                        <Style.Triggers>
+                                            <DataTrigger Value="True">
+                                                <DataTrigger.Binding>
+                                                    <MultiBinding Converter="{StaticResource ReferenceEqualsConv}">
+                                                        <Binding />
+                                                        <Binding Path="DataContext.ArmedTrack" RelativeSource="{RelativeSource AncestorType=ItemsControl}" />
+                                                    </MultiBinding>
+                                                </DataTrigger.Binding>
+                                                <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding Muted}" Value="True">
+                                                <Setter Property="Opacity" Value="0.4" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{Binding Label}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                               Foreground="{StaticResource TextBrush}" FontSize="11" FontWeight="SemiBold" />
+                                    <!-- Real Button (not Border+MouseBinding like the row's own arm-click): ButtonBase
+                                         marks its Click handled, which stops it bubbling to the row's MouseBinding —
+                                         otherwise a click on the mute icon would also arm the track underneath it. -->
+                                    <Button Grid.Column="1" Style="{StaticResource MiniButtonStyle}" Padding="4,1" FontSize="10"
+                                            Command="{Binding DataContext.ToggleMuteCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                            CommandParameter="{Binding}" ToolTip="Mute this track for Rehearse (local) only">
+                                        <TextBlock FontSize="10" Text="{Binding Muted, Converter={StaticResource BoolToTextConv}, ConverterParameter='🔇|🔊'}" />
+                                    </Button>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+
+            <!-- Ruler + audio lanes + tracks, scrolling together horizontally -->
+            <ScrollViewer Grid.Column="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"
+                          Background="{StaticResource RecessBrush}">
+                <StackPanel>
+                    <Canvas x:Name="RulerCanvas" Height="24" Background="Transparent" Cursor="SizeWE"
+                            Width="{Binding TimelineWidthPx}"
+                            MouseLeftButtonDown="Ruler_MouseLeftButtonDown"
+                            MouseMove="Ruler_MouseMove"
+                            MouseLeftButtonUp="Ruler_MouseLeftButtonUp">
+                        <ItemsControl ItemsSource="{Binding RulerTicks}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><Canvas /></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Canvas>
+                                        <Line Canvas.Left="{Binding Left}" X1="0" X2="0" Y1="0" Y2="24" StrokeThickness="1"
+                                              IsHitTestVisible="False">
+                                            <Line.Style>
+                                                <Style TargetType="Line">
+                                                    <Setter Property="Opacity" Value="0.25" />
+                                                    <Setter Property="Stroke" Value="{StaticResource BorderHiBrush}" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Major}" Value="True">
+                                                            <Setter Property="Opacity" Value="0.7" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Line.Style>
+                                        </Line>
+                                        <TextBlock Canvas.Left="{Binding Left}" Text="{Binding Label}" Margin="3,9,0,0"
+                                                   FontFamily="{StaticResource MonoFont}" FontSize="9"
+                                                   Foreground="{StaticResource MutedBrush}" IsHitTestVisible="False" />
+                                    </Canvas>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Border Width="11" Height="11" CornerRadius="6" Background="{StaticResource AccentBrush}"
+                                IsHitTestVisible="False">
+                            <Border.RenderTransform>
+                                <TranslateTransform X="-5.5" />
+                            </Border.RenderTransform>
+                            <Canvas.Left>
+                                <MultiBinding Converter="{StaticResource TimelineGeometryConv}" ConverterParameter="Left">
+                                    <Binding Path="PlayheadMs" />
+                                    <Binding Path="PxPerMs" />
+                                </MultiBinding>
+                            </Canvas.Left>
+                        </Border>
+                    </Canvas>
+
+                    <!-- Audio lanes: one 48px Canvas per lane, each holding its own clips. Clips
+                         within a lane may overlap (no collision handling, by design) and only
+                         move horizontally — there's no cross-lane drag. -->
+                    <ItemsControl ItemsSource="{Binding AudioLanes}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Canvas Height="48" Margin="0,0,0,4" Background="Transparent"
+                                        Width="{Binding DataContext.TimelineWidthPx, RelativeSource={RelativeSource AncestorType=ItemsControl}}">
+                                    <ItemsControl ItemsSource="{Binding Clips}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate><Canvas /></ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Canvas>
+                                                    <Border Height="44" CornerRadius="4" Padding="6,2" BorderThickness="1"
+                                                            Background="{StaticResource AccentBrush}" BorderBrush="#66FFFFFF"
+                                                            Opacity="0.88" Cursor="SizeWE"
+                                                            Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=ItemsControl, AncestorLevel=2}}"
+                                                            MouseLeftButtonDown="AudioClip_MouseLeftButtonDown"
+                                                            MouseMove="AudioClip_MouseMove"
+                                                            MouseLeftButtonUp="AudioClip_MouseLeftButtonUp">
+                                                        <Border.ContextMenu>
+                                                            <ContextMenu Style="{StaticResource DarkContextMenuStyle}">
+                                                                <MenuItem Header="Replace file…" Style="{StaticResource DarkMenuItemStyle}"
+                                                                          Command="{Binding PlacementTarget.Tag.ReplaceAudioClipCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                                          CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                                                <MenuItem Header="Loop" IsCheckable="True" Style="{StaticResource DarkMenuItemStyle}"
+                                                                          IsChecked="{Binding PlacementTarget.DataContext.Loop, RelativeSource={RelativeSource AncestorType=ContextMenu}, Mode=TwoWay}" />
+                                                                <Separator />
+                                                                <MenuItem Header="Delete" Style="{StaticResource DarkMenuItemStyle}"
+                                                                          Command="{Binding PlacementTarget.Tag.DeleteAudioClipCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                                          CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                                            </ContextMenu>
+                                                        </Border.ContextMenu>
+                                                        <Canvas.Left>
+                                                            <MultiBinding Converter="{StaticResource TimelineGeometryConv}" ConverterParameter="Left">
+                                                                <Binding Path="StartMs" />
+                                                                <Binding Path="DataContext.PxPerMs" RelativeSource="{RelativeSource AncestorType=ItemsControl, AncestorLevel=2}" />
+                                                            </MultiBinding>
+                                                        </Canvas.Left>
+                                                        <Border.Width>
+                                                            <MultiBinding Converter="{StaticResource TimelineGeometryConv}" ConverterParameter="Duration">
+                                                                <Binding Path="DurationMs" />
+                                                                <Binding Path="DataContext.PxPerMs" RelativeSource="{RelativeSource AncestorType=ItemsControl, AncestorLevel=2}" />
+                                                            </MultiBinding>
+                                                        </Border.Width>
+                                                        <StackPanel Orientation="Horizontal" IsHitTestVisible="False">
+                                                            <TextBlock Text="🔁" FontSize="9" Margin="0,0,3,0"
+                                                                       Visibility="{Binding Loop, Converter={StaticResource BoolToVisConv}}" />
+                                                            <TextBlock Text="{Binding FileName}" FontSize="10" FontWeight="Bold"
+                                                                       Foreground="#1C1206" TextTrimming="CharacterEllipsis" />
+                                                        </StackPanel>
+                                                    </Border>
+                                                </Canvas>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </Canvas>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <Canvas x:Name="TracksCanvas" Background="Transparent"
+                            Width="{Binding TimelineWidthPx}" Height="{Binding TracksHeightPx}">
+                        <ItemsControl ItemsSource="{Binding Steps}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><Canvas /></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Canvas>
+                                        <Border Height="44" CornerRadius="4" Padding="6,2" BorderThickness="1"
+                                                Background="{Binding AnimId, Converter={StaticResource AnimFamilyToBrushConv}}"
+                                                BorderBrush="#40000000" Cursor="SizeAll"
+                                                MouseLeftButtonDown="Clip_MouseLeftButtonDown"
+                                                MouseMove="Clip_MouseMove"
+                                                MouseLeftButtonUp="Clip_MouseLeftButtonUp">
+                                            <Canvas.Left>
+                                                <MultiBinding Converter="{StaticResource TimelineGeometryConv}" ConverterParameter="Left">
+                                                    <Binding Path="StartMs" />
+                                                    <Binding Path="DataContext.PxPerMs" RelativeSource="{RelativeSource AncestorType=ItemsControl}" />
+                                                </MultiBinding>
+                                            </Canvas.Left>
+                                            <Canvas.Top>
+                                                <MultiBinding Converter="{StaticResource TimelineGeometryConv}" ConverterParameter="Top">
+                                                    <Binding Path="Target" />
+                                                    <Binding Path="DataContext.Tracks" RelativeSource="{RelativeSource AncestorType=ItemsControl}" />
+                                                </MultiBinding>
+                                            </Canvas.Top>
+                                            <Border.Width>
+                                                <MultiBinding Converter="{StaticResource TimelineGeometryConv}" ConverterParameter="Width">
+                                                    <Binding Path="AnimId" />
+                                                    <Binding Path="DataContext.PxPerMs" RelativeSource="{RelativeSource AncestorType=ItemsControl}" />
+                                                    <Binding Path="DataContext.AnimDurationMsLookup" RelativeSource="{RelativeSource AncestorType=ItemsControl}" />
+                                                </MultiBinding>
+                                            </Border.Width>
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="Opacity" Value="0.92" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Value="True">
+                                                            <DataTrigger.Binding>
+                                                                <MultiBinding Converter="{StaticResource ReferenceEqualsConv}">
+                                                                    <Binding />
+                                                                    <Binding Path="DataContext.SelectedStep" RelativeSource="{RelativeSource AncestorType=ItemsControl}" />
+                                                                </MultiBinding>
+                                                            </DataTrigger.Binding>
+                                                            <Setter Property="BorderBrush" Value="White" />
+                                                            <Setter Property="BorderThickness" Value="2" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Value="True">
+                                                            <DataTrigger.Binding>
+                                                                <MultiBinding Converter="{StaticResource TimelineActiveConv}">
+                                                                    <Binding Path="StartMs" />
+                                                                    <Binding Path="AnimId" />
+                                                                    <Binding Path="DataContext.PlayheadMs" RelativeSource="{RelativeSource AncestorType=ItemsControl}" />
+                                                                    <Binding Path="DataContext.AnimDurationMsLookup" RelativeSource="{RelativeSource AncestorType=ItemsControl}" />
+                                                                </MultiBinding>
+                                                            </DataTrigger.Binding>
+                                                            <Setter Property="Opacity" Value="1" />
+                                                            <Setter Property="Effect">
+                                                                <Setter.Value>
+                                                                    <DropShadowEffect Color="White" ShadowDepth="0" BlurRadius="10" Opacity="0.9" />
+                                                                </Setter.Value>
+                                                            </Setter>
+                                                        </DataTrigger>
+                                                        <DataTrigger Value="True">
+                                                            <DataTrigger.Binding>
+                                                                <MultiBinding Converter="{StaticResource TrackMutedConv}">
+                                                                    <Binding Path="Target" />
+                                                                    <Binding Path="DataContext.Tracks" RelativeSource="{RelativeSource AncestorType=ItemsControl}" />
+                                                                </MultiBinding>
+                                                            </DataTrigger.Binding>
+                                                            <Setter Property="Opacity" Value="0.35" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <TextBlock Text="{Binding AnimId, Converter={StaticResource AnimIdToNameConv}}"
+                                                       FontSize="10" FontWeight="Bold" Foreground="#1C1206"
+                                                       TextTrimming="CharacterEllipsis" IsHitTestVisible="False" />
+                                        </Border>
+                                    </Canvas>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <Line X1="0" X2="0" Y1="0" Y2="{Binding TracksHeightPx}" IsHitTestVisible="False"
+                              Stroke="{StaticResource AccentBrush}" StrokeThickness="1.5">
+                            <Canvas.Left>
+                                <MultiBinding Converter="{StaticResource TimelineGeometryConv}" ConverterParameter="Left">
+                                    <Binding Path="PlayheadMs" />
+                                    <Binding Path="PxPerMs" />
+                                </MultiBinding>
+                            </Canvas.Left>
+                        </Line>
+                    </Canvas>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- Inspector: shown when a clip is selected -->
+            <Border Grid.Column="2" Width="210" Margin="8,0,0,0" Padding="10" CornerRadius="6"
+                    Background="{StaticResource RecessBrush}" VerticalAlignment="Top">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding SelectedStep}" Value="{x:Null}">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+                <StackPanel>
+                    <TextBlock Text="SELECTED CLIP" Style="{StaticResource FieldLabelStyle}" Margin="0,0,0,8" />
+
+                    <TextBlock Text="GESTURE" Style="{StaticResource FieldLabelStyle}" Margin="0,0,0,4" />
+                    <ComboBox Style="{StaticResource DarkComboBoxStyle}" ItemsSource="{Binding GestureNames}"
+                              SelectedIndex="{Binding SelectedStep.AnimId}" Margin="0,0,0,10" />
+
+                    <TextBlock Text="TARGET" Style="{StaticResource FieldLabelStyle}" Margin="0,0,0,4" />
+                    <ComboBox Style="{StaticResource DarkComboBoxStyle}" ItemsSource="{Binding Tracks}"
+                              DisplayMemberPath="Label" SelectedItem="{Binding SelectedStepTrack}" Margin="0,0,0,10" />
+
+                    <TextBlock Text="START" Style="{StaticResource FieldLabelStyle}" Margin="0,0,0,4" />
+                    <Border Style="{StaticResource ValuePillStyle}" HorizontalAlignment="Stretch" Margin="0,0,0,4">
+                        <TextBlock Style="{StaticResource ValuePillTextStyle}"
+                                   Text="{Binding SelectedStep.StartMs, StringFormat={}{0} ms}" />
+                    </Border>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                        <Button Content="−0.1s" Style="{StaticResource MiniButtonStyle}" Margin="0,0,4,0"
+                                Command="{Binding NudgeStartBackwardCommand}" />
+                        <Button Content="+0.1s" Style="{StaticResource MiniButtonStyle}"
+                                Command="{Binding NudgeStartForwardCommand}" />
+                    </StackPanel>
+
+                    <StackPanel Orientation="Horizontal">
+                        <Button Content="Duplicate" Style="{StaticResource MiniButtonStyle}" Margin="0,0,4,0"
+                                Command="{Binding DuplicateStepCommand}" CommandParameter="{Binding SelectedStep}" />
+                        <Button Content="Delete" Style="{StaticResource MiniButtonStyle}"
+                                Command="{Binding DeleteStepCommand}" CommandParameter="{Binding SelectedStep}" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- Gesture library: click a chip to insert on the armed track at the playhead, or
+             drag it straight onto a specific droid+time cell of the timeline. -->
+        <StackPanel Grid.Row="2" Margin="0,10,0,0">
+            <TextBlock Text="GESTURE LIBRARY — CLICK TO INSERT, OR DRAG ONTO A SPECIFIC CELL" Style="{StaticResource SectionSubtitleStyle}" />
+            <ItemsControl ItemsSource="{Binding GestureLibrary}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <!-- Border+raw mouse events, not a Button: BeveledButtonStyle's template hardcodes
+                             its own Background (not a TemplateBinding), so it can't show per-gesture
+                             family color — same pattern already used for arming a track. Raw events
+                             (not MouseBinding) so code-behind can distinguish a click from a drag. -->
+                        <Border Margin="0,0,6,6" Padding="9,5" CornerRadius="12" Cursor="Hand"
+                                Background="{Binding Id, Converter={StaticResource AnimFamilyToBrushConv}}"
+                                MouseLeftButtonDown="GestureChip_MouseLeftButtonDown"
+                                MouseMove="GestureChip_MouseMove"
+                                MouseLeftButtonUp="GestureChip_MouseLeftButtonUp">
+                            <TextBlock Text="{Binding Name}" FontSize="10.5" FontWeight="SemiBold" Foreground="#1C1206" IsHitTestVisible="False" />
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+
+        <!-- Floating ghost shown while dragging a gesture-library chip toward a drop target. -->
+        <Canvas x:Name="DragGhostCanvas" Grid.Row="0" Grid.RowSpan="3" IsHitTestVisible="False" Panel.ZIndex="999">
+            <Border x:Name="GhostBorder" Padding="9,5" CornerRadius="12" Visibility="Collapsed"
+                    Opacity="0.85">
+                <TextBlock x:Name="GhostText" FontSize="10.5" FontWeight="SemiBold" Foreground="#1C1206" />
+            </Border>
+        </Canvas>
+    </Grid>
+</UserControl>

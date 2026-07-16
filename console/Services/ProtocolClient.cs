@@ -54,6 +54,7 @@ public partial class ProtocolClient : ObservableObject
     public event Action<JsonElement>? SeqSavedReceived;
     public event Action<int>? SeqDeletedReceived;
     public event Action<JsonElement>? SeqStateReceived;
+    public event Action? AnimDurationsReceived;
     public event Action? MeshTopologyChanged;
     public event Action? DroidsChanged;
     public event Action<ushort, int>? AnimSent; // target, animId — used to drive the mesh topology's broadcast ripple
@@ -434,5 +435,6 @@ public partial class ProtocolClient : ObservableObject
         if (root.TryGetProperty("list", out var list) && list.ValueKind == JsonValueKind.Array)
             foreach (var item in list.EnumerateArray())
                 AnimDurationMs[item.GetProperty("animId").GetInt32()] = item.GetProperty("ms").GetInt32();
+        AnimDurationsReceived?.Invoke();
     }
 }
