@@ -140,21 +140,6 @@ void SerialConsole::pushAnimDurations() {
     Serial.print('\n');
 }
 
-void SerialConsole::pushSeqState(bool playing, uint8_t slot, uint16_t elapsedMs, uint16_t totalMs,
-                                 bool paused) {
-    if (!_clientReady) return;
-
-    JsonDocument doc;
-    doc["evt"] = "seqState";
-    doc["playing"] = playing;
-    doc["slot"] = slot;
-    doc["elapsedMs"] = elapsedMs;
-    doc["totalMs"] = totalMs;
-    doc["paused"] = paused;
-    serializeJson(doc, Serial);
-    Serial.print('\n');
-}
-
 void SerialConsole::pushMeshTopology() {
     if (!_clientReady) return;
 
@@ -230,52 +215,6 @@ void SerialConsole::pushOtaError(uint16_t target, uint8_t sessionId, const char*
     Serial.print('\n');
 }
 
-void SerialConsole::pushSeqSaved(bool ok, uint8_t slot, const char* name) {
-    if (!_clientReady) return;
-
-    JsonDocument doc;
-    doc["evt"] = "seqSaved";
-    doc["ok"] = ok;
-    doc["slot"] = slot;
-    doc["name"] = name;
-    serializeJson(doc, Serial);
-    Serial.print('\n');
-}
-
-void SerialConsole::pushSeqDeleted(bool ok, uint8_t slot) {
-    if (!_clientReady) return;
-
-    JsonDocument doc;
-    doc["evt"] = "seqDeleted";
-    doc["ok"] = ok;
-    doc["slot"] = slot;
-    serializeJson(doc, Serial);
-    Serial.print('\n');
-}
-
-void SerialConsole::pushSeqList() {
-    if (!_clientReady) return;
-
-    JsonDocument doc;
-    doc["evt"] = "seqList";
-    JsonArray arr = doc["list"].to<JsonArray>();
-
-    if (_seqListCb) {
-        StoredSequenceMeta metas[SequenceStore::SLOT_MAX];
-        const uint8_t n = _seqListCb(metas, SequenceStore::SLOT_MAX);
-        for (uint8_t i = 0; i < n; i++) {
-            JsonObject o = arr.add<JsonObject>();
-            o["slot"] = metas[i].slot;
-            o["name"] = metas[i].name;
-            o["loop"] = metas[i].loop;
-            o["stepCount"] = metas[i].stepCount;
-        }
-    }
-
-    serializeJson(doc, Serial);
-    Serial.print('\n');
-}
-
 void SerialConsole::pushCalibData(uint16_t target) {
     if (!_clientReady) return;
 
@@ -291,28 +230,6 @@ void SerialConsole::pushCalibData(uint16_t target) {
     doc["tiltMin"] = c.tiltMin;
     doc["tiltCenter"] = c.tiltCenter;
     doc["tiltMax"] = c.tiltMax;
-    serializeJson(doc, Serial);
-    Serial.print('\n');
-}
-
-void SerialConsole::pushSeqData(uint8_t slot, const StoredSequence& seq) {
-    if (!_clientReady) return;
-
-    JsonDocument doc;
-    doc["evt"] = "seqData";
-    doc["slot"] = slot;
-    doc["name"] = seq.name;
-    doc["loop"] = seq.loop;
-    doc["totalMs"] = seq.totalMs;
-
-    JsonArray steps = doc["steps"].to<JsonArray>();
-    for (uint8_t i = 0; i < seq.stepCount; i++) {
-        JsonObject s = steps.add<JsonObject>();
-        s["animId"] = seq.steps[i].animId;
-        s["target"] = seq.steps[i].targetId;
-        s["start"] = seq.steps[i].startMs;
-    }
-
     serializeJson(doc, Serial);
     Serial.print('\n');
 }
@@ -359,22 +276,8 @@ bool SerialConsole::validateOp(JsonObjectConst op, char* why, size_t whyLen) {
     if (!strcmp(c, "name") || !strcmp(c, "calib") || !strcmp(c, "config")) {
         return true;   // fields bounded by nature (uint8/clamp)
     }
-    if (!strcmp(c, "seqSave")) {
-        const uint8_t slot = op["slot"] | 0;
-        if (slot >= SequenceStore::SLOT_MAX) {
-            snprintf(why, whyLen, "seqSave: invalid slot %u", slot);
-            return false;
-        }
-        return true;
-    }
-    if (!strcmp(c, "seqDelete")) {
-        const uint8_t slot = op["slot"] | 0;
-        if (slot >= SequenceStore::SLOT_MAX) {
-            snprintf(why, whyLen, "seqDelete: invalid slot %u", slot);
-            return false;
-        }
-        return true;
-    }
+    // (seqSave/seqDelete ops removed in fw 1.7.0 — an old backup file carrying
+    // them is rejected here with an explicit reason, nothing partially applies.)
     snprintf(why, whyLen, "unsupported op: %s", c[0] ? c : "(no cmd)");
     return false;
 }
@@ -420,27 +323,6 @@ bool SerialConsole::applyOp(JsonObjectConst op) {
             _calibCb(target, panMin, panCenter, panMax, tiltMin, tiltCenter, tiltMax);
         return true;
     }
-    if (!strcmp(c, "seqSave")) {
-        StoredSequence seq{};
-        strncpy(seq.name, op["name"] | "Sequence", sizeof(seq.name) - 1);
-        seq.name[sizeof(seq.name) - 1] = '\0';
-        seq.loop = (op["loop"] | false) ? 1 : 0;
-        seq.totalMs = op["totalMs"] | 0;
-        JsonArrayConst steps = op["steps"].as<JsonArrayConst>();
-        uint8_t idx = 0;
-        for (JsonObjectConst s : steps) {
-            if (idx >= StoredSequence::STEP_MAX) break;
-            seq.steps[idx].animId = s["animId"] | 0;
-            seq.steps[idx].targetId = s["target"] | (uint16_t)MESH_TARGET_ALL;
-            seq.steps[idx].startMs = s["start"] | 0;
-            idx++;
-        }
-        seq.stepCount = idx;
-        return _seqSaveCb ? _seqSaveCb(op["slot"] | 0, seq) : false;
-    }
-    if (!strcmp(c, "seqDelete")) {
-        return _seqDeleteCb ? _seqDeleteCb(op["slot"] | 0) : false;
-    }
     return false;   // impossible after validateOp
 }
 
@@ -467,18 +349,10 @@ void SerialConsole::handleLine(const char* line) {
         ack["proto"] = FW_PROTO;
         ack["lineMax"] = SERIAL_LINE_MAX;
         ack["anims"] = ANIM_COUNT;
-        ack["seqSlots"] = SequenceStore::SLOT_MAX;
         JsonArray caps = ack["caps"].to<JsonArray>();
         caps.add("err");
         caps.add("getAll");
         caps.add("config");
-        // Absolute-time sequence model (breaking change from the old chained
-        // relative-delay one): steps carry `start` (ms from t=0, not a
-        // relative delay), seqData/seqSave also carry `totalMs`, seqRun
-        // takes `fromMs` (not a step index), and seqState reports
-        // `elapsedMs`/`totalMs` (not `index`/`total`).
-        caps.add("seqTimeline");
-        caps.add("seqPause");
         caps.add("setMulti");
         caps.add("commit");
         ack["dirty"] = Config.dirty();
@@ -510,23 +384,13 @@ void SerialConsole::handleLine(const char* line) {
 
     } else if (!strcmp(cmd, "getAll")) {
         // Full dump: burst of existing events ending with allDone. Replaces
-        // the dozen or so intercepted per-target requests (getCalib/seqLoad)
-        // the console used to make for backup/restore.
+        // the dozen or so intercepted per-target requests (getCalib) the
+        // console used to make for backup/restore.
         pushState();
         pushDroids();
         pushCalibData(Mesh.myId());
         for (uint8_t i = 0; i < Droids.count(); i++)
             pushCalibData(Droids.at(i).id);
-        if (_seqListCb && _seqLoadCb) {
-            StoredSequenceMeta metas[SequenceStore::SLOT_MAX];
-            const uint8_t n = _seqListCb(metas, SequenceStore::SLOT_MAX);
-            for (uint8_t i = 0; i < n; i++) {
-                StoredSequence seq{};
-                if (_seqLoadCb(metas[i].slot, seq)) pushSeqData(metas[i].slot, seq);
-            }
-        }
-        pushSeqList();
-        if (_seqQueryCb) _seqQueryCb();
         pushMeshTopology();
         JsonDocument done;
         done["evt"] = "allDone";
@@ -626,86 +490,6 @@ void SerialConsole::handleLine(const char* line) {
     } else if (!strcmp(cmd, "otaAbort")) {
         if (_otaAbortCb) _otaAbortCb();
 
-    } else if (!strcmp(cmd, "seqList")) {
-        pushSeqList();
-
-    } else if (!strcmp(cmd, "seqSave")) {
-        const uint8_t slot = doc["slot"] | 0;
-        if (slot >= SequenceStore::SLOT_MAX) {
-            pushErr("invalid slot: %u (0-%u)", slot, SequenceStore::SLOT_MAX - 1);
-            return;
-        }
-        StoredSequence seq{};
-        const char* name = doc["name"] | "Sequence";
-        strncpy(seq.name, name, sizeof(seq.name) - 1);
-        seq.name[sizeof(seq.name) - 1] = '\0';
-        seq.loop = (doc["loop"] | false) ? 1 : 0;
-        seq.totalMs = doc["totalMs"] | 0;
-
-        JsonArrayConst steps = doc["steps"].as<JsonArrayConst>();
-        uint8_t idx = 0;
-        for (JsonObjectConst s : steps) {
-            if (idx >= StoredSequence::STEP_MAX) break;
-            seq.steps[idx].animId = s["animId"] | 0;
-            seq.steps[idx].targetId = s["target"] | (uint16_t)MESH_TARGET_ALL;
-            seq.steps[idx].startMs = s["start"] | 0;
-            idx++;
-        }
-        seq.stepCount = idx;
-
-        bool ok = false;
-        if (_seqSaveCb) ok = _seqSaveCb(slot, seq);
-        log("seq save slot=%u %s", slot, ok ? "OK" : "ERR");
-        pushSeqSaved(ok, slot, seq.name);
-        pushSeqList();
-
-    } else if (!strcmp(cmd, "seqLoad")) {
-        const uint8_t slot = doc["slot"] | 0;
-        StoredSequence seq{};
-        bool ok = false;
-        if (_seqLoadCb) ok = _seqLoadCb(slot, seq);
-        if (ok) {
-            pushSeqData(slot, seq);
-            log("seq load slot=%u OK", slot);
-        } else {
-            pushErr("seq load slot=%u: empty or not found", slot);
-        }
-
-    } else if (!strcmp(cmd, "seqDelete")) {
-        const uint8_t slot = doc["slot"] | 0;
-        if (slot >= SequenceStore::SLOT_MAX) {
-            pushErr("invalid slot: %u (0-%u)", slot, SequenceStore::SLOT_MAX - 1);
-            return;
-        }
-        bool ok = false;
-        if (_seqDeleteCb) ok = _seqDeleteCb(slot);
-        log("seq del slot=%u %s", slot, ok ? "OK" : "ERR");
-        pushSeqDeleted(ok, slot);
-        pushSeqList();
-
-    } else if (!strcmp(cmd, "seqRun")) {
-        const uint8_t slot = doc["slot"] | 0;
-        const uint16_t fromMs = doc["fromMs"] | 0;   // starting offset, ms from t=0 (0 = beginning)
-        if (slot >= SequenceStore::SLOT_MAX) {
-            pushErr("invalid slot: %u (0-%u)", slot, SequenceStore::SLOT_MAX - 1);
-            return;
-        }
-        if (_seqRunCb) _seqRunCb(slot, fromMs);
-        log("seq run slot=%u fromMs=%u", slot, fromMs);
-
-    } else if (!strcmp(cmd, "seqStop")) {
-        if (_seqStopCb) _seqStopCb();
-        log("seq stop");
-
-    } else if (!strcmp(cmd, "seqPause")) {
-        if (_seqPauseCb) _seqPauseCb(true);
-
-    } else if (!strcmp(cmd, "seqResume")) {
-        if (_seqPauseCb) _seqPauseCb(false);
-
-    } else if (!strcmp(cmd, "seqState")) {
-        if (_seqQueryCb) _seqQueryCb();
-
     } else if (!strcmp(cmd, "calib")) {
         const uint16_t target = doc["target"] | (uint16_t)MESH_TARGET_ALL;
         const uint8_t panMin     = doc["panMin"]     | SERVO_PAN_MIN;
@@ -784,7 +568,6 @@ void SerialConsole::handleLine(const char* line) {
         Serial.print('\n');
         log("setMulti: %u/%u ops", applied, idx);
         pushDroids();
-        pushSeqList();
         syncDirty();
 
     } else if (!strcmp(cmd, "commit")) {

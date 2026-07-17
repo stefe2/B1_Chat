@@ -15,9 +15,14 @@ public partial class AudioClip : ObservableObject
     // until then, or if decoding failed (missing/corrupt file), in which case no waveform renders.
     [ObservableProperty] private float[]? _peaks;
 
-    // Transient, not persisted: true while this clip is the target of a cross-lane drag (see
-    // SequenceTimelineView.xaml.cs) — dims the real clip while a ghost follows the cursor.
+    // Transient, not persisted: true while this clip is held/dragged (dimmed "in hand", same
+    // idea as SequenceStep.Dragging) — see SequenceTimelineView.xaml.cs.
     [ObservableProperty] private bool _dragging;
+
+    // Transient view state: vertical pixel offset while dragged, so the clip itself glides
+    // with the cursor across lanes — the actual lane move only settles at mouse-up. Drives a
+    // TranslateTransform in the view; never serialized.
+    [ObservableProperty] private double _dragOffsetY;
 
     public string FileName => System.IO.Path.GetFileName(FilePath);
 

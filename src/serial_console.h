@@ -3,13 +3,15 @@
 // ============================================================================
 //  SerialConsole — JSON bridge over USB for the web console (master)
 //
-//  Protocol: one line = one JSON message (see project.md §10).
+//  Protocol: one line = one JSON message (see CLAUDE.md).
 //  - PC → master: {cmd:"list"|"anim"|"config"|"name"|
 //                   "getConfig"|"calib"|"preview"|"getCalib"|"getAnimDurations"|
-//                   "seqState"|"servo"|"autoAnim"|"locate"|"getMeshTopology"|"getAll"|
-//                   "setMulti"|"commit"|"revert"|"seqPause"|"seqResume", ...}
+//                   "servo"|"autoAnim"|"locate"|"getMeshTopology"|"getAll"|
+//                   "setMulti"|"commit"|"revert", ...}
 //  - master → PC: {evt:"droids"|"log"|"config"|"meshTopology"|"err"|"allDone"|
 //                   "setMultiDone"|"dirty", ...}
+//  (The seq* commands/events — the 8 NVS sequence slots and the onboard
+//  player — were removed in fw 1.7.0: sequences are console-driven only.)
 //
 //  Application logs go through log() to stay in JSON format and not pollute
 //  the protocol. Hooks let the firmware act on commands (play an anim, etc.).
@@ -17,7 +19,6 @@
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
-#include "sequence_store.h"
 
 class SerialConsole {
 public:
@@ -41,10 +42,6 @@ public:
     // Emits the indicative duration (ms) of each gesture ({evt:"animDurations",...}).
     void pushAnimDurations();
 
-    // Emits a sequence's playback state ({evt:"seqState",...}).
-    void pushSeqState(bool playing, uint8_t slot, uint16_t elapsedMs, uint16_t totalMs,
-                      bool paused = false);
-
     // Emits the mesh's detected direct links ({evt:"meshTopology",...}).
     void pushMeshTopology();
 
@@ -61,17 +58,9 @@ public:
     void onServo(void (*cb)(uint16_t target, bool enabled)) { _servoCb = cb; }
     void onAutoAnim(void (*cb)(uint16_t target, bool enabled)) { _autoAnimCb = cb; }
     void onLocate(void (*cb)(uint16_t target, bool enabled)) { _locateCb = cb; }
-    void onSeqSave(bool (*cb)(uint8_t slot, const StoredSequence& seq)) { _seqSaveCb = cb; }
-    void onSeqList(uint8_t (*cb)(StoredSequenceMeta* out, uint8_t maxOut)) { _seqListCb = cb; }
-    void onSeqLoad(bool (*cb)(uint8_t slot, StoredSequence& out)) { _seqLoadCb = cb; }
-    void onSeqRun(void (*cb)(uint8_t slot, uint16_t fromMs)) { _seqRunCb = cb; }
-    void onSeqStop(void (*cb)()) { _seqStopCb = cb; }
-    void onSeqPause(void (*cb)(bool paused)) { _seqPauseCb = cb; }
-    void onSeqDelete(bool (*cb)(uint8_t slot)) { _seqDeleteCb = cb; }
     void onCalib(void (*cb)(uint16_t target, uint8_t panMin, uint8_t panCenter, uint8_t panMax,
                             uint8_t tiltMin, uint8_t tiltCenter, uint8_t tiltMax)) { _calibCb = cb; }
     void onPreview(void (*cb)(uint16_t target, uint8_t pan, uint8_t tilt)) { _previewCb = cb; }
-    void onSeqQuery(void (*cb)()) { _seqQueryCb = cb; }
     void onOtaStart(bool (*cb)(uint16_t target, uint32_t size, const char* md5Hex32)) { _otaStartCb = cb; }
     void onOtaChunk(void (*cb)(uint16_t seq, const uint8_t* data, uint8_t len)) { _otaChunkCb = cb; }
     void onOtaAbort(void (*cb)()) { _otaAbortCb = cb; }
@@ -86,8 +75,8 @@ public:
     bool isClientReady() const { return _clientReady; }
 
 private:
-    // Line buffer: 4 KB to accept a 32-step seqSave and setMulti.
-    // (256 B before: any longer line was silently dropped.)
+    // Line buffer: 4 KB to accept a large setMulti (and, historically, a
+    // 32-step seqSave). (256 B before: any longer line was silently dropped.)
     static const uint16_t SERIAL_LINE_MAX = 4096;
     char     _buf[SERIAL_LINE_MAX];
     uint16_t _len = 0;
@@ -103,24 +92,16 @@ private:
     void (*_servoCb)(uint16_t, bool) = nullptr;
     void (*_autoAnimCb)(uint16_t, bool) = nullptr;
     void (*_locateCb)(uint16_t, bool) = nullptr;
-    bool (*_seqSaveCb)(uint8_t, const StoredSequence&) = nullptr;
-    uint8_t (*_seqListCb)(StoredSequenceMeta*, uint8_t) = nullptr;
-    bool (*_seqLoadCb)(uint8_t, StoredSequence&) = nullptr;
-    void (*_seqRunCb)(uint8_t, uint16_t) = nullptr;
-    void (*_seqStopCb)() = nullptr;
-    void (*_seqPauseCb)(bool) = nullptr;
-    bool (*_seqDeleteCb)(uint8_t) = nullptr;
     void (*_calibCb)(uint16_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t) = nullptr;
     void (*_previewCb)(uint16_t, uint8_t, uint8_t) = nullptr;
-    void (*_seqQueryCb)() = nullptr;
     bool (*_otaStartCb)(uint16_t, uint32_t, const char*) = nullptr;
     void (*_otaChunkCb)(uint16_t, const uint8_t*, uint8_t) = nullptr;
     void (*_otaAbortCb)() = nullptr;
 
     void handleLine(const char* line);
 
-    // setMulti: validation then application of a batch op (name/calib/
-    // volume/config/seqSave/seqDelete). validateOp fills `why` on rejection.
+    // setMulti: validation then application of a batch op (name/calib/config).
+    // validateOp fills `why` on rejection.
     bool validateOp(JsonObjectConst op, char* why, size_t whyLen);
     bool applyOp(JsonObjectConst op);
 
@@ -128,11 +109,7 @@ private:
     void syncDirty();
     bool _lastDirtySent = false;
 
-    void pushSeqList();
-    void pushSeqData(uint8_t slot, const StoredSequence& seq);
     void pushCalibData(uint16_t target);
-    void pushSeqSaved(bool ok, uint8_t slot, const char* name);
-    void pushSeqDeleted(bool ok, uint8_t slot);
 };
 
 extern SerialConsole Console;

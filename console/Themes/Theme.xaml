@@ -8,6 +8,7 @@
     <SolidColorBrush x:Key="PanelBrush" Color="#4C4F56" />
     <SolidColorBrush x:Key="PanelHiBrush" Color="#5A5E66" />
     <SolidColorBrush x:Key="RecessBrush" Color="#2E3034" />
+    <SolidColorBrush x:Key="Recess2Brush" Color="#26282B" />
 
     <SolidColorBrush x:Key="BorderHiBrush" Color="#38FFFFFF" />
     <SolidColorBrush x:Key="BorderLoBrush" Color="#73000000" />

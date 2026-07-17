@@ -13,11 +13,13 @@
 //  compares it to the latest stefe2/B1_Chat release to offer an update. Bump
 //  on every release (tools/release.ps1 relies on it).
 // ---------------------------------------------------------------------------
-#define FW_VERSION "1.6.0"
+#define FW_VERSION "1.7.0"
 
 // Console<->master serial protocol version (bumped when a change isn't
 // backward-compatible; adding fields/commands doesn't require it).
-#define FW_PROTO 3
+// 4: seq* commands/events removed (the 8 NVS sequence slots + onboard player
+//    were retired — sequences are entirely console-driven now).
+#define FW_PROTO 4
 
 // ---------------------------------------------------------------------------
 //  DROID ROLE  —  SET HERE BEFORE FLASHING (pio run -e b1 -t upload)

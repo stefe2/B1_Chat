@@ -14,12 +14,13 @@ Written on 2026-07-12, while the firmware source code wasn't yet available.
 | §1/§2 audio track / `getTrackDurations` | ❌ removed (fw 1.6.0) — DFPlayer retired firmware-wide, the console now owns multi-track audio playback client-side; see CLAUDE.md |
 | §3 `getConfig` response = `{evt:"config",...}` | ✅ implemented (now `freq`/`amp`/`speed` only — `volume` dropped alongside DFPlayer) |
 | §4 atomic `setMulti` (full validation before application) | ✅ implemented |
-| §5 `seqRun {from}`, `seqPause`/`seqResume`, `seqState.paused` + per-step push | ✅ implemented, then superseded — see "Absolute-time sequence model" below (fw ≥ 1.5.0, `caps: seqTimeline`) |
-| Absolute-time sequence model (`start`/`totalMs`/`fromMs`/`elapsedMs`) | ✅ implemented (fw 1.5.0; `audioStartMs` dropped in fw 1.6.0 alongside the audio track) |
+| §5 `seqRun {from}`, `seqPause`/`seqResume`, `seqState.paused` + per-step push | ❌ removed (fw 1.7.0) — the whole seq* family (8 NVS slots + onboard player) was retired; sequences are entirely console-driven now, see CLAUDE.md |
+| Absolute-time sequence model (`start`/`totalMs`/`fromMs`/`elapsedMs`) | ❌ removed (fw 1.7.0) with the rest of the seq* machinery (was ✅ fw 1.5.0-1.6.0) |
 
 **Beyond the contract** (inspired by the KyberEditor protocol): line buffer raised to
 4 KB (`lineMax` announced); `{evt:"err", msg}` for any invalid command; enriched
-`hello` handshake (`fw`, `proto`, `lineMax`, `anims`, `seqSlots`, `caps[]`, `dirty`);
+`hello` handshake (`fw`, `proto`, `lineMax`, `anims`, `caps[]`, `dirty` — `seqSlots`
+dropped in fw 1.7.0 with the slot machinery);
 `{cmd:"getAll"}` = full dump (burst of existing events ending with `{evt:"allDone"}`);
 commit/revert model for anim params/names (`{cmd:"commit"}` / `{cmd:"revert"}` /
 `{evt:"dirty"}` — setters are "live", NVS is only written on commit; **the console

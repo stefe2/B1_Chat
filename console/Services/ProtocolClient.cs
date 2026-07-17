@@ -23,7 +23,6 @@ public partial class ProtocolClient : ObservableObject
 
     public ObservableCollection<Droid> Droids { get; } = new();
     public ObservableCollection<MeshLink> MeshLinks { get; } = new();
-    public ObservableCollection<SequenceSlotMeta> SeqCatalog { get; } = new();
     public Dictionary<int, int> AnimDurationMs { get; } = new();
 
     [ObservableProperty] private bool _portOpen;
@@ -48,10 +47,6 @@ public partial class ProtocolClient : ObservableObject
     public event Action? HelloReceived;
     public event Action? AllDoneReceived;
     public event Action<JsonElement>? CalibDataReceived;
-    public event Action<JsonElement>? SeqDataReceived;
-    public event Action<JsonElement>? SeqSavedReceived;
-    public event Action<int>? SeqDeletedReceived;
-    public event Action<JsonElement>? SeqStateReceived;
     public event Action? AnimDurationsReceived;
     public event Action? MeshTopologyChanged;
     public event Action? DroidsChanged;
@@ -155,8 +150,6 @@ public partial class ProtocolClient : ObservableObject
     public void RequestGetAll() => SendCmd(new JsonObject { ["cmd"] = "getAll" });
     public void RequestAnimDurations() => SendCmd(new JsonObject { ["cmd"] = "getAnimDurations" });
     public void RequestMeshTopology() => SendCmd(new JsonObject { ["cmd"] = "getMeshTopology" });
-    public void RequestSeqList() => SendCmd(new JsonObject { ["cmd"] = "seqList" });
-    public void RequestSeqState() => SendCmd(new JsonObject { ["cmd"] = "seqState" });
     public void RequestCalib(ushort target) => SendCmd(new JsonObject { ["cmd"] = "getCalib", ["target"] = target });
 
     public void SetName(ushort id, string name) => SendCmd(new JsonObject { ["cmd"] = "name", ["id"] = id, ["name"] = name });
@@ -210,34 +203,8 @@ public partial class ProtocolClient : ObservableObject
     public void Commit() => SendCmd(new JsonObject { ["cmd"] = "commit" });
     public void Revert() => SendCmd(new JsonObject { ["cmd"] = "revert" });
 
-    public void SeqLoad(int slot) => SendCmd(new JsonObject { ["cmd"] = "seqLoad", ["slot"] = slot });
-    public void SeqDelete(int slot) => SendCmd(new JsonObject { ["cmd"] = "seqDelete", ["slot"] = slot });
-    public void SeqRun(int slot, int? fromMs = null)
-    {
-        var o = new JsonObject { ["cmd"] = "seqRun", ["slot"] = slot };
-        if (fromMs.HasValue) o["fromMs"] = fromMs.Value;
-        SendCmd(o);
-    }
-    public void SeqStop() => SendCmd(new JsonObject { ["cmd"] = "seqStop" });
-    public void SeqPause() => SendCmd(new JsonObject { ["cmd"] = "seqPause" });
-    public void SeqResume() => SendCmd(new JsonObject { ["cmd"] = "seqResume" });
-
-    // totalMs (loop/end boundary) is derived here rather than asked of the caller,
-    // so every save path (slot save, library push) gets a consistent value — see
-    // FIRMWARE-CONTRACT.md §6.
-    public void SeqSave(int slot, string name, bool loop, IEnumerable<SequenceStep> steps)
-    {
-        var stepList = steps.ToList();
-        var stepsArr = new JsonArray();
-        foreach (var s in stepList)
-            stepsArr.Add(new JsonObject { ["target"] = s.Target, ["animId"] = s.AnimId, ["start"] = s.StartMs });
-        var totalMs = stepList.Count == 0 ? 0 : stepList.Max(s => s.StartMs) + 1500;
-        SendCmd(new JsonObject
-        {
-            ["cmd"] = "seqSave", ["slot"] = slot, ["name"] = name, ["loop"] = loop,
-            ["totalMs"] = totalMs, ["steps"] = stepsArr,
-        });
-    }
+    // (seqLoad/seqSave/seqRun/... helpers removed 2026-07-16 with the rest of the slot
+    // machinery — sequences are console-only now, fw 1.7.0 dropped the commands too.)
 
     public void SetMulti(JsonArray ops) => SendCmd(new JsonObject { ["cmd"] = "setMulti", ["ops"] = ops });
 
@@ -276,14 +243,7 @@ public partial class ProtocolClient : ObservableObject
             case "calibData": CalibDataReceived?.Invoke(root); break;
             case "allDone": AllDoneReceived?.Invoke(); break;
             case "meshTopology": HandleMeshTopology(root); break;
-            case "seqList": HandleSeqList(root); break;
-            case "seqData": SeqDataReceived?.Invoke(root); break;
-            case "seqSaved": SeqSavedReceived?.Invoke(root); break;
-            case "seqDeleted":
-                if (root.TryGetProperty("slot", out var sd)) SeqDeletedReceived?.Invoke(sd.GetInt32());
-                break;
             case "animDurations": HandleAnimDurations(root); break;
-            case "seqState": SeqStateReceived?.Invoke(root); break;
             case "otaReady":
                 OtaReadyReceived?.Invoke(
                     (ushort)(root.TryGetProperty("target", out var ort) ? ort.GetInt32() : 0),
@@ -325,7 +285,6 @@ public partial class ProtocolClient : ObservableObject
         FwProto = root.TryGetProperty("proto", out var proto) ? proto.GetInt32() : 0;
         LineMax = root.TryGetProperty("lineMax", out var lm) ? lm.GetInt32() : 0;
         AnimCount = root.TryGetProperty("anims", out var an) ? an.GetInt32() : AnimCount;
-        SeqSlotMax = root.TryGetProperty("seqSlots", out var ss) ? ss.GetInt32() : SeqSlotMax;
         Dirty = root.TryGetProperty("dirty", out var d) && d.GetBoolean();
 
         _caps.Clear();
@@ -337,9 +296,7 @@ public partial class ProtocolClient : ObservableObject
         {
             RequestList();
             RequestConfig();
-            RequestSeqList();
             RequestAnimDurations();
-            RequestSeqState();
             RequestMeshTopology();
         }
         HelloReceived?.Invoke();
@@ -407,18 +364,6 @@ public partial class ProtocolClient : ObservableObject
                     (ushort)l.GetProperty("to").GetInt32(),
                     l.GetProperty("rssi").GetInt32()));
         MeshTopologyChanged?.Invoke();
-    }
-
-    private void HandleSeqList(JsonElement root)
-    {
-        SeqCatalog.Clear();
-        if (root.TryGetProperty("list", out var list) && list.ValueKind == JsonValueKind.Array)
-            foreach (var item in list.EnumerateArray())
-                SeqCatalog.Add(new SequenceSlotMeta(
-                    item.GetProperty("slot").GetInt32(),
-                    item.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "",
-                    item.TryGetProperty("stepCount", out var sc) ? sc.GetInt32() : 0,
-                    item.TryGetProperty("loop", out var lp) && lp.GetBoolean()));
     }
 
     private void HandleAnimDurations(JsonElement root)

@@ -83,7 +83,7 @@ last 2 bytes of the MAC — plug in → flash → done, no ID to manage).
 | `animation.{h,cpp}` | 18 keyframe anims, non-blocking player, variation seed, `totalDurationMs()` |
 | `registry.{h,cpp}` | (master) live inventory: srcId, RSSI, lastSeen, servos, autoAnim (synchronized access, see pitfalls) |
 | `config_store.{h,cpp}` | NVS: names, anim params, per-droid servo calibration |
-| `sequence_store.{h,cpp}` | (master) NVS: 8 named sequence slots, ≤ 32 steps {targetId,animId,delayMs} |
+| `sequence_store.{h,cpp}` | **deleted fw 1.7.0** (was: master NVS, 8 named sequence slots) — sequences are console-only now |
 | `serial_console.{h,cpp}` | (master) USB JSON ↔ mesh bridge for the console |
 | `ota_guard.{h,cpp}` | (all roles) anti-brick: NVS flag + manual rollback to the other partition if the new firmware doesn't start correctly |
 | `ota_master.{h,cpp}` | (master) orchestrates an OTA session toward a slave (stop-and-wait, retry, post-reboot confirmation via heartbeat) |
@@ -152,19 +152,13 @@ Session guarded by a handshake: `hello` → `{evt:"hello",ok,id}`, then keepaliv
   `adopt {target}` · `forget {target}` ·
   `anim {target,animId,seed}` · `preview {target,pan,tilt}` ·
   `calib {target,+6 limits}` · `getCalib {target}` · `getAnimDurations` ·
-  `getMeshTopology` · `seqList` · `seqLoad {slot}` ·
-  `seqSave {slot,name,loop,totalMs,steps:[{animId,target,start}]}` · `seqDelete {slot}` ·
-  `seqRun {slot,fromMs?}` · `seqStop` · `seqPause` · `seqResume` · `seqState` ·
+  `getMeshTopology` ·
   `setMulti {ops:[...]}` · `commit` · `revert` ·
   `otaStart {target,size,md5}` · `otaChunk {seq,data}` (data = base64) · `otaAbort {}`
-- **Master → console** (`evt`): `hello {ok,id,fw,proto,lineMax,anims,seqSlots,caps[],dirty}` ·
+- **Master → console** (`evt`): `hello {ok,id,fw,proto,lineMax,anims,caps[],dirty}` ·
   `droids {list:[{id,name,rssi,age,role,servos,autoAnim,adopted,fw}]}` ·
   `log {msg}` · `err {msg}` · `config {freq,amp,speed}` · `calibData {target,+6}` ·
   `meshTopology {links:[{from,to,rssi}]}` · `animDurations {list:[{animId,ms}]}` ·
-  `seqList {list:[{slot,name,stepCount,loop}]}` ·
-  `seqData {slot,name,loop,totalMs,steps:[{animId,target,start}]}` ·
-  `seqSaved {ok,slot,name}` · `seqDeleted {ok,slot}` ·
-  `seqState {playing,slot,elapsedMs,totalMs,paused}` ·
   `setMultiDone {ok,applied,failedAt?,error?}` · `dirty {dirty}` · `allDone` ·
   `otaReady {target,sessionId,chunkSize,totalChunks}` · `otaChunkAck {seq,sent,total}` ·
   `otaDone {target,sessionId}` · `otaResult {target,ok,fw?,reason?}` ·
@@ -175,12 +169,18 @@ firmware). Responses routed exclusively on `evt`. Line buffer: 4 KB
 (`lineMax` announced at handshake; any longer line → `err`).
 
 **No audio in this protocol** (fw 1.6.0): `volume`/`playTrack` (console→master)
-and `config`'s `volume` field, plus `track`/`audioStartMs` on
-`seqSave`/`seqData`/`seqList`/`seqState`, were all removed when the DFPlayer
-was retired — see the Progress log. `seqRun`/`seqStop`/`seqPause`/`seqResume`
-and the master's own onboard sequence player are unaffected (still fully
-functional), just no longer triggered from the console's Sequencer UI (Play
-is console-driven now, see that Progress entry).
+and `config`'s `volume` field were removed when the DFPlayer was retired —
+see the Progress log.
+
+**No sequences in this protocol either** (fw 1.7.0, proto 4): the whole `seq*`
+family — `seqList`/`seqLoad`/`seqSave`/`seqDelete`/`seqRun`/`seqStop`/
+`seqPause`/`seqResume`/`seqState` commands, the matching `seqList`/`seqData`/
+`seqSaved`/`seqDeleted`/`seqState` events, `hello`'s `seqSlots` field and the
+`seqTimeline`/`seqPause` caps — was removed along with the master's 8 NVS
+sequence slots and its onboard player (see the Progress log). Sequences are
+entirely console-driven: the console fires per-step `anim` commands from its
+own timers and stores sequences locally (Local Library + `.b1seq.json`
+export, both carrying the droid roster for offline layout).
 
 **Commit/revert** (anim params, names — not calibration or
 sequences): setters are "live" (RAM overlay), NVS is only written on
@@ -310,7 +310,7 @@ width at the bottom. Firmware card taken out of the grid (separate window).
 | What | Where |
 | --- | --- |
 | Names, anim params, calibrations, adoption status | Master's NVS (`config_store`) |
-| Sequences (8 slots, ≤ 32 steps) | Master's NVS (`sequence_store`) |
+| Sequences | Console only (Local Library + `.b1seq.json` export, with droid roster) — the master's 8 NVS slots were removed in fw 1.7.0 |
 | Sequence library, last port | `%LOCALAPPDATA%\B1ChatConsole\` (console side) |
 | Per-slot console-side audio lanes (label + clips, each a file path/duration/start/loop) | `%LOCALAPPDATA%\B1ChatConsole\slot-audio.json` (console side, keyed by NVS slot number — see the Sequencer audio Progress entries below) |
 | OTA anti-brick flag (pending/attempts) | NVS of **each droid** flashed via OTA, separate `"ota"` namespace (`ota_guard`) |
@@ -964,6 +964,178 @@ width at the bottom. Firmware card taken out of the grid (separate window).
       re-verified live against the real fleet this pass (see the DFPlayer
       entry above for the build verification already done) — needs a
       hands-on Play/Pause/Resume/Stop/Loop pass against real hardware.
+- [x] Sequencer: full visual polish to the "Sequencer v2" mockup's look
+      (2026-07-16, second batch — look only, no new features, plan confirmed
+      before coding; reference = the same approved concept artifact, fetched
+      and mirrored CSS-value-for-CSS-value). **Body**: rail + timeline +
+      inspector unified into one recessed rounded container (mockup `.body`)
+      — the gutter's old floating 110px boxes became a flush 150px rail
+      (`BgBrush`, contiguous rows with bottom separators, 3px accent left
+      bar + orange tint when armed, glowing status dot, 📡 broadcast row,
+      accent-tinted "♪ LANE" audio rows with an AUDIO LANE caption).
+      **Geometry**: `TimelineTrack`/`AudioLane` `RowHeight` 48→52,
+      `RowGap` 4→0 (contiguous mockup rows); clips float inside their row
+      via a new `TimelineGeometryConverter` "ClipTop" mode (`ClipInsetY` 5,
+      clip height 42) so row backgrounds still use raw "Top"; `TrackAtY`
+      switched Round→Floor to match. `TimelineWidthPx` now also floors at
+      the visible viewport width (`ViewportWidthPx`, pushed by the view on
+      `ScrollViewer.SizeChanged`) so row backgrounds/gridlines fill the body
+      even for a short/empty sequence (mockup `max(content, viewport)`).
+      **Ruler**: 30px on new `Recess2Brush` (#26282B, added to Theme.xaml),
+      bottom-anchored short/tall ticks, labels up top, bottom hairline, and
+      a glowing pentagon playhead flag (mockup `.playhead .flag`); the
+      tracks-canvas playhead line gained the matching accent glow.
+      **Gesture clips**: vertical family gradient (new "Gradient" parameter
+      on `AnimFamilyToBrushConverter`, cached frozen brushes, `Lift(+43)` =
+      mockup's `lighten(18)`), rounded 5px, drop shadow, two-line content —
+      name + real duration ("2.00s", new `AnimDurationTextConverter` sharing
+      the Width mode's 800ms fallback so label always matches drawn width) —
+      and a ⟲ badge on the two looping gestures (16/17). **Audio clips**:
+      translucent orange gradient + orange border (was opaque accent),
+      waveform recolored light orange (#8CFFB766), file label top-left in
+      #FFD9A3. **Transport**: timecode split into `TimecodeNowText` (accent)
+      + `TimecodeTotalText` (muted gray) rendered as two `Run`s (must be
+      `Mode=OneWay` — `Run.Text` defaults TwoWay and the sources are
+      get-only), 🔍 glyph for zoom, mockup ordering. **Gesture library**:
+      drawer-style bordered container ("GESTURES" header + right-aligned
+      hint), family labels tinted with their family color (new
+      `GestureFamily.ColorAnimId`), chips restyled from solid family-color
+      pills to neutral panel pills with a 3px family-colored left edge +
+      mono `#id` + ⟲ on loops (mockup `.chip`); the drag ghost now takes the
+      full family color from the converter instead of copying the (now
+      neutral) chip background. **Inspector**: flush right panel inside the
+      body (BgBrush, left separator), family color strip under the gesture
+      picker, red-tinted Delete text (BeveledButtonStyle's template
+      hardcodes its BorderBrush, so only Foreground can signal danger).
+      **Removed on request: the "Save (ESP32)" button** (SaveToSlotCommand
+      still exists in the VM; pushing to a slot remains possible via the
+      Local Library's "→ ESP32"). Catalog/Local Library/name field/New
+      left as-is — explicitly deferred to a later pass. Verified:
+      `dotnet build` clean, launched + full-window screenshots (empty
+      state) matching the mockup; a live pass with real droids/sequence
+      data still pending.
+- [x] Sequencer timeline: 6 fixes from direct user feedback on the polish
+      pass above, seen live with the real 4-droid fleet (2026-07-16,
+      confirmed before coding): **(1+2 — one root cause)** row backgrounds
+      and separators were piling on row 0 and every vertical gridline was
+      stacking at x=0 — the ItemsControl/Canvas pitfall again, this time
+      disproving the old note's "works on the template root" claim (see the
+      amended pitfall below); the gridline templates got a Canvas root, and
+      the row-background ItemsControl dropped Canvas positioning entirely
+      (plain vertical StackPanel — Tracks is already in row order and rows
+      are contiguous RowHeight, so stacking IS the layout). **(3)** every
+      droid row now gets the same accent-tinted background the broadcast
+      row appeared to have (per direct request — what the user saw was
+      actually 5 stacked 1.5% white layers), uniform, no IsBroadcast
+      trigger. **(4)** gridline opacities raised (minor .05→.08, major
+      .12→.18) so the second markers visibly run down to the last droid.
+      **(5)** right-click ContextMenu on gesture clips (Duplicate/Delete,
+      same Tag=ViewModel trick and dark menu styles as the audio clips'
+      menu). **(6)** transport zoom glyph switched from the 🔍 emoji (color
+      font, ignores Foreground, rendered dark) to Segoe MDL2 Assets E71E in
+      theme text color; and the rail's broadcast row shows the same status
+      dot as every other row (📡 special case removed, per direct request).
+- [x] Sequences made 100% console-side + fourth Sequencer feedback batch
+      (2026-07-16, fw 1.7.0 / proto 4, console build 225 — every item
+      confirmed before coding, including "retirer les slots du firmware
+      aussi" via an explicit disambiguation question). **Firmware 1.7.0**:
+      `src/sequence_store.{h,cpp}` deleted; the whole `seq*` command/event
+      family removed from `serial_console.{h,cpp}` (handlers, `push*`
+      emitters, `hello.seqSlots`, `seqTimeline`/`seqPause` caps, the
+      seqSave/seqDelete `setMulti` ops — an old backup carrying them is now
+      rejected with an explicit reason, atomically); `main.cpp` lost the
+      onboard player (gSeq* state machine, sortStepsByStart, onSeq* hooks)
+      — the master keeps relaying live `anim` commands, its idle draw no
+      longer checks gSeqPlaying. `FW_PROTO` 3→4 (commands removed =
+      breaking); builds clean on b1/b1_master/b1_slave; **not yet
+      released/flashed** — bump is in `config.h`, CI will release on push.
+      **Console**: all slot plumbing stripped end-to-end (`ProtocolClient`
+      `seq*` helpers/events/catalog + `SequencerViewModel` LoadSlot/SaveToSlot/
+      DeleteSlot/PushToMaster/PullFromMaster/CurrentSlot +
+      `SequenceAudioStore` service deleted + `SequenceSlotMeta` record);
+      Local Library's "→ ESP32" button removed; header badge is name-only.
+      **Sequence files carry the droid roster** (new `tracks` array in
+      `.b1seq.json` v4 + `SequenceLibraryItem.Tracks`): on load/import with
+      droids unplugged, each saved droid keeps its own named row (role
+      "OFFLINE", `RebuildTracks` appends them after live rows, plus hex-id
+      rows for pre-roster files' step targets) instead of everything
+      collapsing onto one line; a droid coming online takes its row over.
+      **Fixes/UX from direct feedback**: Pause button fixed — root cause:
+      `[RelayCommand(CanExecute=...)]` never re-evaluates without
+      `[NotifyCanExecuteChangedFor]` on the properties it reads, so Pause
+      stayed disabled forever (same latent bug fixed on Undo/Redo);
+      `TotalDurationMs()` now uses real gesture durations (was flat
+      +1500 ms — the reason "Fit" kept cutting the last clip's tail) and
+      "Fit" also scrolls back to t=0; ruler ticks/gridlines now span the
+      whole drawn width incl. viewport ("la trame reste en pleine
+      longueur"), minor gridlines raised to 0.20; smooth drag — clips move
+      freely at pixel level while held, Snap (100 ms grid) applies at
+      release only, gestures and audio clips alike; audio clips use the
+      same SizeAll cursor as gestures; audio lanes renamable in place
+      (borderless TextBox in the rail; `AudioLane` became an
+      ObservableObject); clicking empty timeline space deselects; name
+      field + New + "→ Library" buttons removed from the card (consequence
+      accepted explicitly: no way to ADD to the Local Library anymore —
+      Export/Import files remain the save path until a future "My
+      Sequences" pass). Verified: console build clean, firmware builds
+      clean ×3, full-width grid confirmed by screenshot; hands-on pass
+      (Pause fix, offline-roster import, lane rename/delete) still to do —
+      and the fleet still runs fw 1.6.0, which is fine (the console simply
+      ignores the extra hello fields and never sends `seq*`).
+- [x] Sequencer: third feedback batch (2026-07-16, 9 items + 3 amendments,
+      confirmed before coding). **Visual**: major gridline opacity .18→.30
+      (seconds markers readable); audio clips get the same SizeAll move
+      cursor as gesture clips; a gesture clip dims to 55% while held/dragged
+      (new transient `SequenceStep.Dragging`, set by the view for the mouse
+      capture's duration — never serialized) and the selected clip gains a
+      white halo on top of its outline (trigger placed last so it wins over
+      active/muted). **Behavior**: `Fit` (zooms so the whole sequence fits
+      the visible width) now also scrolls back to t=0 — previously a
+      scrolled view could sit past the fitted content; `Duplicate` nudges
+      the clone +200 ms right and selects it (was landing exactly on top of
+      the original, invisible); new `DeleteAudioLane` (right-click a lane's
+      rail row → dark ContextMenu), any lane deletable including the two
+      seeded ones, asks via MessageBox when the lane still holds clips;
+      new `Clear` transport button after Import (`ClearTimeline`: empties
+      steps + all lanes' clips, keeps the lanes and the name, asks first
+      when Dirty) — both undoable via the existing history. **Removed**:
+      the "CATALOG (8 ESP32 SLOTS)" section from SequencerCardView (per
+      direct request) — the master's 8 NVS slots and the VM plumbing
+      (Catalog/LoadSlot/DeleteSlot) remain, the only UI path into them is
+      now the Local Library's "→ ESP32". Verified: build clean, screenshot
+      (Catalog gone, Clear present); the interactive behaviors (drag dim,
+      duplicate offset, confirmations, lane delete) still need a hands-on
+      pass.
+- [x] Sequencer: fifth feedback batch (2026-07-17, console build 227,
+      confirmed before coding). **Droid row background** made a neutral
+      light tint (#FFFFFF at 3%, was the same #FF9D2E accent tint as the
+      audio lanes) so the orange tint now reads as "audio row" only.
+      **Resume button removed** — Play doubles as Resume: pressed while
+      paused it resumes from the pause point (`ResumeCommand`/`CanResume`
+      deleted, logic folded into `Play()`), otherwise it (re)starts from
+      t=0; a Play pressed mid-playback now also calls
+      `AudioPlaybackService.StopAll()` first (previously it re-armed timers
+      without stopping in-flight audio → overlapped playback, latent).
+      **Major gridlines** raised .30→.40 (both the tracks canvas and the
+      audio lanes). **Truly smooth 2-axis drag** — root cause of the
+      "jumps droid to droid" complaint: the previous drag updated
+      `SequenceStep.Target` live on every MouseMove, so the clip teleported
+      row-by-row (52px) the instant the cursor crossed a boundary (and an
+      audio clip stayed dimmed in place with only a small ghost following
+      the cursor, teleporting lanes at release). Now both clip kinds glide
+      with the cursor at pixel level on BOTH axes via a new transient
+      `DragOffsetY` (`SequenceStep`/`AudioClip`, drives a bound
+      `TranslateTransform` in the clip templates — a Canvas doesn't clip
+      children, so an audio clip stays visible outside its own lane's row)
+      and the row/lane, like the 100ms time snap, only settles at mouse-up
+      (released outside the tracks/lanes area vertically → snaps back to
+      its original row/lane). The audio drag's ghost-border mechanism is
+      gone (the ghost remains for gesture-library chip drags, which have no
+      real element to move); audio clips dim to the same 55% "in hand" as
+      gesture clips (was 25% cross-lane-only). One Undo still restores
+      time + row/lane together. Verified: build clean (0 warnings),
+      screenshot (⏵ gone, neutral vs orange row tints, brighter second
+      markers); the drag feel itself still needs the user's hands-on pass.
 
 ## Full flash (virgin board support)
 
@@ -1136,13 +1308,15 @@ change).
   console flashed a 1.3.9 thinking it was the latest. Parse the
   versions and take the semantic maximum.
 - In an `ItemsControl` whose `ItemsPanel` is a `Canvas`, `Canvas.Left`/
-  `Canvas.Top` bound inside the `DataTemplate` only work if they sit on the
-  **template root** — each item gets wrapped in a `ContentPresenter`, which
-  is the Canvas's real direct child, so the attached properties set on a
-  deeper element are silently ignored and every item renders at the canvas
-  origin (0,0). Fix: make the template root a `Canvas` (position children
-  absolutely inside it) — the Nodes template always did this; the packet
-  dots didn't and piled up invisible in the corner until 2026-07-15.
+  `Canvas.Top` bound inside the `DataTemplate` are **silently ignored — even
+  on the template root**: each item gets wrapped in a `ContentPresenter`,
+  which is the Canvas's real direct child, and the attached properties never
+  transfer to it, so every item renders at the canvas origin (0,0). The only
+  reliable fix: make the template root a `Canvas` and position a *child*
+  element absolutely inside it. The mesh packet dots hit this until
+  2026-07-15; it recurred 2026-07-16 in the Sequencer timeline grid (row
+  backgrounds all piled on row 0 — read as a "broadcast tint" — and every
+  vertical gridline stacked at x=0), caught during the visual-polish pass.
 - WPF named color `Transparent` is **transparent white** (`#00FFFFFF`), not
   transparent black like CSS's `transparent`. In a gradient toward an opaque
   dark color, the interpolation passes through semi-transparent greys and
@@ -1213,13 +1387,11 @@ change).
 2. Smooth servo sweep; `MSG_ANIM` relayed ≥ 2 hops without a broadcast storm;
    2 different group keys ignore each other.
 3. Console connected: droid list, anim/name, persistence after reboot.
-4. Sequence saved to a slot, master reboot, then `seqRun` sent directly
-   (e.g. `tools/ota-test.ps1`-style serial) → still plays without a PC — the
-   master's own onboard sequence player is unaffected by the fw 1.6.0 audio
-   removal (**caveat**: the console's own Sequencer `Play` no longer sends
-   `seqRun` at all, see the Progress log — this is no longer exercised from
-   the console UI, only worth re-checking if that firmware capability is
-   ever revived for something else).
+4. ~~Sequence saved to a slot, master reboot, `seqRun` → plays without a PC~~ —
+   **obsolete since fw 1.7.0**: the onboard sequence player and its 8 NVS
+   slots were removed outright (sequences are console-driven only). Instead:
+   console `Play` on a loaded sequence fires the right `anim` commands on the
+   right droids at the right times, and Pause/Resume/Stop behave.
 5. Topology: move a slave out of the master's direct range → its direct
    link disappears from the graph, relayed links remain.
 6. OTA — **only on a spare board, never a droid in service** —

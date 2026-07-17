@@ -55,6 +55,10 @@ public class AnimFamilyToBrushConverter : IValueConverter
         ("TALK (AUDIO-SYNCED, LOOPS)", new[] { 17 }),
     };
 
+    // One frozen gradient per family color — clips re-render often (drag, zoom), no point
+    // allocating a fresh brush every time.
+    private static readonly Dictionary<Color, LinearGradientBrush> GradientCache = new();
+
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
     {
         var id = value switch { int i => i, double d => (int)d, _ => -1 };
@@ -62,8 +66,24 @@ public class AnimFamilyToBrushConverter : IValueConverter
         // ConverterParameter="Color" returns the raw Color (e.g. for a DropShadowEffect.Color,
         // which isn't a Brush) instead of the default SolidColorBrush.
         if (parameter as string == "Color") return color;
+        // ConverterParameter="Gradient" returns the mockup's clip fill: lightened tone at the
+        // top fading to the base family color (reads as a beveled top highlight for free).
+        if (parameter as string == "Gradient")
+        {
+            if (!GradientCache.TryGetValue(color, out var grad))
+            {
+                var top = Color.FromRgb(Lift(color.R), Lift(color.G), Lift(color.B));
+                grad = new LinearGradientBrush(top, color, 90);
+                grad.Freeze();
+                GradientCache[color] = grad;
+            }
+            return grad;
+        }
         return new SolidColorBrush(color);
     }
+
+    // Mirrors the mockup's lighten(color, 18) helper (each channel +18*2.4, clamped).
+    private static byte Lift(byte c) => (byte)Math.Min(255, c + 43);
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotSupportedException();
 }

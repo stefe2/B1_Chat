@@ -17,12 +17,10 @@ public partial class SequencerViewModel : ObservableObject
 {
     private readonly ProtocolClient _protocol;
     private readonly LibraryService _library = new();
-    private readonly SequenceAudioStore _audioStore = new();
     private readonly AudioPlaybackService _audioPlayer = new();
     private const int HistoryMax = 50;
     private const string AudioFileFilter = "Audio files (*.mp3;*.wav;*.wma;*.ogg)|*.mp3;*.wav;*.wma;*.ogg|All files (*.*)|*.*";
 
-    public ObservableCollection<SequenceSlotMeta> Catalog => _protocol.SeqCatalog;
     public ObservableCollection<SequenceLibraryItem> Library { get; } = new();
     public ObservableCollection<SequenceStep> Steps { get; } = new();
     public ObservableCollection<Droid> Targets => _protocol.Droids;
@@ -34,7 +32,7 @@ public partial class SequencerViewModel : ObservableObject
 
     // Console-side audio (DFPlayer set aside "for now", see CLAUDE.md): one or more named
     // lanes (default "AUDIO"/"AMBIENT"), each holding independently-placeable clips that may
-    // overlap within their own lane. Never sent to the master — see SequenceAudioStore.
+    // overlap within their own lane. Never sent to the master — console-side only.
     public ObservableCollection<AudioLane> AudioLanes { get; } = new();
 
     // The 18 built-in gestures, reused as-is from AnimationViewModel — never redefined here.
@@ -50,6 +48,7 @@ public partial class SequencerViewModel : ObservableObject
         .Select(f => new GestureFamily
         {
             Label = f.Label,
+            ColorAnimId = f.AnimIds[0],
             Gestures = f.AnimIds.Select(id => new GestureLibraryEntry { Id = id, Name = AnimationViewModel.AnimNames[id] }).ToList(),
         }).ToList();
 
@@ -68,9 +67,16 @@ public partial class SequencerViewModel : ObservableObject
         RebuildRulerTicks();
     }
 
-    // Transport bar readout ("00:03.400 / 00:15.800") — mirrors the mockup's timecode pill.
-    public string TimecodeText => $"{FormatTimecode(PlayheadMs)} / {FormatTimecode(TotalDurationMs())}";
-    partial void OnPlayheadMsChanged(double value) => OnPropertyChanged(nameof(TimecodeText));
+    // Transport bar readout ("00:03.400" + " / 00:15.800") — mirrors the mockup's timecode
+    // pill, split in two so the view renders the current position in accent and the total in
+    // muted gray (the mockup's .timecode/.tot duo).
+    public string TimecodeNowText => FormatTimecode(PlayheadMs);
+    public string TimecodeTotalText => $" / {FormatTimecode(TotalDurationMs())}";
+    partial void OnPlayheadMsChanged(double value)
+    {
+        OnPropertyChanged(nameof(TimecodeNowText));
+        OnPropertyChanged(nameof(TimecodeTotalText));
+    }
 
     private static string FormatTimecode(double ms)
     {
@@ -86,20 +92,29 @@ public partial class SequencerViewModel : ObservableObject
 
     [ObservableProperty] private string _name = "";
     [ObservableProperty] private bool _loop;
-    [ObservableProperty] private int? _currentSlot;
     [ObservableProperty] private bool _dirty;
 
-    // Card header badge (mockup's "SLOT 2 · “PARADE”"), kept in sync with whichever of the two
-    // source properties last changed.
-    public string SequenceBadgeText => CurrentSlot.HasValue
-        ? $"SLOT {CurrentSlot} · \"{(string.IsNullOrWhiteSpace(Name) ? "UNNAMED" : Name.ToUpperInvariant())}\""
-        : "UNSAVED · NEW SEQUENCE";
-    partial void OnCurrentSlotChanged(int? value) => OnPropertyChanged(nameof(SequenceBadgeText));
+    // Card header badge — name only, now that the ESP32 slot concept is gone from the console.
+    public string SequenceBadgeText => string.IsNullOrWhiteSpace(Name)
+        ? "UNSAVED · NEW SEQUENCE"
+        : $"\"{Name.ToUpperInvariant()}\"";
     partial void OnNameChanged(string value) => OnPropertyChanged(nameof(SequenceBadgeText));
-    [ObservableProperty] private bool _canUndo;
-    [ObservableProperty] private bool _canRedo;
-    [ObservableProperty] private bool _isPlaying;
-    [ObservableProperty] private bool _isPaused;
+
+    // NotifyCanExecuteChangedFor is load-bearing: a [RelayCommand(CanExecute=...)] never
+    // re-evaluates on its own — without these, Pause stayed permanently disabled (the
+    // condition was checked once at startup, while nothing played, and never again).
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(UndoCommand))]
+    private bool _canUndo;
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(RedoCommand))]
+    private bool _canRedo;
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(PauseCommand))]
+    private bool _isPlaying;
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(PauseCommand))]
+    private bool _isPaused;
     [ObservableProperty] private SequenceStep? _selectedStep;
 
     // SelectedStep.Target as a TimelineTrack, for the inspector's Target ComboBox.
@@ -122,24 +137,48 @@ public partial class SequencerViewModel : ObservableObject
     public SequencerViewModel(ProtocolClient protocol)
     {
         _protocol = protocol;
-        _protocol.SeqDataReceived += OnSeqData;
         _protocol.DroidsChanged += RebuildTracks;
-        _protocol.AnimDurationsReceived += () => OnPropertyChanged(nameof(AnimDurationMsLookup));
-        _protocol.SeqStateReceived += OnSeqState;
+        _protocol.AnimDurationsReceived += () =>
+        {
+            OnPropertyChanged(nameof(AnimDurationMsLookup));
+            // Real durations change TotalDurationMs (clip tails) — refresh ruler extent too.
+            RebuildRulerTicks();
+        };
         Steps.CollectionChanged += (_, _) => RebuildRulerTicks();
         RebuildTracks();
         ApplyAudioLanesFromDto(null);
         RebuildRulerTicks();
         RefreshLibrary();
-        _protocol.RequestSeqList();
     }
 
     // --- Timeline: tracks, ruler, zoom, playhead --------------------------------
 
     // Explicit Canvas extents for the ScrollViewer — a WPF Canvas doesn't auto-size to its
     // children's positions, so the scrollable width/height must be computed and bound.
-    public double TimelineWidthPx => Math.Max(400, (TotalDurationMs() + 2000) * PxPerMs);
+    // Floored at the viewport width (mockup: width = max(content, viewport)) so the row
+    // backgrounds/gridlines fill the whole visible body even for a short/empty sequence,
+    // instead of stopping in a stub partway across.
+    public double TimelineWidthPx => Math.Max(Math.Max(400, ViewportWidthPx), (TotalDurationMs() + 2000) * PxPerMs);
+
+    // Pushed by the view on ScrollViewer.SizeChanged — a pure layout input, not sequence data.
+    private double _viewportWidthPx;
+    public double ViewportWidthPx
+    {
+        get => _viewportWidthPx;
+        set
+        {
+            if (Math.Abs(value - _viewportWidthPx) < 0.5) return;
+            _viewportWidthPx = value;
+            OnPropertyChanged(nameof(TimelineWidthPx));
+            RebuildRulerTicks(); // ticks/gridlines span the drawn width, which just changed
+        }
+    }
     public double TracksHeightPx => Math.Max(TimelineTrack.RowHeight, Tracks.Count * (TimelineTrack.RowHeight + TimelineTrack.RowGap));
+
+    // Droid roster carried by the loaded/imported sequence file (id → name, in saved row
+    // order) — lets a sequence authored against the full fleet keep one row per droid even
+    // when nothing is plugged in, instead of collapsing every step onto the broadcast row.
+    private readonly List<SequenceTrackDto> _fileTracks = new();
 
     private void RebuildTracks()
     {
@@ -157,6 +196,23 @@ public partial class SequencerViewModel : ObservableObject
                 Id = d.Id, Label = d.Name.Length > 0 ? d.Name : d.IdHex, Role = d.IsMaster ? "MASTER" : "SLAVE",
                 RowIndex = row++, Muted = mutedIds.Contains(d.Id),
             });
+        // Offline rows: first the sequence file's saved roster (name + order preserved),
+        // then any step target still unaccounted for (e.g. a pre-roster file), labeled by
+        // its hex id. A droid that comes online later simply takes over its row as live.
+        foreach (var ft in _fileTracks)
+            if (ft.Id != 0xFFFF && Tracks.All(t => t.Id != ft.Id))
+                Tracks.Add(new TimelineTrack
+                {
+                    Id = ft.Id, Label = ft.Name.Length > 0 ? ft.Name : $"{ft.Id:X4}", Role = "OFFLINE",
+                    RowIndex = row++, Muted = mutedIds.Contains(ft.Id),
+                });
+        foreach (var target in Steps.Select(s => s.Target).Distinct())
+            if (target != 0xFFFF && Tracks.All(t => t.Id != target))
+                Tracks.Add(new TimelineTrack
+                {
+                    Id = target, Label = $"{target:X4}", Role = "OFFLINE",
+                    RowIndex = row++, Muted = mutedIds.Contains(target),
+                });
         ArmedTrack = armedId.HasValue ? Tracks.FirstOrDefault(t => t.Id == armedId.Value) : null;
         OnPropertyChanged(nameof(TracksHeightPx));
         // Tracks are wholesale-replaced (new instances) — the inspector's Target combo holds a
@@ -186,7 +242,9 @@ public partial class SequencerViewModel : ObservableObject
     public TimelineTrack? TrackAtY(double y)
     {
         if (Tracks.Count == 0) return null;
-        var idx = (int)Math.Round(y / (TimelineTrack.RowHeight + TimelineTrack.RowGap));
+        // Rows are contiguous now (RowGap 0) — Floor maps [rowTop, rowBottom) to the row,
+        // where the old Round only made sense with a gap between rows.
+        var idx = (int)Math.Floor(y / (TimelineTrack.RowHeight + TimelineTrack.RowGap));
         idx = Math.Clamp(idx, 0, Tracks.Count - 1);
         return Tracks.ElementAtOrDefault(idx) ?? Tracks.FirstOrDefault();
     }
@@ -215,9 +273,13 @@ public partial class SequencerViewModel : ObservableObject
     }
 
     // Public: also read by the view's "Fit" zoom handler (SequenceTimelineView.xaml.cs).
+    // Uses each step's REAL gesture duration (getAnimDurations) rather than a fixed 1.5s
+    // tail — the old flat tail under-measured long gestures (TALK ~4s), which is why "Fit"
+    // kept cutting a sliver off the right edge of the last clip.
     public double TotalDurationMs()
     {
-        var stepsEnd = Steps.Count == 0 ? 0 : Steps.Max(s => s.StartMs) + 1500;
+        var stepsEnd = Steps.Count == 0 ? 0 : Steps.Max(s =>
+            s.StartMs + (AnimDurationMsLookup.TryGetValue(s.AnimId, out var d) ? d : 1500));
         var audioEnd = AudioLanes.SelectMany(l => l.Clips)
             .Select(c => (double)(c.StartMs + c.DurationMs)).DefaultIfEmpty(0).Max();
         return Math.Max(stepsEnd, audioEnd);
@@ -226,12 +288,15 @@ public partial class SequencerViewModel : ObservableObject
     private void RebuildRulerTicks()
     {
         RulerTicks.Clear();
-        var total = TotalDurationMs();
         if (PxPerMs > 0)
         {
+            // Ticks (and therefore the gridlines bound to them) cover the whole DRAWN width —
+            // viewport floor included — not just the sequence's own duration, so the grid
+            // never stops in a stub partway across ("la trame reste en pleine longueur").
+            var endMs = Math.Max(TotalDurationMs(), TimelineWidthPx / PxPerMs);
             int[] niceIntervals = { 100, 200, 500, 1000, 2000, 5000, 10000 };
             var interval = niceIntervals.FirstOrDefault(i => i * PxPerMs >= 50, niceIntervals[^1]);
-            for (double t = 0; t <= total; t += interval)
+            for (double t = 0; t <= endMs; t += interval)
             {
                 var major = (long)t % (interval * 5) == 0;
                 RulerTicks.Add(new TimelineTick
@@ -243,7 +308,8 @@ public partial class SequencerViewModel : ObservableObject
             }
         }
         OnPropertyChanged(nameof(TimelineWidthPx));
-        OnPropertyChanged(nameof(TimecodeText));
+        OnPropertyChanged(nameof(TimecodeNowText));
+        OnPropertyChanged(nameof(TimecodeTotalText));
     }
 
     // Called by the view once at drag-end (not per MouseMove — recomputing ticks under the
@@ -298,6 +364,46 @@ public partial class SequencerViewModel : ObservableObject
         PushHistory();
         AudioLanes.Add(new AudioLane { Label = $"AUDIO {AudioLanes.Count + 1}", RowIndex = AudioLanes.Count });
         Dirty = true;
+    }
+
+    // Any lane can be deleted, the two seeded ones (AMBIENT/AUDIO) included — but a lane
+    // that still holds clips asks first (direct user request). Undo restores lane + clips.
+    [RelayCommand]
+    private void DeleteAudioLane(AudioLane? lane)
+    {
+        if (lane == null || !AudioLanes.Contains(lane)) return;
+        if (lane.Clips.Count > 0)
+        {
+            var res = MessageBox.Show(
+                $"Lane \"{lane.Label}\" still holds {lane.Clips.Count} audio clip(s) — delete the lane and its clips?",
+                "Delete audio lane", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            if (res != MessageBoxResult.Yes) return;
+        }
+        PushHistory();
+        AudioLanes.Remove(lane);
+        for (var i = 0; i < AudioLanes.Count; i++) AudioLanes[i].RowIndex = i;
+        Dirty = true;
+    }
+
+    // Empties the timeline (all gestures + all audio clips; the lanes themselves stay).
+    // Asks first when there are unsaved changes; still one Undo away either way.
+    [RelayCommand]
+    private void ClearTimeline()
+    {
+        if (Steps.Count == 0 && AudioLanes.All(l => l.Clips.Count == 0)) return;
+        if (Dirty)
+        {
+            var res = MessageBox.Show(
+                "The current sequence has unsaved changes — clear the whole timeline anyway?",
+                "Clear timeline", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            if (res != MessageBoxResult.Yes) return;
+        }
+        PushHistory();
+        Steps.Clear();
+        foreach (var lane in AudioLanes) lane.Clips.Clear();
+        SelectedStep = null;
+        Dirty = true;
+        RefreshTimelineExtent();
     }
 
     [RelayCommand]
@@ -391,43 +497,9 @@ public partial class SequencerViewModel : ObservableObject
         PlayheadMs = Math.Max(0, x / PxPerMs);
     }
 
-    // Passive reflection of the firmware's OWN sequence player (`seqRun`/`seqState`) — realistically
-    // never fires `playing:true` anymore since nothing in this app's UI sends `seqRun` (Play is
-    // entirely console-driven now, see the Playback region below), but kept in case something
-    // else ever triggers it (e.g. tools/ota-test.ps1-style direct serial use). Shares the same
-    // playhead/LIVE-badge state (StartPlayheadTicker) as the console-driven path so both sources
-    // drive identical visuals.
-    private void OnSeqState(JsonElement root)
-    {
-        var slot = root.TryGetProperty("slot", out var s) ? s.GetInt32() : -1;
-        if (slot != CurrentSlot) return;
-
-        var playing = root.TryGetProperty("playing", out var p) && p.GetBoolean();
-        var paused = root.TryGetProperty("paused", out var pa) && pa.GetBoolean();
-        var elapsedMs = root.TryGetProperty("elapsedMs", out var e) ? e.GetInt32() : 0;
-
-        if (!playing)
-        {
-            StopPlayheadTimer();
-            IsLiveTracking = false;
-            PlayheadMs = 0;
-            return;
-        }
-
-        if (paused)
-        {
-            StopPlayheadTimer();
-            IsLiveTracking = true;
-            PlayheadMs = elapsedMs;
-            return;
-        }
-
-        StartPlayheadTicker(elapsedMs);
-    }
-
-    // Anchors the playhead ticker at fromElapsedMs and starts advancing it — shared by the
-    // console-driven Play/Resume path below and OnSeqState's hardware reflection above, so
-    // both sources drive the exact same playhead/LIVE-badge/timecode visuals identically.
+    // Anchors the playhead ticker at fromElapsedMs and starts advancing it — used by the
+    // console-driven Play/Resume path below. (The old `seqState` hardware reflection was
+    // removed with the rest of the ESP32 slot machinery, fw 1.7.0.)
     private void StartPlayheadTicker(double fromElapsedMs)
     {
         IsLiveTracking = true;
@@ -465,6 +537,7 @@ public partial class SequencerViewModel : ObservableObject
         ApplyAudioLanesFromDto(snap.AudioLanes);
         Steps.Clear();
         foreach (var s in snap.Steps) Steps.Add(new SequenceStep { AnimId = s.AnimId, Target = s.Target, StartMs = s.StartMs });
+        RebuildTracks(); // step targets may have changed — offline rows must follow
         SelectedStep = null;
         Dirty = true;
         UpdateUndoButtons();
@@ -524,81 +597,26 @@ public partial class SequencerViewModel : ObservableObject
     {
         if (step == null) return;
         PushHistory();
+        var clone = step.Clone();
+        // Nudged right and selected so the new clip is visibly a new arrival instead of
+        // landing invisibly right on top of the original (direct user request).
+        clone.StartMs += 200;
         var idx = Steps.IndexOf(step);
-        Steps.Insert(idx + 1, step.Clone());
+        Steps.Insert(idx + 1, clone);
+        SelectedStep = clone;
         Dirty = true;
     }
 
-    [RelayCommand]
-    private void NewSequence()
-    {
-        CurrentSlot = null;
-        Name = "";
-        Loop = false;
-        ApplyAudioLanesFromDto(null);
-        Steps.Clear();
-        SelectedStep = null;
-        ClearHistory();
-        Dirty = false;
-    }
-
-    // --- Firmware: 8 NVS slots --------------------------------------------------
-
-    [RelayCommand]
-    private void LoadSlot(SequenceSlotMeta? meta)
-    {
-        if (meta == null) return;
-        _protocol.SeqLoad(meta.Slot);
-    }
-
-    private void OnSeqData(JsonElement root)
-    {
-        CurrentSlot = root.TryGetProperty("slot", out var s) ? s.GetInt32() : null;
-        Name = root.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
-        Loop = root.TryGetProperty("loop", out var l) && l.GetBoolean();
-        Steps.Clear();
-        if (root.TryGetProperty("steps", out var steps) && steps.ValueKind == JsonValueKind.Array)
-            foreach (var st in steps.EnumerateArray())
-                Steps.Add(new SequenceStep
-                {
-                    AnimId = st.GetProperty("animId").GetInt32(),
-                    Target = (ushort)st.GetProperty("target").GetInt32(),
-                    StartMs = st.GetProperty("start").GetInt32(),
-                });
-        ApplyAudioLanesFromDto(CurrentSlot.HasValue ? _audioStore.Get(CurrentSlot.Value) : null);
-        SelectedStep = null;
-        ClearHistory();
-        Dirty = false;
-    }
-
-    [RelayCommand]
-    private void SaveToSlot()
-    {
-        var slot = CurrentSlot ?? FindFreeSlot();
-        if (slot < 0) { MessageBox.Show("All 8 slots are occupied.", "Sequencer", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
-        _protocol.SeqSave(slot, Name, Loop, Steps);
-        _audioStore.Set(slot, AudioLanesToDto());
-        CurrentSlot = slot;
-        Dirty = false;
-    }
-
-    private int FindFreeSlot()
-    {
-        var used = Catalog.Select(c => c.Slot).ToHashSet();
-        for (var i = 0; i < _protocol.SeqSlotMax; i++) if (!used.Contains(i)) return i;
-        return -1;
-    }
-
-    [RelayCommand]
-    private void DeleteSlot(SequenceSlotMeta? meta)
-    {
-        if (meta == null) return;
-        _protocol.SeqDelete(meta.Slot);
-        _audioStore.Delete(meta.Slot);
-        if (CurrentSlot == meta.Slot) NewSequence();
-    }
+    // (The whole "Firmware: 8 NVS slots" region — LoadSlot/SaveToSlot/DeleteSlot/PushToMaster/
+    // PullFromMaster and the slot-audio store — was removed 2026-07-16: sequences are
+    // console-only now, and fw 1.7.0 dropped the slot machinery too.)
 
     // --- Local library ------------------------------------------------------
+
+    // The current droid rows (broadcast excluded), saved with the sequence so its layout
+    // survives a load with the fleet unplugged — see RebuildTracks' offline rows.
+    private List<SequenceTrackDto> CurrentTrackDtos() =>
+        Tracks.Where(t => !t.IsBroadcast).Select(t => new SequenceTrackDto { Id = t.Id, Name = t.Label }).ToList();
 
     [RelayCommand]
     private void SaveToLibrary()
@@ -607,6 +625,7 @@ public partial class SequencerViewModel : ObservableObject
         var item = new SequenceLibraryItem
         {
             Id = id, Name = Name, Loop = Loop,
+            Tracks = CurrentTrackDtos(),
             AudioLanes = AudioLanesToDto(),
             Steps = Steps.Select(s => new SequenceStepDto { AnimId = s.AnimId, Target = s.Target, StartMs = s.StartMs }).ToList(),
             SavedAt = DateTime.UtcNow,
@@ -619,12 +638,14 @@ public partial class SequencerViewModel : ObservableObject
     private void LoadFromLibrary(SequenceLibraryItem? item)
     {
         if (item == null) return;
-        CurrentSlot = null;
         Name = item.Name;
         Loop = item.Loop;
+        _fileTracks.Clear();
+        _fileTracks.AddRange(item.Tracks);
         ApplyAudioLanesFromDto(item.AudioLanes);
         Steps.Clear();
         foreach (var s in item.Steps) Steps.Add(new SequenceStep { AnimId = s.AnimId, Target = s.Target, StartMs = s.StartMs });
+        RebuildTracks();
         SelectedStep = null;
         ClearHistory();
         Dirty = false;
@@ -638,31 +659,6 @@ public partial class SequencerViewModel : ObservableObject
         RefreshLibrary();
     }
 
-    [RelayCommand]
-    private void PushToMaster(SequenceLibraryItem? item)
-    {
-        if (item == null) return;
-        var slot = Catalog.FirstOrDefault(c => c.Name == item.Name)?.Slot ?? FindFreeSlot();
-        if (slot < 0) { MessageBox.Show("All 8 slots are occupied.", "Sequencer", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
-        var steps = item.Steps.Select(s => new SequenceStep { AnimId = s.AnimId, Target = s.Target, StartMs = s.StartMs });
-        _protocol.SeqSave(slot, item.Name, item.Loop, steps);
-        _audioStore.Set(slot, item.AudioLanes);
-    }
-
-    [RelayCommand]
-    private void PullFromMaster(SequenceSlotMeta? meta)
-    {
-        if (meta == null) return;
-        // Loads the slot into the editor (OnSeqData), then immediately saves it to the library.
-        void Once(JsonElement root)
-        {
-            _protocol.SeqDataReceived -= Once;
-            SaveToLibrary();
-        }
-        _protocol.SeqDataReceived += Once;
-        _protocol.SeqLoad(meta.Slot);
-    }
-
     // --- Export / import ----------------------------------------------------------
 
     [RelayCommand]
@@ -672,7 +668,11 @@ public partial class SequencerViewModel : ObservableObject
         if (dlg.ShowDialog() != true) return;
         var obj = new JsonObject
         {
-            ["type"] = "b1-sequence", ["version"] = 3, ["name"] = Name, ["loop"] = Loop,
+            ["type"] = "b1-sequence", ["version"] = 4, ["name"] = Name, ["loop"] = Loop,
+            // Droid roster (id + name, row order): re-imported on a console with the fleet
+            // unplugged, every step still gets its own named row instead of one flat line.
+            ["tracks"] = new JsonArray(Tracks.Where(t => !t.IsBroadcast)
+                .Select(t => (JsonNode)new JsonObject { ["id"] = t.Id, ["name"] = t.Label }).ToArray()),
             // Local-machine paths only (no audio bytes travel with the export) — a reasonable
             // best-effort round-trip on the same console install, per CLAUDE.md's console-side
             // audio decision; harmless dangling reference if imported elsewhere.
@@ -698,9 +698,17 @@ public partial class SequencerViewModel : ObservableObject
         {
             var obj = JsonNode.Parse(File.ReadAllText(dlg.FileName)) as JsonObject;
             if (obj == null) return;
-            CurrentSlot = null;
             Name = obj["name"]?.GetValue<string>() ?? "";
             Loop = obj["loop"]?.GetValue<bool>() ?? false;
+            _fileTracks.Clear();
+            if (obj["tracks"] is JsonArray trackArr)
+                foreach (var tn in trackArr)
+                    if (tn is JsonObject to)
+                        _fileTracks.Add(new SequenceTrackDto
+                        {
+                            Id = to["id"]?.GetValue<ushort>() ?? 0xFFFF,
+                            Name = to["name"]?.GetValue<string>() ?? "",
+                        });
             List<AudioLaneDto>? lanes = null;
             if (obj["audioLanes"] is JsonArray laneArr)
             {
@@ -736,6 +744,7 @@ public partial class SequencerViewModel : ObservableObject
                             Target = so["target"]?.GetValue<ushort>() ?? 0xFFFF,
                             StartMs = so["startMs"]?.GetValue<int>() ?? so["delayMs"]?.GetValue<int>() ?? 0,
                         });
+            RebuildTracks();
             SelectedStep = null;
             ClearHistory();
             Dirty = false;
@@ -756,10 +765,21 @@ public partial class SequencerViewModel : ObservableObject
     // save required, like Rehearse did) and drives the exact same real commands + audio, with
     // genuine pause/resume on top.
 
+    // Play doubles as Resume (the dedicated ⏵ button was removed on request): pressed while
+    // paused it picks up exactly where Pause left off; otherwise it (re)starts from t=0.
     [RelayCommand]
     private void Play()
     {
+        if (IsPaused)
+        {
+            _audioPlayer.ResumeAll(); // continues from each clip's retained position, no seek math
+            ScheduleTimers(_elapsedAtPauseMs);
+            StartPlayheadTicker(_elapsedAtPauseMs);
+            IsPaused = false;
+            return;
+        }
         if (Steps.Count == 0 && AudioLanes.All(l => l.Clips.Count == 0)) return;
+        _audioPlayer.StopAll(); // Play pressed mid-playback restarts clean, no overlapped audio
         IsPlaying = true;
         IsPaused = false;
         _elapsedAtPauseMs = 0;
@@ -793,23 +813,13 @@ public partial class SequencerViewModel : ObservableObject
         IsLiveTracking = false;
     }
 
-    [RelayCommand(CanExecute = nameof(CanResume))]
-    private void Resume()
-    {
-        if (!CanResume()) return;
-        _audioPlayer.ResumeAll(); // continues from each clip's retained position, no seek math
-        ScheduleTimers(_elapsedAtPauseMs);
-        StartPlayheadTicker(_elapsedAtPauseMs);
-        IsPaused = false;
-    }
-
     private bool CanPause() => IsPlaying && !IsPaused;
-    private bool CanResume() => IsPlaying && IsPaused;
 
     // Absolute-time model (FIRMWARE-CONTRACT.md §6): one one-shot timer per step and per audio
     // clip, armed at its own StartMs relative to fromMs — steps/clips sharing a StartMs fire
     // together, matching what the firmware's own player does. Only items whose StartMs >=
-    // fromMs are armed, so Resume() (fromMs = elapsed at the moment of pause) never replays
+    // fromMs are armed, so resuming (Play while paused — fromMs = elapsed at the moment of
+    // pause) never replays
     // anything that already fired before the pause. Muted droids' steps are simply skipped (see
     // ToggleMute) — unconditional now, since Play is the only playback path there is.
     private void ScheduleTimers(int fromMs)

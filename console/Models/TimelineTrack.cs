@@ -12,9 +12,10 @@ namespace b1_chat_console.Models;
 public partial class TimelineTrack : ObservableObject
 {
     // Single source of truth for row geometry — shared by TimelineGeometryConverter (clip
-    // Top) and the view (track-gutter row heights, total canvas height).
-    public const double RowHeight = 48;
-    public const double RowGap = 4;
+    // Top) and the view (track-gutter row heights, total canvas height). Rows are contiguous
+    // (mockup-matched rail: full-width 52px rows divided by bottom separators, no gap).
+    public const double RowHeight = 52;
+    public const double RowGap = 0;
 
     public ushort Id { get; init; }
     public string Label { get; init; } = "";

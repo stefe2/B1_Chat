@@ -7,7 +7,6 @@
 #include "registry.h"
 #include "config_store.h"
 #include "serial_console.h"
-#include "sequence_store.h"
 #include "ota_guard.h"
 #include "ota_master.h"
 #include "ota_slave.h"
@@ -54,23 +53,8 @@ static uint32_t nextPresenceScan = 0;
 static uint32_t nextDroidsPush = 0;
 static uint32_t nextNeighborReport = 0;
 
-// Stored sequence player (master): autonomous playback without a PC.
-#if IS_MASTER
-static StoredSequence gSeq;
-static bool gSeqPlaying = false;
-// Index into gSeq.steps (sorted by startMs at seqRun time) of the next step
-// not yet fired. Several steps can fire on the same loop() pass if their
-// startMs coincide — that's the whole point of the absolute-time model
-// (parallel tracks), unlike the old chained one-at-a-time player.
-static uint8_t gSeqNextFireIdx = 0;
-// Anchor: millis() value corresponding to the sequence's own t=0. Elapsed
-// time is always `now - gSeqStartMs` (see seqElapsedMs()); pausing shifts
-// this anchor forward instead of freezing a per-step countdown.
-static uint32_t gSeqStartMs = 0;
-static uint8_t gSeqSlot = 0;
-static bool gSeqPaused = false;
-static uint32_t gSeqPauseStartedAt = 0;
-#endif
+// (The master's stored-sequence player and its 8 NVS slots were retired in
+// fw 1.7.0 — sequences are entirely console-driven now, see CLAUDE.md.)
 
 // Offline tracking (master): remembers the online state to report losses.
 static const uint32_t DROID_TIMEOUT_MS = 4000;
@@ -153,89 +137,6 @@ static void onLocateCmd(uint16_t target, bool en) {
     LocatePayload p{target, (uint8_t)(en ? 1 : 0)};
     Mesh.send(MSG_LOCATE, &p, sizeof(p));
     if (target == MESH_TARGET_ALL || target == Mesh.myId()) applyLocate(en);
-}
-
-static bool onSeqSave(uint8_t slot, const StoredSequence& seq) {
-    return Sequences.save(slot, seq);
-}
-
-static uint8_t onSeqList(StoredSequenceMeta* out, uint8_t maxOut) {
-    return Sequences.list(out, maxOut);
-}
-
-static bool onSeqLoad(uint8_t slot, StoredSequence& out) {
-    return Sequences.load(slot, out);
-}
-
-static bool onSeqDelete(uint8_t slot) {
-    return Sequences.remove(slot);
-}
-
-// Small N (<=32), plain array: an insertion sort is simpler and just as
-// fast here as pulling in <algorithm> for std::sort.
-static void sortStepsByStart(StoredSequence& seq) {
-    for (uint8_t i = 1; i < seq.stepCount; i++) {
-        const SeqStep key = seq.steps[i];
-        int8_t j = i - 1;
-        while (j >= 0 && seq.steps[j].startMs > key.startMs) {
-            seq.steps[j + 1] = seq.steps[j];
-            j--;
-        }
-        seq.steps[j + 1] = key;
-    }
-}
-
-// Elapsed time since the running sequence's own t=0 — frozen at the instant
-// pause began (gSeqPauseStartedAt) rather than growing with millis() while
-// paused; onSeqPauseCmd's resume path shifts gSeqStartMs to match.
-static uint32_t seqElapsedMs() {
-    if (!gSeqPlaying) return 0;
-    const uint32_t at = gSeqPaused ? gSeqPauseStartedAt : millis();
-    return at > gSeqStartMs ? at - gSeqStartMs : 0;
-}
-
-static void onSeqRun(uint8_t slot, uint16_t fromMs) {
-    if (!Sequences.load(slot, gSeq) || gSeq.stepCount == 0) {
-        gSeqPlaying = false;
-        Console.pushErr("sequence slot=%u not found/empty", slot);
-        Console.pushSeqState(false, slot, 0, 0);
-        return;
-    }
-    sortStepsByStart(gSeq);
-    gSeqSlot = slot;
-    gSeqPlaying = true;
-    gSeqPaused = false;
-    gSeqStartMs = millis() - fromMs;   // fromMs > now only near boot; harmless (clamped by seqElapsedMs)
-    gSeqNextFireIdx = 0;
-    while (gSeqNextFireIdx < gSeq.stepCount && gSeq.steps[gSeqNextFireIdx].startMs < fromMs) gSeqNextFireIdx++;
-    Console.pushSeqState(true, gSeqSlot, fromMs, gSeq.totalMs);
-}
-
-static void onSeqStop() {
-    const uint32_t elapsed = seqElapsedMs();
-    gSeqPlaying = false;
-    gSeqPaused = false;
-    Console.pushSeqState(false, gSeqSlot, elapsed, gSeq.totalMs);
-}
-
-// Pause/resume: shifts the t=0 anchor forward by however long the pause
-// lasted, instead of freezing a per-step countdown (see seqElapsedMs()).
-static void onSeqPauseCmd(bool paused) {
-    if (!gSeqPlaying || paused == gSeqPaused) return;
-    if (paused) {
-        gSeqPauseStartedAt = millis();
-        gSeqPaused = true;
-    } else {
-        gSeqStartMs += millis() - gSeqPauseStartedAt;
-        gSeqPaused = false;
-    }
-    Console.pushSeqState(true, gSeqSlot, seqElapsedMs(), gSeq.totalMs, gSeqPaused);
-}
-
-// Answers a one-off state request (e.g. a dashboard connecting mid-playback,
-// without waiting for the next step transition).
-static void onSeqQueryCmd() {
-    Console.pushSeqState(gSeqPlaying, gSeqSlot, seqElapsedMs(), gSeq.totalMs, gSeqPaused);
 }
 
 // Console hook: calibration received (already filtered on target == this droid).
@@ -434,9 +335,6 @@ void setup() {
     sscanf(FW_VERSION, "%hhu.%hhu.%hhu", &gFwMajor, &gFwMinor, &gFwPatch);
 
     Config.begin();
-#if IS_MASTER
-    Sequences.begin();
-#endif
 
     head.begin();
     head.setIdleNoise(true);
@@ -459,14 +357,6 @@ void setup() {
     Console.onServo(onServoCmd);
     Console.onAutoAnim(onAutoAnimCmd);
     Console.onLocate(onLocateCmd);
-    Console.onSeqSave(onSeqSave);
-    Console.onSeqList(onSeqList);
-    Console.onSeqLoad(onSeqLoad);
-    Console.onSeqRun(onSeqRun);
-    Console.onSeqStop(onSeqStop);
-    Console.onSeqPause(onSeqPauseCmd);
-    Console.onSeqDelete(onSeqDelete);
-    Console.onSeqQuery(onSeqQueryCmd);
     Console.onCalib(onCalibCmd);
     Console.onPreview(onPreviewCmd);
     Console.onOtaStart(onOtaStartCmd);
@@ -539,45 +429,6 @@ void loop() {
     }
 
 #if IS_MASTER
-    // In-progress stored sequence (takes priority over the master's random
-    // idle draw). Absolute-time model: every step whose startMs has come due
-    // fires this pass — possibly several at once, e.g. two droids starting
-    // together — instead of advancing one chained step at a time. Trade-off
-    // accepted along with this: unlike the old chained player, nothing here
-    // still waits for the master's own gesture to finish before the next
-    // event fires (a later local step just interrupts it, same as any live
-    // MSG_ANIM) — remote slaves already worked this way (no mesh ack to know
-    // when a gesture ends), this just makes the master consistent with them.
-    if (gSeqPlaying && !gSeqPaused && gServos) {
-        const uint32_t elapsed = seqElapsedMs();
-        bool fired = false;
-
-        while (gSeqNextFireIdx < gSeq.stepCount && elapsed >= gSeq.steps[gSeqNextFireIdx].startMs) {
-            const SeqStep& st = gSeq.steps[gSeqNextFireIdx];
-            const uint32_t seed = (uint32_t)esp_random();
-            AnimPayload p{st.targetId, st.animId, 0, seed};
-            Mesh.send(MSG_ANIM, &p, sizeof(p));
-            if (st.targetId == MESH_TARGET_ALL || st.targetId == Mesh.myId()) {
-                anim.play(st.animId, seed);
-            }
-            gSeqNextFireIdx++;
-            fired = true;
-        }
-
-        if (elapsed >= gSeq.totalMs) {
-            if (gSeq.loop) {
-                gSeqStartMs = now;
-                gSeqNextFireIdx = 0;
-                Console.pushSeqState(true, gSeqSlot, 0, gSeq.totalMs);
-            } else {
-                gSeqPlaying = false;
-                Console.pushSeqState(false, gSeqSlot, gSeq.totalMs, gSeq.totalMs);
-            }
-        } else if (fired) {
-            Console.pushSeqState(true, gSeqSlot, elapsed, gSeq.totalMs);
-        }
-    }
-
     // Presence monitoring: reports a B1 going offline.
     if (now > nextPresenceScan) {
         nextPresenceScan = now + 1000;
@@ -600,7 +451,7 @@ void loop() {
     }
 
     // The master picks a random anim, plays it, and broadcasts it to the group.
-    if (!gSeqPlaying && gServos && gAutoAnim && !anim.isPlaying() && now > nextMeshSend) {
+    if (gServos && gAutoAnim && !anim.isPlaying() && now > nextMeshSend) {
         nextMeshSend = now + (uint32_t)random(2500, 5000);
         const uint32_t seed = (uint32_t)esp_random();
         const uint8_t animId = AnimationPlayer::randomAnimId(seed);

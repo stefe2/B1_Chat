@@ -17,6 +17,9 @@ namespace b1_chat_console.Converters;
 ///   "Top"   — {target (ushort), tracks (ObservableCollection&lt;TimelineTrack&gt;)} -> double.
 ///             Falls back to row 0 (the broadcast row) if the target isn't a currently-known
 ///             track (e.g. a droid that went offline since the sequence was authored).
+///   "ClipTop" — same inputs as "Top", plus a vertical inset (ClipInsetY) so a clip floats
+///             centered inside its contiguous 52px row (mockup's .clip top:5/bottom:5) while
+///             the row background itself still starts at the raw row top.
 ///   "Duration" — {durationMs (int), pxPerMs (double)} -> double. Same math as "Left" (a
 ///             duration is just "a span of ms" at bind time) — used for the audio bar's width.
 /// </summary>
@@ -24,6 +27,8 @@ public class TimelineGeometryConverter : IMultiValueConverter
 {
     private const int DefaultDurationMs = 800;
     private const double MinWidth = 18;
+    // Vertical breathing room of a clip inside its row (row height 52 - 2×5 = 42px clip).
+    public const double ClipInsetY = 5;
 
     public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
     {
@@ -32,6 +37,7 @@ public class TimelineGeometryConverter : IMultiValueConverter
             "Left" => ConvertLeft(values),
             "Width" => ConvertWidth(values),
             "Top" => ConvertTop(values),
+            "ClipTop" => ConvertTop(values) + ClipInsetY,
             "Duration" => ConvertLeft(values),
             _ => 0.0,
         };

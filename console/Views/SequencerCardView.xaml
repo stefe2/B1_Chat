@@ -22,45 +22,14 @@
                 </Border>
             </DockPanel>
 
-            <TextBlock Text="CATALOG (8 ESP32 SLOTS)" Style="{StaticResource SectionSubtitleStyle}" />
-            <ItemsControl ItemsSource="{Binding Catalog}" Margin="0,0,0,10">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <Border BorderBrush="{StaticResource BorderLoBrush}" BorderThickness="0,0,0,1" Padding="0,4">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="60" />
-                                    <ColumnDefinition Width="60" />
-                                    <ColumnDefinition Width="70" />
-                                    <ColumnDefinition Width="70" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center" />
-                                <TextBlock Grid.Column="1" Text="{Binding StepCount, StringFormat='{}{0} steps'}" FontSize="10" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" />
-                                <TextBlock Grid.Column="2" Text="{Binding Loop, StringFormat='loop:{0}'}" FontSize="10" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" />
-                                <Button Grid.Column="3" Content="Load" Style="{StaticResource MiniButtonStyle}"
-                                        Command="{Binding DataContext.LoadSlotCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}" Margin="0,0,4,0" />
-                                <Button Grid.Column="4" Content="Del." Style="{StaticResource MiniButtonStyle}"
-                                        Command="{Binding DataContext.DeleteSlotCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}" />
-                            </Grid>
-                        </Border>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+            <!-- The ESP32 slot catalog UI was removed on request (2026-07-16) — the master's 8
+                 NVS slots still exist firmware-side and are still reachable through the Local
+                 Library's "→ ESP32" push; the VM's Catalog/LoadSlot/DeleteSlot plumbing stays. -->
 
-            <Separator Margin="0,0,0,8" />
-
-            <!-- Loop moved into SequenceTimelineView's transport bar (⟲ Loop toggle, mockup-matched). -->
-            <TextBox Style="{StaticResource RecessedTextBoxStyle}" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,6" />
-
-            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                <Button Content="New" Style="{StaticResource MiniButtonStyle}" Command="{Binding NewSequenceCommand}" Margin="0,0,4,0" />
-                <Button Content="Save (ESP32)" Style="{StaticResource MiniButtonStyle}" Command="{Binding SaveToSlotCommand}" Margin="0,0,4,0" />
-                <Button Content="→ Library" Style="{StaticResource MiniButtonStyle}" Command="{Binding SaveToLibraryCommand}" />
-            </StackPanel>
-
-            <!-- Play/Stop/Pause/Resume/Loop/Undo/Redo/Rehearse/Export/Import/zoom/snap all live
-                 in SequenceTimelineView's own unified transport bar now (mockup-matched). -->
+            <!-- Name field + New/"→ Library" buttons removed on request (2026-07-16) — Clear
+                 (transport bar) empties the editor, and sequence names now only come from a
+                 loaded/imported file. Play/Stop/Pause/Resume/Loop/Undo/Redo/Export/Import/
+                 Clear/zoom/snap all live in SequenceTimelineView's own transport bar. -->
             <views:SequenceTimelineView Margin="0,0,0,10" />
 
             <Separator Margin="0,0,0,8" />
@@ -69,19 +38,18 @@
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
                         <Border BorderBrush="{StaticResource BorderLoBrush}" BorderThickness="0,0,0,1" Padding="0,4">
+                            <!-- "→ ESP32" removed with the rest of the slot machinery (fw 1.7.0):
+                                 the console no longer writes the master's sequence slots at all. -->
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="70" />
                                     <ColumnDefinition Width="70" />
                                     <ColumnDefinition Width="70" />
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center" />
                                 <Button Grid.Column="1" Content="Load" Style="{StaticResource MiniButtonStyle}"
                                         Command="{Binding DataContext.LoadFromLibraryCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}" Margin="0,0,4,0" />
-                                <Button Grid.Column="2" Content="→ ESP32" Style="{StaticResource MiniButtonStyle}"
-                                        Command="{Binding DataContext.PushToMasterCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}" Margin="0,0,4,0" />
-                                <Button Grid.Column="3" Content="Del." Style="{StaticResource MiniButtonStyle}"
+                                <Button Grid.Column="2" Content="Del." Style="{StaticResource MiniButtonStyle}"
                                         Command="{Binding DataContext.DeleteFromLibraryCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}" />
                             </Grid>
                         </Border>
