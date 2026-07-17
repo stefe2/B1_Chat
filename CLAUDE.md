@@ -153,7 +153,7 @@ Session guarded by a handshake: `hello` → `{evt:"hello",ok,id}`, then keepaliv
   `anim {target,animId,seed}` · `preview {target,pan,tilt}` ·
   `calib {target,+6 limits}` · `getCalib {target}` · `getAnimDurations` ·
   `getMeshTopology` ·
-  `setMulti {ops:[...]}` · `commit` · `revert` ·
+  `setMulti {ops:[...]}` · `commit` ·
   `otaStart {target,size,md5}` · `otaChunk {seq,data}` (data = base64) · `otaAbort {}`
 - **Master → console** (`evt`): `hello {ok,id,fw,proto,lineMax,anims,caps[],dirty}` ·
   `droids {list:[{id,name,rssi,age,role,servos,autoAnim,adopted,fw}]}` ·
@@ -182,12 +182,15 @@ entirely console-driven: the console fires per-step `anim` commands from its
 own timers and stores sequences locally (Local Library + `.b1seq.json`
 export, both carrying the droid roster for offline layout).
 
-**Commit/revert** (anim params, names — not calibration or
-sequences): setters are "live" (RAM overlay), NVS is only written on
-`commit`; `revert` reloads the persisted state. The console must send `commit`
-after a restore `setMulti`. [FIRMWARE-CONTRACT.md](FIRMWARE-CONTRACT.md)
-tracks the implementation status (§3/§4/§5 done; §1/§2 removed fw 1.6.0 —
-audio track, retired with the DFPlayer).
+**Commit** (anim params, names — not calibration or sequences): setters are
+"live" (RAM overlay), NVS is only written on `commit`. The console auto-commits
+2s after the last change (debounced, see `ProtocolClient.ScheduleAutoCommit`)
+instead of offering a manual save — the header only shows a passive "unsaved"
+badge now. The console must also send `commit` after a restore `setMulti`. The
+manual `{cmd:"revert"}` (discard the RAM overlay, reload the persisted state)
+was removed in fw 1.8.0/proto 5 — nothing needed it once auto-commit landed.
+[FIRMWARE-CONTRACT.md](FIRMWARE-CONTRACT.md) tracks the implementation status
+(§3/§4/§5 done; §1/§2 removed fw 1.6.0 — audio track, retired with the DFPlayer).
 
 **Droid adoption** (`registry`/`config_store`): a droid never seen before
 (`adopted:false` in `evt:droids`) stays in the mesh (broadcast anims received
@@ -282,7 +285,7 @@ loaded by the application.
 
 | Folder/file | Role |
 | --- | --- |
-| `MainWindow.xaml(.cs)` | header (logo, connection status, commit/revert, "Firmware…" button) + card grid |
+| `MainWindow.xaml(.cs)` | header (logo, connection status, "unsaved" auto-commit badge, "Firmware…" button) + card grid |
 | `FirmwareWindow.xaml(.cs)` | separate window hosting `Views/FirmwareCardView` (espflash flashing + GitHub update), opened from the header button |
 | `App.xaml(.cs)` | composition root: converters + merged resource dictionaries |
 | `Themes/Theme.xaml` | palette (brushes), button/LED/mesh-node gradients — ported from index.html's CSS custom properties |
@@ -1136,6 +1139,45 @@ width at the bottom. Firmware card taken out of the grid (separate window).
       time + row/lane together. Verified: build clean (0 warnings),
       screenshot (⏵ gone, neutral vs orange row tints, brighter second
       markers); the drag feel itself still needs the user's hands-on pass.
+- [x] Header: manual Save/Revert replaced by a debounced auto-commit (2026-07-17,
+      fw 1.8.0/proto 5), plus a firmware+console dead-code sweep in the same
+      pass. The header's "unsaved" badge (`MainWindow.xaml`) now shows on its
+      own — the Save/Revert buttons and `MainViewModel.CommitChangesCommand`/
+      `RevertChangesCommand` are gone. `ProtocolClient.SetName`/`SetConfig`
+      (the only two setters that dirty the master's draft) now arm a 2s
+      `System.Threading.Timer` (`ScheduleAutoCommit`, same dispatcher-remarshal
+      pattern as the existing keepalive timer), re-armed on every call so it
+      only fires once, 2s after the *last* edit, and only commits if `Dirty &&
+      HasCap("commit")` — avoids writing to the master's NVS on every
+      keystroke/slider tick. Since nothing sends `cmd:"revert"` anymore, it was
+      removed end-to-end rather than left dormant: `ConfigStore::revertPending()`
+      + the `serial_console.cpp` handler deleted, `FW_PROTO` 4→5, `FW_VERSION`
+      1.8.0. **Dead-code sweep** (two `Explore` agents audited `src/` and
+      `console/` independently, findings reviewed before deleting): firmware —
+      `ServoEngine::isEnabled/pan/tilt`, `AnimationPlayer::current()`,
+      `SerialConsole::isClientReady()` (zero callers), `MESH_DEDUP_CACHE`/
+      `IDLE_ANIM_MIN_MS`/`IDLE_ANIM_MAX_MS` (config.h constants nobody read —
+      the real values are hardcoded literals elsewhere, and no longer even
+      matched what these claimed), two stale "volume" comments (DFPlayer-era
+      leftovers). Console — `SequencerViewModel.SaveToLibrary()`/
+      `CurrentTrackDtos()` (button removed earlier, method forgotten),
+      `ProtocolClient.SeqSlotMax`/`AnimCount` (write-only) and
+      `AllDoneReceived` (event with no subscriber), `Effects.xaml`'s
+      `MeshRadarRingStyle` (superseded by a locally-scoped style, never
+      referenced), `Theme.xaml`'s `OkDimBrush`/`WarnDimBrush`/`SansFont`
+      (unused), two unused `App.xaml.cs` usings, five stale comments
+      referencing removed concepts (DFPlayer, the old slot catalog, the old
+      "Rehearse (local)" vs hardware-Play split that Play/Rehearse-unification
+      already erased). `Models/SequenceSlotMeta.cs` renamed to
+      `SequenceLibraryModels.cs` (the class it was named for no longer exists
+      in the file). Deliberately left alone: `UpdateInfo.Notes` (GitHub release
+      body, captured but not yet shown in any UI) — not dead, parked for a
+      future "what's new" block in `FirmwareCardView`, now documented inline
+      as such; `DroidsViewModel.AnyOtaActive` (has a real internal reader, just
+      no XAML binding); `droid.{h,cpp}` and the anim freq/amp/speed
+      params/`onConfig` hook (both already documented above as deliberately
+      incomplete, not dead). Verified: `pio run -e b1` and `dotnet build` both
+      clean throughout.
 
 ## Full flash (virgin board support)
 
@@ -1225,10 +1267,10 @@ or an intentional full erase can wipe.
 Fix (2026-07-15): renaming a droid (`cmd:"name"` and the `setMulti`/restore
 path in `applyOp`) now ALSO relays `MSG_NAME` (targetId + name[24]) over the
 mesh; the targeted droid persists it immediately in its own NVS via the new
-`ConfigStore::setNameImmediate()` — bypassing the master's own commit/revert
+`ConfigStore::setNameImmediate()` — bypassing the master's own commit
 draft entirely (that draft is a master-side UI concern for its own display
 cache, unrelated to what a remote droid should keep). The master's own
-name-editing UX (the "unsaved / Save / Revert" header badge) is unchanged;
+name-editing UX (the header's "unsaved" auto-commit badge) is unchanged;
 only the mesh-received copy on the OTHER droid is immediate, mirroring how
 `applyCalib` already behaves. Additive mesh message — an older slave simply
 ignores `MSG_NAME`, no fleet-wide reflash required (unlike a `HeartbeatPayload`

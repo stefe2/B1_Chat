@@ -613,27 +613,6 @@ public partial class SequencerViewModel : ObservableObject
 
     // --- Local library ------------------------------------------------------
 
-    // The current droid rows (broadcast excluded), saved with the sequence so its layout
-    // survives a load with the fleet unplugged — see RebuildTracks' offline rows.
-    private List<SequenceTrackDto> CurrentTrackDtos() =>
-        Tracks.Where(t => !t.IsBroadcast).Select(t => new SequenceTrackDto { Id = t.Id, Name = t.Label }).ToList();
-
-    [RelayCommand]
-    private void SaveToLibrary()
-    {
-        var id = Guid.NewGuid().ToString("N");
-        var item = new SequenceLibraryItem
-        {
-            Id = id, Name = Name, Loop = Loop,
-            Tracks = CurrentTrackDtos(),
-            AudioLanes = AudioLanesToDto(),
-            Steps = Steps.Select(s => new SequenceStepDto { AnimId = s.AnimId, Target = s.Target, StartMs = s.StartMs }).ToList(),
-            SavedAt = DateTime.UtcNow,
-        };
-        _library.Save(id, item);
-        RefreshLibrary();
-    }
-
     [RelayCommand]
     private void LoadFromLibrary(SequenceLibraryItem? item)
     {

@@ -22,14 +22,11 @@
     <SolidColorBrush x:Key="AccentDimBrush" Color="#29FF9D2E" />
 
     <SolidColorBrush x:Key="OkBrush" Color="#3DDC84" />
-    <SolidColorBrush x:Key="OkDimBrush" Color="#293DDC84" />
     <SolidColorBrush x:Key="WarnBrush" Color="#FFCC4D" />
-    <SolidColorBrush x:Key="WarnDimBrush" Color="#29FFCC4D" />
     <SolidColorBrush x:Key="BadBrush" Color="#FF5B52" />
     <SolidColorBrush x:Key="BadDimBrush" Color="#29FF5B52" />
 
     <FontFamily x:Key="MonoFont">Consolas</FontFamily>
-    <FontFamily x:Key="SansFont">Segoe UI</FontFamily>
 
     <LinearGradientBrush x:Key="PageBackgroundBrush" StartPoint="0,0" EndPoint="1,1">
         <GradientStop Color="#43464C" Offset="0" />

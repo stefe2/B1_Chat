@@ -6,15 +6,16 @@
 //  Stores animation parameters and names assigned to droids (srcId -> name
 //  mapping). Survives reboots.
 //
-//  Commit/revert model (inspired by KyberEditor) for anim params / names:
-//  setters write to a RAM overlay ("pending", the effect is
-//  immediate via the getters) and NVS is only touched on commitPending();
-//  revertPending() discards the overlay and reverts to the persisted
-//  values. Servo calibration (setCalib) stays IMMEDIATELY persisted: it's
+//  Commit model (inspired by KyberEditor) for anim params / names: setters
+//  write to a RAM overlay ("pending", the effect is immediate via the
+//  getters) and NVS is only touched on commitPending() — the console
+//  triggers this itself ~2s after the last change (see ProtocolClient's
+//  auto-commit debounce; there's no manual "revert" anymore, fw 1.8.0).
+//  Servo calibration (setCalib) stays IMMEDIATELY persisted: it's
 //  a physical adjustment made live on the targeted droid. setNameImmediate()
 //  is the same kind of exception, used when a droid persists its OWN name
 //  upon receiving MSG_NAME (mesh-pushed) — bypassing the master's own
-//  commit/revert draft entirely, since that draft is a master-side UI
+//  commit draft entirely, since that draft is a master-side UI
 //  concern that doesn't apply to a remote droid's local copy.
 // ============================================================================
 
@@ -64,10 +65,9 @@ public:
     bool isAdopted(uint16_t id);
     void setAdopted(uint16_t id, bool adopted);
 
-    // Commit/revert model (volume, anim params, names).
+    // Commit model (anim params, names).
     bool dirty() const { return _dirty; }
     void commitPending();   // writes the RAM overlay to NVS then clears it
-    void revertPending();   // discards the RAM overlay (NVS is authoritative)
 
 private:
     Preferences _p;

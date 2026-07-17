@@ -24,7 +24,7 @@ public partial class TimelineTrack : ObservableObject
     public bool IsBroadcast { get; init; }
     public int RowIndex { get; init; }
 
-    // Rehearse (local) only — a live hardware Play cannot honor this, see CLAUDE.md.
+    // Applies to Play (the only playback path there is — see SequencerViewModel.ScheduleTimers).
     [ObservableProperty] private bool _muted;
 
     // DarkComboBoxStyle's ControlTemplate renders the selected item via SelectionBoxItem,

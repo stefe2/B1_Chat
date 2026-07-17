@@ -4,6 +4,8 @@ public class AppUpdateInfo
 {
     public string? Latest { get; set; }
     public string? Url { get; set; }
+    // GitHub release body (changelog). Captured but not yet shown anywhere in the UI —
+    // parked for a future "what's new" block in FirmwareCardView, not dead code.
     public string? Notes { get; set; }
 }
 

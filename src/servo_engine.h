@@ -43,10 +43,6 @@ public:
     // Physically enables/disables the PWM outputs (servo protection).
     // Disabled: the pins are detached (no signal -> servos free to move).
     void setEnabled(bool en);
-    bool isEnabled() const { return _enabled; }
-
-    float pan() const { return _curPan; }
-    float tilt() const { return _curTilt; }
 
 private:
     bool _enabled = true;

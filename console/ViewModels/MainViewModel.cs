@@ -109,10 +109,4 @@ public partial class MainViewModel : ObservableObject
 
     [RelayCommand]
     private void Disconnect() => _link.Close();
-
-    [RelayCommand]
-    private void CommitChanges() => Protocol.Commit();
-
-    [RelayCommand]
-    private void RevertChanges() => Protocol.Revert();
 }

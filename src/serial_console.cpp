@@ -571,17 +571,9 @@ void SerialConsole::handleLine(const char* line) {
         syncDirty();
 
     } else if (!strcmp(cmd, "commit")) {
-        // Commits the RAM overlay (volume/params/names) to NVS.
+        // Commits the RAM overlay (params/names) to NVS.
         Config.commitPending();
         log("configuration committed (NVS)");
-        syncDirty();
-
-    } else if (!strcmp(cmd, "revert")) {
-        // Discards uncommitted changes and re-applies the persisted state.
-        Config.revertPending();
-        log("changes reverted");
-        pushState();
-        pushDroids();
         syncDirty();
 
     } else if (cmd[0] == '\0') {

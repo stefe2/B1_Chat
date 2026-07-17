@@ -114,14 +114,6 @@ void ConfigStore::commitPending() {
     refreshDirty();
 }
 
-void ConfigStore::revertPending() {
-    _pendAnimSet = false;
-    for (uint8_t i = 0; i < PENDING_NAMES_MAX; i++) {
-        _pendNames[i] = {false, 0, String()};
-    }
-    refreshDirty();
-}
-
 void ConfigStore::calibKey(uint16_t id, char out[8]) {
     // Short NVS key: "c" + hex of the id, e.g. "c3A7C".
     snprintf(out, 8, "c%04X", id);

@@ -13,13 +13,15 @@
 //  compares it to the latest stefe2/B1_Chat release to offer an update. Bump
 //  on every release (tools/release.ps1 relies on it).
 // ---------------------------------------------------------------------------
-#define FW_VERSION "1.7.0"
+#define FW_VERSION "1.8.0"
 
 // Console<->master serial protocol version (bumped when a change isn't
 // backward-compatible; adding fields/commands doesn't require it).
 // 4: seq* commands/events removed (the 8 NVS sequence slots + onboard player
 //    were retired — sequences are entirely console-driven now).
-#define FW_PROTO 4
+// 5: "revert" command removed — the console auto-commits 2s after the last
+//    change instead of offering a manual save/revert choice.
+#define FW_PROTO 5
 
 // ---------------------------------------------------------------------------
 //  DROID ROLE  —  SET HERE BEFORE FLASHING (pio run -e b1 -t upload)
@@ -80,7 +82,6 @@ static const uint16_t SERVO_UPDATE_HZ = 50;
 //  ESP-NOW network
 // ---------------------------------------------------------------------------
 static const uint8_t MESH_WIFI_CHANNEL = 1;   // radio channel shared by the whole group
-static const uint8_t MESH_DEDUP_CACHE  = 32;  // anti-duplicate cache size
 
 // Mesh topology (direct radio neighborhood, independent of relaying).
 static const uint8_t  MAX_NEIGHBORS      = 12;   // max direct neighbors per report
@@ -90,8 +91,6 @@ static const uint32_t NEIGHBOR_STALE_MS  = 9000; // radio link staleness (~3x th
 // ---------------------------------------------------------------------------
 //  Animation timing (ms)
 // ---------------------------------------------------------------------------
-static const uint32_t IDLE_ANIM_MIN_MS = 3000;   // min delay before a local anim
-static const uint32_t IDLE_ANIM_MAX_MS = 9000;   // max delay before a local anim
 static const uint32_t HEARTBEAT_MS     = 2000;   // heartbeat emission period
 
 // ---------------------------------------------------------------------------

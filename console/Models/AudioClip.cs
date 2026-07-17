@@ -8,7 +8,7 @@ public partial class AudioClip : ObservableObject
     [ObservableProperty] private string _filePath = "";
     [ObservableProperty] private int _durationMs;
     [ObservableProperty] private int _startMs;
-    // Restarts on completion during Rehearse (local) — see SequencerViewModel.ScheduleRehearsalPass.
+    // Restarts on completion while playing — see SequencerViewModel.ScheduleTimers.
     [ObservableProperty] private bool _loop;
 
     // Waveform preview (WaveformService), populated asynchronously after load/add/replace — null

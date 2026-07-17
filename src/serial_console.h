@@ -7,11 +7,13 @@
 //  - PC → master: {cmd:"list"|"anim"|"config"|"name"|
 //                   "getConfig"|"calib"|"preview"|"getCalib"|"getAnimDurations"|
 //                   "servo"|"autoAnim"|"locate"|"getMeshTopology"|"getAll"|
-//                   "setMulti"|"commit"|"revert", ...}
+//                   "setMulti"|"commit", ...}
 //  - master → PC: {evt:"droids"|"log"|"config"|"meshTopology"|"err"|"allDone"|
 //                   "setMultiDone"|"dirty", ...}
 //  (The seq* commands/events — the 8 NVS sequence slots and the onboard
-//  player — were removed in fw 1.7.0: sequences are console-driven only.)
+//  player — were removed in fw 1.7.0: sequences are console-driven only.
+//  "revert" was removed in fw 1.8.0: the console now auto-commits 2s after
+//  the last change instead of offering a manual save/revert choice.)
 //
 //  Application logs go through log() to stay in JSON format and not pollute
 //  the protocol. Hooks let the firmware act on commands (play an anim, etc.).
@@ -70,9 +72,6 @@ public:
 
     // Master's auto-anim state (to display it in the list).
     void setMasterAutoAnim(bool on) { _masterAutoAnim = on; }
-
-    // Web Serial session validated via the hello/ping handshake.
-    bool isClientReady() const { return _clientReady; }
 
 private:
     // Line buffer: 4 KB to accept a large setMulti (and, historically, a

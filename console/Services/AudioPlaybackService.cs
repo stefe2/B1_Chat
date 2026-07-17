@@ -15,7 +15,7 @@ public class AudioPlaybackService
     private readonly List<MediaPlayer> _players = new();
 
     /// <summary>Starts a new, independent playback. When loop is true, restarts on completion
-    /// until StopAll() is called — used for a looping ambient clip during Rehearse (local).</summary>
+    /// until StopAll() is called — used for a looping ambient clip during a Play pass.</summary>
     public void Play(string? path, bool loop = false)
     {
         if (string.IsNullOrEmpty(path) || !File.Exists(path)) return;

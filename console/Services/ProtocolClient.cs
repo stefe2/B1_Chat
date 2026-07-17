@@ -30,8 +30,6 @@ public partial class ProtocolClient : ObservableObject
     [ObservableProperty] private string? _fwVersion;
     [ObservableProperty] private int _fwProto;
     [ObservableProperty] private int _lineMax;
-    [ObservableProperty] private int _animCount = 18;
-    [ObservableProperty] private int _seqSlotMax = 8;
     [ObservableProperty] private bool _dirty;
 
     [ObservableProperty] private int _lastFreq;
@@ -45,7 +43,6 @@ public partial class ProtocolClient : ObservableObject
     public event Action<string>? LogSys;
     public event Action<string>? LogErr;
     public event Action? HelloReceived;
-    public event Action? AllDoneReceived;
     public event Action<JsonElement>? CalibDataReceived;
     public event Action? AnimDurationsReceived;
     public event Action? MeshTopologyChanged;
@@ -152,7 +149,11 @@ public partial class ProtocolClient : ObservableObject
     public void RequestMeshTopology() => SendCmd(new JsonObject { ["cmd"] = "getMeshTopology" });
     public void RequestCalib(ushort target) => SendCmd(new JsonObject { ["cmd"] = "getCalib", ["target"] = target });
 
-    public void SetName(ushort id, string name) => SendCmd(new JsonObject { ["cmd"] = "name", ["id"] = id, ["name"] = name });
+    public void SetName(ushort id, string name)
+    {
+        SendCmd(new JsonObject { ["cmd"] = "name", ["id"] = id, ["name"] = name });
+        ScheduleAutoCommit();
+    }
     public void SetServo(ushort target, bool enabled)
     {
         SendCmd(new JsonObject { ["cmd"] = "servo", ["target"] = target, ["enabled"] = enabled });
@@ -199,9 +200,28 @@ public partial class ProtocolClient : ObservableObject
     {
         SendCmd(new JsonObject { ["cmd"] = "config", ["target"] = target, ["freq"] = freq, ["amp"] = amp, ["speed"] = speed });
         PacketSent?.Invoke(target, "config");
+        ScheduleAutoCommit();
     }
     public void Commit() => SendCmd(new JsonObject { ["cmd"] = "commit" });
-    public void Revert() => SendCmd(new JsonObject { ["cmd"] = "revert" });
+
+    // Debounced auto-commit: SetName/SetConfig are the only two setters that leave the
+    // master's draft "dirty" (see the header's unsaved badge, ShowCommitUi). Re-armed on
+    // every such call so it fires once, 2s after the LAST one — not on every single
+    // keystroke/slider tick, to avoid hammering the master's NVS.
+    private System.Threading.Timer? _autoCommitTimer;
+    private void ScheduleAutoCommit()
+    {
+        _autoCommitTimer ??= new System.Threading.Timer(_ =>
+        {
+            // Runs on the timer's own thread; Commit()/SendCmdRaw raise LogTx which feeds
+            // UI-bound ObservableCollections, hence the remarshaling (same as StartKeepalive).
+            var dispatcher = System.Windows.Application.Current?.Dispatcher;
+            void Fire() { if (Dirty && HasCap("commit")) Commit(); }
+            if (dispatcher == null || dispatcher.CheckAccess()) Fire();
+            else dispatcher.Invoke(Fire);
+        }, null, System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
+        _autoCommitTimer.Change(TimeSpan.FromSeconds(2), System.Threading.Timeout.InfiniteTimeSpan);
+    }
 
     // (seqLoad/seqSave/seqRun/... helpers removed 2026-07-16 with the rest of the slot
     // machinery — sequences are console-only now, fw 1.7.0 dropped the commands too.)
@@ -241,7 +261,6 @@ public partial class ProtocolClient : ObservableObject
             case "config": HandleConfig(root); break;
             case "dirty": Dirty = root.TryGetProperty("dirty", out var dv) && dv.GetBoolean(); break;
             case "calibData": CalibDataReceived?.Invoke(root); break;
-            case "allDone": AllDoneReceived?.Invoke(); break;
             case "meshTopology": HandleMeshTopology(root); break;
             case "animDurations": HandleAnimDurations(root); break;
             case "otaReady":
@@ -284,7 +303,6 @@ public partial class ProtocolClient : ObservableObject
         FwVersion = root.TryGetProperty("fw", out var fw) ? fw.GetString() : null;
         FwProto = root.TryGetProperty("proto", out var proto) ? proto.GetInt32() : 0;
         LineMax = root.TryGetProperty("lineMax", out var lm) ? lm.GetInt32() : 0;
-        AnimCount = root.TryGetProperty("anims", out var an) ? an.GetInt32() : AnimCount;
         Dirty = root.TryGetProperty("dirty", out var d) && d.GetBoolean();
 
         _caps.Clear();

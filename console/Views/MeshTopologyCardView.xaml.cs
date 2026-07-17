@@ -55,7 +55,7 @@ public partial class MeshTopologyCardView : UserControl
     }
 
     // Rhythmic pulse on the master node for the TALK animation's known duration —
-    // not audio-reactive (no amplitude data available from the DFPlayer).
+    // not audio-reactive (AudioPlaybackService's MediaPlayer exposes no live amplitude data).
     private void PlayTalkPulse(int durationMs)
     {
         Dispatcher.Invoke(() =>

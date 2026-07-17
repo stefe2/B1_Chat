@@ -22,9 +22,10 @@ Written on 2026-07-12, while the firmware source code wasn't yet available.
 `hello` handshake (`fw`, `proto`, `lineMax`, `anims`, `caps[]`, `dirty` — `seqSlots`
 dropped in fw 1.7.0 with the slot machinery);
 `{cmd:"getAll"}` = full dump (burst of existing events ending with `{evt:"allDone"}`);
-commit/revert model for anim params/names (`{cmd:"commit"}` / `{cmd:"revert"}` /
-`{evt:"dirty"}` — setters are "live", NVS is only written on commit; **the console
-must send `commit` after a restore `setMulti`**).
+commit model for anim params/names (`{cmd:"commit"}` / `{evt:"dirty"}` — setters
+are "live", NVS is only written on commit; the console auto-commits 2s after the
+last change, and must also send `commit` after a restore `setMulti`; the manual
+`{cmd:"revert"}` was removed in fw 1.8.0/proto 5, see CLAUDE.md).
 
 ---
 

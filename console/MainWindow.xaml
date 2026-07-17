@@ -44,13 +44,9 @@
                 <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
                     <!-- Cluster 1: pending local changes -->
                     <Border Style="{Binding ShowCommitUi, Converter={StaticResource BoolToStyleConv}, ConverterParameter='HaloBadgeWarnStyle|HaloBadgeBaseStyle'}"
-                            Visibility="{Binding ShowCommitUi, Converter={StaticResource BoolToVisConv}}" Margin="0,0,8,0" VerticalAlignment="Center">
+                            Visibility="{Binding ShowCommitUi, Converter={StaticResource BoolToVisConv}}" Margin="0,0,20,0" VerticalAlignment="Center">
                         <TextBlock Text="● unsaved" FontSize="11" Foreground="White" />
                     </Border>
-                    <Button Content="Save" Style="{StaticResource MiniButtonStyle}" Command="{Binding CommitChangesCommand}"
-                            Visibility="{Binding ShowCommitUi, Converter={StaticResource BoolToVisConv}}" Margin="0,0,4,0" />
-                    <Button Content="Revert" Style="{StaticResource MiniButtonStyle}" Command="{Binding RevertChangesCommand}"
-                            Visibility="{Binding ShowCommitUi, Converter={StaticResource BoolToVisConv}}" Margin="0,0,20,0" />
 
                     <Border Width="1" Height="20" Background="{StaticResource BevelBorderBrush}" Margin="0,0,16,0" VerticalAlignment="Center" />
 

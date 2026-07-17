@@ -22,10 +22,6 @@
                 </Border>
             </DockPanel>
 
-            <!-- The ESP32 slot catalog UI was removed on request (2026-07-16) — the master's 8
-                 NVS slots still exist firmware-side and are still reachable through the Local
-                 Library's "→ ESP32" push; the VM's Catalog/LoadSlot/DeleteSlot plumbing stays. -->
-
             <!-- Name field + New/"→ Library" buttons removed on request (2026-07-16) — Clear
                  (transport bar) empties the editor, and sequence names now only come from a
                  loaded/imported file. Play/Stop/Pause/Resume/Loop/Undo/Redo/Export/Import/

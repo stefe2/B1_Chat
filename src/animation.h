@@ -52,7 +52,6 @@ public:
     void stop() { _playing = false; }
 
     bool isPlaying() const { return _playing; }
-    uint8_t current() const { return _animId; }
 
     // Picks a random "active" animation ID (excluding IDLE and gestures
     // triggered manually only, like POWER_DOWN/TALK).
