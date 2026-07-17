@@ -57,6 +57,14 @@ public:
     // triggered manually only, like POWER_DOWN/TALK).
     static uint8_t randomAnimId(uint32_t seed);
 
+    // Live-tunable via MSG_CONFIG (0..100 each, see main.cpp's
+    // applyAnimParamsEffect). Scales keyframe offsets ("petits gestes ↔ grands
+    // gestes") and move/hold durations for every gesture played from here on —
+    // does NOT affect ServoEngine's own idle noise (see setIdleNoise), only
+    // real gesture playback. 60/50 are the historical, pre-this-feature
+    // defaults, so passing them back reproduces today's exact tuning.
+    void setAmpSpeedPct(uint8_t ampPct, uint8_t speedPct);
+
     // Indicative total duration (ms) of a gesture (sum of keyframes). For a
     // looping gesture (POWER_DOWN, TALK) or IDLE, returns an indicative
     // default value since there's no natural finite duration.
@@ -76,6 +84,10 @@ private:
     uint32_t _rng = 1;
     uint8_t  rnd(uint8_t n);
     int      jitter(uint8_t amp);
+
+    // See setAmpSpeedPct(); 1.0 = today's untouched tuning.
+    float _ampScale = 1.0f;
+    float _speedScale = 1.0f;
 
     void issueCurrentFrame();
 };

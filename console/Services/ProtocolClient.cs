@@ -204,6 +204,12 @@ public partial class ProtocolClient : ObservableObject
     }
     public void Commit() => SendCmd(new JsonObject { ["cmd"] = "commit" });
 
+    // Also catches a draft that was ALREADY dirty when this console connected (e.g. an
+    // edit left uncommitted by an earlier session) — SetName/SetConfig alone would never
+    // notice that case, since neither was called this session, and the badge would stay
+    // lit forever with no way left to clear it (the manual Save button is gone).
+    partial void OnDirtyChanged(bool value) { if (value) ScheduleAutoCommit(); }
+
     // Debounced auto-commit: SetName/SetConfig are the only two setters that leave the
     // master's draft "dirty" (see the header's unsaved badge, ShowCommitUi). Re-armed on
     // every such call so it fires once, 2s after the LAST one — not on every single

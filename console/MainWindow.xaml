@@ -42,10 +42,10 @@
                 </StackPanel>
 
                 <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
-                    <!-- Cluster 1: pending local changes -->
-                    <Border Style="{Binding ShowCommitUi, Converter={StaticResource BoolToStyleConv}, ConverterParameter='HaloBadgeWarnStyle|HaloBadgeBaseStyle'}"
-                            Visibility="{Binding ShowCommitUi, Converter={StaticResource BoolToVisConv}}" Margin="0,0,20,0" VerticalAlignment="Center">
-                        <TextBlock Text="● unsaved" FontSize="11" Foreground="White" />
+                    <!-- Cluster 1: commit/sync status (always on once the firmware supports it) -->
+                    <Border Style="{Binding Protocol.Dirty, Converter={StaticResource BoolToStyleConv}, ConverterParameter='HaloBadgeWarnStyle|HaloBadgeOkStyle'}"
+                            Visibility="{Binding ShowSyncBadge, Converter={StaticResource BoolToVisConv}}" Margin="0,0,20,0" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Protocol.Dirty, Converter={StaticResource BoolToTextConv}, ConverterParameter='● unsaved|● synced'}" FontSize="11" Foreground="White" />
                     </Border>
 
                     <Border Width="1" Height="20" Background="{StaticResource BevelBorderBrush}" Margin="0,0,16,0" VerticalAlignment="Center" />

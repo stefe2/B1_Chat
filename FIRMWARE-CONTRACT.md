@@ -1,31 +1,41 @@
-# Firmware contract — proposed extensions to the B1 protocol
+# Firmware contract — proposed extensions to the B1 protocol (fully resolved)
 
-This document describes the evolutions of the JSON-lines protocol (`{cmd:...}` → `{evt:...}`,
-115200 baud, one line per message) that the console expects from the master ESP32 firmware.
-The console (≥ v0.7.0) works **without** these extensions — each section describes the
-current fallback behavior and what will improve once the extension is implemented.
+This document originally proposed evolutions of the JSON-lines protocol
+(`{cmd:...}` → `{evt:...}`, 115200 baud, one line per message) for the master
+ESP32 firmware to implement, written on 2026-07-12 while the firmware source
+code didn't exist yet.
 
-Written on 2026-07-12, while the firmware source code wasn't yet available.
+**Status: every section below is now resolved** — either implemented as
+proposed, or superseded/fully removed by a later redesign. There is nothing
+outstanding from this contract; it's kept as the historical rationale for
+those decisions (in particular the field-rename reasoning §6 explains, which
+CLAUDE.md's "Known pitfalls" section still references). For the protocol's
+current, authoritative shape, see CLAUDE.md's "JSON serial protocol" section;
+for how each item actually evolved over time, see its Progress log.
 
-## ⚑ Implementation status (firmware ≥ 1.0.0, 2026-07-07)
+## ⚑ Resolution summary (current firmware: 1.8.0, proto 5)
 
-| Section | Status |
+| Section | Outcome |
 | --- | --- |
-| §1/§2 audio track / `getTrackDurations` | ❌ removed (fw 1.6.0) — DFPlayer retired firmware-wide, the console now owns multi-track audio playback client-side; see CLAUDE.md |
-| §3 `getConfig` response = `{evt:"config",...}` | ✅ implemented (now `freq`/`amp`/`speed` only — `volume` dropped alongside DFPlayer) |
-| §4 atomic `setMulti` (full validation before application) | ✅ implemented |
-| §5 `seqRun {from}`, `seqPause`/`seqResume`, `seqState.paused` + per-step push | ❌ removed (fw 1.7.0) — the whole seq* family (8 NVS slots + onboard player) was retired; sequences are entirely console-driven now, see CLAUDE.md |
-| Absolute-time sequence model (`start`/`totalMs`/`fromMs`/`elapsedMs`) | ❌ removed (fw 1.7.0) with the rest of the seq* machinery (was ✅ fw 1.5.0-1.6.0) |
+| §1/§2 audio track / `getTrackDurations` | Implemented (fw 1.0.0), then fully **removed** (fw 1.6.0) — DFPlayer retired firmware-wide, the console now owns multi-track audio playback client-side; see CLAUDE.md |
+| §3 `getConfig` response = `{evt:"config",...}` | **Implemented** (fw 1.0.0), unchanged since (now `freq`/`amp`/`speed` only — `volume` dropped alongside DFPlayer) |
+| §4 atomic `setMulti` (full validation before application) | **Implemented** (fw 1.0.0), unchanged since |
+| §5 `seqRun {from}`, `seqPause`/`seqResume`, `seqState.paused` + per-step push | Implemented (fw 1.0.0), then fully **removed** (fw 1.7.0) — the whole seq* family (8 NVS slots + onboard player) was retired; sequences are entirely console-driven now, see CLAUDE.md |
+| §6 absolute-time sequence model (`start`/`totalMs`/`fromMs`/`elapsedMs`) | Implemented (fw 1.5.0), then fully **removed** (fw 1.7.0) with the rest of the seq* machinery |
 
-**Beyond the contract** (inspired by the KyberEditor protocol): line buffer raised to
-4 KB (`lineMax` announced); `{evt:"err", msg}` for any invalid command; enriched
-`hello` handshake (`fw`, `proto`, `lineMax`, `anims`, `caps[]`, `dirty` — `seqSlots`
-dropped in fw 1.7.0 with the slot machinery);
+**Beyond the original contract** (also resolved, inspired by the KyberEditor
+protocol, not part of the initial proposal): line buffer raised to 4 KB
+(`lineMax` announced); `{evt:"err", msg}` for any invalid command; enriched
+`hello` handshake (`fw`, `proto`, `lineMax`, `anims`, `caps[]`, `dirty` —
+`seqSlots` dropped in fw 1.7.0 with the slot machinery);
 `{cmd:"getAll"}` = full dump (burst of existing events ending with `{evt:"allDone"}`);
-commit model for anim params/names (`{cmd:"commit"}` / `{evt:"dirty"}` — setters
-are "live", NVS is only written on commit; the console auto-commits 2s after the
-last change, and must also send `commit` after a restore `setMulti`; the manual
-`{cmd:"revert"}` was removed in fw 1.8.0/proto 5, see CLAUDE.md).
+a commit model for anim params/names (`{cmd:"commit"}` / `{evt:"dirty"}` —
+setters are "live", NVS is only written on commit; the console auto-commits
+2s after the last change, and must also send `commit` after a restore
+`setMulti`). Its manual counterpart, `{cmd:"revert"}`, was implemented
+alongside `commit` and later fully **removed** (fw 1.8.0/proto 5) once the
+console's auto-commit made a manual "discard my recent edits" action
+unreachable — see CLAUDE.md.
 
 ---
 
@@ -42,54 +52,63 @@ involvement at all. `volume`/`playTrack` (console→master) and the
 `config` evt's `volume` field are gone with it. See CLAUDE.md's Progress
 log for the full removal.
 
-## 3. Reading the general configuration (medium priority)
+## 3. Reading the general configuration — implemented (fw 1.0.0)
 
-**Today**: the console sends `getConfig` at handshake but **doesn't know the
-shape of the response** (it logs it without interpreting it). Consequences: the
-frequency/amplitude/speed sliders show default values on
-startup, and backup restore can't compare these settings
-(they're offered "blindly", unchecked by default).
+**Before**: the console sent `getConfig` at handshake but didn't know the
+shape of the response (it logged it without interpreting it) — the
+frequency/amplitude/speed sliders showed default values on startup, and
+backup restore couldn't compare these settings (offered "blindly", unchecked
+by default).
 
-**Requested**: document/standardize the response as follows:
+**Implemented as**:
 
 ```json
 → {"cmd":"getConfig"}
 ← {"evt":"config","freq":50,"amp":60,"speed":50}
 ```
 
-The console will then populate its sliders on connection and do a true
+The console populates its sliders on connection and does a true
 field-by-field reconciliation of these values on restore.
 
-## 4. Atomic batch write — `setMulti` (medium priority)
+## 4. Atomic batch write — `setMulti` — implemented (fw 1.0.0)
 
-Inspired by the Kyber firmware's `SETM`: backup restore currently sends
+Inspired by the Kyber firmware's `SETM`: backup restore used to send
 a burst of commands spaced 200 ms apart (names, calibrations,
 sequences) — slow and interruptible partway through.
 
-**Requested**:
+**Implemented as**:
 
 ```json
 → {"cmd":"setMulti","ops":[
      {"cmd":"name","id":513,"name":"Rex"},
-     {"cmd":"calib","target":513,"panMin":20,...},
-     {"cmd":"seqSave","slot":0,"name":"Parade","loop":false,"steps":[...]}
+     {"cmd":"calib","target":513,"panMin":20,...}
    ]}
-← {"evt":"setMultiDone","ok":true,"applied":3}
+← {"evt":"setMultiDone","ok":true,"applied":2}
 ```
 
 - All or nothing: if one op fails, none are persisted, and the response reports
   the offending index: `{"evt":"setMultiDone","ok":false,"failedAt":1,"error":"..."}`.
-- Size bounded by the serial buffer: accept at least 4 KB per line, and the
-  console will fragment its batches beyond that.
+- Size bounded by the serial buffer: accepts at least 4 KB per line, and the
+  console fragments its batches beyond that.
+- The example above no longer includes a `seqSave` op — `setMulti` could
+  carry one back when sequences were still firmware-side (fw 1.0.0-1.6.x);
+  fw 1.7.0 removed the whole seq* family, so it never appears in an op today.
 
-## 5. Enriched playback control (nice-to-have)
+## 5. Enriched playback control — implemented (fw 1.0.0), then removed (fw 1.7.0)
 
-- `{"cmd":"seqPause"}` / `{"cmd":"seqResume"}` — with `{"evt":"seqState","paused":true,...}`.
-- `seqState` during playback: push the event **on every step** (already seems to
-  be the case).
-- `seqRun {from}` — originally "start at step N"; superseded by `fromMs`, see below.
+Was implemented as proposed (`{"cmd":"seqPause"}` / `{"cmd":"seqResume"}` with
+`{"evt":"seqState","paused":true,...}`, and `seqRun {from}` superseded by
+`fromMs`, see §6) — then the whole seq* command/event family, including this
+one, was removed in fw 1.7.0 along with the master's 8 NVS sequence slots and
+its onboard player. Sequences are entirely console-driven now (own timers,
+`anim` commands per step); none of this exists in the current firmware.
 
-## 6. Absolute-time sequence model (fw ≥ 1.5.0, breaking change, `caps: seqTimeline`)
+## 6. Absolute-time sequence model — implemented (fw 1.5.0), then removed (fw 1.7.0)
+
+Kept in full below for its field-rename rationale, still referenced by
+CLAUDE.md's "Known pitfalls" — but this entire model (and the `seq*` command
+family it belongs to) no longer exists in the firmware as of fw 1.7.0; skip to
+the bullet list's last point if you just want the outcome.
 
 The original model was a **chained list**: each step waited `delay` ms after
 the *previous* step before firing — inherently serial, even across droids

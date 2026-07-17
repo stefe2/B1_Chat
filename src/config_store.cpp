@@ -28,6 +28,12 @@ void ConfigStore::setAnimParams(uint8_t freq, uint8_t amp, uint8_t speed) {
     _dirty = true;
 }
 
+void ConfigStore::setAnimParamsImmediate(uint8_t freq, uint8_t amp, uint8_t speed) {
+    _p.putUChar("af", freq);
+    _p.putUChar("aa", amp);
+    _p.putUChar("as", speed);
+}
+
 void ConfigStore::nameKey(uint16_t id, char out[8]) {
     // Short NVS key (< 15 chars): "n" + hex of the id, e.g. "n3A7C".
     snprintf(out, 8, "n%04X", id);

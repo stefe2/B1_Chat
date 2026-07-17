@@ -33,6 +33,21 @@ static bool gServos = true;
 // Doesn't affect Play (anim) or the Sequencer: only the random idle draw.
 static bool gAutoAnim = true;
 
+// Live-tunable "frequency" param (0..100, see applyAnimParamsEffect) — scales
+// the idle-draw interval below. 50 = historical default = today's untouched
+// 2.5-5s (master)/3-7s (isolated slave) range.
+static uint8_t gIdleFreqPct = 50;
+
+// Multiplier applied to the idle-draw interval, mirroring AnimationPlayer's
+// own amp/speed scale clamp (see setAmpSpeedPct) so "frequency" behaves
+// consistently with the other two knobs.
+static float idleFreqScale() {
+    float s = 50.0f / (float)(gIdleFreqPct < 10 ? 10 : gIdleFreqPct);
+    if (s < 0.15f) s = 0.15f;
+    if (s > 4.0f) s = 4.0f;
+    return s;
+}
+
 // Life LED (execution indicator) — non-blocking blink, overridden solid by "locate".
 static uint32_t lastBlink = 0;
 static bool ledOn = false;
@@ -98,6 +113,15 @@ static void applyName(const char* name) {
 static void applyLocate(bool en) {
     gLocateOn = en;
     LOGF("locate %s", en ? "ON" : "OFF");
+}
+
+// Applies freq/amp/speed to THIS droid's running behavior (master or slave) —
+// persistence is the CALLER's job (see the two call sites: the master's own
+// draft/auto-commit for its local changes, ConfigStore::setAnimParamsImmediate
+// for a value received over the mesh).
+static void applyAnimParamsEffect(uint8_t freq, uint8_t amp, uint8_t speed) {
+    gIdleFreqPct = freq;
+    anim.setAmpSpeedPct(amp, speed);
 }
 
 // Persists and applies a received calibration for THIS droid (master or slave).
@@ -199,6 +223,16 @@ static void onMeshMessage(uint8_t type, const uint8_t* payload, uint8_t len,
         memcpy(&p, payload, sizeof(p));
         if (p.targetId == MESH_TARGET_ALL || p.targetId == Mesh.myId())
             applyCalib(p);
+    } else if (type == MSG_CONFIG && len == sizeof(ConfigPayload)) {
+        ConfigPayload p;
+        memcpy(&p, payload, sizeof(p));
+        if (p.targetId == MESH_TARGET_ALL || p.targetId == Mesh.myId()) {
+            const uint8_t freq = (uint8_t)p.freq, amp = (uint8_t)p.amplitude, speed = (uint8_t)p.speed;
+            // Immediate persistence: the receiving droid has no "commit" command of its
+            // own to ever flush a draft with (see ConfigStore::setAnimParamsImmediate).
+            Config.setAnimParamsImmediate(freq, amp, speed);
+            applyAnimParamsEffect(freq, amp, speed);
+        }
     } else if (type == MSG_PREVIEW && len == sizeof(PreviewPayload)) {
         PreviewPayload p;
         memcpy(&p, payload, sizeof(p));
@@ -351,11 +385,22 @@ void setup() {
     gAutoAnim = Config.autoAnimEnabled(true);
     head.setEnabled(gServos);
 
+    // Restores this droid's own last freq/amp/speed (master: last committed
+    // value; slave: last value immediately persisted via a received
+    // MSG_CONFIG) — defaults (50/60/50) if never set, matching today's
+    // untouched tuning.
+    {
+        uint8_t f, a, s;
+        Config.animParams(f, a, s);
+        applyAnimParamsEffect(f, a, s);
+    }
+
 #if IS_MASTER
     Console.begin();
     Console.onAnim(playLocalAnim);
     Console.onServo(onServoCmd);
     Console.onAutoAnim(onAutoAnimCmd);
+    Console.onConfig(applyAnimParamsEffect);
     Console.onLocate(onLocateCmd);
     Console.onCalib(onCalibCmd);
     Console.onPreview(onPreviewCmd);
@@ -452,7 +497,7 @@ void loop() {
 
     // The master picks a random anim, plays it, and broadcasts it to the group.
     if (gServos && gAutoAnim && !anim.isPlaying() && now > nextMeshSend) {
-        nextMeshSend = now + (uint32_t)random(2500, 5000);
+        nextMeshSend = now + (uint32_t)(random(2500, 5000) * idleFreqScale());
         const uint32_t seed = (uint32_t)esp_random();
         const uint8_t animId = AnimationPlayer::randomAnimId(seed);
         AnimPayload p{MESH_TARGET_ALL, animId, 0, seed};
@@ -462,7 +507,7 @@ void loop() {
 #else
     // An isolated slave (no master) also animates itself on its own.
     if (gServos && gAutoAnim && !anim.isPlaying() && now > nextMove) {
-        nextMove = now + (uint32_t)random(3000, 7000);
+        nextMove = now + (uint32_t)(random(3000, 7000) * idleFreqScale());
         const uint32_t seed = (uint32_t)esp_random();
         anim.play(AnimationPlayer::randomAnimId(seed), seed);
     }

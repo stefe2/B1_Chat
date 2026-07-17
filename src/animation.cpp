@@ -124,6 +124,21 @@ int AnimationPlayer::jitter(uint8_t amp) {
     return (int)rnd(2 * amp + 1) - (int)amp;
 }
 
+void AnimationPlayer::setAmpSpeedPct(uint8_t ampPct, uint8_t speedPct) {
+    // 60 = the historical default (index.html's original slider value) -> scale 1.0,
+    // i.e. passing back the default reproduces today's exact tuning untouched.
+    _ampScale = ampPct / 60.0f;
+    if (_ampScale < 0.0f) _ampScale = 0.0f;
+    if (_ampScale > 1.7f) _ampScale = 1.7f;
+
+    // 50 = the historical default -> scale 1.0. Floored at speedPct=10 (not 0) so a
+    // near-zero slider can't blow the multiplier up past a merely "very slow" droid.
+    float s = 50.0f / (float)(speedPct < 10 ? 10 : speedPct);
+    if (s < 0.4f) s = 0.4f;
+    if (s > 4.0f) s = 4.0f;
+    _speedScale = s;
+}
+
 uint8_t AnimationPlayer::randomAnimId(uint32_t seed) {
     // "Active" anims eligible for random draw: 1..ANIM_POWER_DOWN-1 (excludes IDLE, and
     // excludes POWER_DOWN/TALK which are manual-trigger-only gestures).
@@ -163,13 +178,15 @@ void AnimationPlayer::issueCurrentFrame() {
     const AnimDef& a = ANIMS[_animId];
     const KeyFrame& f = a.frames[_idx];
 
-    // Absolute target = center + offset + slight organic jitter.
-    const float pan  = SERVO_PAN_CENTER  + f.panOff  + jitter(4);
-    const float tilt = SERVO_TILT_CENTER + f.tiltOff + jitter(3);
-    const uint16_t move = f.moveMs + (uint16_t)(jitter(6) * 10);
+    // Absolute target = center + scaled offset + slight organic jitter (jitter
+    // itself is NOT scaled — it's a fixed "organic realism" detail, not the
+    // gesture's actual amplitude/speed).
+    const float pan  = SERVO_PAN_CENTER  + f.panOff  * _ampScale + jitter(4);
+    const float tilt = SERVO_TILT_CENTER + f.tiltOff * _ampScale + jitter(3);
+    const uint16_t move = (uint16_t)(f.moveMs * _speedScale) + (uint16_t)(jitter(6) * 10);
 
     _engine->setTarget(pan, tilt, move);
-    _holdDur = f.holdMs;
+    _holdDur = (uint16_t)(f.holdMs * _speedScale);
     _needMove = false;
     _holding = false;
 }

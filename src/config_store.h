@@ -36,6 +36,14 @@ public:
     void animParams(uint8_t& freq, uint8_t& amp, uint8_t& speed);
     void setAnimParams(uint8_t freq, uint8_t amp, uint8_t speed);
 
+    // Immediately persists params received via mesh MSG_CONFIG (see main.cpp's
+    // applyAnimParamsEffect) — bypasses the RAM overlay/commit draft entirely,
+    // same reasoning as setNameImmediate/setCalib: a slave has no "commit"
+    // command to ever flush the draft with, so it must persist right away to
+    // survive its own reboot. The master keeps using setAnimParams() above for
+    // its own console-driven draft (auto-committed ~2s after the last change).
+    void setAnimParamsImmediate(uint8_t freq, uint8_t amp, uint8_t speed);
+
     // A droid's name (empty if unset).
     String getName(uint16_t id);
     void   setName(uint16_t id, const String& name);

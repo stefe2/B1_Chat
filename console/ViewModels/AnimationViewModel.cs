@@ -25,11 +25,14 @@ public partial class AnimationViewModel : ObservableObject
     [ObservableProperty] private Droid? _selectedTarget;
     [ObservableProperty] private int _selectedAnimIndex;
 
-    // These 3 sliders have, as of today, no firmware effect (onConfig hook not
-    // wired up in main.cpp — see CLAUDE.md): this faithfully reproduces that gap,
-    // it's not a console bug.
+    // Fleet-wide (or per-target, via TargetId below) idle-animation tuning —
+    // wired up firmware-side in fw 1.9.0 (applyAnimParamsEffect in main.cpp):
+    // Freq scales the spontaneous idle-draw interval, Amp scales gesture
+    // offsets, Speed scales gesture move/hold durations. 50/60/50 are the
+    // historical defaults (index.html's original values), matching today's
+    // untouched tuning until moved.
     [ObservableProperty] private int _freq = 50;
-    [ObservableProperty] private int _amp = 50;
+    [ObservableProperty] private int _amp = 60;
     [ObservableProperty] private int _speed = 50;
 
     public AnimationViewModel(ProtocolClient protocol)

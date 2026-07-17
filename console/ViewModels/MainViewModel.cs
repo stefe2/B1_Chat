@@ -34,7 +34,10 @@ public partial class MainViewModel : ObservableObject
     public MeshTopologyViewModel Topology { get; }
     public SequencerViewModel Sequencer { get; }
 
-    public bool ShowCommitUi => Protocol.Dirty && Protocol.HasCap("commit");
+    // Always visible once the firmware supports the commit/dirty model (regardless of
+    // Dirty itself) — the badge now doubles as a passive "synced" status indicator
+    // instead of only appearing to flag a pending auto-commit.
+    public bool ShowSyncBadge => Protocol.HasCap("commit");
 
     public MainViewModel()
     {
@@ -59,11 +62,7 @@ public partial class MainViewModel : ObservableObject
         Protocol.HelloReceived += () =>
         {
             ConnectionStatusText = Protocol.SessionReady ? $"Connected — fw {Protocol.FwVersion ?? "?"}" : "Handshake failed";
-            OnPropertyChanged(nameof(ShowCommitUi));
-        };
-        Protocol.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName is nameof(ProtocolClient.Dirty)) OnPropertyChanged(nameof(ShowCommitUi));
+            OnPropertyChanged(nameof(ShowSyncBadge));
         };
 
         Protocol.LogTx += line => AddLog(LogKind.Tx, "→ " + line);
