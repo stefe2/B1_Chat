@@ -9,7 +9,7 @@
     <UseWPF>true</UseWPF>
     <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
     <!-- Semantic version: bumped by hand at each roadmap phase (see CLAUDE.md). -->
-    <VersionPrefix>0.10.0</VersionPrefix>
+    <VersionPrefix>0.10.1</VersionPrefix>
     <!-- Only takes effect with PublishSingleFile (see release.ps1): bundles the native DLLs
          (WPF, System.IO.Ports) into the .exe instead of leaving them alongside it in the
          install folder; auto-extracted to a temp cache at launch. -->
