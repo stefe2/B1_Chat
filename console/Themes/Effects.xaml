@@ -139,7 +139,8 @@
     <Style x:Key="AccentButtonStyle" TargetType="Button">
         <Setter Property="Foreground" Value="#2A1B0A" />
         <Setter Property="FontWeight" Value="Bold" />
-        <Setter Property="Padding" Value="14,8" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="Padding" Value="14,4" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="Template">
@@ -180,7 +181,7 @@
         <Setter Property="BorderBrush" Value="{StaticResource BevelBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="CornerRadius" Value="14" />
-        <Setter Property="Padding" Value="10,6" />
+        <Setter Property="Padding" Value="10,4" />
     </Style>
 
     <!-- App icon/logo: rounded accent square with a simplified droid-head glyph. -->

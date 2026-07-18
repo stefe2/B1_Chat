@@ -285,13 +285,14 @@ loaded by the application.
 
 | Folder/file | Role |
 | --- | --- |
-| `MainWindow.xaml(.cs)` | header (logo, connection status, "unsaved" auto-commit badge, "Firmware…" button) + card grid |
+| `MainWindow.xaml(.cs)` | header (logo, connection status, "unsaved" auto-commit badge, "Firmware…"/"Help" buttons) + card grid |
 | `FirmwareWindow.xaml(.cs)` | separate window hosting `Views/FirmwareCardView` (espflash flashing + GitHub update), opened from the header button |
+| `HelpWindow.xaml(.cs)` | separate window: table-of-contents sidebar + `FlowDocumentScrollViewer` rendering `Help/docs/*.md` (native, via `Markdig.Wpf` — deliberately not WebView2), opened from the header "Help" button |
 | `App.xaml(.cs)` | composition root: converters + merged resource dictionaries |
 | `Themes/Theme.xaml` | palette (brushes), button/LED/mesh-node gradients — ported from index.html's CSS custom properties |
 | `Themes/Effects.xaml` | shared styles: `CardBorderStyle`, `BeveledButtonStyle`, `HaloBadge*Style`, `MetalSliderStyle`, `DarkComboBoxStyle`, `CardIconBoxStyle`, `MeshNodeEllipseStyle`, etc. |
-| `Models/` | `Droid`, `MeshNodeVisual`/`MeshEdgeVisual`, sequences, calibration — view-bound objects |
-| `ViewModels/` | `MainViewModel` + one per card (`DroidsViewModel`, `CalibrationViewModel`, `AnimationViewModel`, `AudioViewModel`, `FirmwareViewModel`, `MeshTopologyViewModel`, `SequencerViewModel`) |
+| `Models/` | `Droid`, `MeshNodeVisual`/`MeshEdgeVisual`, sequences, calibration, `HelpManifest`/`HelpSection`/`HelpPage` — view-bound objects |
+| `ViewModels/` | `MainViewModel` + one per card (`DroidsViewModel`, `CalibrationViewModel`, `AnimationViewModel`, `AudioViewModel`, `FirmwareViewModel`, `MeshTopologyViewModel`, `SequencerViewModel`) + `HelpViewModel` (standalone, no `ProtocolClient` dependency — Help content is local-only) |
 | `Views/` | one XAML `UserControl` per card (no more Activity card) |
 | `Services/SerialLinkService.cs` | native serial port (`System.IO.Ports`), auto-reconnect (3s) |
 | `Services/ProtocolClient.cs` | central state: parses incoming JSON `evt`, builds outgoing `cmd` (C# equivalent of JS's `sendCmd()`/`handleEvent()`) |
@@ -299,7 +300,8 @@ loaded by the application.
 | `Services/OtaService.cs` | drives an OTA session (one slave at a time): reads the `.bin`, computes the MD5, sends one fragment per `evt:otaChunkAck` received |
 | `Services/AudioPlaybackService.cs` | console-side Sequencer audio (the master's DFPlayer was retired fw 1.6.0 — this is the only audio source now): tracks several concurrent `MediaPlayer`s (one per active clip, optionally looping), `PauseAll`/`ResumeAll` for real Play pause/resume, plus a one-off probe for a picked file's duration |
 | `Services/SequenceAudioStore.cs` | client-only slot→audio-lanes (each a label + clip list) association for the 8 NVS slots (`slot-audio.json`) — the master's NVS has no room for a filesystem path |
-| `Converters/` | `BoolToStyleConverter`, `BoolToTextConverter`, `BoolToVisibilityConverter`, `BoolToBrushConverter`, `StrengthToBrushConverter` (mesh link color by RSSI), `TimelineGeometryConverter`/`TimelineActiveConverter`/`AnimFamilyToBrushConverter` (Sequencer timeline) |
+| `Converters/` | `BoolToStyleConverter`, `BoolToTextConverter`, `BoolToVisibilityConverter`, `BoolToBrushConverter`, `StrengthToBrushConverter` (mesh link color by RSSI), `TimelineGeometryConverter`/`TimelineActiveConverter`/`AnimFamilyToBrushConverter` (Sequencer timeline), `MarkdownToFlowDocumentConverter` (Help window) |
+| `Help/manifest.json` + `Help/docs/**/*.md` | in-app Help content: sections → pages (same shape as KyberEditor's own Help viewer), rendered by `HelpWindow`/`HelpViewModel` — copied to the output dir as Content, not embedded |
 | `b1-chat-console.csproj` | auto-incremented build number, version from `VersionPrefix`, `IncludeNativeLibrariesForSelfExtract`, `tools/` (espflash) excluded from the single-file but copied on publish |
 | `installer/b1-chat-console.nsi` + `release.ps1` | NSIS installer + GitHub release script (tag `vX.Y.Z`) |
 
@@ -1178,6 +1180,70 @@ width at the bottom. Firmware card taken out of the grid (separate window).
       params/`onConfig` hook (both already documented above as deliberately
       incomplete, not dead). Verified: `pio run -e b1` and `dotnet build` both
       clean throughout.
+- [x] In-app Help window (2026-07-17, console build 228), modeled after
+      KyberEditor's own Help viewer (`C:\Program Files\KyberEditor\Help`) —
+      same **content** shape (`manifest.json` sections→pages, Markdown pages
+      under `docs/**`) but a **native WPF** rendering instead of Kyber's
+      WebView2 mini-browser, deliberately: this console dropped WebView2
+      entirely on 2026-07-13 and re-adding it just for Help would have been a
+      step backward. New `Markdig.Wpf` NuGet dependency
+      (`Markdig.Wpf.Markdown.ToFlowDocument`) converts a page's Markdown text
+      straight to a `FlowDocument` for a `FlowDocumentScrollViewer` — no
+      `MarkdownViewer` control, no JS. `Themes/HelpStyles.xaml` overrides
+      every `Markdig.Wpf.Styles.*StyleKey` (headings/links/code/quotes/tables)
+      to match this app's dark palette instead of the library's default
+      black-on-white; scoped to `HelpWindow` only (merges `Theme.xaml` itself
+      so it doesn't depend on merge order at the call site) since nothing
+      else in the app renders Markdown. `HelpViewModel` loads
+      `Help/manifest.json` once, exposes the current page's raw Markdown, and
+      resolves relative links between pages (`droids.md`, `../firmware/ota.md`,
+      etc.) the same way the old `index.html`'s `app.js` did — `HelpWindow`'s
+      code-behind binds a `CommandBinding` on `Markdig.Wpf.Commands.Hyperlink`
+      (the library routes link clicks through a command rather than
+      `Hyperlink.RequestNavigate`) to navigate internal links inside the same
+      window and `Process.Start` external ones. New "Help" button in the
+      header, next to "Firmware…", same singleton-reopen pattern as
+      `OpenFirmwareWindow`. Content: 12 pages across 8 sections (Getting
+      Started, Droids, Calibration, Mesh Topology, Animation, Sequencer ×3,
+      Firmware ×2, Reference ×2) — screenshots and per-card "?" contextual
+      entry points deliberately deferred to a later pass (text-only content
+      for now). **Bug found and fixed during verification**: the static
+      `Markdown.ToFlowDocument(markdown)` helper defaults to a bare pipeline
+      with *no* extensions, unlike `MarkdownViewer`'s own default — Markdown
+      tables silently rendered as raw `| a | b |` text instead of an actual
+      `Table` until `MarkdownToFlowDocumentConverter` was made to pass an
+      explicit `new MarkdownPipelineBuilder().UseSupportedExtensions().Build()`
+      pipeline. Verified live end-to-end via a scripted UI-automation pass
+      (real click simulation, not just a static screenshot): Help opens on
+      Overview with the full 8-section sidebar, sidebar navigation between
+      pages, an inline Markdown link clicked at its real screen coordinates
+      correctly navigated within the same window (Overview → Droids Card, no
+      browser opened), tables render as real grids after the fix, and
+      re-clicking "Help" while already open refocuses the existing window
+      instead of duplicating it. `dotnet build` clean (0 warnings).
+- [x] Help window: relative image support + logo on the Overview page
+      (2026-07-17, same day, follow-up to the Help window above). Markdig.Wpf's
+      image renderer builds a `BitmapImage` straight from the Markdown `src`
+      with no base URI, so a plain `images/x.png` never resolved on its own —
+      `HelpViewModel.ResolveImagePaths()` now rewrites every image link in a
+      page's Markdown (relative to that page's own folder, same rule
+      `TryNavigateInternalLink` already used for page links) to the image's
+      real path on disk, emitted as a `file://` URI (`Uri.AbsoluteUri`, not a
+      raw Windows path — this repo's own path contains a space, "B1 Chat",
+      which breaks unescaped Markdown link syntax). New
+      `Themes/HelpStyles.xaml` `ImageStyleKey` override caps images at
+      220×220 (the library's default binds Max Width/Height to the bitmap's
+      own native pixel size — no scaling at all, would otherwise blow out the
+      content column). `Help/docs/images/b1-chat-logo.png` (user-supplied
+      artwork) added and referenced at the top of `getting-started.md`,
+      mirroring KyberEditor's own banner-image treatment. Verified via the
+      same scripted UI-automation screenshot pass as the Help window itself.
+- [ ] Help window, phase 2 remainder (not started): a per-card "?" button
+      opening Help directly on that card's page (`HelpViewModel.OpenAtPage`,
+      mapping in the plan file `regarde-dans-ce-répertoire-swift-dawn.md`).
+      Screenshots for the other pages (Droids, Calibration, Mesh Topology,
+      Sequencer, Firmware) can now reuse the same mechanism as the Overview
+      logo — just add the files under `Help/docs/images/` and reference them.
 
 ## Full flash (virgin board support)
 

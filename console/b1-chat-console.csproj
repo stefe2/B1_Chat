@@ -46,11 +46,16 @@
     <!-- Waveform preview only (decode-to-PCM for peak analysis): MediaPlayer/AudioPlaybackService
          has no sample access, so this is purely additive to that playback path, not a replacement. -->
     <PackageReference Include="NAudio" Version="2.2.1" />
+    <!-- In-app Help window (native FlowDocument rendering of Help\docs\*.md) — deliberately not
+         WebView2: the console dropped that shell in 2026-07-13, see CLAUDE.md. -->
+    <PackageReference Include="Markdig.Wpf" Version="0.5.0.1" />
   </ItemGroup>
 
   <ItemGroup>
     <Resource Include="Assets\AppIcon.ico" />
+    <Resource Include="Assets\AppLogo.png" />
     <None Include="wwwroot\**" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Help\**" CopyToOutputDirectory="PreserveNewest" />
     <!-- ESP32 flashing tool (espflash.exe, not version-controlled): dropped in by the user,
          see CLAUDE.md. ExcludeFromSingleFile+CopyToPublishDirectory: a nested .exe is never
          bundled into the single-file output (silently excluded otherwise); it must stay a

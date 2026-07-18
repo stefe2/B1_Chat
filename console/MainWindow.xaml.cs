@@ -6,6 +6,7 @@ namespace b1_chat_console;
 public partial class MainWindow : Window
 {
     private FirmwareWindow? _firmwareWindow;
+    private HelpWindow? _helpWindow;
 
     public MainWindow()
     {
@@ -31,5 +32,17 @@ public partial class MainWindow : Window
         vm.Firmware.CheckUpdatesCommand.Execute(null);
         _firmwareWindow = new FirmwareWindow { Owner = this, DataContext = vm.Firmware };
         _firmwareWindow.Show();
+    }
+
+    private void OpenHelpWindow_Click(object sender, RoutedEventArgs e)
+    {
+        if (_helpWindow is { IsVisible: true })
+        {
+            _helpWindow.Activate();
+            return;
+        }
+
+        _helpWindow = new HelpWindow { Owner = this };
+        _helpWindow.Show();
     }
 }

@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Reflection;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using b1_chat_console.Services;
@@ -97,19 +98,26 @@ public partial class FirmwareViewModel : ObservableObject
     [ObservableProperty] private string? _fwShaBootloader;
     [ObservableProperty] private string? _fwShaPartitions;
 
-    public bool HasAppUpdate => !string.IsNullOrEmpty(AppLatest);
+    // The app's own running version (VersionPrefix from the csproj, e.g. "0.10.2" — the
+    // "+build.N" suffix is a per-compile counter, not part of the release's semantic version).
+    private static readonly string RunningAppVersion =
+        (Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0")
+        .Split('+')[0];
+
+    // GetLatestReleaseAsync always returns *a* release if the repo has one published under the
+    // matching tag prefix — AppLatest/FwLatest being non-empty does NOT mean it's newer than
+    // what's already running. Comparing versions here (rather than "is Latest non-empty") is
+    // what makes "Install"/the header badge turn off again once you're actually caught up.
+    private static bool IsNewer(string? latest, string current) =>
+        !string.IsNullOrEmpty(latest) && Version.TryParse(latest, out var l) && Version.TryParse(current, out var c) && l > c;
+
+    public bool HasAppUpdate => IsNewer(AppLatest, RunningAppVersion);
+    // Purely informational here ("GitHub has a firmware release") — whether a given droid
+    // actually needs it is DroidsViewModel.AnyFwUpdateAvailable's job (per-droid FwVersion
+    // comparison), which is what the header badge uses instead of this property.
     public bool HasFwUpdate => !string.IsNullOrEmpty(FwLatest);
-    public bool HasAnyUpdate => HasAppUpdate || HasFwUpdate;
-    partial void OnAppLatestChanged(string? value)
-    {
-        OnPropertyChanged(nameof(HasAppUpdate));
-        OnPropertyChanged(nameof(HasAnyUpdate));
-    }
-    partial void OnFwLatestChanged(string? value)
-    {
-        OnPropertyChanged(nameof(HasFwUpdate));
-        OnPropertyChanged(nameof(HasAnyUpdate));
-    }
+    partial void OnAppLatestChanged(string? value) => OnPropertyChanged(nameof(HasAppUpdate));
+    partial void OnFwLatestChanged(string? value) => OnPropertyChanged(nameof(HasFwUpdate));
 
     private static void RunOnUi(Action a)
     {

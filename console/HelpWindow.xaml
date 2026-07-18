@@ -1,0 +1,102 @@
+<Window x:Class="b1_chat_console.HelpWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:markdig="clr-namespace:Markdig.Wpf;assembly=Markdig.Wpf"
+        Title="Help — B1 Chat" Height="820" Width="980"
+        Icon="Assets/AppIcon.ico"
+        Background="{StaticResource PageBackgroundBrush}">
+    <Window.CommandBindings>
+        <CommandBinding Command="{x:Static markdig:Commands.Hyperlink}" Executed="Hyperlink_Executed" />
+    </Window.CommandBindings>
+
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Themes/HelpStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- Flat sidebar link — deliberately not BeveledButtonStyle: this is a table-of-contents
+                 list, not a toolbar action, so it stays borderless with a soft hover/active tint. -->
+            <Style x:Key="HelpNavButtonStyle" TargetType="Button">
+                <Setter Property="HorizontalContentAlignment" Value="Left" />
+                <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Padding" Value="10,6" />
+                <Setter Property="Margin" Value="4,1" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="FontSize" Value="12.5" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="5">
+                                <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="Left" VerticalAlignment="Center" />
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="#14FFFFFF" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+                <Style.Triggers>
+                    <DataTrigger Value="True">
+                        <DataTrigger.Binding>
+                            <MultiBinding Converter="{StaticResource ReferenceEqualsConv}">
+                                <Binding />
+                                <Binding Path="DataContext.CurrentPage" RelativeSource="{RelativeSource AncestorType=Window}" />
+                            </MultiBinding>
+                        </DataTrigger.Binding>
+                        <Setter Property="Background" Value="{StaticResource AccentBrush}" />
+                        <Setter Property="Foreground" Value="White" />
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Grid>
+        <Rectangle Fill="{StaticResource NoiseTileBrush}" IsHitTestVisible="False" />
+        <Grid Margin="16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="210" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Sidebar / table of contents -->
+            <Border Grid.Column="0" Style="{StaticResource CardBorderStyle}" Padding="6" Margin="0,0,12,0">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <ItemsControl ItemsSource="{Binding Sections}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Title}" FontSize="10.5" FontWeight="Bold"
+                                               Foreground="{StaticResource MutedBrush}" Margin="10,14,10,4" />
+                                    <ItemsControl ItemsSource="{Binding Pages}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Button Content="{Binding Title}" Style="{StaticResource HelpNavButtonStyle}"
+                                                        HorizontalAlignment="Stretch"
+                                                        Command="{Binding DataContext.SelectPageCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding}" />
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Border>
+
+            <!-- Content -->
+            <Border Grid.Column="1" Style="{StaticResource CardBorderStyle}" Padding="0">
+                <FlowDocumentScrollViewer
+                    Document="{Binding CurrentMarkdown, Converter={StaticResource MarkdownToFlowDocumentConv}}"
+                    Background="Transparent" Foreground="{StaticResource TextBrush}"
+                    Padding="28,20" VerticalScrollBarVisibility="Auto" />
+            </Border>
+        </Grid>
+    </Grid>
+</Window>

@@ -1,0 +1,57 @@
+{
+  "title": "B1 Chat Help",
+  "sections": [
+    {
+      "title": "Getting Started",
+      "pages": [
+        { "title": "Overview", "file": "getting-started.md" }
+      ]
+    },
+    {
+      "title": "Droids",
+      "pages": [
+        { "title": "Droids Card", "file": "droids.md" }
+      ]
+    },
+    {
+      "title": "Calibration",
+      "pages": [
+        { "title": "Servo Calibration", "file": "calibration.md" }
+      ]
+    },
+    {
+      "title": "Mesh Topology",
+      "pages": [
+        { "title": "Reading the Radar", "file": "mesh-topology.md" }
+      ]
+    },
+    {
+      "title": "Animation",
+      "pages": [
+        { "title": "Gestures & Idle Behavior", "file": "animation.md" }
+      ]
+    },
+    {
+      "title": "Sequencer",
+      "pages": [
+        { "title": "Timeline", "file": "sequencer/timeline.md" },
+        { "title": "Audio", "file": "sequencer/audio.md" },
+        { "title": "Playback", "file": "sequencer/playback.md" }
+      ]
+    },
+    {
+      "title": "Firmware",
+      "pages": [
+        { "title": "Flashing over USB", "file": "firmware/flashing.md" },
+        { "title": "OTA over the Mesh", "file": "firmware/ota.md" }
+      ]
+    },
+    {
+      "title": "Reference",
+      "pages": [
+        { "title": "Troubleshooting", "file": "reference/troubleshooting.md" },
+        { "title": "Tips & Shortcuts", "file": "reference/tips.md" }
+      ]
+    }
+  ]
+}

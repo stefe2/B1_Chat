@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -20,6 +21,12 @@ public partial class DroidsViewModel : ObservableObject
     private string? _latestFwVersion;
 
     public ObservableCollection<Droid> Droids => _protocol.Droids;
+
+    // Real per-droid comparison (Droid.FwUpToDate — same one that colors each row's own
+    // badge), unlike FirmwareViewModel.HasFwUpdate which only means "GitHub has a firmware
+    // release" regardless of whether the fleet already has it. Kept in sync via each droid's
+    // PropertyChanged below, not just when the collection itself changes.
+    public bool AnyFwUpdateAvailable => Droids.Any(d => d.FwUpToDate == false);
 
     [ObservableProperty] private bool _anyOtaActive;
 
@@ -51,9 +58,21 @@ public partial class DroidsViewModel : ObservableObject
         };
         Droids.CollectionChanged += (_, e) =>
         {
-            if (e.NewItems == null) return;
-            foreach (Droid d in e.NewItems) d.LatestFwVersion = _latestFwVersion;
+            if (e.OldItems != null)
+                foreach (Droid d in e.OldItems) d.PropertyChanged -= OnDroidPropertyChanged;
+            if (e.NewItems != null)
+                foreach (Droid d in e.NewItems)
+                {
+                    d.LatestFwVersion = _latestFwVersion;
+                    d.PropertyChanged += OnDroidPropertyChanged;
+                }
+            OnPropertyChanged(nameof(AnyFwUpdateAvailable));
         };
+    }
+
+    private void OnDroidPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(Droid.FwUpToDate)) OnPropertyChanged(nameof(AnyFwUpdateAvailable));
     }
 
     // Called by MainViewModel whenever the shared FirmwareViewModel learns of a new

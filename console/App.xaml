@@ -27,6 +27,7 @@
             <conv:TrackMutedConverter x:Key="TrackMutedConv" />
             <conv:WaveformToGeometryConverter x:Key="WaveformToGeometryConv" />
             <conv:BoolInvertConverter x:Key="BoolInvertConv" />
+            <conv:MarkdownToFlowDocumentConverter x:Key="MarkdownToFlowDocumentConv" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>

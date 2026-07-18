@@ -39,6 +39,11 @@ public partial class MainViewModel : ObservableObject
     // instead of only appearing to flag a pending auto-commit.
     public bool ShowSyncBadge => Protocol.HasCap("commit");
 
+    // Console update (real version comparison) OR at least one droid actually behind the
+    // latest published firmware (real per-droid comparison) — see FirmwareViewModel.HasAppUpdate
+    // and DroidsViewModel.AnyFwUpdateAvailable for why neither can just be "a release exists".
+    public bool HasAnyUpdateAvailable => Firmware.HasAppUpdate || Droids.AnyFwUpdateAvailable;
+
     public MainViewModel()
     {
         _settings = new SettingsService();
@@ -77,6 +82,11 @@ public partial class MainViewModel : ObservableObject
         Firmware.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is nameof(FirmwareViewModel.FwLatest)) Droids.UpdateLatestFwVersion(Firmware.FwLatest);
+            if (e.PropertyName is nameof(FirmwareViewModel.HasAppUpdate)) OnPropertyChanged(nameof(HasAnyUpdateAvailable));
+        };
+        Droids.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(DroidsViewModel.AnyFwUpdateAvailable)) OnPropertyChanged(nameof(HasAnyUpdateAvailable));
         };
         Firmware.CheckUpdatesCommand.Execute(null);
 

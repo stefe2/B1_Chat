@@ -20,20 +20,14 @@
         </Grid.RowDefinitions>
 
         <!-- Header: logo + title, status/port, commit/revert -->
-        <Border Grid.Row="0" Background="{StaticResource Bg2Brush}" BorderBrush="{StaticResource BevelBorderBrush}" BorderThickness="0,0,0,1.5" Padding="18,12">
+        <Border Grid.Row="0" Background="{StaticResource Bg2Brush}" BorderBrush="{StaticResource BevelBorderBrush}" BorderThickness="0,0,0,1.5" Padding="18,4">
             <Border.Effect>
                 <DropShadowEffect Color="Black" Direction="270" ShadowDepth="3" BlurRadius="8" Opacity="0.4" />
             </Border.Effect>
             <DockPanel LastChildFill="False">
                 <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" VerticalAlignment="Center">
-                    <Border Style="{StaticResource AppLogoStyle}" Margin="0,0,10,0">
-                        <Canvas Width="20" Height="16" HorizontalAlignment="Center" VerticalAlignment="Center">
-                            <Rectangle Canvas.Left="9" Canvas.Top="0" Width="2" Height="4" Fill="#2A1B0A" />
-                            <Ellipse Canvas.Left="8" Canvas.Top="0" Width="4" Height="4" Fill="#2A1B0A" />
-                            <Rectangle Canvas.Left="0" Canvas.Top="4" Width="20" Height="12" RadiusX="4" RadiusY="4" Fill="#2A1B0A" />
-                            <Ellipse Canvas.Left="4" Canvas.Top="8" Width="4" Height="4" Fill="#FF9D2E" />
-                            <Ellipse Canvas.Left="12" Canvas.Top="8" Width="4" Height="4" Fill="#FF9D2E" />
-                        </Canvas>
+                    <Border Style="{StaticResource AppLogoStyle}" Background="Transparent" Width="50" Height="50" Margin="0,0,10,0">
+                        <Image Source="Assets/AppLogo.png" Width="50" Height="50" Stretch="Uniform" />
                     </Border>
                     <StackPanel VerticalAlignment="Center">
                         <TextBlock Text="B1 CHAT" Style="{StaticResource PageTitleStyle}" />
@@ -44,6 +38,7 @@
                 <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
                     <!-- Cluster 1: commit/sync status (always on once the firmware supports it) -->
                     <Border Style="{Binding Protocol.Dirty, Converter={StaticResource BoolToStyleConv}, ConverterParameter='HaloBadgeWarnStyle|HaloBadgeOkStyle'}"
+                            Effect="{x:Null}"
                             Visibility="{Binding ShowSyncBadge, Converter={StaticResource BoolToVisConv}}" Margin="0,0,20,0" VerticalAlignment="Center">
                         <TextBlock Text="{Binding Protocol.Dirty, Converter={StaticResource BoolToTextConv}, ConverterParameter='● unsaved|● synced'}" FontSize="11" Foreground="White" />
                     </Border>
@@ -52,6 +47,12 @@
 
                     <!-- Cluster 2: manual/dev firmware entry point (always available, unlike the
                          per-droid row buttons which hide once a droid is confirmed up to date). -->
+                    <Border Style="{StaticResource HaloBadgeOkStyle}"
+                            Visibility="{Binding HasAnyUpdateAvailable, Converter={StaticResource BoolToVisConv}}"
+                            Margin="0,0,16,0" VerticalAlignment="Center"
+                            ToolTip="{Binding Firmware.UpdateStatus}">
+                        <TextBlock Text="● update available" FontSize="11" Foreground="White" />
+                    </Border>
                     <Button Style="{StaticResource MiniButtonStyle}" Click="OpenFirmwareWindow_Click"
                             Margin="0,0,8,0" VerticalAlignment="Center" ToolTip="Open the firmware flash and update window">
                         <StackPanel Orientation="Horizontal">
@@ -67,28 +68,35 @@
                             <TextBlock Text="Firmware…" />
                         </StackPanel>
                     </Button>
-                    <Border Style="{StaticResource HaloBadgeOkStyle}"
-                            Visibility="{Binding Firmware.HasAnyUpdate, Converter={StaticResource BoolToVisConv}}"
-                            Margin="0,0,16,0" VerticalAlignment="Center"
-                            ToolTip="{Binding Firmware.UpdateStatus}">
-                        <TextBlock Text="● update available" FontSize="11" Foreground="White" />
-                    </Border>
+
+                    <Button Style="{StaticResource MiniButtonStyle}" Click="OpenHelpWindow_Click"
+                            Margin="0,0,16,0" VerticalAlignment="Center" ToolTip="Open the Help window"
+                            AutomationProperties.Name="Help">
+                        <StackPanel Orientation="Horizontal">
+                            <Grid Width="13" Height="13" Margin="0,0,6,0" VerticalAlignment="Center">
+                                <Ellipse Stroke="{StaticResource AccentBrush}" StrokeThickness="1.2" />
+                                <TextBlock Text="?" FontSize="9" FontWeight="Bold" Foreground="{StaticResource AccentBrush}"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-1,0,0" />
+                            </Grid>
+                            <TextBlock Text="Help" />
+                        </StackPanel>
+                    </Button>
 
                     <Border Width="1" Height="20" Background="{StaticResource BevelBorderBrush}" Margin="0,0,16,0" VerticalAlignment="Center" />
 
                     <!-- Cluster 3: serial connection -->
-                    <Border Style="{StaticResource HeaderPillStyle}" Margin="0,0,12,0">
+                    <Border Style="{StaticResource HeaderPillStyle}" Margin="0,0,12,0" VerticalAlignment="Center">
                         <StackPanel Orientation="Horizontal">
                             <Ellipse Style="{Binding Connected, Converter={StaticResource BoolToStyleConv}, ConverterParameter='LedDotOnStyle|LedDotOffStyle'}"
                                      VerticalAlignment="Center" Margin="0,0,7,0" />
                             <TextBlock Text="{Binding ConnectionStatusText}" Foreground="{StaticResource TextBrush}" FontSize="11" VerticalAlignment="Center" />
                         </StackPanel>
                     </Border>
-                    <ComboBox Width="100" Style="{StaticResource DarkComboBoxStyle}" ItemsSource="{Binding AvailablePorts}" SelectedItem="{Binding SelectedPort}" Margin="0,0,6,0" />
-                    <Button Content="Rescan" Style="{StaticResource MiniButtonStyle}" Command="{Binding RefreshPortsCommand}" Margin="0,0,8,0" ToolTip="Refresh the port list" />
-                    <Button Content="Connect" Style="{StaticResource AccentButtonStyle}" Command="{Binding ConnectCommand}"
+                    <ComboBox Width="100" Style="{StaticResource DarkComboBoxStyle}" Padding="10,4" FontSize="11" VerticalAlignment="Center" ItemsSource="{Binding AvailablePorts}" SelectedItem="{Binding SelectedPort}" Margin="0,0,6,0" />
+                    <Button Content="Rescan" Style="{StaticResource MiniButtonStyle}" Command="{Binding RefreshPortsCommand}" Margin="0,0,8,0" VerticalAlignment="Center" ToolTip="Refresh the port list" />
+                    <Button Content="Connect" Style="{StaticResource AccentButtonStyle}" Command="{Binding ConnectCommand}" VerticalAlignment="Center"
                             Visibility="{Binding Connected, Converter={StaticResource BoolToVisConv}, ConverterParameter=Invert}" />
-                    <Button Content="Disconnect" Style="{StaticResource AccentButtonStyle}" Command="{Binding DisconnectCommand}"
+                    <Button Content="Disconnect" Style="{StaticResource AccentButtonStyle}" Command="{Binding DisconnectCommand}" VerticalAlignment="Center"
                             Visibility="{Binding Connected, Converter={StaticResource BoolToVisConv}}" />
                 </StackPanel>
             </DockPanel>
