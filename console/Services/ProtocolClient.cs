@@ -90,10 +90,11 @@ public partial class ProtocolClient : ObservableObject
         PortOpen = false;
         SessionReady = false;
         StopKeepalive();
-        // Voluntary disconnect (not a drop mid-auto-reconnect): the console can no longer
-        // guarantee this data (online/RSSI/mesh links) is still current, so it's cleared
-        // instead of leaving a frozen, potentially misleading state on screen.
-        if (!unexpected) ClearLiveState();
+        // Cleared on ANY disconnect, expected or not: an unplugged master must refresh the
+        // UI exactly like clicking Disconnect (droid list/mesh links no longer guaranteed
+        // current) rather than leaving stale, misleadingly "live"-looking data on screen
+        // while a background auto-reconnect is in flight.
+        ClearLiveState();
         LinkClosed?.Invoke(unexpected);
     }
 

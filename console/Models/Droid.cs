@@ -27,6 +27,12 @@ public partial class Droid : ObservableObject
     public string IdHex => Id.ToString("X4");
     public string DisplayLabel => $"{Name} ({IdHex})";
 
+    // DarkComboBoxStyle's ControlTemplate renders the selected item via SelectionBoxItem,
+    // which falls back to ToString() rather than respecting DisplayMemberPath (same pitfall
+    // already fixed on TimelineTrack for the Sequencer) — without this, any ComboBox bound
+    // to a Droid shows the CLR type name instead of its name.
+    public override string ToString() => DisplayLabel;
+
     // Never-adopted droid: waiting on a UI decision (Adopt/Ignore).
     public bool IsPending => !IsMaster && !Adopted;
 

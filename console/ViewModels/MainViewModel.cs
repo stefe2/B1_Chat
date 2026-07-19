@@ -17,6 +17,11 @@ public partial class MainViewModel : ObservableObject
     public ObservableCollection<LogEntry> LogEntries { get; } = new();
     private const int LogMax = 300;
 
+    // Retries the last known port every 3s until it reappears (droid fleet powered on after
+    // the console itself) — stopped as soon as any connection succeeds or the user manually
+    // disconnects, same "don't fight the user" reflex as SerialLinkService's own reconnect loop.
+    private System.Threading.Timer? _startupConnectTimer;
+
     [ObservableProperty] private string? _selectedPort;
     [ObservableProperty] private bool _connected;
     [ObservableProperty] private string _connectionStatusText = "Disconnected";
@@ -57,9 +62,10 @@ public partial class MainViewModel : ObservableObject
         Animation = new AnimationViewModel(Protocol);
         Firmware = new FirmwareViewModel(Protocol, _link);
         Topology = new MeshTopologyViewModel(Protocol);
-        Sequencer = new SequencerViewModel(Protocol);
+        Sequencer = new SequencerViewModel(Protocol, _settings);
+        Sequencer.TryLoadLastSequence();
 
-        _link.Opened += () => { Connected = true; ConnectionStatusText = "Connected — handshake…"; };
+        _link.Opened += () => { Connected = true; ConnectionStatusText = "Connected — handshake…"; StopStartupConnectTimer(); };
         _link.Closed += unexpected => { Connected = false; ConnectionStatusText = unexpected ? "Disconnected (unexpected) — reconnecting…" : "Disconnected"; };
         _link.OpenFailed += err => ConnectionStatusText = "Connection failed: " + err;
         Protocol.LinkError += err => ConnectionStatusText = "Serial port error: " + err;
@@ -91,7 +97,35 @@ public partial class MainViewModel : ObservableObject
         Firmware.CheckUpdatesCommand.Execute(null);
 
         RefreshPorts();
-        if (!string.IsNullOrEmpty(_settings.LastPort)) SelectedPort = _settings.LastPort;
+        if (!string.IsNullOrEmpty(_settings.LastPort))
+        {
+            SelectedPort = _settings.LastPort;
+            TryAutoConnect();
+            _startupConnectTimer = new System.Threading.Timer(_ =>
+                System.Windows.Application.Current?.Dispatcher.BeginInvoke(TryAutoConnect),
+                null, TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(3));
+        }
+    }
+
+    // Re-scans ports and, if the last known one has (re)appeared and we're not already
+    // connected, opens it — called once immediately at startup, then every 3s by
+    // _startupConnectTimer until it succeeds or the user takes over manually.
+    private void TryAutoConnect()
+    {
+        if (Connected) { StopStartupConnectTimer(); return; }
+        RefreshPorts();
+        var last = _settings.LastPort;
+        if (!string.IsNullOrEmpty(last) && AvailablePorts.Contains(last))
+        {
+            SelectedPort = last;
+            _link.Open(last);
+        }
+    }
+
+    private void StopStartupConnectTimer()
+    {
+        _startupConnectTimer?.Dispose();
+        _startupConnectTimer = null;
     }
 
     private void AddLog(LogKind kind, string text)
@@ -117,5 +151,9 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void Disconnect() => _link.Close();
+    private void Disconnect()
+    {
+        StopStartupConnectTimer();
+        _link.Close();
+    }
 }

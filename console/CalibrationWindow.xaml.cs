@@ -3,9 +3,9 @@ using b1_chat_console.Services;
 
 namespace b1_chat_console;
 
-public partial class FirmwareWindow : Window
+public partial class CalibrationWindow : Window
 {
-    public FirmwareWindow()
+    public CalibrationWindow()
     {
         InitializeComponent();
         DarkTitleBar.Apply(this);

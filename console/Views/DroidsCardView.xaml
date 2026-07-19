@@ -5,7 +5,7 @@
              d:DataContext="{d:DesignInstance vm:DroidsViewModel}"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008/design"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" mc:Ignorable="d">
-    <Border Style="{StaticResource CardBorderStyle}" Width="780" HorizontalAlignment="Left">
+    <Border Style="{StaticResource CardBorderStyle}" Width="820" HorizontalAlignment="Left">
         <DockPanel>
             <DockPanel DockPanel.Dock="Top" LastChildFill="False" Margin="0,0,0,12">
                 <Border Style="{StaticResource CardIconBoxStyle}" DockPanel.Dock="Left" Margin="0,0,10,0">
@@ -41,6 +41,7 @@
                             <ColumnDefinition Width="56" />
                             <ColumnDefinition Width="92" />
                             <ColumnDefinition Width="40" />
+                            <ColumnDefinition Width="40" />
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0" Text="NAME" Style="{StaticResource TableHeaderTextStyle}" />
                         <TextBlock Grid.Column="1" Text="VERSION" Style="{StaticResource TableHeaderTextStyle}" />
@@ -69,6 +70,7 @@
                                             <ColumnDefinition Width="70" />
                                             <ColumnDefinition Width="56" />
                                             <ColumnDefinition Width="92" />
+                                            <ColumnDefinition Width="40" />
                                             <ColumnDefinition Width="40" />
                                         </Grid.ColumnDefinitions>
 
@@ -168,6 +170,15 @@
                                         </Border>
 
                                         <Button Grid.Column="9" Style="{StaticResource MiniButtonStyle}"
+                                                Command="{Binding DataContext.OpenCalibrationCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                CommandParameter="{Binding}"
+                                                ToolTip="Open servo calibration for this droid"
+                                                Visibility="{Binding IsPending, Converter={StaticResource BoolToVisConv}, ConverterParameter=Invert}"
+                                                HorizontalAlignment="Center">
+                                            <TextBlock Text="⛭" FontSize="12" Foreground="{StaticResource AccentBrush}" FontWeight="Bold" />
+                                        </Button>
+
+                                        <Button Grid.Column="10" Style="{StaticResource MiniButtonStyle}"
                                                 Command="{Binding DataContext.ForgetDroidCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                 CommandParameter="{Binding}"
                                                 ToolTip="Remove this droid from the list — it will ask to be adopted again if it talks."

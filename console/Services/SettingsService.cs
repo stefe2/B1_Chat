@@ -11,6 +11,7 @@ public class SettingsService
     private static readonly string SettingsFile = Path.Combine(SettingsDir, "settings.json");
 
     public string? LastPort { get; private set; }
+    public string? LastSequencePath { get; private set; }
 
     public void Load()
     {
@@ -20,6 +21,8 @@ public class SettingsService
             var doc = JsonSerializer.Deserialize<JsonElement>(File.ReadAllText(SettingsFile));
             if (doc.TryGetProperty("lastPort", out var p) && p.ValueKind == JsonValueKind.String)
                 LastPort = p.GetString();
+            if (doc.TryGetProperty("lastSequencePath", out var s) && s.ValueKind == JsonValueKind.String)
+                LastSequencePath = s.GetString();
         }
         catch { /* file missing/corrupt: start over without a known last port */ }
     }
@@ -30,12 +33,18 @@ public class SettingsService
         Save();
     }
 
+    public void SetLastSequencePath(string? path)
+    {
+        LastSequencePath = path;
+        Save();
+    }
+
     private void Save()
     {
         try
         {
             Directory.CreateDirectory(SettingsDir);
-            var json = JsonSerializer.Serialize(new { lastPort = LastPort });
+            var json = JsonSerializer.Serialize(new { lastPort = LastPort, lastSequencePath = LastSequencePath });
             File.WriteAllText(SettingsFile, json);
         }
         catch { /* disk full/locked: non-blocking */ }

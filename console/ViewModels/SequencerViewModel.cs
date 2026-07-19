@@ -16,6 +16,7 @@ namespace b1_chat_console.ViewModels;
 public partial class SequencerViewModel : ObservableObject
 {
     private readonly ProtocolClient _protocol;
+    private readonly SettingsService _settings;
     private readonly LibraryService _library = new();
     private readonly AudioPlaybackService _audioPlayer = new();
     private const int HistoryMax = 50;
@@ -134,9 +135,10 @@ public partial class SequencerViewModel : ObservableObject
     private readonly List<System.Threading.Timer> _playbackTimers = new();
     private int _elapsedAtPauseMs;
 
-    public SequencerViewModel(ProtocolClient protocol)
+    public SequencerViewModel(ProtocolClient protocol, SettingsService settings)
     {
         _protocol = protocol;
+        _settings = settings;
         _protocol.DroidsChanged += RebuildTracks;
         _protocol.AnimDurationsReceived += () =>
         {
@@ -666,6 +668,7 @@ public partial class SequencerViewModel : ObservableObject
             ["steps"] = new JsonArray(Steps.Select(s => (JsonNode)new JsonObject { ["animId"] = s.AnimId, ["target"] = s.Target, ["startMs"] = s.StartMs }).ToArray()),
         };
         File.WriteAllText(dlg.FileName, obj.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+        _settings.SetLastSequencePath(dlg.FileName);
     }
 
     [RelayCommand]
@@ -675,63 +678,80 @@ public partial class SequencerViewModel : ObservableObject
         if (dlg.ShowDialog() != true) return;
         try
         {
-            var obj = JsonNode.Parse(File.ReadAllText(dlg.FileName)) as JsonObject;
-            if (obj == null) return;
-            Name = obj["name"]?.GetValue<string>() ?? "";
-            Loop = obj["loop"]?.GetValue<bool>() ?? false;
-            _fileTracks.Clear();
-            if (obj["tracks"] is JsonArray trackArr)
-                foreach (var tn in trackArr)
-                    if (tn is JsonObject to)
-                        _fileTracks.Add(new SequenceTrackDto
-                        {
-                            Id = to["id"]?.GetValue<ushort>() ?? 0xFFFF,
-                            Name = to["name"]?.GetValue<string>() ?? "",
-                        });
-            List<AudioLaneDto>? lanes = null;
-            if (obj["audioLanes"] is JsonArray laneArr)
-            {
-                lanes = new List<AudioLaneDto>();
-                foreach (var ln in laneArr)
-                    if (ln is JsonObject lo)
-                    {
-                        var laneDto = new AudioLaneDto { Label = lo["label"]?.GetValue<string>() ?? "AUDIO" };
-                        if (lo["clips"] is JsonArray clipArr)
-                            foreach (var cl in clipArr)
-                                if (cl is JsonObject co)
-                                    laneDto.Clips.Add(new AudioClipDto
-                                    {
-                                        FilePath = co["filePath"]?.GetValue<string>() ?? "",
-                                        DurationMs = co["durationMs"]?.GetValue<int>() ?? 0,
-                                        StartMs = co["startMs"]?.GetValue<int>() ?? 0,
-                                        Loop = co["loop"]?.GetValue<bool>() ?? false,
-                                    });
-                        lanes.Add(laneDto);
-                    }
-            }
-            ApplyAudioLanesFromDto(lanes);
-            Steps.Clear();
-            if (obj["steps"] is JsonArray arr)
-                foreach (var st in arr)
-                    if (st is JsonObject so)
-                        // "delayMs": pre-timeline export (schema version 1) — read back as a
-                        // start offset, not a relative delay; not equivalent, but a reasonable
-                        // best-effort rather than silently dropping the step.
-                        Steps.Add(new SequenceStep
-                        {
-                            AnimId = so["animId"]?.GetValue<int>() ?? 0,
-                            Target = so["target"]?.GetValue<ushort>() ?? 0xFFFF,
-                            StartMs = so["startMs"]?.GetValue<int>() ?? so["delayMs"]?.GetValue<int>() ?? 0,
-                        });
-            RebuildTracks();
-            SelectedStep = null;
-            ClearHistory();
-            Dirty = false;
+            ImportFrom(dlg.FileName);
+            _settings.SetLastSequencePath(dlg.FileName);
         }
         catch (Exception ex)
         {
             MessageBox.Show("Import failed: " + ex.Message, "Sequencer", MessageBoxButton.OK, MessageBoxImage.Error);
         }
+    }
+
+    // Restores whatever sequence was last exported/imported, so the console resumes exactly
+    // where the previous session left off instead of starting blank. Silent on failure (a
+    // missing/corrupt file at startup shouldn't pop a dialog before the app has even settled).
+    public void TryLoadLastSequence()
+    {
+        var path = _settings.LastSequencePath;
+        if (string.IsNullOrEmpty(path) || !File.Exists(path)) return;
+        try { ImportFrom(path); }
+        catch { /* stale/corrupt last-sequence file: start with an empty sequence instead */ }
+    }
+
+    private void ImportFrom(string path)
+    {
+        var obj = JsonNode.Parse(File.ReadAllText(path)) as JsonObject;
+        if (obj == null) return;
+        Name = obj["name"]?.GetValue<string>() ?? "";
+        Loop = obj["loop"]?.GetValue<bool>() ?? false;
+        _fileTracks.Clear();
+        if (obj["tracks"] is JsonArray trackArr)
+            foreach (var tn in trackArr)
+                if (tn is JsonObject to)
+                    _fileTracks.Add(new SequenceTrackDto
+                    {
+                        Id = to["id"]?.GetValue<ushort>() ?? 0xFFFF,
+                        Name = to["name"]?.GetValue<string>() ?? "",
+                    });
+        List<AudioLaneDto>? lanes = null;
+        if (obj["audioLanes"] is JsonArray laneArr)
+        {
+            lanes = new List<AudioLaneDto>();
+            foreach (var ln in laneArr)
+                if (ln is JsonObject lo)
+                {
+                    var laneDto = new AudioLaneDto { Label = lo["label"]?.GetValue<string>() ?? "AUDIO" };
+                    if (lo["clips"] is JsonArray clipArr)
+                        foreach (var cl in clipArr)
+                            if (cl is JsonObject co)
+                                laneDto.Clips.Add(new AudioClipDto
+                                {
+                                    FilePath = co["filePath"]?.GetValue<string>() ?? "",
+                                    DurationMs = co["durationMs"]?.GetValue<int>() ?? 0,
+                                    StartMs = co["startMs"]?.GetValue<int>() ?? 0,
+                                    Loop = co["loop"]?.GetValue<bool>() ?? false,
+                                });
+                    lanes.Add(laneDto);
+                }
+        }
+        ApplyAudioLanesFromDto(lanes);
+        Steps.Clear();
+        if (obj["steps"] is JsonArray arr)
+            foreach (var st in arr)
+                if (st is JsonObject so)
+                    // "delayMs": pre-timeline export (schema version 1) — read back as a
+                    // start offset, not a relative delay; not equivalent, but a reasonable
+                    // best-effort rather than silently dropping the step.
+                    Steps.Add(new SequenceStep
+                    {
+                        AnimId = so["animId"]?.GetValue<int>() ?? 0,
+                        Target = so["target"]?.GetValue<ushort>() ?? 0xFFFF,
+                        StartMs = so["startMs"]?.GetValue<int>() ?? so["delayMs"]?.GetValue<int>() ?? 0,
+                    });
+        RebuildTracks();
+        SelectedStep = null;
+        ClearHistory();
+        Dirty = false;
     }
 
     // --- Playback (client-side: real anim/audio commands, nothing stored) --------

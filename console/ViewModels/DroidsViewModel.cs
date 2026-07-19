@@ -37,6 +37,13 @@ public partial class DroidsViewModel : ObservableObject
     [RelayCommand]
     private void OpenFirmware() => OpenFirmwareRequested?.Invoke();
 
+    // Same "dedicated window lives in MainWindow" pattern as OpenFirmwareRequested, but
+    // per-droid: the Calibration window opens pre-targeted at whichever row's ⚙ was clicked.
+    public event Action<Droid>? OpenCalibrationRequested;
+
+    [RelayCommand]
+    private void OpenCalibration(Droid droid) => OpenCalibrationRequested?.Invoke(droid);
+
     public DroidsViewModel(ProtocolClient protocol)
     {
         _protocol = protocol;

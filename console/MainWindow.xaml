@@ -102,7 +102,7 @@
             </DockPanel>
         </Border>
 
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+        <ScrollViewer x:Name="MainScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto" PreviewMouseWheel="MainScroll_PreviewMouseWheel">
             <Grid Margin="18">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
@@ -112,16 +112,14 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <views:DroidsCardView Grid.Row="0" Grid.RowSpan="2" Grid.Column="0" DataContext="{Binding Droids}" Margin="0,0,12,14" />
-                <views:CalibrationCardView Grid.Row="0" Grid.Column="1" DataContext="{Binding Calibration}" Margin="0,0,0,14" />
-                <views:MeshTopologyCardView Grid.Row="1" Grid.Column="1" DataContext="{Binding Topology}" Margin="0,0,0,14" />
+                <views:DroidsCardView Grid.Row="0" Grid.Column="0" DataContext="{Binding Droids}" Margin="0,0,12,14" />
+                <views:MeshTopologyCardView Grid.Row="0" Grid.Column="1" DataContext="{Binding Topology}" Margin="0,0,0,14" />
 
-                <views:AnimationCardView Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" DataContext="{Binding Animation}" Margin="0,0,0,14" />
+                <views:AnimationCardView Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" DataContext="{Binding Animation}" Margin="0,0,0,14" />
 
-                <views:SequencerCardView Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" DataContext="{Binding Sequencer}" />
+                <views:SequencerCardView Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" DataContext="{Binding Sequencer}" />
             </Grid>
         </ScrollViewer>
         </Grid>

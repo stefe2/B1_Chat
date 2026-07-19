@@ -1,0 +1,14 @@
+<Window x:Class="b1_chat_console.CalibrationWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:views="clr-namespace:b1_chat_console.Views"
+        Title="Servo Calibration — B1 Chat" Height="640" Width="620"
+        Icon="Assets/AppIcon.ico"
+        Background="{StaticResource PageBackgroundBrush}">
+    <Grid>
+        <Rectangle Fill="{StaticResource NoiseTileBrush}" IsHitTestVisible="False" />
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <views:CalibrationCardView Margin="16" />
+        </ScrollViewer>
+    </Grid>
+</Window>
