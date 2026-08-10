@@ -1,5 +1,6 @@
 using System.IO;
 using System.IO.Ports;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using b1_chat_console.Models;
@@ -39,8 +40,38 @@ public static class InstallationVerifier
             var helpRoot = Path.Combine(root, "Help");
             var docsRoot = Path.Combine(helpRoot, "docs");
             var manifestPath = Path.Combine(helpRoot, "manifest.json");
-            RequireFile(Path.Combine(root, "tools", "espflash.exe"), "flashing tool");
+            var toolsRoot = Path.Combine(root, "tools");
+            RequireFile(Path.Combine(toolsRoot, "espflash.exe"), "flashing tool");
+            RequireFile(Path.Combine(toolsRoot, "vcruntime140.dll"), "Visual C++ runtime for the flashing tool");
+            var vcManifestPath = Path.Combine(toolsRoot, "vc-runtime-manifest.json");
+            RequireFile(vcManifestPath, "Visual C++ runtime manifest");
             RequireFile(manifestPath, "Help manifest");
+
+            using (var vcDocument = JsonDocument.Parse(File.ReadAllText(vcManifestPath)))
+            {
+                var vcRoot = vcDocument.RootElement;
+                if (vcRoot.GetProperty("architecture").GetString() != "x64" ||
+                    vcRoot.GetProperty("runtime").GetString() != "Microsoft.VC143.CRT")
+                    throw new InvalidDataException("The Visual C++ runtime manifest has invalid metadata.");
+
+                var vcFiles = vcRoot.GetProperty("files");
+                if (vcFiles.GetArrayLength() == 0)
+                    throw new InvalidDataException("The Visual C++ runtime manifest contains no DLLs.");
+                foreach (var file in vcFiles.EnumerateArray())
+                {
+                    var name = file.GetProperty("name").GetString() ?? "";
+                    if (!name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ||
+                        Path.GetFileName(name) != name)
+                        throw new InvalidDataException($"Invalid Visual C++ runtime filename: '{name}'.");
+
+                    var path = SafeChildPath(toolsRoot, name);
+                    RequireFile(path, $"Visual C++ runtime DLL '{name}'");
+                    var expectedHash = file.GetProperty("sha256").GetString() ?? "";
+                    var actualHash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path)));
+                    if (!actualHash.Equals(expectedHash, StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidDataException($"Visual C++ runtime DLL failed integrity verification: '{name}'.");
+                }
+            }
 
             var manifest = JsonSerializer.Deserialize<HelpManifest>(
                 File.ReadAllText(manifestPath),

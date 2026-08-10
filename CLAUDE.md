@@ -316,7 +316,7 @@ loaded by the application.
 | `Services/DarkTitleBar.cs` | recolors the native Win32 title bar dark (`DwmSetWindowAttribute`, Windows 11 22H2+) to match the app's own header — applied to all 4 windows |
 | `Converters/` | `BoolToStyleConverter`, `BoolToTextConverter`, `BoolToVisibilityConverter`, `BoolToBrushConverter`, `StrengthToBrushConverter` (mesh link color by RSSI), `TimelineGeometryConverter`/`TimelineActiveConverter`/`AnimFamilyToBrushConverter` (Sequencer timeline), `MarkdownToFlowDocumentConverter` (Help window) |
 | `Help/manifest.json` + `Help/docs/**/*.md` | in-app Help content: sections → pages (same shape as KyberEditor's own Help viewer), rendered by `HelpWindow`/`HelpViewModel` — copied to the output dir as Content, not embedded |
-| `b1-chat-console.csproj` | auto-incremented build number, version from `VersionPrefix`, `IncludeNativeLibrariesForSelfExtract`, `tools/` (espflash) excluded from the single-file but copied on publish |
+| `b1-chat-console.csproj` | auto-incremented build number, version from `VersionPrefix`, `IncludeNativeLibrariesForSelfExtract`, `tools/` (espflash + app-local VC143 x64 runtime) excluded from the single-file but copied on publish |
 | `installer/b1-chat-console.nsi` + `release.ps1` | NSIS installer + GitHub release script (tag `vX.Y.Z`) |
 
 Main grid layout (`MainWindow.xaml`, reorganized 2026-07-19): Droids (left

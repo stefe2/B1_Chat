@@ -10,7 +10,7 @@ ManifestSupportedOS all
 !define APPDISPLAY "B1 Chat — Supervision Console"
 ; Matches the csproj's <VersionPrefix>; overridable: makensis /DAPPVERSION=x.y.z
 !ifndef APPVERSION
-  !define APPVERSION "0.10.5"
+  !define APPVERSION "0.10.6"
 !endif
 !define PUBLISHER "stefe"
 !define EXENAME "b1-chat-console.exe"
@@ -100,12 +100,12 @@ Section "Application" SecApp
   ${EndIf}
   DetailPrint "Application self-check: OK (.NET runtime is bundled)."
 
-  DetailPrint "Checking bundled espflash tool..."
+  DetailPrint "Checking bundled espflash tool and local Visual C++ runtime..."
   nsExec::ExecToStack '"$INSTDIR\tools\espflash.exe" --version'
   Pop $0
   Pop $1
   ${If} $0 != 0
-    MessageBox MB_OK|MB_ICONSTOP "The bundled espflash tool could not start (exit code $0).$\r$\n$\r$\nFirmware flashing would not work. Installation cannot continue safely."
+    MessageBox MB_OK|MB_ICONSTOP "The bundled espflash tool or its local Visual C++ runtime could not start (exit code $0).$\r$\n$\r$\nAll required runtime DLLs are included in this installer. Antivirus quarantine or a damaged download may be responsible.$\r$\n$\r$\nFirmware flashing would not work. Installation cannot continue safely."
     Abort
   ${EndIf}
   DetailPrint "espflash self-check: OK ($1)"

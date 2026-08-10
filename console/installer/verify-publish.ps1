@@ -11,14 +11,41 @@ $docsRoot = Join-Path $helpRoot "docs"
 $manifestPath = Join-Path $helpRoot "manifest.json"
 $appPath = Join-Path $publishRoot "b1-chat-console.exe"
 $espflashPath = Join-Path $publishRoot "tools\espflash.exe"
+$vcRuntimePath = Join-Path $publishRoot "tools\vcruntime140.dll"
+$vcManifestPath = Join-Path $publishRoot "tools\vc-runtime-manifest.json"
 
 foreach ($required in @(
     $appPath,
     $espflashPath,
+    $vcRuntimePath,
+    $vcManifestPath,
     $manifestPath
 )) {
     if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
         throw "Publish verification failed: missing required file '$required'."
+    }
+}
+
+$vcManifest = Get-Content -LiteralPath $vcManifestPath -Raw | ConvertFrom-Json
+if ($vcManifest.architecture -ne "x64" -or $vcManifest.runtime -ne "Microsoft.VC143.CRT") {
+    throw "Publish verification failed: invalid VC runtime manifest metadata."
+}
+$vcFiles = @($vcManifest.files)
+if ($vcFiles.Count -eq 0) {
+    throw "Publish verification failed: VC runtime manifest contains no DLLs."
+}
+foreach ($file in $vcFiles) {
+    $name = [string]$file.name
+    if ([IO.Path]::GetFileName($name) -ne $name -or -not $name.EndsWith(".dll", [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Publish verification failed: invalid VC runtime filename '$name'."
+    }
+    $path = Join-Path (Split-Path -Parent $espflashPath) $name
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+        throw "Publish verification failed: missing VC runtime DLL '$name'."
+    }
+    $actualHash = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($actualHash -ne ([string]$file.sha256).ToLowerInvariant()) {
+        throw "Publish verification failed: VC runtime DLL hash mismatch for '$name'."
     }
 }
 
@@ -89,4 +116,4 @@ if ($LASTEXITCODE -ne 0) {
     throw "Publish verification failed: espflash self-check exited with $LASTEXITCODE. $espflashOutput"
 }
 
-Write-Host "Publish verified: x64 app/runtime, $($pages.Count) Help pages, $imageCount local image reference(s), $espflashOutput." -ForegroundColor Green
+Write-Host "Publish verified: x64 app/runtime, $($pages.Count) Help pages, $imageCount local image reference(s), $espflashOutput, $($vcFiles.Count) local VC runtime DLLs (v$($vcManifest.version))." -ForegroundColor Green
