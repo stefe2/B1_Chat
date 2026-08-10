@@ -10,7 +10,7 @@ ManifestSupportedOS all
 !define APPDISPLAY "B1 Chat — Supervision Console"
 ; Matches the csproj's <VersionPrefix>; overridable: makensis /DAPPVERSION=x.y.z
 !ifndef APPVERSION
-  !define APPVERSION "0.10.4"
+  !define APPVERSION "0.10.5"
 !endif
 !define PUBLISHER "stefe"
 !define EXENAME "b1-chat-console.exe"

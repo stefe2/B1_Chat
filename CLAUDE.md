@@ -13,7 +13,7 @@ A single git repo (`stefe2/B1_Chat`), two halves:
    network, with smooth/organic animations coordinated by a **master**
    (sound is played by the **console**, client-side — the master's own
    DFPlayer was retired, see the Progress log). Settings persisted in NVS.
-2. **Supervision console** (`console/`, WPF net8.0-windows, v0.9.x): a
+2. **Supervision console** (`console/`, WPF net8.0-windows, v0.10.x): a
    **100% native WPF** desktop app (XAML/MVVM, `CommunityToolkit.Mvvm`) that
    owns the serial port (`System.IO.Ports`) and reproduces the old web
    page's design card by card. `console/wwwroot/index.html` (inline
@@ -27,6 +27,15 @@ A single git repo (`stefe2/B1_Chat`), two halves:
 Two distinct GitHub release trains within the **same** repo, distinguished
 by tag prefix: `vX.Y.Z` for the console app, `fw-vX.Y.Z` for the firmware
 (see `tools/release.ps1` and `console/installer/release.ps1`).
+
+## Git commit preference
+
+Use commit messages that are a little more detailed than a single generic
+sentence. Keep a clear imperative summary, then add a short body describing
+the important user-visible or architectural changes and the validation that
+was performed. Mention notable risks or intentionally excluded work when
+relevant. Avoid vague messages that do not make the commit's scope clear from
+the history.
 
 ## Commands
 
