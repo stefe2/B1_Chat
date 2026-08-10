@@ -14,6 +14,19 @@ struct KeyFrame {
 
 namespace {
 
+// Keep randomized movement durations inside the domain accepted by the servo
+// engine. In particular, a negative jitter must be clamped while it is still
+// signed: converting it to uint16_t first used to wrap a short movement to
+// roughly 65 seconds.
+constexpr uint16_t clampMoveDurationMs(int32_t durationMs) {
+    return durationMs < 1 ? 1
+         : durationMs > UINT16_MAX ? UINT16_MAX
+         : (uint16_t)durationMs;
+}
+
+static_assert(clampMoveDurationMs(-10) == 1, "negative move duration must not wrap");
+static_assert(clampMoveDurationMs(250) == 250, "valid move duration must be preserved");
+
 // -- Animation definitions (offsets from center) ------------------
 const KeyFrame LOOK_AROUND[] = {
     {-40,   5, 900, 500}, { 40,   5, 1200, 500}, {  0,   0, 800, 300},
@@ -178,14 +191,19 @@ void AnimationPlayer::issueCurrentFrame() {
     const AnimDef& a = ANIMS[_animId];
     const KeyFrame& f = a.frames[_idx];
 
-    // Absolute target = center + scaled offset + slight organic jitter (jitter
-    // itself is NOT scaled — it's a fixed "organic realism" detail, not the
-    // gesture's actual amplitude/speed).
-    const float pan  = SERVO_PAN_CENTER  + f.panOff  * _ampScale + jitter(4);
-    const float tilt = SERVO_TILT_CENTER + f.tiltOff * _ampScale + jitter(3);
-    const uint16_t move = (uint16_t)(f.moveMs * _speedScale) + (uint16_t)(jitter(6) * 10);
+    // Offsets are relative to THIS droid's calibrated center (ServoEngine),
+    // not the compile-time 90-degree defaults. Jitter itself is not scaled:
+    // it is a fixed organic-realism detail, not the gesture's amplitude.
+    const float panOffset  = f.panOff  * _ampScale + jitter(4);
+    const float tiltOffset = f.tiltOff * _ampScale + jitter(3);
 
-    _engine->setTarget(pan, tilt, move);
+    // Do the whole randomized calculation signed, then clamp before narrowing.
+    // The shortest 50 ms frames can otherwise become negative at high speed
+    // and wrap to ~65 seconds when converted to uint16_t.
+    const int32_t randomizedMoveMs = (int32_t)(f.moveMs * _speedScale) + jitter(6) * 10;
+    const uint16_t move = clampMoveDurationMs(randomizedMoveMs);
+
+    _engine->setTargetOffset(panOffset, tiltOffset, move);
     _holdDur = (uint16_t)(f.holdMs * _speedScale);
     _needMove = false;
     _holding = false;

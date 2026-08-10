@@ -1,5 +1,7 @@
 using System.Globalization;
 using System.Windows.Data;
+using System.Windows.Documents;
+using b1_chat_console.Services;
 using Markdig;
 using Markdig.Wpf;
 
@@ -12,8 +14,21 @@ public class MarkdownToFlowDocumentConverter : IValueConverter
     // pipeline (UseSupportedExtensions) isn't used by the static ToFlowDocument helper we call here.
     private static readonly MarkdownPipeline Pipeline = new MarkdownPipelineBuilder().UseSupportedExtensions().Build();
 
-    public object? Convert(object? value, Type targetType, object parameter, CultureInfo culture) =>
-        value is string markdown ? Markdig.Wpf.Markdown.ToFlowDocument(markdown, Pipeline) : null;
+    public object? Convert(object? value, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (value is not string markdown) return null;
+
+        try
+        {
+            return Markdig.Wpf.Markdown.ToFlowDocument(markdown, Pipeline);
+        }
+        catch (Exception ex)
+        {
+            TraceLog.Write("ERR", $"Help Markdown render: {ex.GetType().Name} — {ex.Message}");
+            return new FlowDocument(new Paragraph(new Run(
+                "This Help page could not be displayed. Details were written to serial-trace.log.")));
+        }
+    }
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotSupportedException();
 }

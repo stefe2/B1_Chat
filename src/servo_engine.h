@@ -21,6 +21,12 @@ public:
     // pan/tilt in degrees (automatically clamped).
     void setTarget(float panDeg, float tiltDeg, uint32_t durationMs);
 
+    // Sets a target expressed as offsets from THIS droid's calibrated
+    // pan/tilt centers. Animation keyframes use this path so changing a
+    // mechanical center does not make subsequent gestures drift back toward
+    // the compile-time 90-degree defaults.
+    void setTargetOffset(float panOffsetDeg, float tiltOffsetDeg, uint32_t durationMs);
+
     // Recenters the head.
     void center(uint32_t durationMs = 800);
 

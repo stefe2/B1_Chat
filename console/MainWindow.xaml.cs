@@ -57,14 +57,26 @@ public partial class MainWindow : Window
 
     private void OpenHelpWindow_Click(object sender, RoutedEventArgs e)
     {
-        if (_helpWindow is { IsVisible: true })
+        try
         {
-            _helpWindow.Activate();
-            return;
-        }
+            if (_helpWindow is { IsVisible: true })
+            {
+                _helpWindow.Activate();
+                return;
+            }
 
-        _helpWindow = new HelpWindow { Owner = this };
-        _helpWindow.Show();
+            _helpWindow = new HelpWindow { Owner = this };
+            _helpWindow.Show();
+        }
+        catch (Exception ex)
+        {
+            _helpWindow = null;
+            TraceLog.Write("ERR", $"Open Help: {ex.GetType().Name} — {ex.Message}");
+            MessageBox.Show(
+                "Help could not be opened. Reinstall B1 Chat Console.\n\n" +
+                "Diagnostic details were written to:\n%LOCALAPPDATA%\\B1ChatConsole\\serial-trace.log",
+                "B1 Chat Help", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
     // Handled at the tunneling (Preview) stage, before the event can reach whichever

@@ -20,10 +20,15 @@ public partial class ProtocolClient : ObservableObject
     private System.Threading.Timer? _keepalive;
     private readonly HashSet<string> _caps = new();
     private readonly Dictionary<ushort, Droid> _droidsById = new();
+    private readonly Dictionary<ushort, AnimConfig> _animConfigs = new();
+    private ushort? _masterId;
+
+    public readonly record struct AnimConfig(int Freq, int Amp, int Speed);
 
     public ObservableCollection<Droid> Droids { get; } = new();
     public ObservableCollection<MeshLink> MeshLinks { get; } = new();
     public Dictionary<int, int> AnimDurationMs { get; } = new();
+    public IReadOnlyDictionary<ushort, AnimConfig> AnimConfigs => _animConfigs;
 
     [ObservableProperty] private bool _portOpen;
     [ObservableProperty] private bool _sessionReady;
@@ -44,6 +49,7 @@ public partial class ProtocolClient : ObservableObject
     public event Action<string>? LogErr;
     public event Action? HelloReceived;
     public event Action<JsonElement>? CalibDataReceived;
+    public event Action<ushort, int, int, int>? ConfigDataReceived;
     public event Action? AnimDurationsReceived;
     public event Action? MeshTopologyChanged;
     public event Action? DroidsChanged;
@@ -102,6 +108,8 @@ public partial class ProtocolClient : ObservableObject
     {
         Droids.Clear();
         _droidsById.Clear();
+        _animConfigs.Clear();
+        _masterId = null;
         MeshLinks.Clear();
         DroidsChanged?.Invoke();
         MeshTopologyChanged?.Invoke();
@@ -144,7 +152,8 @@ public partial class ProtocolClient : ObservableObject
 
     // Typed helpers for the commands the ViewModels use most.
     public void RequestList() => SendCmd(new JsonObject { ["cmd"] = "list" });
-    public void RequestConfig() => SendCmd(new JsonObject { ["cmd"] = "getConfig" });
+    public void RequestConfig(ushort target = 0xFFFF) =>
+        SendCmd(new JsonObject { ["cmd"] = "getConfig", ["target"] = target });
     public void RequestGetAll() => SendCmd(new JsonObject { ["cmd"] = "getAll" });
     public void RequestAnimDurations() => SendCmd(new JsonObject { ["cmd"] = "getAnimDurations" });
     public void RequestMeshTopology() => SendCmd(new JsonObject { ["cmd"] = "getMeshTopology" });
@@ -233,7 +242,31 @@ public partial class ProtocolClient : ObservableObject
     // (seqLoad/seqSave/seqRun/... helpers removed 2026-07-16 with the rest of the slot
     // machinery — sequences are console-only now, fw 1.7.0 dropped the commands too.)
 
-    public void SetMulti(JsonArray ops) => SendCmd(new JsonObject { ["cmd"] = "setMulti", ["ops"] = ops });
+    public void SetMulti(JsonArray ops)
+    {
+        // Per-droid backups can contain names + animation settings for the
+        // whole fleet. Split them without ever exceeding the lineMax announced
+        // by the firmware; each batch is fully validated before application.
+        var maxLine = LineMax > 0 ? LineMax - 1 : 4095;
+        var batch = new JsonArray();
+        foreach (var op in ops)
+        {
+            batch.Add(op?.DeepClone());
+            var candidate = new JsonObject { ["cmd"] = "setMulti", ["ops"] = batch.DeepClone() };
+            if (candidate.ToJsonString().Length <= maxLine) continue;
+
+            batch.RemoveAt(batch.Count - 1);
+            if (batch.Count == 0)
+            {
+                LogErr?.Invoke("One restore operation exceeds the firmware line limit.");
+                return;
+            }
+            SendCmd(new JsonObject { ["cmd"] = "setMulti", ["ops"] = batch });
+            batch = new JsonArray { op?.DeepClone() };
+        }
+        if (batch.Count > 0)
+            SendCmd(new JsonObject { ["cmd"] = "setMulti", ["ops"] = batch });
+    }
 
     // --- Receiving (equivalent to handleEvent() in JS) ------------------------
 
@@ -349,6 +382,7 @@ public partial class ProtocolClient : ObservableObject
             }
             if (item.TryGetProperty("rssi", out var r) && r.TryGetInt32(out var rssi)) droid.Rssi = rssi;
             if (item.TryGetProperty("role", out var role)) droid.IsMaster = role.GetString() == "master";
+            if (droid.IsMaster) _masterId = id;
             if (droid.IsMaster) droid.PortName = _link.PortName;
             if (item.TryGetProperty("servos", out var sv)) droid.ServosOn = sv.GetBoolean();
             if (item.TryGetProperty("autoAnim", out var aa)) droid.AutoAnimOn = aa.GetBoolean();
@@ -369,14 +403,31 @@ public partial class ProtocolClient : ObservableObject
             _droidsById.Remove(staleId);
         }
 
+        // The master answers these from its local per-ID cache; no mesh
+        // round-trip is generated. Ask only once per newly discovered droid.
+        foreach (var id in seen)
+            if (!_animConfigs.ContainsKey(id)) RequestConfig(id);
+
         DroidsChanged?.Invoke();
     }
 
     private void HandleConfig(JsonElement root)
     {
-        if (root.TryGetProperty("freq", out var f)) LastFreq = f.GetInt32();
-        if (root.TryGetProperty("amp", out var a)) LastAmp = a.GetInt32();
-        if (root.TryGetProperty("speed", out var s)) LastSpeed = s.GetInt32();
+        var target = (ushort)(root.TryGetProperty("target", out var t)
+            ? t.GetInt32()
+            : _masterId ?? 0);
+        if (target == 0) return;
+        var freq = root.TryGetProperty("freq", out var f) ? f.GetInt32() : 50;
+        var amp = root.TryGetProperty("amp", out var a) ? a.GetInt32() : 60;
+        var speed = root.TryGetProperty("speed", out var s) ? s.GetInt32() : 50;
+        _animConfigs[target] = new AnimConfig(freq, amp, speed);
+        if (_masterId == target)
+        {
+            LastFreq = freq;
+            LastAmp = amp;
+            LastSpeed = speed;
+        }
+        ConfigDataReceived?.Invoke(target, freq, amp, speed);
     }
 
     private void HandleMeshTopology(JsonElement root)

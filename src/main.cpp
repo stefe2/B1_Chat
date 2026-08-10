@@ -68,6 +68,83 @@ static uint32_t nextPresenceScan = 0;
 static uint32_t nextDroidsPush = 0;
 static uint32_t nextNeighborReport = 0;
 
+// Valid application messages arrive on the ESP-NOW Wi-Fi task. Keep that
+// callback short: it only copies them here, then loop() performs all logging,
+// NVS, registry, topology, animation, and servo work.
+static const uint8_t MESH_INBOX_CAPACITY = 32;
+static const uint8_t MESH_INBOX_MAX_PER_LOOP = 16;
+
+struct PendingMeshMessage {
+    uint8_t  type;
+    uint8_t  len;
+    uint16_t srcId;
+    int16_t  rssi;
+    uint8_t  payload[MESH_MAX_PAYLOAD];
+};
+
+static PendingMeshMessage gMeshInbox[MESH_INBOX_CAPACITY];
+static uint8_t gMeshInboxHead = 0;
+static uint8_t gMeshInboxTail = 0;
+static uint8_t gMeshInboxCount = 0;
+static uint32_t gMeshInboxDropped = 0;
+static portMUX_TYPE gMeshInboxMux = portMUX_INITIALIZER_UNLOCKED;
+
+struct MeshInboxGuard {
+    MeshInboxGuard() { portENTER_CRITICAL(&gMeshInboxMux); }
+    ~MeshInboxGuard() { portEXIT_CRITICAL(&gMeshInboxMux); }
+};
+
+static void enqueueMeshMessage(uint8_t type, const uint8_t* payload, uint8_t len,
+                               uint16_t srcId, int rssi) {
+    if (len > MESH_MAX_PAYLOAD || (len > 0 && payload == nullptr)) return;
+
+    MeshInboxGuard guard;
+    if (gMeshInboxCount >= MESH_INBOX_CAPACITY) {
+        gMeshInboxDropped++;
+        return;
+    }
+
+    PendingMeshMessage& msg = gMeshInbox[gMeshInboxTail];
+    msg.type = type;
+    msg.len = len;
+    msg.srcId = srcId;
+    msg.rssi = (int16_t)rssi;
+    if (len > 0) memcpy(msg.payload, payload, len);
+
+    gMeshInboxTail = (uint8_t)((gMeshInboxTail + 1) % MESH_INBOX_CAPACITY);
+    gMeshInboxCount++;
+}
+
+static bool dequeueMeshMessage(PendingMeshMessage& out) {
+    MeshInboxGuard guard;
+    if (gMeshInboxCount == 0) return false;
+
+    out = gMeshInbox[gMeshInboxHead];
+    gMeshInboxHead = (uint8_t)((gMeshInboxHead + 1) % MESH_INBOX_CAPACITY);
+    gMeshInboxCount--;
+    return true;
+}
+
+static bool validMeshTarget(uint16_t target, bool allowAll = true) {
+    return target != 0 && (allowAll || target != MESH_TARGET_ALL);
+}
+
+static bool validCalibPayload(const CalibPayload& p) {
+    return validMeshTarget(p.targetId) &&
+           p.panMin <= 180 && p.panCenter <= 180 && p.panMax <= 180 &&
+           p.tiltMin <= 180 && p.tiltCenter <= 180 && p.tiltMax <= 180 &&
+           p.panMin <= p.panCenter && p.panCenter <= p.panMax &&
+           p.tiltMin <= p.tiltCenter && p.tiltCenter <= p.tiltMax;
+}
+
+static bool validConfigPayload(const ConfigPayload& p) {
+    return validMeshTarget(p.targetId) && isfinite(p.freq) &&
+           isfinite(p.amplitude) && isfinite(p.speed) &&
+           p.freq >= 0.0f && p.freq <= 100.0f &&
+           p.amplitude >= 0.0f && p.amplitude <= 100.0f &&
+           p.speed >= 0.0f && p.speed <= 100.0f;
+}
+
 // (The master's stored-sequence player and its 8 NVS slots were retired in
 // fw 1.7.0 — sequences are entirely console-driven now, see CLAUDE.md.)
 
@@ -178,8 +255,8 @@ static void onPreviewCmd(uint16_t target, uint8_t pan, uint8_t tilt) {
 }
 #endif
 
-static void onMeshMessage(uint8_t type, const uint8_t* payload, uint8_t len,
-                          uint16_t srcId, int rssi) {
+static void processMeshMessage(uint8_t type, const uint8_t* payload, uint8_t len,
+                               uint16_t srcId, int rssi) {
 #if IS_MASTER
     // Any received message proves this droid's presence.
     if (Droids.seen(srcId, rssi, millis())) {
@@ -194,6 +271,10 @@ static void onMeshMessage(uint8_t type, const uint8_t* payload, uint8_t len,
     if (type == MSG_ANIM && len == sizeof(AnimPayload)) {
         AnimPayload p;
         memcpy(&p, payload, sizeof(p));
+        if (!validMeshTarget(p.targetId) || p.animId >= ANIM_COUNT) {
+            LOGF("invalid ANIM payload from %04X", srcId);
+            return;
+        }
         LOGF("ANIM from %04X (rssi %d) target=%04X anim=%u", srcId, rssi, p.targetId, p.animId);
         if (p.targetId == MESH_TARGET_ALL || p.targetId == Mesh.myId()) {
             if (gServos) anim.play(p.animId, p.seed);
@@ -201,31 +282,43 @@ static void onMeshMessage(uint8_t type, const uint8_t* payload, uint8_t len,
     } else if (type == MSG_SERVO && len == sizeof(ServoPayload)) {
         ServoPayload p;
         memcpy(&p, payload, sizeof(p));
+        if (!validMeshTarget(p.targetId) || p.enabled > 1) return;
         if (p.targetId == MESH_TARGET_ALL || p.targetId == Mesh.myId())
             applyServos(p.enabled != 0);
     } else if (type == MSG_AUTOANIM && len == sizeof(AutoAnimPayload)) {
         AutoAnimPayload p;
         memcpy(&p, payload, sizeof(p));
+        if (!validMeshTarget(p.targetId) || p.enabled > 1) return;
         if (p.targetId == MESH_TARGET_ALL || p.targetId == Mesh.myId())
             applyAutoAnim(p.enabled != 0);
     } else if (type == MSG_LOCATE && len == sizeof(LocatePayload)) {
         LocatePayload p;
         memcpy(&p, payload, sizeof(p));
+        if (!validMeshTarget(p.targetId) || p.enabled > 1) return;
         if (p.targetId == MESH_TARGET_ALL || p.targetId == Mesh.myId())
             applyLocate(p.enabled != 0);
     } else if (type == MSG_NAME && len == sizeof(NamePayload)) {
         NamePayload p;
         memcpy(&p, payload, sizeof(p));
         p.name[sizeof(p.name) - 1] = '\0'; // defensive: guarantee NUL-termination
+        if (!validMeshTarget(p.targetId, false)) return;
         if (p.targetId == Mesh.myId()) applyName(p.name);
     } else if (type == MSG_CALIB && len == sizeof(CalibPayload)) {
         CalibPayload p;
         memcpy(&p, payload, sizeof(p));
+        if (!validCalibPayload(p)) {
+            LOGF("invalid CALIB payload from %04X", srcId);
+            return;
+        }
         if (p.targetId == MESH_TARGET_ALL || p.targetId == Mesh.myId())
             applyCalib(p);
     } else if (type == MSG_CONFIG && len == sizeof(ConfigPayload)) {
         ConfigPayload p;
         memcpy(&p, payload, sizeof(p));
+        if (!validConfigPayload(p)) {
+            LOGF("invalid CONFIG payload from %04X", srcId);
+            return;
+        }
         if (p.targetId == MESH_TARGET_ALL || p.targetId == Mesh.myId()) {
             const uint8_t freq = (uint8_t)p.freq, amp = (uint8_t)p.amplitude, speed = (uint8_t)p.speed;
             // Immediate persistence: the receiving droid has no "commit" command of its
@@ -236,6 +329,7 @@ static void onMeshMessage(uint8_t type, const uint8_t* payload, uint8_t len,
     } else if (type == MSG_PREVIEW && len == sizeof(PreviewPayload)) {
         PreviewPayload p;
         memcpy(&p, payload, sizeof(p));
+        if (!validMeshTarget(p.targetId) || p.pan > 180 || p.tilt > 180) return;
         if (p.targetId == MESH_TARGET_ALL || p.targetId == Mesh.myId())
             head.setTarget(p.pan, p.tilt, 150);
     } else if (type == MSG_HEARTBEAT && len == sizeof(HeartbeatPayload)) {
@@ -252,43 +346,81 @@ static void onMeshMessage(uint8_t type, const uint8_t* payload, uint8_t len,
 #if IS_MASTER
         NeighborReportPayload rep;
         memcpy(&rep, payload, sizeof(rep));
+        if (rep.count > MAX_NEIGHBORS) return;
         const uint32_t now2 = millis();
         const uint8_t n = rep.count > MAX_NEIGHBORS ? MAX_NEIGHBORS : rep.count;
         for (uint8_t i = 0; i < n; i++)
             MeshTopo.seen(srcId, rep.entries[i].id, rep.entries[i].rssi, now2);
 #endif
-    } else if (type == MSG_OTA_ACK && len == sizeof(OtaAckPayload)) {
+    } else {
+        LOGF("type=%u len=%u from %04X (rssi %d)", type, len, srcId, rssi);
+    }
+}
+
+// ESP-NOW receive callback. OTA already has its own callback-safe mailbox /
+// lock and remains on this low-latency path; every other application message
+// is copied to the inbox and processed by loop().
+static void onMeshMessage(uint8_t type, const uint8_t* payload, uint8_t len,
+                          uint16_t srcId, int rssi) {
 #if IS_MASTER
+    if (type == MSG_OTA_ACK && len == sizeof(OtaAckPayload)) {
         OtaAckPayload p;
         memcpy(&p, payload, sizeof(p));
         OtaM.onAck(srcId, p);
-#endif
-    } else if (type == MSG_OTA_START && len == sizeof(OtaStartPayload)) {
-#if !IS_MASTER
+        return;
+    }
+#else
+    if (type == MSG_OTA_START && len == sizeof(OtaStartPayload)) {
         OtaStartPayload p;
         memcpy(&p, payload, sizeof(p));
         OtaS.onStart(srcId, p);
-#endif
-    } else if (type == MSG_OTA_CHUNK && len == sizeof(OtaChunkPayload)) {
-#if !IS_MASTER
+        return;
+    }
+    if (type == MSG_OTA_CHUNK && len == sizeof(OtaChunkPayload)) {
         OtaChunkPayload p;
         memcpy(&p, payload, sizeof(p));
         OtaS.onChunk(srcId, p);
-#endif
-    } else if (type == MSG_OTA_END && len == sizeof(OtaEndPayload)) {
-#if !IS_MASTER
+        return;
+    }
+    if (type == MSG_OTA_END && len == sizeof(OtaEndPayload)) {
         OtaEndPayload p;
         memcpy(&p, payload, sizeof(p));
         OtaS.onEnd(srcId, p);
-#endif
-    } else if (type == MSG_OTA_ABORT && len == sizeof(OtaAbortPayload)) {
-#if !IS_MASTER
+        return;
+    }
+    if (type == MSG_OTA_ABORT && len == sizeof(OtaAbortPayload)) {
         OtaAbortPayload p;
         memcpy(&p, payload, sizeof(p));
         OtaS.onAbort(srcId, p);
+        return;
+    }
 #endif
-    } else {
-        LOGF("type=%u len=%u from %04X (rssi %d)", type, len, srcId, rssi);
+
+    enqueueMeshMessage(type, payload, len, srcId, rssi);
+}
+
+static void pumpMeshInbox() {
+    PendingMeshMessage msg;
+    uint8_t processed = 0;
+    while (processed < MESH_INBOX_MAX_PER_LOOP && dequeueMeshMessage(msg)) {
+        processMeshMessage(msg.type, msg.payload, msg.len, msg.srcId, msg.rssi);
+        processed++;
+    }
+
+    // A bounded queue is preferable to exhausting RAM under a radio flood.
+    // Report cumulative losses from loop(), never from the Wi-Fi callback.
+    static uint32_t reportedDropped = 0;
+    static uint32_t lastDropReportMs = 0;
+    uint32_t dropped;
+    {
+        MeshInboxGuard guard;
+        dropped = gMeshInboxDropped;
+    }
+    const uint32_t now = millis();
+    if (dropped != reportedDropped && now - lastDropReportMs >= 1000) {
+        LOGF("mesh inbox full: %lu message(s) dropped", (unsigned long)dropped);
+        reportedDropped = dropped;
+        lastDropReportMs = now;
     }
 }
 
@@ -385,16 +517,6 @@ void setup() {
     gAutoAnim = Config.autoAnimEnabled(true);
     head.setEnabled(gServos);
 
-    // Restores this droid's own last freq/amp/speed (master: last committed
-    // value; slave: last value immediately persisted via a received
-    // MSG_CONFIG) — defaults (50/60/50) if never set, matching today's
-    // untouched tuning.
-    {
-        uint8_t f, a, s;
-        Config.animParams(f, a, s);
-        applyAnimParamsEffect(f, a, s);
-    }
-
 #if IS_MASTER
     Console.begin();
     Console.onAnim(playLocalAnim);
@@ -411,7 +533,18 @@ void setup() {
     Console.setMasterAutoAnim(gAutoAnim);
 #endif
 
-    if (Mesh.begin(GROUP_KEY)) {
+    const bool meshReady = Mesh.begin(GROUP_KEY);
+    Config.setLocalId(Mesh.myId());
+
+    // Restores this droid's own keyed freq/amp/speed. ConfigStore falls back
+    // to the <=1.9.0 global keys on the first upgraded boot.
+    {
+        uint8_t f, a, s;
+        Config.animParams(f, a, s);
+        applyAnimParamsEffect(f, a, s);
+    }
+
+    if (meshReady) {
         Mesh.onReceive(onMeshMessage);
         // Persisted calibration of THIS droid (default limits if never set).
         const ServoCalib c = Config.getCalib(Mesh.myId());
@@ -430,6 +563,7 @@ void loop() {
 
     head.update();
     if (gServos) anim.update();
+    pumpMeshInbox();
 #if IS_MASTER
     Console.update();
     OtaM.update(now);

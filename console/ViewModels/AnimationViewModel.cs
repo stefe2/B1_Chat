@@ -10,6 +10,8 @@ public partial class AnimationViewModel : ObservableObject
 {
     private readonly ProtocolClient _protocol;
     private System.Threading.Timer? _saveDebounce;
+    private int _saveGeneration;
+    private bool _loadingConfig;
 
     public static readonly string[] AnimNames =
     {
@@ -38,6 +40,7 @@ public partial class AnimationViewModel : ObservableObject
     public AnimationViewModel(ProtocolClient protocol)
     {
         _protocol = protocol;
+        _protocol.ConfigDataReceived += OnConfigData;
     }
 
     private ushort TargetId => SelectedTarget?.Id ?? 0xFFFF;
@@ -49,17 +52,56 @@ public partial class AnimationViewModel : ObservableObject
         _protocol.PlayAnim(TargetId, SelectedAnimIndex, seed);
     }
 
-    partial void OnFreqChanged(int value) => ScheduleSave();
-    partial void OnAmpChanged(int value) => ScheduleSave();
-    partial void OnSpeedChanged(int value) => ScheduleSave();
+    partial void OnSelectedTargetChanged(Droid? value)
+    {
+        CancelPendingSave();
+        _protocol.RequestConfig(value?.Id ?? 0xFFFF);
+    }
+
+    partial void OnFreqChanged(int value) { if (!_loadingConfig) ScheduleSave(); }
+    partial void OnAmpChanged(int value) { if (!_loadingConfig) ScheduleSave(); }
+    partial void OnSpeedChanged(int value) { if (!_loadingConfig) ScheduleSave(); }
+
+    private void OnConfigData(ushort target, int freq, int amp, int speed)
+    {
+        var selectedId = SelectedTarget?.Id;
+        if (selectedId.HasValue && selectedId.Value != target) return;
+        if (!selectedId.HasValue && Targets.FirstOrDefault(d => d.IsMaster)?.Id != target) return;
+
+        CancelPendingSave();
+        _loadingConfig = true;
+        try
+        {
+            Freq = freq;
+            Amp = amp;
+            Speed = speed;
+        }
+        finally { _loadingConfig = false; }
+    }
+
+    private void CancelPendingSave()
+    {
+        _saveGeneration++;
+        _saveDebounce?.Dispose();
+        _saveDebounce = null;
+    }
 
     private void ScheduleSave()
     {
-        _saveDebounce?.Dispose();
+        CancelPendingSave();
+        var generation = _saveGeneration;
+        var target = TargetId;
+        var freq = Freq;
+        var amp = Amp;
+        var speed = Speed;
         _saveDebounce = new System.Threading.Timer(_ =>
         {
             var dispatcher = System.Windows.Application.Current?.Dispatcher;
-            void Send() => _protocol.SetConfig(TargetId, Freq, Amp, Speed);
+            void Send()
+            {
+                if (generation != _saveGeneration) return;
+                _protocol.SetConfig(target, freq, amp, speed);
+            }
             if (dispatcher == null || dispatcher.CheckAccess()) Send(); else dispatcher.Invoke(Send);
         }, null, 1200, System.Threading.Timeout.Infinite);
     }

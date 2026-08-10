@@ -49,6 +49,11 @@ enum OtaStatus : uint8_t {
 // "All droids" address for targeted payloads.
 static const uint16_t MESH_TARGET_ALL = 0xFFFF;
 
+// Maximum application payload carried by one authenticated ESP-NOW frame.
+// Public because main.cpp's callback-to-loop inbox must reserve enough room
+// to copy any message without processing it on the Wi-Fi task.
+static const uint8_t MESH_MAX_PAYLOAD = 200;
+
 #pragma pack(push, 1)
 struct MeshHeader {
     uint16_t srcId;   // originating droid (derived from the MAC)
@@ -139,7 +144,7 @@ struct NeighborReportPayload {
     NeighborEntry entries[MAX_NEIGHBORS];
 };
 
-// Payload data size per OTA fragment (margin under mesh_comm.cpp's MAX_PAYLOAD=200).
+// Payload data size per OTA fragment (margin under MESH_MAX_PAYLOAD).
 static const uint8_t OTA_CHUNK_DATA_MAX = 190;
 
 // Starts an OTA session toward `targetId` (never MESH_TARGET_ALL). `md5Hex`
@@ -186,7 +191,8 @@ struct OtaAbortPayload {
 };
 #pragma pack(pop)
 
-// Callback invoked for every valid, non-duplicate message.
+// Callback invoked on the ESP-NOW Wi-Fi task for every valid, non-duplicate
+// message. It must return quickly and must not perform flash or actuator work.
 typedef void (*MeshReceiveHandler)(uint8_t type, const uint8_t* payload,
                                    uint8_t len, uint16_t srcId, int rssi);
 
@@ -234,6 +240,13 @@ private:
     struct Neighbor { uint16_t id; int8_t rssi; uint32_t lastSeenMs; };
     Neighbor _neighbors[MAX_NEIGHBORS];
     uint8_t  _neighborCount = 0;
+
+    // send()/copyNeighbors() run from loop(), while handleRaw() runs on the
+    // ESP-NOW Wi-Fi task. Protects _seq, _seen*, and _neighbors* only; HMAC
+    // calculation and esp_now_send() deliberately stay outside the lock.
+    mutable portMUX_TYPE _mux = portMUX_INITIALIZER_UNLOCKED;
+
+    // The helpers below are called only while _mux is held.
     void recordNeighbor(uint16_t id, int rssi, uint32_t now);
     static uint16_t idFromMac(const uint8_t* mac);
 

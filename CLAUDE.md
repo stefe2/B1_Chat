@@ -75,14 +75,14 @@ last 2 bytes of the MAC — plug in → flash → done, no ID to manage).
 
 | File | Role |
 | --- | --- |
-| `main.cpp` | setup()/loop(), module wiring, non-blocking timers |
+| `main.cpp` | setup()/loop(), module wiring, non-blocking timers, bounded ESP-NOW callback→loop inbox |
 | `config.h` | role, pins, default servo limits, mesh/audio/topology constants |
 | `mesh_comm.{h,cpp}` | ESP-NOW: header {srcId,seq,ttl,type}, dedup (srcId,seq), TTL relay, truncated 8-byte HMAC-SHA256, **direct radio neighborhood** (physical sender MAC + RSSI) |
 | `mesh_topology.{h,cpp}` | (master) aggregator of directed {from,to,rssi} edges of the neighborhood graph |
 | `servo_engine.{h,cpp}` | native 50 Hz LEDC PWM, smootherstep easing, idle noise, calibratable limits |
 | `animation.{h,cpp}` | 18 keyframe anims, non-blocking player, variation seed, `totalDurationMs()` |
 | `registry.{h,cpp}` | (master) live inventory: srcId, RSSI, lastSeen, servos, autoAnim (synchronized access, see pitfalls) |
-| `config_store.{h,cpp}` | NVS: names, anim params, per-droid servo calibration |
+| `config_store.{h,cpp}` | NVS: per-droid names, anim params, servo calibration, adoption |
 | `sequence_store.{h,cpp}` | **deleted fw 1.7.0** (was: master NVS, 8 named sequence slots) — sequences are console-only now |
 | `serial_console.{h,cpp}` | (master) USB JSON ↔ mesh bridge for the console |
 | `ota_guard.{h,cpp}` | (all roles) anti-brick: NVS flag + manual rollback to the other partition if the new firmware doesn't start correctly |
@@ -106,7 +106,10 @@ Frame = header + payload + HMAC(8 B, TTL excluded from the signature). Relay: de
 (srcId,seq) in a ring buffer, then if ttl>0 → ttl-- and re-broadcast. Two B1
 fleets with different `GROUP_KEY`s ignore each other; tampered messages are rejected.
 Anti-replay: dedup + monotonic seq (enough for a prop, not an absolute
-cryptographic guarantee).
+cryptographic guarantee). The sequence/dedup/direct-neighbor caches are protected
+across the Wi-Fi and Arduino loop tasks. Valid non-OTA messages are copied into a
+bounded 32-frame inbox and processed from `loop()`; OTA keeps its pre-existing
+callback-safe lock/mailbox fast path.
 
 | Type | Payload |
 | --- | --- |
@@ -145,7 +148,7 @@ broadcasts it to everyone (isolated slave: 3-7s, local) — suspendable per droi
 Session guarded by a handshake: `hello` → `{evt:"hello",ok,id}`, then keepalive
 `ping` (5s timeout on the firmware side, `_clientReady`).
 
-- **Console → master** (`cmd`): `hello` · `ping` · `list` · `getConfig` · `getAll` ·
+- **Console → master** (`cmd`): `hello` · `ping` · `list` · `getConfig {target?}` · `getAll` ·
   `config {target,freq,amp,speed}` · `name {id,name}` ·
   `servo {target,enabled}` · `autoAnim {target,enabled}` ·
   `locate {target,enabled}` ·
@@ -157,7 +160,7 @@ Session guarded by a handshake: `hello` → `{evt:"hello",ok,id}`, then keepaliv
   `otaStart {target,size,md5}` · `otaChunk {seq,data}` (data = base64) · `otaAbort {}`
 - **Master → console** (`evt`): `hello {ok,id,fw,proto,lineMax,anims,caps[],dirty}` ·
   `droids {list:[{id,name,rssi,age,role,servos,autoAnim,adopted,fw}]}` ·
-  `log {msg}` · `err {msg}` · `config {freq,amp,speed}` · `calibData {target,+6}` ·
+  `log {msg}` · `err {msg}` · `config {target,freq,amp,speed}` · `calibData {target,+6}` ·
   `meshTopology {links:[{from,to,rssi}]}` · `animDurations {list:[{animId,ms}]}` ·
   `setMultiDone {ok,applied,failedAt?,error?}` · `dirty {dirty}` · `allDone` ·
   `otaReady {target,sessionId,chunkSize,totalChunks}` · `otaChunkAck {seq,sent,total}` ·
@@ -182,7 +185,7 @@ entirely console-driven: the console fires per-step `anim` commands from its
 own timers and stores sequences locally (Local Library + `.b1seq.json`
 export, both carrying the droid roster for offline layout).
 
-**Commit** (anim params, names — not calibration or sequences): setters are
+**Commit** (per-droid anim params, names — not calibration or sequences): setters are
 "live" (RAM overlay), NVS is only written on `commit`. The console auto-commits
 2s after the last change (debounced, see `ProtocolClient.ScheduleAutoCommit`)
 instead of offering a manual save — the header only shows a passive "unsaved"
@@ -321,7 +324,7 @@ same pass that moved Calibration out.
 
 | What | Where |
 | --- | --- |
-| Names, anim params, calibrations, adoption status | Master's NVS (`config_store`) |
+| Names, per-droid anim-param cache, calibrations, adoption status | Master's NVS (`config_store`); each droid also persists its own name/anim params/calibration locally |
 | Sequences | Console only (Local Library + `.b1seq.json` export, with droid roster) — the master's 8 NVS slots were removed in fw 1.7.0 |
 | Sequence library, last port, last exported/imported sequence path | `%LOCALAPPDATA%\B1ChatConsole\` (console side, `settings.json`) |
 | Per-slot console-side audio lanes (label + clips, each a file path/duration/start/loop) | `%LOCALAPPDATA%\B1ChatConsole\slot-audio.json` (console side, keyed by NVS slot number — see the Sequencer audio entries in [PROGRESS-ARCHIVE.md](PROGRESS-ARCHIVE.md)) |
@@ -333,9 +336,6 @@ Full detailed history: see [PROGRESS-ARCHIVE.md](PROGRESS-ARCHIVE.md).
 
 **Still open:**
 - [ ] Step 6: `droid.{h,cpp}` state machine.
-- [ ] Anim freq/amp/speed params: received + persisted but **no effect**
-      (`onConfig` hook never wired up in main.cpp; sliders marked "coming
-      soon" in the UI).
 - [ ] Help window, phase 2 remainder (not started): a per-card "?" button
       opening Help directly on that card's page (`HelpViewModel.OpenAtPage`,
       mapping in the plan file `regarde-dans-ce-répertoire-swift-dawn.md`).
@@ -343,7 +343,50 @@ Full detailed history: see [PROGRESS-ARCHIVE.md](PROGRESS-ARCHIVE.md).
       Sequencer, Firmware) can now reuse the same mechanism as the Overview
       logo — just add the files under `Help/docs/images/` and reference them.
 
-**Recent milestones** (2026-07-19 — full detail in the archive):
+**Recent milestones** (2026-08-10):
+- Autonomous preflight: `tools/self-test.ps1` now builds both firmware roles
+  and the WPF console without changing `console/build.number`, checks the
+  critical hardening invariants, and auto-detects an available master for
+  non-destructive serial reads plus invalid-command rejection tests. It never
+  flashes, starts OTA, moves servos, or applies valid settings. JSON reports
+  are written to the user's temporary directory; full usage and exclusions
+  are in `TEST-PROTOCOL.md`.
+- Pre-test hardening: animation tuning is now genuinely keyed and persisted
+  per droid (with migration from the old global NVS keys); `getConfig` and its
+  response carry a target, and v2 backups preserve per-ID values. Animation
+  and calibration debounces snapshot their target/values and cancel on target
+  changes; loading calibration no longer emits preview/save traffic.
+- Strict input boundaries: serial commands and `setMulti` validate targets,
+  types, ranges, name length, calibration ordering, OTA size/MD5, and payload
+  shape before applying anything. Authenticated mesh commands receive the
+  equivalent validation, including finite 0..100 config floats and OTA chunk
+  bounds. OTA START failures now acknowledge the requested session correctly.
+- Mesh sequences start at a random 16-bit value after boot, avoiding false
+  duplicate rejection when a droid reboots while its previous low sequence
+  numbers remain cached by neighbors.
+- GitHub firmware/support-image downloads now fail closed if their manifest
+  SHA-256 is absent or malformed; the UI can no longer label an unverified
+  release as verified. Master, slave, and WPF console builds pass.
+- ESP-NOW callback isolation: ordinary mesh messages are now copied into a
+  bounded 32-frame inbox and drained from `loop()` (maximum 16 per pass).
+  NVS, logging, registry/topology, servo, and animation work therefore no
+  longer runs on the internal Wi-Fi task. Queue overflows are counted and
+  reported from `loop()`. `MeshComm` now also protects its sequence,
+  deduplication, and direct-neighbor caches across tasks. OTA retains its
+  already-safe low-latency callback mailbox/lock path. Master and slave builds
+  pass; the inbox raises static RAM use to 17.8%.
+- Firmware animation safety: randomized movement durations now remain signed
+  until they are clamped to at least 1 ms. A negative duration jitter on the
+  shortest keyframes used to wrap through `uint16_t` and occasionally turn a
+  ~50 ms movement into a ~65-second apparent freeze. Compile-time assertions
+  cover the negative and normal-duration cases.
+- Calibrated animation centers: keyframe offsets now go through
+  `ServoEngine::setTargetOffset()`, which resolves them against each droid's
+  persisted pan/tilt centers. Gestures no longer drift back toward the
+  compile-time 90-degree defaults after calibration. Both `b1_master` and
+  `b1_slave` builds pass with these changes.
+
+**Previous milestones** (2026-07-19 — full detail in the archive):
 - Droids card: ⛭ "Configure" button opens Servo Calibration in its own
   window, pre-targeted per droid; Calibration removed from the main grid,
   Mesh Topology promoted to its spot (Droids | Mesh Topology · Animation ·
@@ -520,6 +563,12 @@ change).
   Static, one-off elements outside any repeating template (e.g. the
   topology card's starfield/radar-sweep) are unaffected.
 - ESP32Servo abandoned (double-attach bug) → native LEDC only.
+- Animation duration variation must stay signed until after it is bounded.
+  Casting a negative jitter term to `uint16_t` wraps it near 65 seconds; use
+  `clampMoveDurationMs()` before narrowing. Animation keyframes are offsets,
+  so they must also use `ServoEngine::setTargetOffset()` rather than adding
+  the compile-time `SERVO_*_CENTER` constants themselves — the latter ignores
+  each droid's persisted calibration center.
 - KyberEditor (`C:\Program Files\KyberEditor`): UX inspiration source for the
   console and origin of `tools\espflash.exe`; its firmwares/bootloaders are of no
   use to us (PlatformIO generates ours).
@@ -532,6 +581,15 @@ change).
   (`fw-v1.3.9` before `fw-v1.3.10`/`fw-v1.3.11`), not chronologically — the
   console flashed a 1.3.9 thinking it was the latest. Parse the
   versions and take the semantic maximum.
+- Firmware/support-image assets obtained from GitHub must have a valid
+  64-character SHA-256 from `firmware_manifest.json`; a missing or unreadable
+  manifest is a hard failure, never a reason to silently download and label
+  the file as verified.
+- WPF slider debounces must snapshot both the target ID and values when they
+  are armed, and cancel when selection changes. Reading `SelectedTarget` from
+  the delayed callback can apply a previous droid's edit to the newly selected
+  droid. Programmatic calibration/config loads must also suppress their change
+  hooks so opening a card does not write the values straight back.
 - In an `ItemsControl` whose `ItemsPanel` is a `Canvas`, `Canvas.Left`/
   `Canvas.Top` bound inside the `DataTemplate` are **silently ignored — even
   on the template root**: each item gets wrapped in a `ContentPresenter`,
@@ -586,9 +644,9 @@ change).
 - `OTA_CHUNK_DATA_MAX` (`mesh_comm.h`) is authoritative on the firmware side and announced
   to the console via `evt:otaReady.chunkSize` — never hardcode it on the
   C# side (`OtaService.cs` reads it dynamically).
-- **Timestamps written by the ESP-NOW callback (Wi-Fi task)** (registry's
-  `lastSeen`, OtaMaster's `_lastSendMs`/`_serialWaitSince`, etc.): they can
-  be LATER than the `now` captured at the start of `loop()`. Any subtraction
+- **Timestamps written after `now` was captured at the start of `loop()`**
+  (registry `lastSeen` while pumping the mesh inbox, or OtaMaster fields from
+  the callback fast path): they can be LATER than that `now`. Any subtraction
   `now - timestamp` must be compared as **signed** (`(int32_t)(diff) >
   threshold`) or clamped — in unsigned math, the negative difference overflows to ~4e9:
   timeouts that fire instantly (OTA bug fw ≤ 1.3.7) or `age` at 4 billion
@@ -597,13 +655,11 @@ change).
   malformed line from the firmware must NEVER kill the read loop (silent
   death of the link, historically) or the application. Don't "simplify" by
   removing this guard.
-- `Registry` (`registry.{h,cpp}`, fw 1.3.12): same precautions as
-  `OtaMaster`/`OtaSlave` — `seen/setServos/setAutoAnim/setFwVersion` are
-  called from the ESP-NOW callback (Wi-Fi task) while `loop()` reads
-  via `count()/at()` (which now returns a **copy**, never a
-  reference into the mutable array). Any new public method must
-  lock `_mux`; NVS access (`Config.isAdopted()` inside `seen()`)
-  must stay **outside** the lock (flash access forbidden under
+- `Registry` (`registry.{h,cpp}`): incoming application messages are now
+  handled from `loop()` via main.cpp's bounded inbox. Its public methods stay
+  synchronized defensively and `at()` returns a **copy**, never a reference
+  into the mutable array. NVS access (`Config.isAdopted()` inside `seen()`)
+  must stay **outside** the lock (flash access is forbidden under
   `portENTER_CRITICAL`, same lesson as the OTA freeze at chunk 21).
 - `DarkComboBoxStyle`'s `ControlTemplate` renders the *closed* selected value
   via `SelectionBoxItem`, which falls back to `ToString()` rather than
@@ -617,6 +673,10 @@ change).
   check for this on any *new* ComboBox-bound model before it ships.
 
 ## Verification (reminders)
+
+Automated safe preflight: `.\tools\self-test.ps1` (see
+`TEST-PROTOCOL.md`). This complements rather than replaces the physical checks
+below.
 
 1. `pio run -e b1` builds (also test `IS_MASTER 0`).
 2. Smooth servo sweep; `MSG_ANIM` relayed ≥ 2 hops without a broadcast storm;

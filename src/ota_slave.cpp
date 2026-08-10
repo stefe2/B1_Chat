@@ -14,6 +14,15 @@ struct CriticalGuard {
     explicit CriticalGuard(portMUX_TYPE& m) : mux(m) { portENTER_CRITICAL(&mux); }
     ~CriticalGuard() { portEXIT_CRITICAL(&mux); }
 };
+
+bool validMd5Hex(const char value[32]) {
+    for (uint8_t i = 0; i < 32; i++) {
+        const char c = value[i];
+        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') ||
+              (c >= 'A' && c <= 'F'))) return false;
+    }
+    return true;
+}
 }  // namespace
 
 // ---------------------------------------------------------------------------
@@ -67,8 +76,22 @@ void OtaSlave::processStart(const OtaStartPayload& p) {
         ackStatus = OTA_OK;
     } else {
         if (_state == RECEIVING) Update.abort();
+        _state = IDLE;
+        _totalChunks = 0;
+        _expectedChunkIndex = 0;
 
-        if (!Update.begin(p.totalSize)) {
+        // Set before every failure path so the master can match the negative
+        // acknowledgment to the session it just requested.
+        _sessionId = p.sessionId;
+
+        const uint32_t expectedChunks =
+            (p.totalSize + OTA_CHUNK_DATA_MAX - 1) / OTA_CHUNK_DATA_MAX;
+        if (p.totalSize == 0 || p.totalSize > OTA_MAX_IMAGE_SIZE ||
+            p.chunkSize != OTA_CHUNK_DATA_MAX || p.totalChunks == 0 ||
+            p.totalChunks != expectedChunks || !validMd5Hex(p.md5Hex)) {
+            Serial.println("OTA: invalid START payload");
+            ackStatus = OTA_ERR_SIZE;
+        } else if (!Update.begin(p.totalSize)) {
             Serial.printf("OTA: Update.begin(%lu) refused (err %u)\n",
                           (unsigned long)p.totalSize, Update.getError());
             ackStatus = OTA_ERR_SIZE;
@@ -80,7 +103,6 @@ void OtaSlave::processStart(const OtaStartPayload& p) {
             md5[32] = '\0';
             Update.setMD5(md5);
 
-            _sessionId = p.sessionId;
             _totalChunks = p.totalChunks;
             _expectedChunkIndex = 0;
             _lastActivityMs = millis();
@@ -93,7 +115,10 @@ void OtaSlave::processStart(const OtaStartPayload& p) {
 
 void OtaSlave::processChunk(const OtaChunkPayload& p) {
     uint8_t ackStatus;
-    if (_state != RECEIVING || p.sessionId != _sessionId) {
+    if (p.dataLen > OTA_CHUNK_DATA_MAX || p.chunkIndex >= _totalChunks) {
+        Serial.printf("OTA: malformed chunk %u (len %u)\n", p.chunkIndex, p.dataLen);
+        ackStatus = OTA_ERR_SESSION;
+    } else if (_state != RECEIVING || p.sessionId != _sessionId) {
         Serial.printf("OTA: chunk %u rejected (state=%d, session %u vs %u)\n",
                       p.chunkIndex, (int)_state, p.sessionId, _sessionId);
         ackStatus = OTA_ERR_SESSION;
@@ -126,8 +151,8 @@ void OtaSlave::processChunk(const OtaChunkPayload& p) {
 void OtaSlave::processEnd(const OtaEndPayload& p) {
     uint8_t ackStatus;
     bool doRestart = false;
-    if (_state != RECEIVING || p.sessionId != _sessionId
-        || _expectedChunkIndex != p.totalChunks) {
+    if (_state != RECEIVING || p.sessionId != _sessionId ||
+        p.totalChunks != _totalChunks || _expectedChunkIndex != p.totalChunks) {
         Serial.printf("OTA: END rejected (state=%d, session %u vs %u, %u/%u chunks)\n",
                       (int)_state, p.sessionId, _sessionId, _expectedChunkIndex, p.totalChunks);
         ackStatus = OTA_ERR_SESSION;

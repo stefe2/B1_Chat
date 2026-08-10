@@ -39,6 +39,11 @@ $publishOutput = dotnet publish -c Release -r win-x64 --self-contained true -p:P
 if ($LASTEXITCODE -ne 0) { $publishOutput | Write-Host; throw "publish failed" }
 $publishOutput | Select-Object -Last 1 | Write-Host
 
+# Fail before NSIS if a runtime file read from disk (Help pages/assets or espflash) was
+# accidentally bundled, omitted, or otherwise not copied to the publish directory.
+& "$PSScriptRoot\verify-publish.ps1" `
+    -PublishDirectory "bin\Release\net8.0-windows\win-x64\publish"
+
 $makensis = @("makensis", "C:\Program Files (x86)\NSIS\makensis.exe", "C:\Program Files\NSIS\makensis.exe") |
     Where-Object { Get-Command $_ -ErrorAction SilentlyContinue } | Select-Object -First 1
 if (-not $makensis) { throw "makensis not found (winget install NSIS.NSIS)" }

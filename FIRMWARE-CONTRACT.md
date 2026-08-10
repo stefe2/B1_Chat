@@ -13,13 +13,13 @@ CLAUDE.md's "Known pitfalls" section still references). For the protocol's
 current, authoritative shape, see CLAUDE.md's "JSON serial protocol" section;
 for how each item actually evolved over time, see its Progress log.
 
-## ⚑ Resolution summary (current firmware: 1.8.0, proto 5)
+## ⚑ Resolution summary (current firmware: 1.9.0, proto 5)
 
 | Section | Outcome |
 | --- | --- |
 | §1/§2 audio track / `getTrackDurations` | Implemented (fw 1.0.0), then fully **removed** (fw 1.6.0) — DFPlayer retired firmware-wide, the console now owns multi-track audio playback client-side; see CLAUDE.md |
-| §3 `getConfig` response = `{evt:"config",...}` | **Implemented** (fw 1.0.0), unchanged since (now `freq`/`amp`/`speed` only — `volume` dropped alongside DFPlayer) |
-| §4 atomic `setMulti` (full validation before application) | **Implemented** (fw 1.0.0), unchanged since |
+| §3 `getConfig` response = `{evt:"config",...}` | **Implemented** (fw 1.0.0), extended in fw 1.9.0 with per-droid `target` on request/response (`freq`/`amp`/`speed`; `volume` retired) |
+| §4 `setMulti` (full validation before application) | **Implemented** (fw 1.0.0), strict field/type/range validation added in fw 1.9.0 |
 | §5 `seqRun {from}`, `seqPause`/`seqResume`, `seqState.paused` + per-step push | Implemented (fw 1.0.0), then fully **removed** (fw 1.7.0) — the whole seq* family (8 NVS slots + onboard player) was retired; sequences are entirely console-driven now, see CLAUDE.md |
 | §6 absolute-time sequence model (`start`/`totalMs`/`fromMs`/`elapsedMs`) | Implemented (fw 1.5.0), then fully **removed** (fw 1.7.0) with the rest of the seq* machinery |
 
@@ -63,12 +63,13 @@ by default).
 **Implemented as**:
 
 ```json
-→ {"cmd":"getConfig"}
-← {"evt":"config","freq":50,"amp":60,"speed":50}
+→ {"cmd":"getConfig","target":513}
+← {"evt":"config","target":513,"freq":50,"amp":60,"speed":50}
 ```
 
-The console populates its sliders on connection and does a true
-field-by-field reconciliation of these values on restore.
+The console reloads the selected droid's sliders and stores version-2 backups
+as per-ID configuration objects. Omitting `target` remains compatible and
+resolves to the master itself.
 
 ## 4. Atomic batch write — `setMulti` — implemented (fw 1.0.0)
 
@@ -86,8 +87,10 @@ sequences) — slow and interruptible partway through.
 ← {"evt":"setMultiDone","ok":true,"applied":2}
 ```
 
-- All or nothing: if one op fails, none are persisted, and the response reports
-  the offending index: `{"evt":"setMultiDone","ok":false,"failedAt":1,"error":"..."}`.
+- Every operation is validated before the first one is applied. A validation
+  error changes nothing and reports its index. A rare runtime send/NVS failure
+  can still leave earlier operations from that already-validated batch applied;
+  the response reports `failedAt` rather than pretending full rollback.
 - Size bounded by the serial buffer: accepts at least 4 KB per line, and the
   console fragments its batches beyond that.
 - The example above no longer includes a `seqSave` op — `setMulti` could

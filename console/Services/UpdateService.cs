@@ -134,17 +134,18 @@ public class UpdateService
         try
         {
             if (string.IsNullOrWhiteSpace(url)) throw new ArgumentException("Missing URL");
+            if (string.IsNullOrWhiteSpace(sha256))
+                throw new InvalidOperationException("Release manifest has no SHA-256 for this file — download rejected");
+            if (sha256.Length != 64 || sha256.Any(c => !Uri.IsHexDigit(c)))
+                throw new InvalidOperationException("Release manifest contains an invalid SHA-256 — download rejected");
             Directory.CreateDirectory(UpdatesDir);
             var name = Path.GetFileName(new Uri(url).LocalPath);
             var path = Path.Combine(UpdatesDir, name);
             var bytes = await Http.GetByteArrayAsync(url);
 
-            if (!string.IsNullOrEmpty(sha256))
-            {
-                var actual = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
-                if (!string.Equals(actual, sha256.ToLowerInvariant(), StringComparison.Ordinal))
-                    throw new InvalidOperationException($"Invalid SHA-256 (expected {sha256[..12]}…, got {actual[..12]}…) — file rejected");
-            }
+            var actual = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+            if (!string.Equals(actual, sha256.ToLowerInvariant(), StringComparison.Ordinal))
+                throw new InvalidOperationException($"Invalid SHA-256 (expected {sha256[..12]}…, got {actual[..12]}…) — file rejected");
 
             await File.WriteAllBytesAsync(path, bytes);
             return (true, path, name, bytes.LongLength, null);

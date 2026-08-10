@@ -26,6 +26,11 @@ to suspend this for that droid specifically — its servos stay enabled and it
 still reacts to anything you trigger manually (Animation card, Sequencer), it
 just stops receiving the random idle broadcast.
 
+The Frequency, Amplitude, and Speed sliders are stored independently for each
+droid. Changing the target reloads that droid's saved values; a pending slider
+change is cancelled when the target changes so it cannot spill onto another
+droid.
+
 ## Durations
 
 Gesture durations shown throughout the app (Sequencer clip widths, etc.) are

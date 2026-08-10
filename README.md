@@ -114,6 +114,18 @@ dotnet run
 Requires the .NET 8 SDK. See [`console/installer/`](console/installer) for
 the NSIS installer/release script.
 
+## Autonomous self-test
+
+The safe default test protocol builds both firmware roles and the console, then
+auto-detects an available master for non-destructive JSON protocol checks:
+
+```powershell
+.\tools\self-test.ps1
+```
+
+See [`TEST-PROTOCOL.md`](TEST-PROTOCOL.md) for coverage, options, and the
+operations deliberately excluded from automation.
+
 ## Project structure
 
 ```

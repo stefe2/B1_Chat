@@ -15,8 +15,13 @@ namespace {
 const uint8_t BROADCAST_ADDR[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 const uint8_t HMAC_LEN = 8;                       // truncated signature
 const uint8_t HDR_LEN = sizeof(MeshHeader);       // 6 bytes
-const uint8_t MAX_PAYLOAD = 200;
 const uint8_t TTL_OFFSET = 4;                     // position of the ttl field
+
+struct CriticalGuard {
+    portMUX_TYPE& mux;
+    explicit CriticalGuard(portMUX_TYPE& m) : mux(m) { portENTER_CRITICAL(&mux); }
+    ~CriticalGuard() { portEXIT_CRITICAL(&mux); }
+};
 }  // namespace
 
 // --- Static ESP-NOW callback (core 3.x) ----------------------------------
@@ -56,6 +61,7 @@ void MeshComm::recordNeighbor(uint16_t id, int rssi, uint32_t now) {
 
 uint8_t MeshComm::copyNeighbors(NeighborEntry* out, uint8_t maxOut, uint32_t staleMs) const {
     const uint32_t now = millis();
+    CriticalGuard guard(_mux);
     uint8_t n = 0;
     for (uint8_t i = 0; i < _neighborCount && n < maxOut; i++) {
         if (now - _neighbors[i].lastSeenMs < staleMs) {
@@ -78,6 +84,15 @@ bool MeshComm::begin(const char* groupPassword) {
     esp_read_mac(mac, ESP_MAC_WIFI_STA);
     _myId = idFromMac(mac);
 
+    // A deterministic restart at sequence 0 can collide with this sender's
+    // still-cached pre-reboot frames on neighboring droids. A random starting
+    // point keeps the wire format unchanged while making that false duplicate
+    // window vanishingly unlikely.
+    {
+        CriticalGuard guard(_mux);
+        _seq = (uint16_t)esp_random();
+    }
+
     // Fixes the radio channel shared by the group.
     esp_wifi_set_promiscuous(true);
     esp_wifi_set_channel(MESH_WIFI_CHANNEL, WIFI_SECOND_CHAN_NONE);
@@ -99,7 +114,7 @@ bool MeshComm::begin(const char* groupPassword) {
 
 void MeshComm::computeHmac(const uint8_t* frame, uint8_t frameLen, uint8_t out8[8]) {
     // Working copy with ttl neutralized (excluded from the signature).
-    uint8_t tmp[HDR_LEN + MAX_PAYLOAD];
+    uint8_t tmp[HDR_LEN + MESH_MAX_PAYLOAD];
     memcpy(tmp, frame, frameLen);
     tmp[TTL_OFFSET] = 0;
 
@@ -133,23 +148,27 @@ bool MeshComm::rawBroadcast(const uint8_t* frame, uint8_t frameLen) {
 }
 
 bool MeshComm::send(uint8_t type, const void* payload, uint8_t len, uint8_t ttl) {
-    if (len > MAX_PAYLOAD) return false;
+    if (len > MESH_MAX_PAYLOAD) return false;
 
-    uint8_t frame[HDR_LEN + MAX_PAYLOAD + HMAC_LEN];
+    uint8_t frame[HDR_LEN + MESH_MAX_PAYLOAD + HMAC_LEN];
     MeshHeader hdr;
     hdr.srcId = _myId;
-    hdr.seq = ++_seq;
     hdr.ttl = ttl;
     hdr.type = type;
+
+    // Sequence allocation and the dedup entry are one atomic operation. No
+    // echo can arrive before rawBroadcast() below, after this lock is released.
+    {
+        CriticalGuard guard(_mux);
+        hdr.seq = ++_seq;
+        remember(_myId, hdr.seq);
+    }
 
     memcpy(frame, &hdr, HDR_LEN);
     if (len && payload) memcpy(frame + HDR_LEN, payload, len);
 
     const uint8_t signedLen = HDR_LEN + len;
     computeHmac(frame, signedLen, frame + signedLen);
-
-    // Our own message must not be re-processed if it comes back to us.
-    remember(_myId, hdr.seq);
 
     return rawBroadcast(frame, signedLen + HMAC_LEN);
 }
@@ -169,7 +188,7 @@ void MeshComm::remember(uint16_t srcId, uint16_t seq) {
 }
 
 void MeshComm::handleRaw(const uint8_t* mac, const uint8_t* data, int len, int rssi) {
-    if (len < HDR_LEN + HMAC_LEN || len > HDR_LEN + MAX_PAYLOAD + HMAC_LEN) return;
+    if (len < HDR_LEN + HMAC_LEN || len > HDR_LEN + MESH_MAX_PAYLOAD + HMAC_LEN) return;
 
     // 1) Authentication: rejects other groups / tampered messages.
     if (!verify(data, (uint8_t)len)) return;
@@ -185,15 +204,20 @@ void MeshComm::handleRaw(const uint8_t* mac, const uint8_t* data, int len, int r
     //    still proves we directly hear the relay;
     //  - a duplicate/relayed copy of an already-seen (srcId,seq) still
     //    refreshes the RSSI measurement for THIS specific radio link.
-    const uint16_t neighborId = idFromMac(mac);
-    if (neighborId != 0 && neighborId != _myId) {
-        recordNeighbor(neighborId, rssi, millis());
-    }
+    bool ignore = false;
+    {
+        CriticalGuard guard(_mux);
+        const uint16_t neighborId = idFromMac(mac);
+        if (neighborId != 0 && neighborId != _myId) {
+            recordNeighbor(neighborId, rssi, millis());
+        }
 
-    // 2) Ignores our own messages and duplicates (anti-loop).
-    if (hdr.srcId == _myId) return;
-    if (alreadySeen(hdr.srcId, hdr.seq)) return;
-    remember(hdr.srcId, hdr.seq);
+        // 2) Ignores our own messages and duplicates (anti-loop). Checking and
+        // remembering must be atomic with send(), which also updates _seen.
+        ignore = hdr.srcId == _myId || alreadySeen(hdr.srcId, hdr.seq);
+        if (!ignore) remember(hdr.srcId, hdr.seq);
+    }
+    if (ignore) return;
 
     const uint8_t payloadLen = (uint8_t)len - HDR_LEN - HMAC_LEN;
     const uint8_t* payload = data + HDR_LEN;
@@ -204,7 +228,7 @@ void MeshComm::handleRaw(const uint8_t* mac, const uint8_t* data, int len, int r
     // 4) Multi-hop relay: decrements the TTL and re-broadcasts (the HMAC
     //    excludes the TTL, so the signature stays valid).
     if (hdr.ttl > 0) {
-        uint8_t relay[HDR_LEN + MAX_PAYLOAD + HMAC_LEN];
+        uint8_t relay[HDR_LEN + MESH_MAX_PAYLOAD + HMAC_LEN];
         memcpy(relay, data, len);
         relay[TTL_OFFSET] = hdr.ttl - 1;
         rawBroadcast(relay, (uint8_t)len);

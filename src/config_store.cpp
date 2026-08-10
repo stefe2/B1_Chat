@@ -5,6 +5,12 @@ ConfigStore Config;
 
 namespace {
 const char* NVS_NS = "b1";
+
+struct StoredAnimParams {
+    uint8_t freq;
+    uint8_t amp;
+    uint8_t speed;
+};
 }
 
 void ConfigStore::begin() {
@@ -13,25 +19,85 @@ void ConfigStore::begin() {
 }
 
 void ConfigStore::animParams(uint8_t& freq, uint8_t& amp, uint8_t& speed) {
-    if (_pendAnimSet) {
-        freq = _pendFreq; amp = _pendAmp; speed = _pendSpeed;
-        return;
-    }
-    freq  = _p.getUChar("af", 50);
-    amp   = _p.getUChar("aa", 60);
-    speed = _p.getUChar("as", 50);
+    animParamsFor(_localId, freq, amp, speed);
 }
 
 void ConfigStore::setAnimParams(uint8_t freq, uint8_t amp, uint8_t speed) {
-    _pendFreq = freq; _pendAmp = amp; _pendSpeed = speed;
-    _pendAnimSet = true;
-    _dirty = true;
+    setAnimParamsFor(_localId, freq, amp, speed);
 }
 
 void ConfigStore::setAnimParamsImmediate(uint8_t freq, uint8_t amp, uint8_t speed) {
-    _p.putUChar("af", freq);
-    _p.putUChar("aa", amp);
-    _p.putUChar("as", speed);
+    writeAnimParams(_localId, freq, amp, speed);
+}
+
+void ConfigStore::animKey(uint16_t id, char out[8]) {
+    snprintf(out, 8, "p%04X", id);
+}
+
+void ConfigStore::animParamsFor(uint16_t id, uint8_t& freq, uint8_t& amp, uint8_t& speed) {
+    for (uint8_t i = 0; i < PENDING_ANIMS_MAX; i++) {
+        if (_pendAnims[i].used && _pendAnims[i].id == id) {
+            freq = _pendAnims[i].freq;
+            amp = _pendAnims[i].amp;
+            speed = _pendAnims[i].speed;
+            return;
+        }
+    }
+
+    char key[8];
+    animKey(id, key);
+    StoredAnimParams stored{50, 60, 50};
+    if (_p.getBytesLength(key) == sizeof(stored)) {
+        _p.getBytes(key, &stored, sizeof(stored));
+    } else if (id != 0 && id == _localId) {
+        // Backward-compatible read of firmware <= 1.9.0's global keys.
+        stored.freq = _p.getUChar("af", 50);
+        stored.amp = _p.getUChar("aa", 60);
+        stored.speed = _p.getUChar("as", 50);
+    }
+    // Sanitizes values written by older firmware/backups before strict input
+    // validation existed.
+    freq = stored.freq > 100 ? 100 : stored.freq;
+    amp = stored.amp > 100 ? 100 : stored.amp;
+    speed = stored.speed > 100 ? 100 : stored.speed;
+}
+
+void ConfigStore::setAnimParamsFor(uint16_t id, uint8_t freq, uint8_t amp, uint8_t speed) {
+    if (id == 0) return;
+    int freeSlot = -1;
+    for (uint8_t i = 0; i < PENDING_ANIMS_MAX; i++) {
+        if (_pendAnims[i].used && _pendAnims[i].id == id) {
+            _pendAnims[i].freq = freq;
+            _pendAnims[i].amp = amp;
+            _pendAnims[i].speed = speed;
+            _dirty = true;
+            return;
+        }
+        if (!_pendAnims[i].used && freeSlot < 0) freeSlot = i;
+    }
+    if (freeSlot >= 0) {
+        _pendAnims[freeSlot] = {true, id, freq, amp, speed};
+        _dirty = true;
+        return;
+    }
+    // A full overlay must not lose a setting; persist the extra entry now.
+    writeAnimParams(id, freq, amp, speed);
+}
+
+void ConfigStore::writeAnimParams(uint16_t id, uint8_t freq, uint8_t amp, uint8_t speed) {
+    if (id == 0) return;
+    char key[8];
+    animKey(id, key);
+    const StoredAnimParams stored{freq, amp, speed};
+    _p.putBytes(key, &stored, sizeof(stored));
+
+    // Keep the old keys synchronized for a possible anti-brick rollback to a
+    // <=1.9.0 image, which only knows the global format.
+    if (id == _localId) {
+        _p.putUChar("af", freq);
+        _p.putUChar("aa", amp);
+        _p.putUChar("as", speed);
+    }
 }
 
 void ConfigStore::nameKey(uint16_t id, char out[8]) {
@@ -97,17 +163,21 @@ void ConfigStore::setAutoAnimEnabledImmediate(bool enabled) {
 }
 
 void ConfigStore::refreshDirty() {
-    _dirty = _pendAnimSet;
+    _dirty = false;
+    for (uint8_t i = 0; !_dirty && i < PENDING_ANIMS_MAX; i++) {
+        if (_pendAnims[i].used) _dirty = true;
+    }
     for (uint8_t i = 0; !_dirty && i < PENDING_NAMES_MAX; i++) {
         if (_pendNames[i].used) _dirty = true;
     }
 }
 
 void ConfigStore::commitPending() {
-    if (_pendAnimSet) {
-        _p.putUChar("af", _pendFreq);
-        _p.putUChar("aa", _pendAmp);
-        _p.putUChar("as", _pendSpeed);
+    for (uint8_t i = 0; i < PENDING_ANIMS_MAX; i++) {
+        if (!_pendAnims[i].used) continue;
+        writeAnimParams(_pendAnims[i].id, _pendAnims[i].freq,
+                        _pendAnims[i].amp, _pendAnims[i].speed);
+        _pendAnims[i] = {false, 0, 0, 0, 0};
     }
     for (uint8_t i = 0; i < PENDING_NAMES_MAX; i++) {
         if (!_pendNames[i].used) continue;
@@ -116,7 +186,6 @@ void ConfigStore::commitPending() {
         _p.putString(key, _pendNames[i].name);
         _pendNames[i] = {false, 0, String()};
     }
-    _pendAnimSet = false;
     refreshDirty();
 }
 

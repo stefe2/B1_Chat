@@ -12,6 +12,43 @@
 
 SerialConsole Console;
 
+namespace {
+bool readIntField(JsonObjectConst obj, const char* key, int minValue, int maxValue,
+                  int& out, char* why, size_t whyLen) {
+    JsonVariantConst v = obj[key];
+    if (v.isNull() || !v.is<int>()) {
+        snprintf(why, whyLen, "%s must be an integer", key);
+        return false;
+    }
+    const int value = v.as<int>();
+    if (value < minValue || value > maxValue) {
+        snprintf(why, whyLen, "%s outside %d..%d", key, minValue, maxValue);
+        return false;
+    }
+    out = value;
+    return true;
+}
+
+bool readTargetField(JsonObjectConst obj, bool allowAll, uint16_t& out,
+                     char* why, size_t whyLen) {
+    int value;
+    if (!readIntField(obj, "target", 1, allowAll ? 65535 : 65534,
+                      value, why, whyLen)) return false;
+    out = (uint16_t)value;
+    return true;
+}
+
+bool isMd5Hex(const char* value) {
+    if (!value || strlen(value) != 32) return false;
+    for (uint8_t i = 0; i < 32; i++) {
+        const char c = value[i];
+        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') ||
+              (c >= 'A' && c <= 'F'))) return false;
+    }
+    return true;
+}
+}
+
 void SerialConsole::begin() {
     _len = 0;
     _clientReady = false;
@@ -109,20 +146,40 @@ void SerialConsole::pushDroids() {
     Serial.print('\n');
 }
 
-void SerialConsole::pushState() {
+void SerialConsole::pushState(uint16_t target) {
     if (!_clientReady) return;
 
+    const uint16_t resolvedTarget = target == MESH_TARGET_ALL ? Mesh.myId() : target;
     uint8_t f, a, s;
-    Config.animParams(f, a, s);
+    Config.animParamsFor(resolvedTarget, f, a, s);
     JsonDocument doc;
     // "config" (contract §3): the console populates its freq/amp/speed
     // sliders on connection. (Formerly evt:"state", never interpreted.)
     doc["evt"] = "config";
+    doc["target"] = resolvedTarget;
     doc["freq"] = f;
     doc["amp"] = a;
     doc["speed"] = s;
     serializeJson(doc, Serial);
     Serial.print('\n');
+}
+
+bool SerialConsole::applyConfig(uint16_t target, uint8_t freq, uint8_t amp, uint8_t speed) {
+    if (target == MESH_TARGET_ALL) {
+        Config.setAnimParamsFor(Mesh.myId(), freq, amp, speed);
+        for (uint8_t i = 0; i < Droids.count(); i++) {
+            Config.setAnimParamsFor(Droids.at(i).id, freq, amp, speed);
+        }
+    } else {
+        Config.setAnimParamsFor(target, freq, amp, speed);
+    }
+
+    ConfigPayload p{target, (float)freq, (float)amp, (float)speed};
+    const bool sent = Mesh.send(MSG_CONFIG, &p, sizeof(p));
+    if ((target == MESH_TARGET_ALL || target == Mesh.myId()) && _cfgCb) {
+        _cfgCb(freq, amp, speed);
+    }
+    return sent;
 }
 
 void SerialConsole::pushAnimDurations() {
@@ -273,8 +330,46 @@ void SerialConsole::update() {
 
 bool SerialConsole::validateOp(JsonObjectConst op, char* why, size_t whyLen) {
     const char* c = op["cmd"] | "";
-    if (!strcmp(c, "name") || !strcmp(c, "calib") || !strcmp(c, "config")) {
-        return true;   // fields bounded by nature (uint8/clamp)
+    if (!strcmp(c, "name")) {
+        int id;
+        if (!readIntField(op, "id", 1, 65534, id, why, whyLen)) return false;
+        JsonVariantConst nameValue = op["name"];
+        if (!nameValue.is<const char*>()) {
+            snprintf(why, whyLen, "name must be a string");
+            return false;
+        }
+        const char* name = nameValue.as<const char*>();
+        if (strlen(name) >= sizeof(((NamePayload*)nullptr)->name)) {
+            snprintf(why, whyLen, "name too long (max %u)",
+                     (unsigned)(sizeof(((NamePayload*)nullptr)->name) - 1));
+            return false;
+        }
+        return true;
+    }
+    if (!strcmp(c, "config")) {
+        uint16_t target;
+        int freq, amp, speed;
+        return readTargetField(op, true, target, why, whyLen) &&
+               readIntField(op, "freq", 0, 100, freq, why, whyLen) &&
+               readIntField(op, "amp", 0, 100, amp, why, whyLen) &&
+               readIntField(op, "speed", 0, 100, speed, why, whyLen);
+    }
+    if (!strcmp(c, "calib")) {
+        uint16_t target;
+        int panMin, panCenter, panMax, tiltMin, tiltCenter, tiltMax;
+        if (!readTargetField(op, true, target, why, whyLen) ||
+            !readIntField(op, "panMin", 0, 180, panMin, why, whyLen) ||
+            !readIntField(op, "panCenter", 0, 180, panCenter, why, whyLen) ||
+            !readIntField(op, "panMax", 0, 180, panMax, why, whyLen) ||
+            !readIntField(op, "tiltMin", 0, 180, tiltMin, why, whyLen) ||
+            !readIntField(op, "tiltCenter", 0, 180, tiltCenter, why, whyLen) ||
+            !readIntField(op, "tiltMax", 0, 180, tiltMax, why, whyLen)) return false;
+        if (panMin > panCenter || panCenter > panMax ||
+            tiltMin > tiltCenter || tiltCenter > tiltMax) {
+            snprintf(why, whyLen, "calib requires min <= center <= max");
+            return false;
+        }
+        return true;
     }
     // (seqSave/seqDelete ops removed in fw 1.7.0 — an old backup file carrying
     // them is rejected here with an explicit reason, nothing partially applies.)
@@ -301,11 +396,7 @@ bool SerialConsole::applyOp(JsonObjectConst op) {
         const uint8_t freq  = op["freq"] | 50;
         const uint8_t amp   = op["amp"]  | 60;
         const uint8_t speed = op["speed"] | 50;
-        Config.setAnimParams(freq, amp, speed);
-        ConfigPayload p{target, (float)freq, (float)amp, (float)speed};
-        Mesh.send(MSG_CONFIG, &p, sizeof(p));
-        if (_cfgCb) _cfgCb(freq, amp, speed);
-        return true;
+        return applyConfig(target, freq, amp, speed);
     }
     if (!strcmp(c, "calib")) {
         const uint16_t target = op["target"] | (uint16_t)MESH_TARGET_ALL;
@@ -370,11 +461,20 @@ void SerialConsole::handleLine(const char* line) {
     if (!_clientReady) return;
     _lastHelloMs = millis();
 
+    JsonObjectConst command = doc.as<JsonObjectConst>();
+    char validationWhy[96] = {0};
+
     if (!strcmp(cmd, "list")) {
         pushDroids();
 
     } else if (!strcmp(cmd, "getConfig")) {
-        pushState();
+        uint16_t target = MESH_TARGET_ALL;
+        if (!command["target"].isNull() &&
+            !readTargetField(command, true, target, validationWhy, sizeof(validationWhy))) {
+            pushErr("invalid getConfig: %s", validationWhy);
+            return;
+        }
+        pushState(target);
 
     } else if (!strcmp(cmd, "getAnimDurations")) {
         pushAnimDurations();
@@ -389,8 +489,10 @@ void SerialConsole::handleLine(const char* line) {
         pushState();
         pushDroids();
         pushCalibData(Mesh.myId());
-        for (uint8_t i = 0; i < Droids.count(); i++)
+        for (uint8_t i = 0; i < Droids.count(); i++) {
+            pushState(Droids.at(i).id);
             pushCalibData(Droids.at(i).id);
+        }
         pushMeshTopology();
         JsonDocument done;
         done["evt"] = "allDone";
@@ -398,8 +500,15 @@ void SerialConsole::handleLine(const char* line) {
         Serial.print('\n');
 
     } else if (!strcmp(cmd, "anim")) {
-        const uint16_t target = doc["target"] | (uint16_t)MESH_TARGET_ALL;
-        const uint8_t  animId = doc["animId"] | 0;
+        uint16_t target;
+        int animIdValue;
+        if (!readTargetField(command, true, target, validationWhy, sizeof(validationWhy)) ||
+            !readIntField(command, "animId", 0, ANIM_COUNT - 1, animIdValue,
+                          validationWhy, sizeof(validationWhy))) {
+            pushErr("invalid anim: %s", validationWhy);
+            return;
+        }
+        const uint8_t animId = (uint8_t)animIdValue;
         const uint32_t seed   = doc["seed"] | (uint32_t)esp_random();
         AnimPayload p{target, animId, 0, seed};
         Mesh.send(MSG_ANIM, &p, sizeof(p));
@@ -408,18 +517,29 @@ void SerialConsole::handleLine(const char* line) {
         log("anim %u -> %04X", animId, target);
 
     } else if (!strcmp(cmd, "config")) {
+        if (!validateOp(command, validationWhy, sizeof(validationWhy))) {
+            pushErr("invalid config: %s", validationWhy);
+            return;
+        }
         const uint16_t target = doc["target"] | (uint16_t)MESH_TARGET_ALL;
         const uint8_t freq  = doc["freq"] | 50;
         const uint8_t amp   = doc["amp"]  | 60;
         const uint8_t speed = doc["speed"] | 50;
-        Config.setAnimParams(freq, amp, speed);
-        ConfigPayload p{target, (float)freq, (float)amp, (float)speed};
-        Mesh.send(MSG_CONFIG, &p, sizeof(p));
-        if (_cfgCb) _cfgCb(freq, amp, speed);
+        applyConfig(target, freq, amp, speed);
+        if (target == MESH_TARGET_ALL) {
+            pushState();
+            for (uint8_t i = 0; i < Droids.count(); i++) pushState(Droids.at(i).id);
+        } else {
+            pushState(target);
+        }
         log("params freq=%u amp=%u speed=%u", freq, amp, speed);
         syncDirty();
 
     } else if (!strcmp(cmd, "name")) {
+        if (!validateOp(command, validationWhy, sizeof(validationWhy))) {
+            pushErr("invalid name: %s", validationWhy);
+            return;
+        }
         const uint16_t id = doc["id"] | 0;
         const char* name = doc["name"] | "";
         Config.setName(id, name);
@@ -433,42 +553,72 @@ void SerialConsole::handleLine(const char* line) {
         syncDirty();
 
     } else if (!strcmp(cmd, "servo")) {
-        const uint16_t target = doc["target"] | (uint16_t)MESH_TARGET_ALL;
+        uint16_t target;
+        if (!readTargetField(command, true, target, validationWhy, sizeof(validationWhy)) ||
+            !command["enabled"].is<bool>()) {
+            pushErr("invalid servo: %s", validationWhy[0] ? validationWhy : "enabled must be boolean");
+            return;
+        }
         const bool en = doc["enabled"] | false;
         if (_servoCb) _servoCb(target, en);
         log("servos %s -> %04X", en ? "ON" : "OFF", target);
 
     } else if (!strcmp(cmd, "autoAnim")) {
-        const uint16_t target = doc["target"] | (uint16_t)MESH_TARGET_ALL;
+        uint16_t target;
+        if (!readTargetField(command, true, target, validationWhy, sizeof(validationWhy)) ||
+            !command["enabled"].is<bool>()) {
+            pushErr("invalid autoAnim: %s", validationWhy[0] ? validationWhy : "enabled must be boolean");
+            return;
+        }
         const bool en = doc["enabled"] | false;
         if (_autoAnimCb) _autoAnimCb(target, en);
         log("anims auto %s -> %04X", en ? "ON" : "OFF", target);
 
     } else if (!strcmp(cmd, "locate")) {
-        const uint16_t target = doc["target"] | (uint16_t)MESH_TARGET_ALL;
+        uint16_t target;
+        if (!readTargetField(command, true, target, validationWhy, sizeof(validationWhy)) ||
+            !command["enabled"].is<bool>()) {
+            pushErr("invalid locate: %s", validationWhy[0] ? validationWhy : "enabled must be boolean");
+            return;
+        }
         const bool en = doc["enabled"] | false;
         if (_locateCb) _locateCb(target, en);
         log("locate %s -> %04X", en ? "ON" : "OFF", target);
 
     } else if (!strcmp(cmd, "adopt")) {
-        const uint16_t target = doc["target"] | 0;
+        uint16_t target;
+        if (!readTargetField(command, false, target, validationWhy, sizeof(validationWhy))) {
+            pushErr("invalid adopt: %s", validationWhy);
+            return;
+        }
         Droids.setAdopted(target, true);
         Config.setAdopted(target, true);
         log("droid %04X adopted", target);
         pushDroids();
 
     } else if (!strcmp(cmd, "forget")) {
-        const uint16_t target = doc["target"] | 0;
+        uint16_t target;
+        if (!readTargetField(command, false, target, validationWhy, sizeof(validationWhy))) {
+            pushErr("invalid forget: %s", validationWhy);
+            return;
+        }
         Config.setAdopted(target, false);
         if (Droids.forget(target)) log("droid %04X forgotten/ignored", target);
         else pushErr("unknown droid: %04X", target);
         pushDroids();
 
     } else if (!strcmp(cmd, "otaStart")) {
-        const uint16_t target = doc["target"] | 0;
-        const uint32_t size = doc["size"] | 0;
+        uint16_t target;
+        int sizeValue;
+        if (!readTargetField(command, false, target, validationWhy, sizeof(validationWhy)) ||
+            !readIntField(command, "size", 1, (int)OTA_MAX_IMAGE_SIZE, sizeValue,
+                          validationWhy, sizeof(validationWhy))) {
+            pushOtaError(0, 0, validationWhy);
+            return;
+        }
+        const uint32_t size = (uint32_t)sizeValue;
         const char* md5 = doc["md5"] | "";
-        if (strlen(md5) != 32) {
+        if (!isMd5Hex(md5)) {
             pushOtaError(target, 0, "invalid md5");
         } else if (!_otaStartCb || !_otaStartCb(target, size, md5)) {
             pushOtaError(target, 0, "busy or invalid target");
@@ -477,7 +627,14 @@ void SerialConsole::handleLine(const char* line) {
         // mesh ack for START is received (see OtaMaster::pollEvent, wired in main.cpp).
 
     } else if (!strcmp(cmd, "otaChunk")) {
-        const uint16_t seq = doc["seq"] | 0;
+        int seqValue;
+        if (!readIntField(command, "seq", 0, 65535, seqValue,
+                          validationWhy, sizeof(validationWhy)) ||
+            !command["data"].is<const char*>()) {
+            pushErr("invalid otaChunk: %s", validationWhy[0] ? validationWhy : "data must be a string");
+            return;
+        }
+        const uint16_t seq = (uint16_t)seqValue;
         const char* b64 = doc["data"] | "";
         uint8_t buf[OTA_CHUNK_DATA_MAX];
         size_t outLen = 0;
@@ -491,6 +648,10 @@ void SerialConsole::handleLine(const char* line) {
         if (_otaAbortCb) _otaAbortCb();
 
     } else if (!strcmp(cmd, "calib")) {
+        if (!validateOp(command, validationWhy, sizeof(validationWhy))) {
+            pushErr("invalid calib: %s", validationWhy);
+            return;
+        }
         const uint16_t target = doc["target"] | (uint16_t)MESH_TARGET_ALL;
         const uint8_t panMin     = doc["panMin"]     | SERVO_PAN_MIN;
         const uint8_t panCenter  = doc["panCenter"]  | SERVO_PAN_CENTER;
@@ -511,13 +672,24 @@ void SerialConsole::handleLine(const char* line) {
         log("calib -> %04X", target);
 
     } else if (!strcmp(cmd, "getCalib")) {
-        const uint16_t target = doc["target"] | (uint16_t)MESH_TARGET_ALL;
+        uint16_t target;
+        if (!readTargetField(command, true, target, validationWhy, sizeof(validationWhy))) {
+            pushErr("invalid getCalib: %s", validationWhy);
+            return;
+        }
         pushCalibData(target);
 
     } else if (!strcmp(cmd, "preview")) {
-        const uint16_t target = doc["target"] | (uint16_t)MESH_TARGET_ALL;
-        const uint8_t pan  = doc["pan"]  | SERVO_PAN_CENTER;
-        const uint8_t tilt = doc["tilt"] | SERVO_TILT_CENTER;
+        uint16_t target;
+        int panValue, tiltValue;
+        if (!readTargetField(command, true, target, validationWhy, sizeof(validationWhy)) ||
+            !readIntField(command, "pan", 0, 180, panValue, validationWhy, sizeof(validationWhy)) ||
+            !readIntField(command, "tilt", 0, 180, tiltValue, validationWhy, sizeof(validationWhy))) {
+            pushErr("invalid preview: %s", validationWhy);
+            return;
+        }
+        const uint8_t pan = (uint8_t)panValue;
+        const uint8_t tilt = (uint8_t)tiltValue;
         PreviewPayload p{target, pan, tilt};
         Mesh.send(MSG_PREVIEW, &p, sizeof(p));
         if ((target == MESH_TARGET_ALL || target == Mesh.myId()) && _previewCb)
@@ -568,6 +740,8 @@ void SerialConsole::handleLine(const char* line) {
         Serial.print('\n');
         log("setMulti: %u/%u ops", applied, idx);
         pushDroids();
+        pushState();
+        for (uint8_t i = 0; i < Droids.count(); i++) pushState(Droids.at(i).id);
         syncDirty();
 
     } else if (!strcmp(cmd, "commit")) {

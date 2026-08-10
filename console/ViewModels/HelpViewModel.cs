@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using b1_chat_console.Models;
+using b1_chat_console.Services;
 
 namespace b1_chat_console.ViewModels;
 
@@ -24,7 +25,10 @@ public partial class HelpViewModel : ObservableObject
     {
         LoadManifest();
         var first = Sections.FirstOrDefault()?.Pages.FirstOrDefault();
-        if (first != null) SelectPage(first);
+        if (first != null)
+            SelectPage(first);
+        else
+            CurrentMarkdown = "# Help unavailable\n\nThe Help manifest could not be loaded. Reinstall B1 Chat Console.";
     }
 
     private void LoadManifest()
@@ -35,12 +39,9 @@ public partial class HelpViewModel : ObservableObject
             var manifest = JsonSerializer.Deserialize<HelpManifest>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
             Sections = manifest?.Sections ?? new List<HelpSection>();
         }
-        catch (IOException)
+        catch (Exception ex)
         {
-            Sections = new List<HelpSection>();
-        }
-        catch (JsonException)
-        {
+            TraceLog.Write("ERR", $"Help manifest: {ex.GetType().Name} — {ex.Message}");
             Sections = new List<HelpSection>();
         }
 
@@ -58,8 +59,9 @@ public partial class HelpViewModel : ObservableObject
             var raw = File.ReadAllText(Path.Combine(DocsRoot, page.File.Replace('/', Path.DirectorySeparatorChar)));
             CurrentMarkdown = ResolveImagePaths(raw, page.File);
         }
-        catch (IOException)
+        catch (Exception ex)
         {
+            TraceLog.Write("ERR", $"Help page {page.File}: {ex.GetType().Name} — {ex.Message}");
             CurrentMarkdown = $"# Page not found\n\n`{page.File}`";
         }
     }
@@ -77,11 +79,25 @@ public partial class HelpViewModel : ObservableObject
         ImageLinkRegex.Replace(markdown, m =>
         {
             var (alt, src) = (m.Groups[1].Value, m.Groups[2].Value);
-            if (src.StartsWith("http://") || src.StartsWith("https://")) return m.Value;
+            // FlowDocument loads images synchronously on the UI thread. Never let a remote or
+            // absent image stall the entire console; show a link/placeholder instead.
+            if (src.StartsWith("http://") || src.StartsWith("https://"))
+                return $"[Image: {SafeAlt(alt)}]({src})";
+
             var relative = Normalize(DirOf(pageFile) + src).Replace('/', Path.DirectorySeparatorChar);
-            var uri = new Uri(Path.Combine(DocsRoot, relative)).AbsoluteUri;
+            var imagePath = Path.Combine(DocsRoot, relative);
+            if (!File.Exists(imagePath))
+            {
+                TraceLog.Write("ERR", $"Help image missing: {imagePath}");
+                return $"**Image unavailable:** {SafeAlt(alt)}";
+            }
+
+            var uri = new Uri(imagePath).AbsoluteUri;
             return $"![{alt}]({uri})";
         });
+
+    private static string SafeAlt(string alt) =>
+        string.IsNullOrWhiteSpace(alt) ? "unnamed image" : alt.Replace('\r', ' ').Replace('\n', ' ');
 
     /// <summary>Resolves a link href from inside the currently displayed page (relative to its own
     /// folder, "../" allowed) against the manifest, and navigates to it if it matches a known page.

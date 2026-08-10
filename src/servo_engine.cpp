@@ -52,6 +52,10 @@ void ServoEngine::setTarget(float panDeg, float tiltDeg, uint32_t durationMs) {
     _moving = true;
 }
 
+void ServoEngine::setTargetOffset(float panOffsetDeg, float tiltOffsetDeg, uint32_t durationMs) {
+    setTarget(_panCenter + panOffsetDeg, _tiltCenter + tiltOffsetDeg, durationMs);
+}
+
 void ServoEngine::center(uint32_t durationMs) {
     setTarget(_panCenter, _tiltCenter, durationMs);
 }

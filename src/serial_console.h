@@ -37,9 +37,10 @@ public:
     // instead of the failure being silent.
     void pushErr(const char* fmt, ...);
 
-    // Emits the droid list ({evt:"droids",...}) and the state ({evt:"state"}).
+    // Emits the droid list and one droid's animation configuration. Passing
+    // MESH_TARGET_ALL to pushState resolves to the master itself.
     void pushDroids();
-    void pushState();
+    void pushState(uint16_t target = 0xFFFF);
 
     // Emits the indicative duration (ms) of each gesture ({evt:"animDurations",...}).
     void pushAnimDurations();
@@ -103,6 +104,7 @@ private:
     // validateOp fills `why` on rejection.
     bool validateOp(JsonObjectConst op, char* why, size_t whyLen);
     bool applyOp(JsonObjectConst op);
+    bool applyConfig(uint16_t target, uint8_t freq, uint8_t amp, uint8_t speed);
 
     // Pushes {evt:"dirty"} when the "uncommitted changes" state changes.
     void syncDirty();

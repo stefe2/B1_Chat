@@ -12,6 +12,8 @@ public partial class CalibrationViewModel : ObservableObject
     private readonly ProtocolClient _protocol;
     private System.Threading.Timer? _saveDebounce;
     private ushort? _loadedFor;
+    private int _saveGeneration;
+    private bool _loadingCalibration;
 
     public ObservableCollection<Droid> Targets => _protocol.Droids;
 
@@ -32,7 +34,8 @@ public partial class CalibrationViewModel : ObservableObject
 
     partial void OnSelectedTargetChanged(Droid? value)
     {
-        if (value == null) return;
+        CancelPendingSave();
+        if (value == null) { _loadedFor = null; return; }
         _loadedFor = value.Id;
         _protocol.RequestCalib(value.Id);
     }
@@ -42,17 +45,23 @@ public partial class CalibrationViewModel : ObservableObject
         var target = root.TryGetProperty("target", out var t) ? (ushort)t.GetInt32() : (ushort)0;
         if (_loadedFor != target) return; // stale response (target changed in the meantime)
 
-        if (root.TryGetProperty("panMin", out var pn)) PanMin = pn.GetInt32();
-        if (root.TryGetProperty("panCenter", out var pc)) PanCenter = pc.GetInt32();
-        if (root.TryGetProperty("panMax", out var pm)) PanMax = pm.GetInt32();
-        if (root.TryGetProperty("tiltMin", out var tn)) TiltMin = tn.GetInt32();
-        if (root.TryGetProperty("tiltCenter", out var tc)) TiltCenter = tc.GetInt32();
-        if (root.TryGetProperty("tiltMax", out var tm)) TiltMax = tm.GetInt32();
+        CancelPendingSave();
+        _loadingCalibration = true;
+        try
+        {
+            if (root.TryGetProperty("panMin", out var pn)) PanMin = pn.GetInt32();
+            if (root.TryGetProperty("panCenter", out var pc)) PanCenter = pc.GetInt32();
+            if (root.TryGetProperty("panMax", out var pm)) PanMax = pm.GetInt32();
+            if (root.TryGetProperty("tiltMin", out var tn)) TiltMin = tn.GetInt32();
+            if (root.TryGetProperty("tiltCenter", out var tc)) TiltCenter = tc.GetInt32();
+            if (root.TryGetProperty("tiltMax", out var tm)) TiltMax = tm.GetInt32();
+        }
+        finally { _loadingCalibration = false; }
     }
 
     private void OnAxisChanged(int pan, int tilt)
     {
-        if (SelectedTarget == null) return;
+        if (_loadingCalibration || SelectedTarget == null) return;
         _protocol.Preview(SelectedTarget.Id, pan, tilt);
         ScheduleSave();
     }
@@ -66,17 +75,34 @@ public partial class CalibrationViewModel : ObservableObject
 
     private void ScheduleSave()
     {
-        _saveDebounce?.Dispose();
+        if (SelectedTarget == null) return;
+        CancelPendingSave();
+        var generation = _saveGeneration;
+        var target = SelectedTarget.Id;
+        var panMin = PanMin;
+        var panCenter = PanCenter;
+        var panMax = PanMax;
+        var tiltMin = TiltMin;
+        var tiltCenter = TiltCenter;
+        var tiltMax = TiltMax;
         _saveDebounce = new System.Threading.Timer(_ =>
         {
             var dispatcher = System.Windows.Application.Current?.Dispatcher;
             void Send()
             {
-                if (SelectedTarget == null) return;
-                _protocol.SetCalib(SelectedTarget.Id, PanMin, PanCenter, PanMax, TiltMin, TiltCenter, TiltMax);
+                if (generation != _saveGeneration) return;
+                _protocol.SetCalib(target, panMin, panCenter, panMax,
+                                   tiltMin, tiltCenter, tiltMax);
             }
             if (dispatcher == null || dispatcher.CheckAccess()) Send(); else dispatcher.Invoke(Send);
         }, null, 1200, System.Threading.Timeout.Infinite);
+    }
+
+    private void CancelPendingSave()
+    {
+        _saveGeneration++;
+        _saveDebounce?.Dispose();
+        _saveDebounce = null;
     }
 
     [RelayCommand] private void GotoPanMin() => Preview(PanMin, TiltCenter);

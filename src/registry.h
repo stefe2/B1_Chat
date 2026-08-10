@@ -8,15 +8,10 @@
 //  offline droids (timeout).
 //  See project.md (§10).
 //
-//  Concurrency: the "receive" setters (seen/setServos/setAutoAnim/
-//  setFwVersion) are called from the ESP-NOW callback (internal Wi-Fi task)
-//  while everything else (pushDroids/OtaMaster/loop reads, adopt/forget)
-//  runs on the loop() task. Every public method is therefore atomic
-//  (portMUX spinlock) and at() returns a COPY of the entry rather than a
-//  reference into a mutable array. Since removals (forget) only happen on
-//  the loop() side, a count()/at() iteration from loop() can't see an entry
-//  shift under it — at worst it misses a droid freshly inserted by the
-//  Wi-Fi task, with no consequence.
+//  Incoming application messages are copied by the ESP-NOW callback into
+//  main.cpp's bounded inbox, then these setters run from loop(). Public
+//  methods remain synchronized defensively, and at() returns a COPY rather
+//  than exposing a reference into the mutable array.
 // ============================================================================
 
 #include <Arduino.h>
@@ -56,13 +51,12 @@ public:
 
     uint8_t count() const;
 
-    // Copy of entry i (never a reference: the underlying array is mutated
-    // by the Wi-Fi task).
+    // Copy of entry i (never a reference into the mutable array).
     Entry at(uint8_t i) const;
 
     // A droid is considered online if it was seen less than `timeoutMs` ago.
-    // SIGNED difference: lastSeen (timestamped by the Wi-Fi task) can be
-    // later than `now` captured at the start of loop() — in unsigned math,
+    // SIGNED difference: the mesh inbox is pumped after `now` is captured at
+    // the start of loop(), so lastSeen can be slightly later than `now`. In unsigned math,
     // the droid would flicker "offline" (same bug family as pushDroids's
     // age, see CLAUDE.md pitfalls).
     bool online(uint8_t i, uint32_t now, uint32_t timeoutMs) const;

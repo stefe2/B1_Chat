@@ -9,7 +9,7 @@
     <UseWPF>true</UseWPF>
     <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
     <!-- Semantic version: bumped by hand at each roadmap phase (see CLAUDE.md). -->
-    <VersionPrefix>0.10.3</VersionPrefix>
+    <VersionPrefix>0.10.4</VersionPrefix>
     <!-- Only takes effect with PublishSingleFile (see release.ps1): bundles the native DLLs
          (WPF, System.IO.Ports) into the .exe instead of leaving them alongside it in the
          install folder; auto-extracted to a temp cache at launch. -->
@@ -19,15 +19,20 @@
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
 
-  <!-- Build number auto-incremented on every compile (build.number file).
-       Produces FileVersion 0.3.0.N and InformationalVersion "0.3.0+build.N",
+  <!-- Build number auto-incremented on every real compile (build.number file).
+       Produces FileVersion X.Y.Z.N and InformationalVersion "X.Y.Z+build.N",
        shown in the window title and dashboard header. -->
   <PropertyGroup>
     <BuildNumberFile>$(MSBuildProjectDirectory)\build.number</BuildNumberFile>
     <BuildNumber Condition="Exists('$(BuildNumberFile)')">$([System.IO.File]::ReadAllText('$(BuildNumberFile)').Trim())</BuildNumber>
     <BuildNumber Condition="'$(BuildNumber)' == ''">0</BuildNumber>
   </PropertyGroup>
-  <Target Name="IncrementBuildNumber" BeforeTargets="GetAssemblyVersion;GenerateAssemblyInfo">
+  <!-- GetAssemblyVersion is the single point that must receive these properties before
+       GenerateAssemblyInfo consumes them. Listing both targets caused one CLI build to run the
+       increment in multiple MSBuild project instances while the executable kept the first value. -->
+  <Target Name="IncrementBuildNumber"
+          BeforeTargets="GetAssemblyVersion"
+          Condition="'$(DesignTimeBuild)' != 'true'">
     <PropertyGroup>
       <NewBuildNumber>$([MSBuild]::Add($(BuildNumber), 1))</NewBuildNumber>
     </PropertyGroup>
@@ -55,7 +60,13 @@
     <Resource Include="Assets\AppIcon.ico" />
     <Resource Include="Assets\AppLogo.png" />
     <None Include="wwwroot\**" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="Help\**" CopyToOutputDirectory="PreserveNewest" />
+    <!-- HelpViewModel reads these files from AppContext.BaseDirectory at runtime. Keep every
+         page and image physically beside the single-file executable; CopyToOutputDirectory
+         alone did not reliably place nested images in dotnet publish output. -->
+    <None Include="Help\**"
+          CopyToOutputDirectory="PreserveNewest"
+          CopyToPublishDirectory="PreserveNewest"
+          ExcludeFromSingleFile="true" />
     <!-- ESP32 flashing tool (espflash.exe, not version-controlled): dropped in by the user,
          see CLAUDE.md. ExcludeFromSingleFile+CopyToPublishDirectory: a nested .exe is never
          bundled into the single-file output (silently excluded otherwise); it must stay a
