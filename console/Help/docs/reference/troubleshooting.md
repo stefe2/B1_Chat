@@ -1,40 +1,135 @@
 # Troubleshooting
 
-## Console won't connect / keeps disconnecting
+Start with the first heading that matches what you see. Avoid full erase as a
+generic troubleshooting step; it permanently removes local calibration and is
+necessary only for the cases described in [USB Flashing](../firmware/flashing.md).
 
-- Check the **Port** dropdown — press **Rescan** if the board isn't listed.
-- Only one application can hold a serial port at a time; close any other
-  terminal/monitor tool talking to the same COM port.
-- The console auto-reconnects on its own every few seconds once the port
-  reappears — you don't need to press Connect again after a firmware flash or
-  a power cycle, just wait a moment.
+![Healthy connected state in the console header](../images/connection-controls.png)
 
-## A droid never shows up in the Droids card
+*Figure: Use this as the connection baseline: green status with firmware
+version, an explicit COM port, Rescan, and a complete Disconnect control.*
 
-- It may be waiting on **Adopt/Ignore** — see [Droids](../droids.md).
-- Check [Mesh Topology](../mesh-topology.md) — if it has no link back to the
-  master at all (direct or relayed), it's genuinely out of range.
-- A droid shown with RSSI `-` is just **lost** (4 seconds of silence) — it
-  clears itself automatically once it's heard from again, no action needed.
+## No COM port appears
 
-## A droid's saved name/calibration reverted unexpectedly
+- Confirm the cable carries data; many charging cables do not.
+- Try another USB port without a hub.
+- Open Device Manager → **Ports (COM & LPT)** and watch while unplugging/replugging.
+- Install the USB-to-serial driver recommended by the board manufacturer. DOIT
+  ESP32 variants commonly use CP210x or CH34x bridges.
+- If Windows shows an unknown or failed device, resolve that before Rescan can
+  find it.
 
-Most likely a **full USB flash** rewrote that board's partition table without
-also erasing — see the warning in [Flashing over USB](../firmware/flashing.md).
-Names and calibration are meant to survive this (each droid keeps its own copy,
-see [Droids](../droids.md)), but the *master's* own display cache can still
-show stale data until it hears from the droid again.
+## Port exists, but Connect fails or keeps disconnecting
 
-## OTA update failed or "rolled back"
+- Choose **Rescan**, then reselect the current COM number.
+- Close PlatformIO Monitor, Arduino Serial Monitor, terminal programs, and any
+  second console instance. Only one process can own a COM port.
+- Use a short known-good cable and stable board power.
+- The console retries an unexpectedly lost port every 3 seconds. A deliberate
+  **Disconnect** stops retries.
 
-See [OTA over the Mesh](../firmware/ota.md) — a genuine rollback means the new
-image failed to boot cleanly and the droid's own safety net reverted it
-automatically; nothing to recover manually. If the verdict is **unreachable**,
-confirm the droid is powered and back in range, then retry.
+## Status stays at “handshake”
 
-## Sequencer audio doesn't play
+The port opened, but the expected B1 master did not answer.
 
-Audio only plays through the **console**, during console-driven Play — see
-[Sequencer → Audio](../sequencer/audio.md). Check the track/lane isn't muted,
-and that the referenced audio file still exists at its saved path (moving or
-renaming a file breaks the link).
+- Confirm this board was flashed with the **Master** role.
+- Reset it once and allow reconnection.
+- Check that firmware and console are reasonably current.
+- A blank board or broken application must be recovered through
+  [USB Flashing](../firmware/flashing.md), which does not require a handshake.
+
+## A droid does not appear or repeatedly asks for adoption
+
+- A pending row needs **Adopt**. **Ignore** is temporary; an active board can
+  return on its next heartbeat.
+- Confirm the slave and master use the same compile-time fleet group key.
+- Check power and wait several seconds for heartbeat/neighbor reports.
+- Use [Mesh Topology](../mesh-topology.md) to look for a direct or relayed path.
+- A retained row becomes **lost** after 4 seconds of silence and recovers
+  automatically when another heartbeat arrives.
+
+## A command or calibration change had no effect
+
+- Commands are not queued for offline droids. Restore the route and repeat.
+- Verify the target with Locate before assuming the wrong mechanism moved.
+- Calibration saves after 1.2 seconds of inactivity. Changing targets sooner
+  cancels the pending calibration send.
+- Reselect the calibration target to read its values back.
+- For names/animation settings, wait for **● synced** before power-cycling the
+  master.
+
+## A name or calibration disappeared after flashing
+
+- **App-only USB flash** preserves NVS when the existing partition layout is the
+  expected one.
+- **Full erase + flash** intentionally deletes that board's name, calibration,
+  and all other NVS settings. Restore supported backup fields and recalibrate.
+- An older/manual procedure that rewrote a different partition table without
+  erasing may have moved the NVS region. Do not repeat it; perform one deliberate
+  full erase/recovery, then rebuild the board's settings.
+- The master's cached name can look stale until it hears the droid's own stored
+  name again.
+
+## USB flashing cannot connect
+
+- Close every application using the Flash Port.
+- Confirm the selected COM port belongs to the target board.
+- Try another cable/USB port and remove unstable servo power loads.
+- Some ESP32 boards require holding **BOOT** while the connection begins; release
+  it when writing starts. Use EN/RESET according to the board manufacturer.
+- Full erase requires `bootloader.bin` and `partitions.bin` as well as the app.
+  **From GitHub** supplies them for current releases.
+
+![Firmware recovery choices](../images/firmware-source-options.png)
+
+*Figure: Before recovery, recheck the role and Flash Port. Leave full erase off
+unless the documented recovery case actually requires it.*
+
+There is no Save Log button in the current Firmware window. Take a screenshot of
+the visible flash output before closing it if you need to report a failure.
+
+## OTA failed, rolled back, or became unreachable
+
+- **Rolled back** means the reported version did not change after reboot; the
+  previous image most likely recovered automatically.
+- **Unreachable** means no heartbeat returned within the wait window. Restore
+  power and range, then inspect the current version before retrying.
+- A serial disconnect, silent fragment, integrity error, or busy session can
+  end the transfer before reboot.
+- Do not launch repeated retries until master USB, target power, and mesh path
+  are stable.
+
+See [OTA over the Mesh](../firmware/ota.md) for the complete outcome model.
+
+## Sequencer Play does not stop a moving droid
+
+Pause and Stop cancel future timeline sends; they cannot retract a gesture already
+received by firmware. One-shot gestures finish naturally. Replace `TALK` or
+`POWER_DOWN` with another gesture, or disable Servos for an immediate motion cut.
+
+## A sequence was not there after restart
+
+Timeline edits are not autosaved. Export a `.b1seq.json` file whenever you need a
+recoverable snapshot. The console reloads the last imported/exported file, not
+unsaved changes made afterward. The current Local Library panel cannot save new
+entries. See [Data & Backups](data-and-backups.md).
+
+## Audio is silent or has no waveform
+
+- Confirm the PC output device and system/app volume.
+- Confirm the file still exists at the exact stored path.
+- Audio lanes have no mute switch; droid-track mute affects gestures only.
+- Test MP3, WAV, WMA, or OGG in another Windows player.
+- A missing waveform can indicate a decoder problem even if another format
+  plays correctly.
+
+## Diagnostic files
+
+The console recreates this timestamped serial trace on every launch:
+
+`%LOCALAPPDATA%\B1ChatConsole\serial-trace.log`
+
+It contains truncated serial TX/RX lines and connection errors, including OTA
+serial activity. Copy it **before launching the console again** if it captures a
+problem you need to keep. It is not a complete ESP-NOW packet capture and does
+not contain all `espflash` console output.

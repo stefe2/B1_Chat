@@ -1,38 +1,61 @@
 # Gestures & Idle Behavior
 
-## The 18 gestures
+The Animation card is the quickest way to test one droid after calibration or
+send an immediate gesture to the fleet.
 
-Every droid shares the same built-in catalog of 18 gestures — from simple
-`IDLE`/`LOOK_AROUND`/`NOD_YES` moves to alert/glitch effects and two **looping**
-gestures (`POWER_DOWN`, `TALK`) meant to play continuously rather than run once.
-`TALK` in particular is designed to accompany audio — a fast tilt motion like a
-talking mouth — see [Sequencer → Audio](sequencer/audio.md) for pairing a
-gesture with a sound clip.
+![Animation target, gesture, and idle-tuning controls](images/animation-controls.png)
 
-Triggering a gesture from the Animation card sends it to the selected
-target(s); it plays immediately and, for a non-looping gesture, ends on its
-own after its natural duration.
+*Figure: Select the target before using Play or changing the three per-droid
+idle settings.*
+
+## Pick the target first
+
+Choose a droid in **Target** before adjusting its tuning. If no target is
+selected, Play and tuning use the fleet-wide broadcast target. Before sending a
+large gesture, verify the name against Locate or the physical mechanism.
+
+## The 18 built-in gestures
+
+The catalog ranges from small `IDLE`, `LOOK_AROUND`, and `NOD_YES` motions to
+alert and glitch effects. A one-shot gesture finishes after its firmware-defined
+duration.
+
+![Complete built-in gesture library](images/gesture-library.png)
+
+*Figure: The same color groups appear in the Sequencer library, where a gesture
+can be clicked or dragged onto a track.*
+
+`POWER_DOWN` and `TALK` are looping gestures. They do not stop when the console
+playhead stops because the gesture command has already reached the droid. Send a
+different gesture to replace the loop, or disable Servos if motion must stop
+immediately. `TALK` is intended to accompany PC audio; see
+[Sequencer Audio](sequencer/audio.md).
 
 ## Automatic idle behavior
 
-When a droid isn't running a manually-triggered gesture, the master picks a
-random gesture (excluding the two looping ones) every 2.5–5 seconds and
-broadcasts it to the whole fleet, so idle droids stay subtly alive instead of
-sitting frozen. A droid that's out of the master's direct range but still on
-the mesh does its own local idle draws on a similar cadence instead.
+When no manual gesture owns a droid, the master selects random non-looping idle
+gestures every 2.5–5 seconds. A slave that cannot hear the master but still runs
+locally draws on a similar 3–7 second cadence.
 
-Use the **Auto anims** toggle on a droid's row in the [Droids card](droids.md)
-to suspend this for that droid specifically — its servos stay enabled and it
-still reacts to anything you trigger manually (Animation card, Sequencer), it
-just stops receiving the random idle broadcast.
+Turn off **Auto anims** on a Droids row to suppress spontaneous idle gestures for
+that droid. This does not disable its servos and does not block manual Animation
+or Sequencer commands.
 
-The Frequency, Amplitude, and Speed sliders are stored independently for each
-droid. Changing the target reloads that droid's saved values; a pending slider
-change is cancelled when the target changes so it cannot spill onto another
-droid.
+## Frequency, amplitude, and speed
 
-## Durations
+- **Frequency** changes how often spontaneous gestures are selected.
+- **Amplitude** scales movement offsets. Start low after mechanical work.
+- **Speed** scales gesture movement and hold timing.
 
-Gesture durations shown throughout the app (Sequencer clip widths, etc.) are
-read directly from the firmware rather than hardcoded, so they self-correct if
-a firmware update changes a gesture's timing.
+Values run from 0 to 100 and are stored per droid. Changing the Target requests
+that droid's stored set. Slider changes wait 1.2 seconds before being sent, then
+the master auto-commits its dirty working copy. Wait until the header shows
+**● synced** before switching off the master. Changing targets during the initial
+1.2-second debounce cancels that pending slider edit.
+
+## Timing expectations
+
+The console obtains gesture durations from the connected firmware. Timeline clip
+widths therefore adapt when firmware timing changes. Mesh and serial delivery
+still add small real-world latency; this is choreography timing, not a hard
+real-time motion-control bus.

@@ -44,9 +44,11 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center" />
                                 <Button Grid.Column="1" Content="Load" Style="{StaticResource MiniButtonStyle}"
-                                        Command="{Binding DataContext.LoadFromLibraryCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}" Margin="0,0,4,0" />
+                                        Command="{Binding DataContext.LoadFromLibraryCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}" Margin="0,0,4,0"
+                                        ToolTip="Load this saved sequence into the timeline, replacing the current editor contents." />
                                 <Button Grid.Column="2" Content="Del." Style="{StaticResource MiniButtonStyle}"
-                                        Command="{Binding DataContext.DeleteFromLibraryCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}" />
+                                        Command="{Binding DataContext.DeleteFromLibraryCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}"
+                                        ToolTip="Delete this sequence from the local library." />
                             </Grid>
                         </Border>
                     </DataTemplate>

@@ -57,7 +57,8 @@ A single repo, two halves:
   board) and OTA updates over the mesh, both with GitHub-release
   auto-discovery and SHA-256 verification.
 - **Help**: an in-app Markdown-based help window (native `FlowDocument`
-  rendering via `Markdig.Wpf`, not a browser) covering every card.
+  rendering via `Markdig.Wpf`, not a browser) with continuous reading,
+  click-to-section navigation, and a scroll-synchronized table of contents.
 
 ## Hardware
 

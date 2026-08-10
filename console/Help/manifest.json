@@ -2,9 +2,10 @@
   "title": "B1 Chat Help",
   "sections": [
     {
-      "title": "Getting Started",
+      "title": "Start Here",
       "pages": [
-        { "title": "Overview", "file": "getting-started.md" }
+        { "title": "Overview", "file": "getting-started.md" },
+        { "title": "Install & First Setup", "file": "first-setup.md" }
       ]
     },
     {
@@ -43,13 +44,16 @@
       "title": "Firmware",
       "pages": [
         { "title": "Flashing over USB", "file": "firmware/flashing.md" },
-        { "title": "OTA over the Mesh", "file": "firmware/ota.md" }
+        { "title": "OTA over the Mesh", "file": "firmware/ota.md" },
+        { "title": "Updating the Console", "file": "firmware/console-updates.md" }
       ]
     },
     {
       "title": "Reference",
       "pages": [
         { "title": "Troubleshooting", "file": "reference/troubleshooting.md" },
+        { "title": "Data & Backups", "file": "reference/data-and-backups.md" },
+        { "title": "Glossary", "file": "reference/glossary.md" },
         { "title": "Tips & Shortcuts", "file": "reference/tips.md" }
       ]
     }

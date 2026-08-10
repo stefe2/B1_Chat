@@ -1,55 +1,94 @@
-# Sequencer — Timeline
+# Sequencer — Build a Timeline
 
-The Sequencer choreographs several droids (and audio) together on one shared
-timeline, entirely from the console — there's no on-board sequencer anymore
-(see [Playback](playback.md)).
+The Sequencer coordinates gesture commands and PC audio on one shared clock. It
+is entirely console-driven: no sequence is uploaded to a droid or master slot.
+
+![Sequencer transport controls](../images/sequencer-transport.png)
+
+*Figure: Start with the transport, timecode, zoom, Snap, and editing controls;
+the entire Add audio lane button remains visible at the right.*
+
+*Transport, timecode, zoom, Snap, editing, import/export, Clear, and audio-lane
+controls stay together above the timeline.*
+
+## A first sequence in five steps
+
+1. Connect the master so live droids populate their tracks.
+2. Click a track gutter to **arm** it. The highlighted track receives gesture
+   chips that you click.
+3. Click the ruler to place the playhead at the desired time.
+4. Click a gesture in the bottom library, or drag it directly onto a track and
+   time.
+5. Add more droids or audio, choose **Play**, then **Export** a snapshot when the
+   result is worth keeping.
 
 ## Tracks
 
-- One horizontal track per droid, plus a synthetic **"All droids"** broadcast
-  row for a gesture aimed at the whole fleet at once.
-- The track gutter on the left shows each droid's name and role (MASTER /
-  SLAVE); a track disconnected from the mesh (e.g. loaded from a saved file
-  with droids offline) still gets its own row, marked OFFLINE, so the layout
-  isn't lost.
-- Click a track's row to **arm** it — new gestures inserted from the library
-  land on the armed track at the current playhead position.
-- Each track has its own mute switch (glossy on/off, same style as Servos/Auto
-  anims elsewhere) — mute only affects local **Play** (see
-  [Playback](playback.md)), it can't suppress anything once a gesture has
-  actually been sent to the mesh.
+![Gesture and audio tracks](../images/sequencer-tracks.png)
 
-## The ruler and gesture clips
+*Figure: Audio lanes sit above the broadcast, master, and slave gesture tracks.
+Every visible clip is contained completely inside the capture.*
 
-The ruler across the top shows time (zoomable, 20–300 px/s) and gridlines run
-down through every row so clips line up visually. Each clip is colored by
-gesture family and shows the gesture name plus its real duration; the two
-looping gestures (`POWER_DOWN`, `TALK`) get a small loop badge.
+*This real sequence contains two audio lanes, a broadcast lane, and offline
+droid lanes preserved from its saved roster.*
 
-- **Insert**: click a gesture in the library row at the bottom to drop it on
-  the armed track at the playhead, or **drag** a library chip directly onto a
-  specific track+time.
-- **Move**: drag a clip — it glides freely at pixel level on both time and
-  track axes while held, and only snaps to the nearest 100 ms / settles onto a
-  row when you release it.
-- **Retarget**: dragging a clip to a different track's row changes which droid
-  it plays on, in the same drag as the time move — one Undo restores both.
-- **Duplicate / Delete**: right-click a clip for a context menu, or use the
-  inspector panel.
+- **All droids** is a broadcast track. One clip sends one fleet-wide command.
+- Each known droid receives its own track with its name and role.
+- A droid saved in a file but currently absent remains as **OFFLINE**, preserving
+  the arrangement until it reconnects.
+- Clicking a gutter arms that track for gesture-library clicks.
+- The green switch mutes a droid track during console Play. It does not edit the
+  sequence file and cannot retract a gesture already sent to the mesh.
+- Audio lanes are not controlled by these droid mute switches.
 
-## The inspector
+## Ruler, zoom, and Snap
 
-Selecting a clip opens an inspector with the gesture, target droid, and a
-precise start-time field (±0.1 s nudge buttons) — useful for adjustments finer
-than a mouse drag.
+The ruler shows time; click or drag it to move the local playhead while playback
+is stopped or paused. The zoom control ranges from 20 to 300 pixels per second.
+**Fit** zooms the whole sequence into view and returns horizontal scroll to the
+start.
 
-## Undo / Redo
+With **Snap** enabled, inserted or dragged clips round to the nearest 100 ms when
+released. While held, a clip moves freely at pixel precision. Disable Snap to
+retain the unsnapped millisecond position. The inspector's −0.1 s and +0.1 s
+buttons always nudge by 100 ms.
 
-Every discrete edit (one drag, one insert, one delete) is a single undo step —
-a drag doesn't create dozens of intermediate steps just because the mouse moved
-many times.
+## Gesture clips
+
+![Gesture library](../images/gesture-library.png)
+
+*Figure: All six behavior groups are visible, including Alert & Glitch and the
+audio-synchronized Talk loop.*
+
+*The built-in gestures are grouped by purpose; loop badges identify
+`POWER_DOWN` and `TALK`.*
+
+- **Insert:** click a library chip to insert it on the armed track at the
+  playhead, or drag the chip to a specific track and time.
+- **Move:** drag a clip horizontally in time or vertically to retarget it.
+- **Select:** click a clip to open its inspector.
+- **Duplicate/Delete:** right-click the clip or use the inspector buttons.
+- **Inspector:** choose a different gesture or target, view its exact start in
+  milliseconds, and use the ±0.1 s buttons. The displayed start value is not a
+  text-entry field in the current release.
+
+Clip widths use durations reported by firmware. The loop badge means the droid
+continues that gesture until another gesture replaces it; the displayed width is
+only an indicative timeline duration.
+
+## Undo and Redo
+
+Insert, delete, duplicate, drag, nudge, add/delete/move/replace audio, Clear, and
+lane creation/deletion create history entries. One drag produces one undo step.
+
+Some direct property edits in the current release — notably changing a gesture
+or target in the inspector, renaming an audio lane, and toggling an audio clip's
+Loop flag — are not guaranteed to create their own history entry. Export before
+making a set of changes you may need to recover exactly.
 
 ## Saving your work
 
-There's no "Save to droid" step for sequences — see [Playback](playback.md) for
-how a sequence is stored and shared (Local Library, `.b1seq.json` export/import).
+Timeline edits are not autosaved and there is no Save-to-droid step. Use
+**Export** to create a `.b1seq.json` snapshot. See [Playback](playback.md) for
+what is restored at startup and the current Local Library limitation, and
+[Audio](audio.md) for portable-file considerations.

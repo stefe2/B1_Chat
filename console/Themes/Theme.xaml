@@ -28,6 +28,26 @@
 
     <FontFamily x:Key="MonoFont">Consolas</FontFamily>
 
+    <!-- App-wide tooltip chrome. Tooltips are operational guidance in this UI, so keep
+         longer explanations readable and visually consistent with the dark console. -->
+    <Style TargetType="{x:Type ToolTip}">
+        <Setter Property="Background" Value="{StaticResource Recess2Brush}" />
+        <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="9,6" />
+        <Setter Property="FontSize" Value="11.5" />
+        <Setter Property="MaxWidth" Value="380" />
+        <Setter Property="HasDropShadow" Value="True" />
+        <Setter Property="ContentTemplate">
+            <Setter.Value>
+                <DataTemplate>
+                    <TextBlock Text="{Binding}" TextWrapping="Wrap" MaxWidth="360" />
+                </DataTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <LinearGradientBrush x:Key="PageBackgroundBrush" StartPoint="0,0" EndPoint="1,1">
         <GradientStop Color="#43464C" Offset="0" />
         <GradientStop Color="#3A3D42" Offset="1" />

@@ -5,12 +5,14 @@
         <StackPanel>
             <DockPanel LastChildFill="False" Margin="0,0,0,12">
                 <TextBlock Text="SERVOS CALIBRATION" Style="{StaticResource CardTitleStyle}" Margin="0" DockPanel.Dock="Left" />
-                <TextBlock Text="auto-save" Style="{StaticResource MetaTextStyle}" DockPanel.Dock="Right" VerticalAlignment="Center" />
+                <TextBlock Text="auto-save" Style="{StaticResource MetaTextStyle}" DockPanel.Dock="Right" VerticalAlignment="Center"
+                           ToolTip="Every calibration change is sent immediately and saved on the selected droid." />
             </DockPanel>
 
             <TextBlock Text="DROID" Style="{StaticResource FieldLabelStyle}" Margin="0,0,0,4" />
             <ComboBox Style="{StaticResource DarkComboBoxStyle}" ItemsSource="{Binding Targets}" SelectedItem="{Binding SelectedTarget}"
-                      DisplayMemberPath="DisplayLabel" Margin="0,0,0,14" />
+                      DisplayMemberPath="DisplayLabel" Margin="0,0,0,14"
+                      ToolTip="Choose the droid to calibrate. Slider changes move and save that droid's servos immediately." />
 
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -28,7 +30,8 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0" Text="MIN" Style="{StaticResource FieldLabelStyle}" />
-                        <Slider Grid.Column="1" Style="{StaticResource MetalSliderStyle}" Minimum="0" Maximum="180" Value="{Binding PanMin}" Margin="6,0" />
+                        <Slider Grid.Column="1" Style="{StaticResource MetalSliderStyle}" Minimum="0" Maximum="180" Value="{Binding PanMin}" Margin="6,0"
+                                ToolTip="Set the horizontal minimum angle. The pan servo moves immediately and the value is auto-saved." />
                         <Border Grid.Column="2" Style="{StaticResource ValuePillStyle}"><TextBlock Text="{Binding PanMin}" Style="{StaticResource ValuePillTextStyle}" /></Border>
                     </Grid>
 
@@ -39,7 +42,8 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0" Text="CENTER" Style="{StaticResource FieldLabelStyle}" />
-                        <Slider Grid.Column="1" Style="{StaticResource MetalSliderStyle}" Minimum="0" Maximum="180" Value="{Binding PanCenter}" Margin="6,0" />
+                        <Slider Grid.Column="1" Style="{StaticResource MetalSliderStyle}" Minimum="0" Maximum="180" Value="{Binding PanCenter}" Margin="6,0"
+                                ToolTip="Set the horizontal center angle. The pan servo moves immediately and the value is auto-saved." />
                         <Border Grid.Column="2" Style="{StaticResource ValuePillStyle}"><TextBlock Text="{Binding PanCenter}" Style="{StaticResource ValuePillTextStyle}" /></Border>
                     </Grid>
 
@@ -50,14 +54,18 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0" Text="MAX" Style="{StaticResource FieldLabelStyle}" />
-                        <Slider Grid.Column="1" Style="{StaticResource MetalSliderStyle}" Minimum="0" Maximum="180" Value="{Binding PanMax}" Margin="6,0" />
+                        <Slider Grid.Column="1" Style="{StaticResource MetalSliderStyle}" Minimum="0" Maximum="180" Value="{Binding PanMax}" Margin="6,0"
+                                ToolTip="Set the horizontal maximum angle. The pan servo moves immediately and the value is auto-saved." />
                         <Border Grid.Column="2" Style="{StaticResource ValuePillStyle}"><TextBlock Text="{Binding PanMax}" Style="{StaticResource ValuePillTextStyle}" /></Border>
                     </Grid>
 
                     <UniformGrid Rows="1" Columns="3">
-                        <Button Content="→ Min" Style="{StaticResource MiniButtonStyle}" Command="{Binding GotoPanMinCommand}" Margin="0,0,4,0" />
-                        <Button Content="→ Center" Style="{StaticResource MiniButtonStyle}" Command="{Binding GotoPanCenterCommand}" Margin="0,0,4,0" />
-                        <Button Content="→ Max" Style="{StaticResource MiniButtonStyle}" Command="{Binding GotoPanMaxCommand}" />
+                        <Button Content="→ Min" Style="{StaticResource MiniButtonStyle}" Command="{Binding GotoPanMinCommand}" Margin="0,0,4,0"
+                                ToolTip="Move the pan servo to the saved minimum position now." />
+                        <Button Content="→ Center" Style="{StaticResource MiniButtonStyle}" Command="{Binding GotoPanCenterCommand}" Margin="0,0,4,0"
+                                ToolTip="Move the pan servo to the saved center position now." />
+                        <Button Content="→ Max" Style="{StaticResource MiniButtonStyle}" Command="{Binding GotoPanMaxCommand}"
+                                ToolTip="Move the pan servo to the saved maximum position now." />
                     </UniformGrid>
                 </StackPanel>
 
@@ -71,7 +79,8 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0" Text="MIN" Style="{StaticResource FieldLabelStyle}" />
-                        <Slider Grid.Column="1" Style="{StaticResource MetalSliderStyle}" Minimum="0" Maximum="180" Value="{Binding TiltMin}" Margin="6,0" />
+                        <Slider Grid.Column="1" Style="{StaticResource MetalSliderStyle}" Minimum="0" Maximum="180" Value="{Binding TiltMin}" Margin="6,0"
+                                ToolTip="Set the vertical minimum angle. The tilt servo moves immediately and the value is auto-saved." />
                         <Border Grid.Column="2" Style="{StaticResource ValuePillStyle}"><TextBlock Text="{Binding TiltMin}" Style="{StaticResource ValuePillTextStyle}" /></Border>
                     </Grid>
 
@@ -82,7 +91,8 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0" Text="CENTER" Style="{StaticResource FieldLabelStyle}" />
-                        <Slider Grid.Column="1" Style="{StaticResource MetalSliderStyle}" Minimum="0" Maximum="180" Value="{Binding TiltCenter}" Margin="6,0" />
+                        <Slider Grid.Column="1" Style="{StaticResource MetalSliderStyle}" Minimum="0" Maximum="180" Value="{Binding TiltCenter}" Margin="6,0"
+                                ToolTip="Set the vertical center angle. The tilt servo moves immediately and the value is auto-saved." />
                         <Border Grid.Column="2" Style="{StaticResource ValuePillStyle}"><TextBlock Text="{Binding TiltCenter}" Style="{StaticResource ValuePillTextStyle}" /></Border>
                     </Grid>
 
@@ -93,14 +103,18 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0" Text="MAX" Style="{StaticResource FieldLabelStyle}" />
-                        <Slider Grid.Column="1" Style="{StaticResource MetalSliderStyle}" Minimum="0" Maximum="180" Value="{Binding TiltMax}" Margin="6,0" />
+                        <Slider Grid.Column="1" Style="{StaticResource MetalSliderStyle}" Minimum="0" Maximum="180" Value="{Binding TiltMax}" Margin="6,0"
+                                ToolTip="Set the vertical maximum angle. The tilt servo moves immediately and the value is auto-saved." />
                         <Border Grid.Column="2" Style="{StaticResource ValuePillStyle}"><TextBlock Text="{Binding TiltMax}" Style="{StaticResource ValuePillTextStyle}" /></Border>
                     </Grid>
 
                     <UniformGrid Rows="1" Columns="3">
-                        <Button Content="→ Min" Style="{StaticResource MiniButtonStyle}" Command="{Binding GotoTiltMinCommand}" Margin="0,0,4,0" />
-                        <Button Content="→ Center" Style="{StaticResource MiniButtonStyle}" Command="{Binding GotoTiltCenterCommand}" Margin="0,0,4,0" />
-                        <Button Content="→ Max" Style="{StaticResource MiniButtonStyle}" Command="{Binding GotoTiltMaxCommand}" />
+                        <Button Content="→ Min" Style="{StaticResource MiniButtonStyle}" Command="{Binding GotoTiltMinCommand}" Margin="0,0,4,0"
+                                ToolTip="Move the tilt servo to the saved minimum position now." />
+                        <Button Content="→ Center" Style="{StaticResource MiniButtonStyle}" Command="{Binding GotoTiltCenterCommand}" Margin="0,0,4,0"
+                                ToolTip="Move the tilt servo to the saved center position now." />
+                        <Button Content="→ Max" Style="{StaticResource MiniButtonStyle}" Command="{Binding GotoTiltMaxCommand}"
+                                ToolTip="Move the tilt servo to the saved maximum position now." />
                     </UniformGrid>
                 </StackPanel>
             </Grid>

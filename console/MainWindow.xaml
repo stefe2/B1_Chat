@@ -6,7 +6,8 @@
         xmlns:local="clr-namespace:b1_chat_console"
         xmlns:views="clr-namespace:b1_chat_console.Views"
         mc:Ignorable="d"
-        Title="B1 Chat — Supervision Console" Height="900" Width="1500"
+        Title="B1 Chat — Supervision Console" Height="1000" Width="1500"
+        WindowStartupLocation="CenterScreen"
         Icon="Assets/AppIcon.ico"
         Background="{StaticResource PageBackgroundBrush}">
     <Grid>
@@ -40,6 +41,7 @@
                     <Border Style="{Binding Protocol.Dirty, Converter={StaticResource BoolToStyleConv}, ConverterParameter='HaloBadgeWarnStyle|HaloBadgeOkStyle'}"
                             Effect="{x:Null}"
                             Visibility="{Binding ShowSyncBadge, Converter={StaticResource BoolToVisConv}}" Margin="0,0,20,0" VerticalAlignment="Center">
+                        <Border.ToolTip>Changes are sent automatically. 'Unsaved' means the master has not acknowledged all of them yet; 'synced' means it has.</Border.ToolTip>
                         <TextBlock Text="{Binding Protocol.Dirty, Converter={StaticResource BoolToTextConv}, ConverterParameter='● unsaved|● synced'}" FontSize="11" Foreground="White" />
                     </Border>
 
@@ -92,7 +94,9 @@
                             <TextBlock Text="{Binding ConnectionStatusText}" Foreground="{StaticResource TextBrush}" FontSize="11" VerticalAlignment="Center" />
                         </StackPanel>
                     </Border>
-                    <ComboBox Width="100" Style="{StaticResource DarkComboBoxStyle}" Padding="10,4" FontSize="11" VerticalAlignment="Center" ItemsSource="{Binding AvailablePorts}" SelectedItem="{Binding SelectedPort}" Margin="0,0,6,0" />
+                    <ComboBox Width="100" Style="{StaticResource DarkComboBoxStyle}" Padding="10,4" FontSize="11" VerticalAlignment="Center"
+                              ItemsSource="{Binding AvailablePorts}" SelectedItem="{Binding SelectedPort}" Margin="0,0,6,0"
+                              ToolTip="Select the USB serial port connected to the master droid." />
                     <Button Content="Rescan" Style="{StaticResource MiniButtonStyle}" Command="{Binding RefreshPortsCommand}" Margin="0,0,8,0" VerticalAlignment="Center" ToolTip="Refresh the port list" />
                     <Button Content="Connect" Style="{StaticResource AccentButtonStyle}" Command="{Binding ConnectCommand}" VerticalAlignment="Center"
                             Visibility="{Binding Connected, Converter={StaticResource BoolToVisConv}, ConverterParameter=Invert}" />

@@ -191,7 +191,7 @@
                     </Ellipse>
                     <Ellipse Width="260" Height="260" Fill="{StaticResource RadarScanlineBrush}" IsHitTestVisible="False" />
 
-                    <ItemsControl ItemsSource="{Binding Edges}">
+                    <ItemsControl ItemsSource="{Binding Edges}" Width="260" Height="260">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate><Canvas /></ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
@@ -206,13 +206,13 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
 
-                    <ItemsControl ItemsSource="{Binding Nodes}">
+                    <ItemsControl ItemsSource="{Binding Nodes}" Width="260" Height="260">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate><Canvas /></ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Canvas>
+                                <Canvas Width="260" Height="260">
                                     <Ellipse Width="30" Height="30" Canvas.Left="{Binding MasterRingLeft}" Canvas.Top="{Binding MasterRingTop}"
                                              Stroke="{StaticResource AccentBrush}" StrokeThickness="1" StrokeDashArray="2,3"
                                              Visibility="{Binding IsMaster, Converter={StaticResource BoolToVisConv}}"
@@ -233,7 +233,8 @@
                                     <!-- Signal halo: only on slaves — the master already gets its own
                                          permanent accent glow (MeshNodeEllipseStyle), so this would
                                          double up on it. Colored by this node's strongest incident link. -->
-                                    <Ellipse Canvas.Left="{Binding Left}" Canvas.Top="{Binding Top}">
+                                    <Ellipse Canvas.Left="{Binding Left}" Canvas.Top="{Binding Top}"
+                                             ToolTip="{Binding Tooltip}">
                                         <Ellipse.Style>
                                             <Style TargetType="Ellipse" BasedOn="{StaticResource MeshNodeEllipseStyle}">
                                                 <Style.Triggers>
@@ -287,7 +288,7 @@
                          graph edges — see MeshTopologyViewModel's packet ticker. Colored by kind
                          (legend above). Plain data-bound Ellipses (no Storyboards), so the
                          DataTemplate/Freezable pitfall documented in CLAUDE.md doesn't apply here. -->
-                    <ItemsControl ItemsSource="{Binding Packets}" IsHitTestVisible="False">
+                    <ItemsControl ItemsSource="{Binding Packets}" Width="260" Height="260">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate><Canvas /></ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
@@ -297,10 +298,11 @@
                                      wraps each item in a ContentPresenter, and Canvas.Left/Top set
                                      on a deeper element is silently ignored — the dots all pile up
                                      at the canvas origin (bug fixed 2026-07-15). -->
-                                <Canvas>
-                                    <Ellipse Width="7" Height="7" Canvas.Left="{Binding Left}" Canvas.Top="{Binding Top}"
-                                             Fill="{Binding Kind, Converter={StaticResource PacketKindToBrushConv}}"
-                                             ToolTip="{Binding Tooltip}" IsHitTestVisible="False">
+                                <Canvas Width="260" Height="260">
+                                     <Ellipse Width="7" Height="7" Canvas.Left="{Binding Left}" Canvas.Top="{Binding Top}"
+                                              Fill="{Binding Kind, Converter={StaticResource PacketKindToBrushConv}}"
+                                              ToolTip="{Binding Tooltip}"
+                                              ToolTipService.InitialShowDelay="0" ToolTipService.ShowDuration="2000">
                                         <Ellipse.Effect>
                                             <DropShadowEffect Color="{Binding Kind, Converter={StaticResource PacketKindToBrushConv}, ConverterParameter=Color}"
                                                               ShadowDepth="0" BlurRadius="6" Opacity="0.85" />

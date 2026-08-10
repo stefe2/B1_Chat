@@ -20,10 +20,13 @@
 
             <TextBlock Text="TARGET" Style="{StaticResource FieldLabelStyle}" Margin="0,0,0,4" />
             <ComboBox Style="{StaticResource DarkComboBoxStyle}" ItemsSource="{Binding Targets}" SelectedItem="{Binding SelectedTarget}"
-                      DisplayMemberPath="DisplayLabel" Margin="0,0,0,8" />
+                      DisplayMemberPath="DisplayLabel" Margin="0,0,0,8"
+                      ToolTip="Choose the droid that will receive the manual gesture and idle-tuning changes." />
             <TextBlock Text="GESTURE" Style="{StaticResource FieldLabelStyle}" Margin="0,0,0,4" />
-            <ComboBox Style="{StaticResource DarkComboBoxStyle}" ItemsSource="{Binding Anims}" SelectedIndex="{Binding SelectedAnimIndex}" Margin="0,0,0,10" />
-            <Button Content="Play" Style="{StaticResource PrimaryButtonStyle}" Command="{Binding PlayAnimCommand}" HorizontalAlignment="Left" Margin="0,0,0,14" />
+            <ComboBox Style="{StaticResource DarkComboBoxStyle}" ItemsSource="{Binding Anims}" SelectedIndex="{Binding SelectedAnimIndex}" Margin="0,0,0,10"
+                      ToolTip="Choose the gesture to send to the selected target." />
+            <Button Content="Play" Style="{StaticResource PrimaryButtonStyle}" Command="{Binding PlayAnimCommand}" HorizontalAlignment="Left" Margin="0,0,0,14"
+                    ToolTip="Play the selected gesture once on the selected target." ToolTipService.ShowOnDisabled="True" />
 
             <Separator Margin="0,0,0,10" />
             <TextBlock Text="IDLE TUNING" Style="{StaticResource SectionSubtitleStyle}" Margin="0,0,0,8" />
@@ -35,7 +38,8 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <TextBlock Grid.Column="0" Text="FREQ." Style="{StaticResource FieldLabelStyle}" ToolTip="How often this target triggers a spontaneous idle gesture" />
-                <Slider Grid.Column="1" Style="{StaticResource MetalSliderStyle}" Minimum="0" Maximum="100" Value="{Binding Freq}" Margin="6,0" />
+                <Slider Grid.Column="1" Style="{StaticResource MetalSliderStyle}" Minimum="0" Maximum="100" Value="{Binding Freq}" Margin="6,0"
+                        ToolTip="Idle frequency: how often this target starts a spontaneous idle gesture." />
                 <Border Grid.Column="2" Style="{StaticResource ValuePillStyle}"><TextBlock Text="{Binding Freq}" Style="{StaticResource ValuePillTextStyle}" /></Border>
             </Grid>
             <Grid Margin="0,0,0,6">
@@ -45,7 +49,8 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <TextBlock Grid.Column="0" Text="AMP." Style="{StaticResource FieldLabelStyle}" ToolTip="Gesture scale: small ↔ large movements" />
-                <Slider Grid.Column="1" Style="{StaticResource MetalSliderStyle}" Minimum="0" Maximum="100" Value="{Binding Amp}" Margin="6,0" />
+                <Slider Grid.Column="1" Style="{StaticResource MetalSliderStyle}" Minimum="0" Maximum="100" Value="{Binding Amp}" Margin="6,0"
+                        ToolTip="Idle amplitude: scales spontaneous gestures from smaller to larger movements." />
                 <Border Grid.Column="2" Style="{StaticResource ValuePillStyle}"><TextBlock Text="{Binding Amp}" Style="{StaticResource ValuePillTextStyle}" /></Border>
             </Grid>
             <Grid>
@@ -55,7 +60,8 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <TextBlock Grid.Column="0" Text="SPEED" Style="{StaticResource FieldLabelStyle}" ToolTip="How fast gestures are played" />
-                <Slider Grid.Column="1" Style="{StaticResource MetalSliderStyle}" Minimum="0" Maximum="100" Value="{Binding Speed}" Margin="6,0" />
+                <Slider Grid.Column="1" Style="{StaticResource MetalSliderStyle}" Minimum="0" Maximum="100" Value="{Binding Speed}" Margin="6,0"
+                        ToolTip="Idle speed: controls how quickly spontaneous gestures are played." />
                 <Border Grid.Column="2" Style="{StaticResource ValuePillStyle}"><TextBlock Text="{Binding Speed}" Style="{StaticResource ValuePillTextStyle}" /></Border>
             </Grid>
         </StackPanel>

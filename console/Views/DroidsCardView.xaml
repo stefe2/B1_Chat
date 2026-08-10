@@ -17,8 +17,10 @@
                     </Canvas>
                 </Border>
                 <TextBlock Text="DETECTED DROIDS" Style="{StaticResource CardTitleStyle}" FontSize="13" Margin="0" DockPanel.Dock="Left" VerticalAlignment="Center" />
-                <Button Content="Backup…" Style="{StaticResource MiniButtonStyle}" DockPanel.Dock="Left" Margin="12,0,0,0" VerticalAlignment="Center" Command="{Binding BackupCommand}" />
-                <Button Content="Restore…" Style="{StaticResource MiniButtonStyle}" DockPanel.Dock="Left" Margin="6,0,0,0" VerticalAlignment="Center" Command="{Binding RestoreCommand}" />
+                <Button Content="Backup…" Style="{StaticResource MiniButtonStyle}" DockPanel.Dock="Left" Margin="12,0,0,0" VerticalAlignment="Center"
+                        Command="{Binding BackupCommand}" ToolTip="Export droid names and known idle-animation settings to JSON. Calibration, adoption, sequences, audio, and firmware are not included." />
+                <Button Content="Restore…" Style="{StaticResource MiniButtonStyle}" DockPanel.Dock="Left" Margin="6,0,0,0" VerticalAlignment="Center"
+                        Command="{Binding RestoreCommand}" ToolTip="Restore names and idle-animation settings from a B1 Chat backup. Existing values for those fields will be overwritten after confirmation." />
                 <TextBlock DockPanel.Dock="Right" VerticalAlignment="Center" Foreground="{StaticResource Muted2Brush}" FontSize="10.5">
                     <Run Text="{Binding Droids.Count, Mode=OneWay}" /><Run Text=" on the network" />
                 </TextBlock>
@@ -45,7 +47,8 @@
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0" Text="NAME" Style="{StaticResource TableHeaderTextStyle}" />
                         <TextBlock Grid.Column="1" Text="VERSION" Style="{StaticResource TableHeaderTextStyle}" />
-                        <TextBlock Grid.Column="2" Text="RSSI" Style="{StaticResource TableHeaderTextStyle}" TextAlignment="Center" />
+                        <TextBlock Grid.Column="2" Text="RSSI" Style="{StaticResource TableHeaderTextStyle}" TextAlignment="Center"
+                                   ToolTip="Received Signal Strength Indicator. Values closer to 0 dBm indicate a stronger wireless link." />
                         <TextBlock Grid.Column="3" Text="STATE" Style="{StaticResource TableHeaderTextStyle}" TextAlignment="Center" />
                         <TextBlock Grid.Column="4" Text="ROLE" Style="{StaticResource TableHeaderTextStyle}" TextAlignment="Center" />
                         <TextBlock Grid.Column="5" Text="SERVOS" Style="{StaticResource TableHeaderTextStyle}" TextAlignment="Center" />
@@ -76,7 +79,8 @@
 
                                         <TextBox Grid.Column="0" Style="{StaticResource RecessedTextBoxStyle}" Margin="0,0,6,0"
                                                  Text="{Binding EditingName, UpdateSourceTrigger=PropertyChanged}"
-                                                 LostFocus="NameBox_LostFocus">
+                                                 LostFocus="NameBox_LostFocus"
+                                                 ToolTip="Rename this droid. Press Enter or click outside the field to save the name.">
                                             <TextBox.InputBindings>
                                                 <KeyBinding Key="Enter" Command="{Binding DataContext.CommitNameCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}" />
                                             </TextBox.InputBindings>
@@ -88,9 +92,12 @@
                                                    FontFamily="{StaticResource MonoFont}" FontSize="10.5" VerticalAlignment="Center" />
 
                                         <TextBlock Grid.Column="2" Text="{Binding RssiLabel}" Foreground="{StaticResource MutedBrush}"
-                                                   FontFamily="{StaticResource MonoFont}" FontSize="11" VerticalAlignment="Center" TextAlignment="Center" />
+                                                   FontFamily="{StaticResource MonoFont}" FontSize="11" VerticalAlignment="Center" TextAlignment="Center"
+                                                   ToolTip="Wireless signal reported by this droid. Values closer to 0 dBm are stronger; '-' means no current reading." />
 
-                                        <Border Grid.Column="3" Style="{Binding Online, Converter={StaticResource BoolToStyleConv}, ConverterParameter='HaloBadgeOkStyle|HaloBadgeBadStyle'}" VerticalAlignment="Center" HorizontalAlignment="Center" MinWidth="66">
+                                        <Border Grid.Column="3" Style="{Binding Online, Converter={StaticResource BoolToStyleConv}, ConverterParameter='HaloBadgeOkStyle|HaloBadgeBadStyle'}"
+                                                VerticalAlignment="Center" HorizontalAlignment="Center" MinWidth="66"
+                                                ToolTip="Online means recent telemetry was received. Lost means the droid stopped reporting to the master.">
                                             <TextBlock Text="{Binding Online, Converter={StaticResource BoolToTextConv}, ConverterParameter='online|lost'}" FontSize="11" Foreground="{StaticResource TextStrongBrush}" TextAlignment="Center" />
                                         </Border>
 
@@ -110,13 +117,14 @@
                                                       Command="{Binding DataContext.ToggleServosCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                       CommandParameter="{Binding}"
                                                       HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                      ToolTip="Servos"
+                                                      ToolTip="Enable or disable this droid's servo outputs. Turning them off prevents powered movement."
                                                       Visibility="{Binding IsPending, Converter={StaticResource BoolToVisConv}, ConverterParameter=Invert}" />
                                         <Button Grid.Column="5" Style="{StaticResource MiniButtonStyle}"
                                                 Command="{Binding DataContext.AdoptDroidCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                CommandParameter="{Binding}"
-                                                HorizontalAlignment="Center"
-                                                Visibility="{Binding IsPending, Converter={StaticResource BoolToVisConv}}">
+                                                 CommandParameter="{Binding}"
+                                                 HorizontalAlignment="Center"
+                                                 ToolTip="Adopt this new slave and store it in the master's persistent fleet roster."
+                                                 Visibility="{Binding IsPending, Converter={StaticResource BoolToVisConv}}">
                                             <TextBlock Text="Adopt" FontSize="11" />
                                         </Button>
 
@@ -125,13 +133,14 @@
                                                       Command="{Binding DataContext.ToggleAutoAnimCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                       CommandParameter="{Binding}"
                                                       HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                      ToolTip="Auto anims"
+                                                      ToolTip="Allow or prevent this droid from playing spontaneous idle gestures."
                                                       Visibility="{Binding IsPending, Converter={StaticResource BoolToVisConv}, ConverterParameter=Invert}" />
                                         <Button Grid.Column="6" Style="{StaticResource MiniButtonStyle}"
                                                 Command="{Binding DataContext.ForgetDroidCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                CommandParameter="{Binding}"
-                                                HorizontalAlignment="Center"
-                                                Visibility="{Binding IsPending, Converter={StaticResource BoolToVisConv}}">
+                                                 CommandParameter="{Binding}"
+                                                 HorizontalAlignment="Center"
+                                                 ToolTip="Dismiss this pending droid for now. It is not blacklisted and may appear again on its next heartbeat."
+                                                 Visibility="{Binding IsPending, Converter={StaticResource BoolToVisConv}}">
                                             <TextBlock Text="Ignore" FontSize="11" />
                                         </Button>
 
@@ -140,7 +149,7 @@
                                                       Command="{Binding DataContext.ToggleLocateCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                       CommandParameter="{Binding}"
                                                       HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                      ToolTip="Blink this droid's onboard LED solid to find it physically"
+                                                      ToolTip="Blink this droid's identification LED so you can match the row to the physical PCB."
                                                       Visibility="{Binding IsPending, Converter={StaticResource BoolToVisConv}, ConverterParameter=Invert}" />
 
                                         <Button Grid.Column="8" Style="{StaticResource MiniButtonStyle}"

@@ -51,17 +51,26 @@
     <Style TargetType="{x:Type Paragraph}" x:Key="{x:Static markdig:Styles.Heading6StyleKey}" />
 
     <Style TargetType="{x:Type Image}" x:Key="{x:Static markdig:Styles.ImageStyleKey}">
-        <!-- Overrides Markdig.Wpf's default (MaxWidth/MaxHeight bound to the bitmap's own native
-             pixel size, i.e. no scaling at all) — a full-resolution image would otherwise blow
-             out the content column. -->
-        <Setter Property="MaxWidth" Value="220" />
-        <Setter Property="MaxHeight" Value="220" />
+        <!-- Wide enough for real interface screenshots while still fitting the Help content
+             column. Do not cap height: the portrait Firmware window should remain readable
+             instead of becoming a thumbnail. -->
+        <Setter Property="MaxWidth" Value="640" />
         <Setter Property="Margin" Value="0,4,0,10" />
     </Style>
 
     <Style TargetType="{x:Type Hyperlink}" x:Key="{x:Static markdig:Styles.HyperlinkStyleKey}">
         <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
         <Setter Property="TextDecorations" Value="Underline" />
+    </Style>
+
+    <!-- Markdig creates real Bold/Italic inline elements. Their framework defaults carry an
+         explicit black foreground instead of inheriting the dark document palette, making
+         emphasized text and screenshot captions unreadable unless overridden here. -->
+    <Style TargetType="{x:Type Bold}">
+        <Setter Property="Foreground" Value="{StaticResource TextStrongBrush}" />
+    </Style>
+    <Style TargetType="{x:Type Italic}">
+        <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
     </Style>
 
     <Style TargetType="{x:Type Run}" x:Key="{x:Static markdig:Styles.CodeStyleKey}">

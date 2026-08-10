@@ -1,45 +1,73 @@
 # OTA over the Mesh
 
-An **adopted** slave can be reflashed without a USB cable, straight from its
-row in the [Droids card](../droids.md) — the `.bin` travels console → master
-over serial, then master → droid over the ESP-NOW mesh.
+OTA updates an adopted **slave** without connecting USB to that slave. The image
+travels PC → master over serial, then master → target through ESP-NOW, including
+relays when needed. The master itself is always updated over USB.
 
-## Starting an update
+![Droid rows showing role and update state](../images/droids-card.png)
 
-Once a newer firmware release is available, a flash button appears on that
-droid's row. Only **one OTA session runs at a time across the whole fleet** —
-starting a second one while one is already in progress is rejected outright
-rather than queued.
+*Figure: OTA starts from the Update column of an adopted slave row. The master
+row is updated through USB, never through mesh OTA.*
 
-## What to expect
+## Before starting
 
-- Progress is shown as fragments sent out of the total — not a fixed time
-  estimate. A realistic transfer takes **8–15 minutes** over a good single-hop
-  link, more over a weak or multi-hop one.
-- When the transfer finishes, the droid reboots on its own, and the console
-  watches for it to come back — this can take up to about 90 seconds.
-- The result is decided by comparing the droid's firmware version **before**
-  and **after** the reboot (not by trusting an announced version number):
-  - **Success** — the version changed.
-  - **Rolled back** — the version is unchanged; the safety net below reverted
-    to the previous image, most likely because the new image failed to run
-    correctly.
-  - **Unreachable** — no heartbeat arrived from the droid within the wait
-    window; check that it's powered and back in range.
+Confirm all of the following:
 
-## Anti-brick safety net
+- the target row is the intended physical droid;
+- the target is adopted, online, and has a stable path in Mesh Topology;
+- the master is connected by USB and the PC will remain awake;
+- both master and target have stable power;
+- Internet access is available so the console can download and SHA-256-verify
+  the latest slave image;
+- no other OTA session is running anywhere in the fleet.
 
-Before finalizing an update, the droid checks the transferred image's
-integrity and arms a "pending" flag before rebooting into it. If the new image
-fails to boot cleanly a few times in a row, the droid **automatically switches
-back** to its previous image on its own — no console involvement needed. Once
-a freshly-flashed image runs for about 20 seconds without resetting, it's
-considered confirmed good and the flag clears.
+> **Do not power off, disconnect the master, close the console, or move the droid
+> out of range during transfer.** One session can take 8–15 minutes on a good
+> single-hop link and longer over a weak or multi-hop path.
 
-## After an OTA
+## Start from the Droids row
 
-A droid that has ever received an OTA update has its boot partition flipped
-compared to a droid that's only ever been USB-flashed. If you later need to
-flash that same droid over **USB**, use the full-erase option, not the
-app-only default — see [Flashing over USB](flashing.md) for why an app-only
-USB flash on a previously-OTA'd board can silently boot the old firmware.
+Choose **Flash (OTA)** on the adopted slave and confirm. Only one fleet-wide OTA
+session is allowed; another start is rejected rather than queued.
+
+Progress is reported as acknowledged fragments out of the total, not a time
+estimate. A temporary serial silence causes the console to retry the current
+fragment. Repeated silence or a dropped serial link aborts the console session.
+
+## Transfer and reboot outcomes
+
+After the last fragment, the slave verifies the image, finalizes it, and reboots.
+The master waits up to roughly 90 seconds for a heartbeat and compares the
+version seen before and after reboot:
+
+- **Success** — the reported version changed.
+- **Rolled back** — the version did not change; the safety mechanism most likely
+  restored the previous image.
+- **Unreachable** — no heartbeat returned before the wait window expired. This
+  does not prove whether the flash booted; restore power/range and inspect the
+  row before retrying.
+- **Transfer failed** — integrity, chunk, busy-session, serial, or mesh handling
+  failed before a successful post-reboot result.
+
+Do not start repeated blind retries. First confirm power, route, current version,
+and the failure text.
+
+## Anti-brick safety mechanism
+
+Before booting a transferred image, the slave stores a pending flag. If the new
+image repeatedly fails early boot, the board switches back to the other image
+partition. A new image that runs for about 20 seconds is confirmed and clears
+the pending flag.
+
+Rollback greatly improves recoverability but cannot protect against every power,
+hardware, partition, or bootloader failure. USB full recovery remains the final
+path for a board that no longer reports.
+
+## The next USB flash must be full
+
+After even one successful OTA, assume the board may boot from the alternate app
+partition. A later app-only USB flash can write successfully while the bootloader
+continues starting the old partition. Select **New / erased board (full erase +
+flash)** for that board's next USB flash. Read
+[Flashing over USB](flashing.md) first because this deletes local calibration and
+other NVS data.

@@ -25,6 +25,7 @@ public partial class MeshNodeVisual : ObservableObject
     public string Label { get; }
     public bool IsMaster { get; }
     public bool Pulse { get; init; }
+    public required string Tooltip { get; init; }
 
     // Signal-halo glow color source (see StrengthToBrushConverter, ConverterParameter="Color").
     public double BestLinkStrength { get; init; }

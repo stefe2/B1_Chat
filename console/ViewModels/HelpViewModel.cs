@@ -15,10 +15,11 @@ public partial class HelpViewModel : ObservableObject
 
     private readonly Dictionary<string, HelpPage> _pagesByFile = new(StringComparer.OrdinalIgnoreCase);
 
+    public event Action<HelpPage>? PageNavigationRequested;
+
     public List<HelpSection> Sections { get; private set; } = new();
 
     [ObservableProperty] private string _currentTitle = "";
-    [ObservableProperty] private string _currentMarkdown = "";
     [ObservableProperty] private HelpPage? _currentPage;
 
     public HelpViewModel()
@@ -26,9 +27,10 @@ public partial class HelpViewModel : ObservableObject
         LoadManifest();
         var first = Sections.FirstOrDefault()?.Pages.FirstOrDefault();
         if (first != null)
-            SelectPage(first);
-        else
-            CurrentMarkdown = "# Help unavailable\n\nThe Help manifest could not be loaded. Reinstall B1 Chat Console.";
+        {
+            CurrentPage = first;
+            CurrentTitle = first.Title;
+        }
     }
 
     private void LoadManifest()
@@ -54,15 +56,20 @@ public partial class HelpViewModel : ObservableObject
     {
         CurrentPage = page;
         CurrentTitle = page.Title;
+        PageNavigationRequested?.Invoke(page);
+    }
+
+    public string GetPageMarkdown(HelpPage page)
+    {
         try
         {
             var raw = File.ReadAllText(Path.Combine(DocsRoot, page.File.Replace('/', Path.DirectorySeparatorChar)));
-            CurrentMarkdown = ResolveImagePaths(raw, page.File);
+            return ResolveImagePaths(raw, page.File);
         }
         catch (Exception ex)
         {
             TraceLog.Write("ERR", $"Help page {page.File}: {ex.GetType().Name} — {ex.Message}");
-            CurrentMarkdown = $"# Page not found\n\n`{page.File}`";
+            return $"# Page not found\n\n`{page.File}`";
         }
     }
 

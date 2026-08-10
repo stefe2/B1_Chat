@@ -1,33 +1,52 @@
 # Tips & Shortcuts
 
-## Sequencer
+![Complete gesture library organized by behavior](../images/gesture-library.png)
 
-- **Drag vs. click** on a gesture-library chip: a small movement still counts
-  as a click (inserts on the armed track at the playhead); past a short
-  threshold it becomes a drag you can drop anywhere on the timeline.
-- **Right-click** a gesture or audio clip for Duplicate/Delete (gestures) or
-  Replace file…/Loop/Delete (audio) — and right-click a lane's row in the
-  gutter to rename or delete that audio lane.
-- Dragging a clip **snaps to the nearest 100 ms** only when you release it —
-  while held, it moves freely at pixel level so you can eyeball an exact
-  alignment against another clip.
-- The **Fit** button zooms the timeline so the whole sequence is visible and
-  scrolls back to the start — handy after zooming in for fine edits.
-- The timecode pill (mm:ss.mmm) always shows current position / total
-  duration, whether you're scrubbing the ruler or watching a live Play pass.
+*Figure: Color-coded categories make the library faster to scan. Click a chip
+for the armed track or drag it when target and timing must be explicit.*
 
-## Droids & Mesh Topology
+## Everyday fleet work
 
-- A droid's **name** field is editable directly in its row — no separate edit
-  mode.
-- The Mesh Topology disc keeps a droid at the **same angular position** across
-  sessions (assigned by ID), so you can learn "where" a given droid sits on the
-  radar over time; only its distance from center changes, with signal strength.
+- Name droids by physical location or role, then verify each one with Locate.
+- An RSSI number closer to zero is stronger. Compare trends rather than treating
+  RSSI as a precise distance.
+- A lost droid usually needs power or route recovery, not Forget.
+- Wait for **● synced** before switching off the master after a name or animation
+  tuning change.
+- After calibration, wait 1.2 seconds and reselect the droid to verify the values.
+- Hover over controls for a concise tooltip.
 
-## General
+## Sequencer editing
 
-- Most buttons and toggles have a **tooltip** — hover to see exactly what a
-  control does before pressing it.
-- The header's **● unsaved / ● synced** badge is the only feedback for pending
-  animation-parameter/name changes — there's no manual Save button for those
-  (see [Getting Started](../getting-started.md)).
+- Click a gesture chip to place it on the armed track at the playhead. Drag it
+  when you want a specific track/time in one action.
+- With Snap selected, placement rounds to 100 ms on release; without Snap,
+  dragged positions retain millisecond precision.
+- Drag a gesture vertically to retarget it. One Undo restores both time and
+  target for that drag.
+- Right-click gesture clips for Duplicate/Delete and audio clips for Replace,
+  Loop, or Delete.
+- Click an audio lane's name to rename it. Right-click the gutter to delete the
+  lane.
+- **Fit** shows the complete sequence and returns horizontal scroll to the start.
+- The timecode shows current position / calculated total duration.
+- Export checkpoints often. Undo history and unsaved edits do not survive an
+  application restart.
+
+## Reliable show preparation
+
+- Keep the PC awake and disable disruptive sleep/update behavior for a show.
+- Use local audio files on a stable drive; avoid removable/network paths.
+- Test the exact master USB port, audio output, and mesh layout in advance.
+- Start with all required droids online. Missed timeline events are not replayed
+  when a droid reconnects.
+- Remember that Pause/Stop cannot cancel a gesture already running on a droid.
+
+## Firmware work
+
+- Write down whether a board has ever completed OTA. Its next USB flash should
+  use full erase + flash.
+- Record calibration before any full erase; Droids Backup does not contain it.
+- Prefer From GitHub for release binaries with SHA-256 verification.
+- For local files, confirm role, group key, and the presence of support images
+  before enabling full erase.

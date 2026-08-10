@@ -18,6 +18,12 @@ public class MarkdownToFlowDocumentConverter : IValueConverter
     {
         if (value is not string markdown) return null;
 
+        return ToFlowDocument(markdown);
+    }
+
+    public static FlowDocument ToFlowDocument(string markdown)
+    {
+
         try
         {
             return Markdig.Wpf.Markdown.ToFlowDocument(markdown, Pipeline);

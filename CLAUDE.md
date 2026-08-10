@@ -290,7 +290,7 @@ loaded by the application.
 | --- | --- |
 | `MainWindow.xaml(.cs)` | header (logo, connection status, "unsaved" auto-commit badge, "Firmware…"/"Help" buttons) + card grid |
 | `FirmwareWindow.xaml(.cs)` | separate window hosting `Views/FirmwareCardView` (espflash flashing + GitHub update), opened from the header button |
-| `HelpWindow.xaml(.cs)` | separate window: table-of-contents sidebar + `FlowDocumentScrollViewer` rendering `Help/docs/*.md` (native, via `Markdig.Wpf` — deliberately not WebView2), opened from the header "Help" button |
+| `HelpWindow.xaml(.cs)` | separate window: table-of-contents sidebar + one continuous `FlowDocumentScrollViewer` assembled from `Help/docs/*.md` (native, via `Markdig.Wpf` — deliberately not WebView2); menu clicks jump to sections and scrolling synchronizes the active menu page |
 | `CalibrationWindow.xaml(.cs)` | separate window hosting `Views/CalibrationCardView`, opened from each Droids-card row's ⛭ "Configure" button — pre-targeted at that row's droid before the window shows, same singleton-reopen pattern as `FirmwareWindow`/`HelpWindow` |
 | `App.xaml(.cs)` | composition root: converters + merged resource dictionaries |
 | `Themes/Theme.xaml` | palette (brushes), button/LED/mesh-node gradients — ported from index.html's CSS custom properties |
@@ -325,9 +325,9 @@ same pass that moved Calibration out.
 | What | Where |
 | --- | --- |
 | Names, per-droid anim-param cache, calibrations, adoption status | Master's NVS (`config_store`); each droid also persists its own name/anim params/calibration locally |
-| Sequences | Console only (Local Library + `.b1seq.json` export, with droid roster) — the master's 8 NVS slots were removed in fw 1.7.0 |
-| Sequence library, last port, last exported/imported sequence path | `%LOCALAPPDATA%\B1ChatConsole\` (console side, `settings.json`) |
-| Per-slot console-side audio lanes (label + clips, each a file path/duration/start/loop) | `%LOCALAPPDATA%\B1ChatConsole\slot-audio.json` (console side, keyed by NVS slot number — see the Sequencer audio entries in [PROGRESS-ARCHIVE.md](PROGRESS-ARCHIVE.md)) |
+| Sequences | Console only (`.b1seq.json` export/import, with droid roster and audio paths) — the master's 8 NVS slots were removed in fw 1.7.0; the current Local Library UI can only load/delete pre-existing entries |
+| Sequence library, last port, last exported/imported sequence path | `%LOCALAPPDATA%\B1ChatConsole\` (`library\*.json` plus `settings.json`) |
+| Console-side audio lanes (label + clips, each a file path/duration/start/loop) | Stored inside the sequence library/export JSON; audio bytes remain at their original PC paths |
 | OTA anti-brick flag (pending/attempts) | NVS of **each droid** flashed via OTA, separate `"ota"` namespace (`ota_guard`) |
 
 ## Progress
@@ -339,11 +339,24 @@ Full detailed history: see [PROGRESS-ARCHIVE.md](PROGRESS-ARCHIVE.md).
 - [ ] Help window, phase 2 remainder (not started): a per-card "?" button
       opening Help directly on that card's page (`HelpViewModel.OpenAtPage`,
       mapping in the plan file `regarde-dans-ce-répertoire-swift-dawn.md`).
-      Screenshots for the other pages (Droids, Calibration, Mesh Topology,
-      Sequencer, Firmware) can now reuse the same mechanism as the Overview
-      logo — just add the files under `Help/docs/images/` and reference them.
 
 **Recent milestones** (2026-08-10):
+- In-app Help was rewritten as a task-oriented 16-page US-English guide and
+  cross-checked against the current WPF/firmware behavior. It now includes
+  first-install/first-fleet setup, mechanical and flash/OTA safety, exact
+  persistence/backup boundaries, console updating, data locations, a glossary,
+  expanded troubleshooting, and honest Sequencer limitations (console-driven
+  fire-and-forget playback, non-autosaved edits, current read-only Local Library
+  creation path). Fourteen focused screenshots captured from the real WPF app
+  now illustrate all 16 pages, including a connected three-droid fleet,
+  calibration, mesh radar, animation controls, audio and gesture tracks,
+  complete gesture library, backups, Firmware, and update status. Crops retain
+  full controls and card boundaries; Help image styling allows readable
+  640px-wide screenshots. Manifest, Markdown targets, and local image links
+  validate with 16/16 pages present. The Help reader now assembles those pages
+  into one continuous document: scrolling crosses page boundaries naturally,
+  menu clicks jump to anchored sections, and the active menu item follows the
+  current reading position.
 - Autonomous preflight: `tools/self-test.ps1` now builds both firmware roles
   and the WPF console without changing `console/build.number`, checks the
   critical hardening invariants, and auto-detects an available master for

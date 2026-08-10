@@ -8,15 +8,18 @@
             <TextBlock Text="ROLE TO FLASH" Style="{StaticResource FieldLabelStyle}" Margin="0,0,0,4" />
             <UniformGrid Rows="1" Columns="2" Margin="0,0,0,10">
                 <ToggleButton Content="Master" Style="{StaticResource HaloToggleButtonStyle}"
-                              IsChecked="{Binding IsMasterRole, Mode=OneWay}" Command="{Binding SelectMasterRoleCommand}" Margin="0,0,4,0" />
+                              IsChecked="{Binding IsMasterRole, Mode=OneWay}" Command="{Binding SelectMasterRoleCommand}" Margin="0,0,4,0"
+                              ToolTip="Prepare and flash firmware built for the master role." />
                 <ToggleButton Content="Slave" Style="{StaticResource HaloToggleButtonStyle}"
-                              IsChecked="{Binding IsSlaveRole, Mode=OneWay}" Command="{Binding SelectSlaveRoleCommand}" Margin="4,0,0,0" />
+                              IsChecked="{Binding IsSlaveRole, Mode=OneWay}" Command="{Binding SelectSlaveRoleCommand}" Margin="4,0,0,0"
+                              ToolTip="Prepare and flash firmware built for the slave role." />
             </UniformGrid>
 
             <TextBlock Text="FLASH PORT" Style="{StaticResource FieldLabelStyle}" Margin="0,0,0,4" />
             <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
                 <ComboBox Width="120" Style="{StaticResource DarkComboBoxStyle}" ItemsSource="{Binding AvailablePorts}"
-                          SelectedItem="{Binding SelectedFlashPort}" Margin="0,0,6,0" />
+                          SelectedItem="{Binding SelectedFlashPort}" Margin="0,0,6,0"
+                          ToolTip="Select the USB port of the board to flash. This is independent of the main console connection." />
                 <Button Content="Rescan" Style="{StaticResource MiniButtonStyle}" Command="{Binding RefreshFlashPortsCommand}"
                         ToolTip="Independent of the port connected in the main window — pick any plugged-in ESP32 board, even one never connected." />
             </StackPanel>
@@ -35,17 +38,20 @@
             </Border>
 
             <Button Content="Advanced options" Style="{StaticResource MiniButtonStyle}" Command="{Binding ToggleAdvancedCommand}"
-                    HorizontalAlignment="Left" Margin="0,0,0,6" />
+                    HorizontalAlignment="Left" Margin="0,0,0,6"
+                    ToolTip="Show or hide the application flash-address override. Leave it unchanged for normal B1 Chat firmware." />
             <StackPanel Orientation="Horizontal" Margin="0,0,0,8" Visibility="{Binding ShowAdvanced, Converter={StaticResource BoolToVisConv}}">
                 <TextBlock Text="Address " VerticalAlignment="Center" FontSize="11" />
-                <TextBox Width="90" Style="{StaticResource RecessedTextBoxStyle}" Text="{Binding Address}" Margin="4,0,0,0" />
+                <TextBox Width="90" Style="{StaticResource RecessedTextBoxStyle}" Text="{Binding Address}" Margin="4,0,0,0"
+                         ToolTip="Application flash address for an app-only update. The normal B1 Chat address is 0x10000; full erase always uses the standard layout." />
             </StackPanel>
 
             <Border Background="{StaticResource RecessBrush}" CornerRadius="4" Padding="10,8" Margin="0,0,0,10"
                     BorderBrush="{StaticResource WarnBrush}" BorderThickness="1">
                 <StackPanel>
                     <CheckBox Content="New / erased board (full erase + flash)" Style="{StaticResource DangerCheckBoxStyle}"
-                              IsChecked="{Binding EraseChipFirst}" />
+                              IsChecked="{Binding EraseChipFirst}"
+                              ToolTip="Erase the entire chip, then write the bootloader, partition table, and application. This permanently removes all settings on this board." />
                     <TextBlock Style="{StaticResource HintTextStyle}" TextWrapping="Wrap" Margin="24,4,0,0"
                                Text="Erases everything (all saved settings — irreversible) then writes bootloader + partition table + app: the only way to bring up a virgin ESP32, or to fully reset one. Unchecked (normal update): only the app is rewritten, keeping every saved setting — needs a board that already runs our firmware." />
                     <TextBlock Style="{StaticResource HintTextStyle}" TextWrapping="Wrap" Margin="24,4,0,0"
@@ -56,7 +62,9 @@
             </Border>
 
             <Button Content="{Binding FlashLabel}" Style="{StaticResource PrimaryButtonStyle}" Command="{Binding FlashCommand}"
-                    IsEnabled="{Binding CanFlash}" HorizontalAlignment="Left" Margin="0,0,0,10" />
+                    IsEnabled="{Binding CanFlash}" HorizontalAlignment="Left" Margin="0,0,0,10"
+                    ToolTip="Flash the selected role and binary to the selected USB port. A confirmation appears before writing."
+                    ToolTipService.ShowOnDisabled="True" />
 
             <StackPanel Margin="0,0,0,10" Visibility="{Binding Flashing, Converter={StaticResource BoolToVisConv}}">
                 <ProgressBar Minimum="0" Maximum="100" Value="{Binding FlashProgressPct, Mode=OneWay}"
@@ -84,7 +92,8 @@
             <StackPanel Orientation="Horizontal" Margin="0,0,0,4" Visibility="{Binding HasAppUpdate, Converter={StaticResource BoolToVisConv}}">
                 <TextBlock Text="App: " FontSize="11" />
                 <TextBlock Text="{Binding AppLatest, StringFormat='v{0} available'}" FontSize="11" Foreground="{StaticResource OkBrush}" Margin="0,0,8,0" />
-                <Button Content="Install" Style="{StaticResource MiniButtonStyle}" Command="{Binding InstallAppUpdateCommand}" />
+                <Button Content="Install" Style="{StaticResource MiniButtonStyle}" Command="{Binding InstallAppUpdateCommand}"
+                        ToolTip="Download the verified console installer, close this console, and start the update." />
             </StackPanel>
             <StackPanel Orientation="Horizontal" Visibility="{Binding HasFwUpdate, Converter={StaticResource BoolToVisConv}}">
                 <TextBlock Text="Firmware: " FontSize="11" />

@@ -370,6 +370,11 @@ public partial class MeshTopologyViewModel : ObservableObject
             {
                 BestLinkStrength = best,
                 Pulse = pulse,
+                Tooltip = $"{(string.IsNullOrEmpty(d.Name) ? d.IdHex : d.Name)}\n" +
+                          $"ID: {d.IdHex}\n" +
+                          $"Role: {(d.IsMaster ? "Master" : "Slave")}\n" +
+                          $"Status: {(d.Online ? "Online" : "Lost")}\n" +
+                          $"Signal: {d.RssiLabel}",
             });
         }
         _nodeById = Nodes.ToDictionary(n => n.Id);

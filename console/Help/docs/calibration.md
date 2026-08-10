@@ -1,36 +1,63 @@
 # Servo Calibration
 
-Each droid has two servos — **pan** and **tilt** — and this card lets you set
-the safe range each one is allowed to move within, per droid.
+Calibration defines the safe mechanical envelope and neutral pose of one droid.
+Pan is horizontal; tilt is vertical. Each axis uses degrees from 0 through 180.
 
-## Live preview
+> **Motion safety:** clear hands, cables, costume parts, and hard stops before
+> moving a slider. Use an external regulated servo supply with common ground.
+> If a servo binds, buzzes, overheats, or pulls the mechanism hard against a
+> stop, disable **Servos** in the Droids card immediately.
 
-Pick a droid, then drag the pan/tilt sliders: the droid moves **live** as you
-drag. This preview is transient — it's not saved, and it doesn't interrupt
-whatever animation state the droid was in beyond the preview itself; releasing
-the slider (or switching to another droid) simply stops sending preview
-updates.
+![Servo Calibration window for the selected droid](images/calibration-window.png)
 
-## Limits
+*Figure: The selected droid appears at the top; Pan and Tilt each have Min,
+Center, and Max controls plus exact-position test buttons.*
 
-The six limit values (pan min/center/max, tilt min/center/max) define the
-physical range the droid's own firmware will ever drive that servo to — every
-gesture and every preview is clamped against them. Setting tighter limits is
-the way to protect a droid's specific mechanical range (e.g. a head that binds
-before reaching a full 180°) without touching firmware.
+## What the six values mean
 
-## Where this is saved
+- **Min** and **Max** are the allowed motion endpoints. Firmware clamps every
+  preview and gesture to this interval.
+- **Center** is the droid's neutral position and the reference point from which
+  gesture offsets are applied.
+- Every axis must satisfy **min ≤ center ≤ max**, and every value must be from
+  0 to 180. Invalid ordering is rejected by the firmware.
 
-Unlike animation parameters and names, calibration is **not** part of the
-header's auto-commit badge. Sending a calibration change is relayed straight to
-the targeted droid, which writes it to its own storage **immediately** — the
-same "own storage, own droid" pattern used for droid names, see
-[Droids](droids.md). This means calibration survives even if the master's own
-storage is ever wiped.
+Tighter limits protect a head that binds before the theoretical 0° or 180°
+servo range. A carefully chosen center makes neutral and mirrored gestures look
+correct without changing firmware.
 
-## If a droid is unreachable
+## Recommended calibration procedure
 
-Calibration requires a live round-trip to the specific droid — if it's out of
-range or powered off, the change simply won't apply (no error dialog, no way to
-"queue" it for later). Reselect the droid once it's back to confirm the values
-took.
+1. Select the intended droid and physically verify it with **Locate** if needed.
+2. Begin with conservative values near the existing center.
+3. Adjust Pan Min slowly. The selected droid previews that position live.
+4. Repeat for Pan Max, then choose a comfortable Pan Center.
+5. Repeat for Tilt Min, Center, and Max.
+6. Use **→ Min**, **→ Center**, and **→ Max** to retest exact stored positions.
+7. After the final change, wait at least **1.2 seconds** without moving another
+   slider or changing targets.
+8. Reselect the droid to request its values again and confirm they persisted.
+
+## Preview versus saved calibration
+
+Every slider movement sends a transient preview immediately. The full set of six
+calibration values is sent only after 1.2 seconds without another change. The
+target is captured when the edit is made, but selecting another droid before the
+delay expires cancels that pending save.
+
+The actual droid writes a received calibration directly to its own persistent
+storage. It does not use the master's **unsaved/synced** badge, and calibration
+is not included in Droids Backup. A full chip erase of that droid removes it.
+
+## If the droid is unreachable
+
+Calibration needs a live path to that specific target. There is no offline queue
+and currently no success/error dialog. If a target loses power or mesh reachability,
+reselect it after reconnection and verify all six returned values before assuming
+the change took effect.
+
+## Sensible first test
+
+After calibration, reduce Animation amplitude, play a small one-shot gesture,
+and observe both axes through the full motion. Increase amplitude only after the
+mechanism remains clear of its limits.

@@ -1,63 +1,99 @@
 # Droids Card
 
-The Droids card is the fleet roster: one row per droid the master can currently
-hear on the mesh, live-updated from its heartbeats.
+![Droid roster and mesh overview](images/fleet-overview.png)
 
-## Adoption
+*Figure: A live fleet with one master and two slaves. Read the roster and radar
+together before sending motion or starting an update.*
 
-A droid the master has **never seen before** (or one you've previously
-**Forgotten**) doesn't join the roster automatically — it stays reachable on the
-mesh (it still receives broadcast gestures) but the console asks you to
-**Adopt** or **Ignore** it first. Adopting persists the decision in the master's
-own storage, so it survives a master reboot; declining just means it'll ask
-again next time that droid talks.
+The Droids card is the fleet's operational roster. It includes the USB-connected
+master and every slave currently retained by the master's live registry. A
+silent droid remains visible as **lost** so you do not lose its row immediately.
 
-Use the **✕** button at the end of a row to **Forget** an adopted droid — this
-removes it from the roster and clears its adoption status, so it comes back
-through the Adopt/Ignore prompt the next time it's heard from.
+## A practical identification workflow
 
-## Per-row info and controls
+When assembling or troubleshooting a fleet:
+
+1. Power one unknown slave at a time.
+2. Choose **Adopt** when its **new** row appears.
+3. Enter a meaningful name and press Enter or click outside the name box.
+4. Turn on **Locate** and confirm the matching physical board's onboard LED.
+5. Turn Locate off and continue with the next board.
+
+## Adoption, Ignore, and Forget
+
+A slave the master has never adopted appears with **Adopt** and **Ignore** in
+place of its normal controls. It can still relay mesh traffic and receive a
+broadcast gesture while pending.
+
+- **Adopt** stores the decision in the master's persistent storage.
+- **Ignore** removes the current pending row, but it is not a blacklist. A
+  powered slave may reappear on its next heartbeat and ask again.
+- **✕ Forget** removes an adopted slave and clears its adoption status. If it is
+  still active, it returns as a new pending droid.
+
+Use Ignore for a board you do not want to decide about yet. A separate fleet
+should use a different compile-time group key so its frames are rejected instead
+of repeatedly appearing for adoption.
+
+## Reading a row
 
 | Column | Meaning |
 | --- | --- |
-| Name | Editable in place — renaming also pushes the new name to the droid itself (see below), not just the master. |
-| RSSI | Signal strength as last reported by the master; shows `-` while the droid is lost. |
-| Role | MASTER or SLAVE. |
-| Version / Update | Firmware version reported in the droid's own heartbeat, with an update indicator once a newer release is available. |
-| Servos | On/off — cuts or resumes that droid's servo output entirely. |
-| Auto anims | On/off — pauses the automatic idle-gesture broadcast for that droid without touching Servos or a manually-triggered `Play`. |
+| Name | Editable identity. Commit with Enter or by leaving the field. The name is sent to the droid and also cached by the master. |
+| Version | Firmware reported by that board. Its color/tooltip indicates whether it matches the latest discovered release. |
+| RSSI | Last signal strength in dBm. The master shows its local COM port; a lost slave shows `-`. Values closer to zero are stronger. |
+| State | **online** or **lost**. Lost means 4 seconds without a heartbeat, not forgotten or unadopted. |
+| Role | The USB-connected fleet coordinator is master; mesh members are slaves. |
+| Servos | Enables or cuts that board's servo output. Use this first if motion is unsafe. |
+| Auto anims | Allows or suppresses spontaneous idle gestures on that droid. Manual Play and Sequencer commands still work. |
+| Locate | Temporarily overrides the onboard LED with a solid on/off state for physical identification. |
+| Update | Opens USB flashing for the master or starts OTA for an adopted slave when a newer release is available. |
+| Gear | Opens Servo Calibration already targeted to that row. |
+| ✕ | Forgets an adopted slave. |
 
-A droid is marked **lost** (RSSI shown as `-`) after **4 seconds** of silence —
-this is purely a display state, not another adoption prompt; it clears itself as
-soon as the droid is heard from again.
+Locate is transient and is not saved. A board or console restart returns the LED
+to its normal status pattern.
 
-## Locate
+## Names and persistence
 
-The **Locate** toggle overrides a droid's onboard status LED with a **solid**
-on/off, so you can match a physical droid to its row on screen. It's transient —
-not saved anywhere — so a reboot (of either the droid or the console) silently
-reverts to the normal blink pattern.
+Renaming sends the new name to the target droid, where it is stored immediately,
+and marks the master's working configuration dirty. The master copy is committed
+after the header returns to **● synced**. Wait for that badge before resetting
+the master.
 
-## Renaming and per-droid persistence
+Keeping a copy on the droid helps the master recover its display name after a
+master configuration loss, but a **full erase** of that droid still destroys its
+local name and calibration.
 
-Editing a name updates the master's own display copy (through the usual
-auto-commit, see [Getting Started](getting-started.md)) **and** relays the new
-name to the droid itself, which saves it in its own storage immediately. This
-means a droid remembers its own name even if the master's storage is ever wiped
-(e.g. a firmware re-flash that resets its saved config) — see [Flashing over
-USB](firmware/flashing.md) for when that can happen.
+## Backup and restore: exact scope
 
-## Backup & restore
+**Backup…** exports a JSON file containing:
 
-Use **Backup** to export the whole roster's settings (names, animation
-parameters) to a file, and **Restore** to push a previously-saved backup back to
-the master. Restoring re-applies every setting in one atomic operation, then
-auto-commits it — you don't need to touch anything else afterward.
+- the visible roster's droid IDs and names;
+- saved frequency, amplitude, and speed values available per droid.
 
-## Firmware, per droid
+It does **not** contain servo calibration, adoption state, Servos/Auto anims/
+Locate switch state, firmware images, sequences, or audio files.
 
-Each row shows the droid's current firmware version. Once a newer release is
-available, a flash button appears on the row — this starts an **OTA** update
-over the mesh, no USB cable needed for that specific droid. See [OTA over the
-Mesh](firmware/ota.md) for the full flow, timing, and what the different
-outcomes mean.
+**Restore…** overwrites names and animation settings from that file. With current
+firmware, operations are validated and applied in size-bounded batches; a large
+restore may require more than one batch. Older firmware falls back to individual
+commands. Do not treat the whole file as one guaranteed rollback transaction:
+leave the fleet powered and connected until the header returns to **● synced**,
+then inspect the rows you care about.
+
+See [Data & Backups](reference/data-and-backups.md) before a full flash or moving
+a show to another PC.
+
+## When a droid is lost
+
+Do not immediately Forget it. Check power, then look at
+[Mesh Topology](mesh-topology.md). A droid can be outside the master's direct
+range and remain reachable through another slave. Commands sent while no path
+exists are not queued for later delivery.
+
+## Per-droid firmware updates
+
+An adopted slave that is behind the latest release displays **Flash (OTA)**.
+The master uses USB only; select its Flash action or the header's Firmware button.
+Read [OTA over the Mesh](firmware/ota.md) before starting a transfer.

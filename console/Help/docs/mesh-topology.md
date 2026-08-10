@@ -1,50 +1,61 @@
-# Reading the Radar
+# Reading the Mesh Radar
 
-The Mesh Topology card shows the live shape of the ESP-NOW mesh as a
-green-phosphor radar display — which droid can hear which, how strong each link
-is, and what's currently traveling across it.
+The Mesh Topology card visualizes the network information that the master makes
+available over serial. Use it to answer two questions: **can the master reach
+this droid, and through which neighbors?**
+
+![Mesh radar with one master and two slaves](images/mesh-radar.png)
+
+*Figure: The master stays at center. Node radius and link appearance reflect
+reported signal strength; colored traffic marks appear while commands move.*
 
 ## Nodes
 
-- The **master** sits pinned at the center.
-- Each **slave** sits at a fixed bearing (evenly spaced around the disc,
-  assigned by ID so a droid keeps the same angular position across sessions) —
-  only its **radius** moves, and it moves with signal strength: a strong link
-  pulls a node in close, a weak one lets it drift toward the rim.
-- A droid with no path back to the master at all sits at the rim.
-- Radius changes glide smoothly rather than jumping, so ordinary RSSI jitter
-  doesn't make the display twitchy.
+- The master is pinned at the center.
+- Slaves keep a stable bearing derived from their ID, making the display easier
+  to learn across sessions.
+- Radius follows signal strength: a stronger path draws a node closer to center;
+  a weak path moves it toward the rim.
+- A known droid with no current path sits at the rim.
+- Movement is smoothed so normal RSSI jitter does not make the display twitch.
 
-## Links
+RSSI is reported in dBm. Values closer to zero are stronger; for example,
+`-45 dBm` is much stronger than `-85 dBm`. Treat it as a relative diagnostic,
+not an exact distance measurement: antennas, orientation, people, power noise,
+and nearby 2.4 GHz traffic all affect it.
 
-Lines between nodes are real direct radio links (each droid periodically
-reports its own direct neighbors). A **multi-hop** droid — one the master can't
-hear directly — is drawn connected through whichever droid is relaying for it;
-moving that droid out of range makes its **direct** link vanish while a relayed
-path, if one still exists, remains visible through another droid.
+## Links and relays
 
-Link color/thickness encodes signal strength, from a strong short green line to
-a faint one near the rim.
+Lines represent direct radio-neighbor observations periodically reported by the
+droids. A multi-hop slave can remain reachable even when its direct link to the
+master disappears, provided another droid relays the traffic. Link thickness and
+opacity encode strength.
 
-## Live traffic
+Neighbor reports update on a roughly three-second cadence with jitter, so the
+picture intentionally lags a physical move slightly. If testing relay behavior,
+move one droid, wait several seconds, and watch which direct edge disappears or
+replaces it.
 
-Small colored dots ride along the links in real time, one per kind of message
-the console can actually observe:
+## Live traffic dots
 
-- Outgoing commands (gesture, servo toggle, config, calibration, preview,
-  **Locate**) — one dot per command, colored by kind (see the legend row under
-  the disc).
-- OTA chunks — one dot per acknowledged fragment, riding the OTA progress line
-  (see [OTA over the Mesh](firmware/ota.md)).
-- Inbound heartbeat/neighbor-report traffic — a generic droid→master dot,
-  standing in for the periodic housekeeping messages the console doesn't see
-  individually.
+Colored dots show observable activity:
 
-This is a faithful visualization of what the **master reports over serial** —
-it is not a full packet capture, and it can't show inter-slave relay traffic the
-master itself never surfaces to the console.
+- outgoing gesture, servo, Auto anim, configuration, calibration, preview, and
+  Locate commands;
+- acknowledged OTA fragments;
+- a generic inbound heartbeat/neighbor-report indication.
 
-## Legend
+This is not a packet capture. The console cannot show every inter-slave relay
+frame that the master never surfaces over serial, and one visible housekeeping
+dot may stand in for periodic traffic rather than one exact radio packet.
 
-The row below the disc explains the master/slave node styling and each traffic
-dot color.
+## Troubleshooting with the radar
+
+1. Confirm the droid exists in the Droids roster.
+2. Look for any path to the center, not only a direct master edge.
+3. If the node is at the rim, check power and nearby relay droids.
+4. Rotate or separate boards and power wiring; antenna orientation matters.
+5. Wait at least one report interval before judging the change.
+
+Commands sent while no route exists are not queued. Once the path returns,
+repeat the command or calibration action.

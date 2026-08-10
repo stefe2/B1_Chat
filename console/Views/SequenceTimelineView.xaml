@@ -20,13 +20,16 @@
                 Background="{StaticResource RecessBrush}" BorderBrush="{StaticResource BorderLoBrush}" BorderThickness="1">
             <StackPanel Orientation="Horizontal">
                 <!-- Play doubles as Resume when paused — the dedicated ⏵ button was removed. -->
-                <Button Style="{StaticResource IconTransportButtonStyle}" Command="{Binding PlayCommand}" ToolTip="Play / Resume" Margin="0,0,4,0">
+                <Button Style="{StaticResource IconTransportButtonStyle}" Command="{Binding PlayCommand}" ToolTip="Play / Resume"
+                        ToolTipService.ShowOnDisabled="True" Margin="0,0,4,0">
                     <TextBlock Text="▶" />
                 </Button>
-                <Button Style="{StaticResource IconTransportButtonStyle}" Command="{Binding StopCommand}" ToolTip="Stop" Margin="0,0,4,0">
+                <Button Style="{StaticResource IconTransportButtonStyle}" Command="{Binding StopCommand}" ToolTip="Stop"
+                        ToolTipService.ShowOnDisabled="True" Margin="0,0,4,0">
                     <TextBlock Text="■" />
                 </Button>
-                <Button Style="{StaticResource IconTransportButtonStyle}" Command="{Binding PauseCommand}" ToolTip="Pause" Margin="0,0,10,0">
+                <Button Style="{StaticResource IconTransportButtonStyle}" Command="{Binding PauseCommand}" ToolTip="Pause"
+                        ToolTipService.ShowOnDisabled="True" Margin="0,0,10,0">
                     <TextBlock Text="⏸" />
                 </Button>
                 <ToggleButton Style="{StaticResource HaloToggleButtonStyle}" IsChecked="{Binding Loop}"
@@ -38,7 +41,8 @@
                      .timecode/.tot). Run.Text bindings must be OneWay — the source properties
                      are get-only and Run.Text defaults to TwoWay. -->
                 <Border Background="{StaticResource Recess2Brush}" BorderBrush="{StaticResource BorderLoBrush}"
-                        BorderThickness="1" CornerRadius="4" Padding="10,4" Margin="0,0,10,0" VerticalAlignment="Center">
+                        BorderThickness="1" CornerRadius="4" Padding="10,4" Margin="0,0,10,0" VerticalAlignment="Center"
+                        ToolTip="Current playhead position followed by the total sequence duration.">
                     <TextBlock FontFamily="{StaticResource MonoFont}" FontSize="12.5" FontWeight="Bold"><Run Text="{Binding TimecodeNowText, Mode=OneWay}" Foreground="{StaticResource AccentBrush}" /><Run Text="{Binding TimecodeTotalText, Mode=OneWay}" Foreground="{StaticResource MutedBrush}" FontWeight="Normal" /></TextBlock>
                 </Border>
 
@@ -49,25 +53,34 @@
                 <TextBlock Text="&#xE71E;" FontFamily="Segoe MDL2 Assets" FontSize="13"
                            Foreground="{StaticResource TextBrush}" VerticalAlignment="Center" Margin="0,0,6,0" />
                 <Slider Style="{StaticResource MetalSliderStyle}" Width="100" Minimum="20" Maximum="300"
-                        Value="{Binding PxPerSecond}" Margin="0,0,10,0" />
+                        Value="{Binding PxPerSecond}" Margin="0,0,10,0"
+                        ToolTip="Timeline zoom: change how many horizontal pixels represent one second." />
                 <CheckBox Content="Snap" IsChecked="{Binding SnapToGrid}" Foreground="{StaticResource MutedBrush}"
-                          VerticalAlignment="Center" Margin="0,0,10,0" />
-                <Button Content="Fit" Style="{StaticResource MiniButtonStyle}" Click="BtnFit_Click" Margin="0,0,10,0" />
+                          VerticalAlignment="Center" Margin="0,0,10,0"
+                          ToolTip="Snap gesture and audio clip start times to the nearest 0.1 second when released." />
+                <Button Content="Fit" Style="{StaticResource MiniButtonStyle}" Click="BtnFit_Click" Margin="0,0,10,0"
+                        ToolTip="Adjust zoom so the complete sequence fits in the visible timeline." />
 
                 <Rectangle Width="1" Fill="{StaticResource BorderHiBrush}" Opacity="0.5" Margin="0,2,10,2" />
 
-                <Button Content="Undo" Style="{StaticResource MiniButtonStyle}" Command="{Binding UndoCommand}" Margin="0,0,4,0" />
-                <Button Content="Redo" Style="{StaticResource MiniButtonStyle}" Command="{Binding RedoCommand}" Margin="0,0,4,0" />
-                <Button Content="Export" Style="{StaticResource MiniButtonStyle}" Command="{Binding ExportCommand}" Margin="0,0,4,0" />
-                <Button Content="Import" Style="{StaticResource MiniButtonStyle}" Command="{Binding ImportCommand}" Margin="0,0,4,0" />
+                <Button Content="Undo" Style="{StaticResource MiniButtonStyle}" Command="{Binding UndoCommand}" Margin="0,0,4,0"
+                        ToolTip="Undo the most recent timeline edit." ToolTipService.ShowOnDisabled="True" />
+                <Button Content="Redo" Style="{StaticResource MiniButtonStyle}" Command="{Binding RedoCommand}" Margin="0,0,4,0"
+                        ToolTip="Restore the most recently undone timeline edit." ToolTipService.ShowOnDisabled="True" />
+                <Button Content="Export" Style="{StaticResource MiniButtonStyle}" Command="{Binding ExportCommand}" Margin="0,0,4,0"
+                        ToolTip="Save the current sequence as a portable .b1seq.json file. Referenced audio files are not copied." />
+                <Button Content="Import" Style="{StaticResource MiniButtonStyle}" Command="{Binding ImportCommand}" Margin="0,0,4,0"
+                        ToolTip="Open a .b1seq.json file in the editor and add it to the local library." />
                 <Button Content="Clear" Style="{StaticResource MiniButtonStyle}" Command="{Binding ClearTimelineCommand}"
                         ToolTip="Empty the timeline (gestures + audio clips) — asks first if unsaved" Margin="0,0,10,0" />
 
                 <Button Content="+ Add audio lane" Style="{StaticResource MiniButtonStyle}"
-                        Command="{Binding AddAudioLaneCommand}" Margin="0,0,10,0" />
+                        Command="{Binding AddAudioLaneCommand}" Margin="0,0,10,0"
+                        ToolTip="Add another independent audio lane. Right-click a lane header to delete it." />
 
                 <Border Style="{StaticResource ValuePillStyle}" BorderBrush="{StaticResource OkBrush}"
-                        Visibility="{Binding IsLiveTracking, Converter={StaticResource BoolToVisConv}}">
+                        Visibility="{Binding IsLiveTracking, Converter={StaticResource BoolToVisConv}}"
+                        ToolTip="Playback is active and the playhead is following the running sequence in real time.">
                     <TextBlock Text="● LIVE" Foreground="{StaticResource OkBrush}" FontFamily="{StaticResource MonoFont}"
                                FontWeight="Bold" FontSize="11" />
                 </Border>
@@ -102,7 +115,8 @@
                                 <DataTemplate>
                                     <Border Height="{x:Static Models:AudioLane.RowHeight}" Padding="10,0"
                                             BorderThickness="0,0,0,1" BorderBrush="#59000000" Background="Transparent"
-                                            Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=ItemsControl}}">
+                                            Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                            ToolTip="Edit the lane name directly, use + to add a clip, or right-click this header to delete the lane.">
                                         <!-- Right-click → delete the lane (asks first if it still holds clips —
                                              see SequencerViewModel.DeleteAudioLane). Same Tag=ViewModel trick as
                                              every other ContextMenu here. -->
@@ -146,7 +160,8 @@
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
                                     <Border Height="{x:Static Models:TimelineTrack.RowHeight}" BorderThickness="0,0,0,1"
-                                            BorderBrush="#59000000" Cursor="Hand">
+                                            BorderBrush="#59000000" Cursor="Hand"
+                                            ToolTip="Click to arm this track. Clicking a gesture then inserts it here at the playhead; you can also drag a gesture directly onto any track.">
                                         <Border.InputBindings>
                                             <MouseBinding MouseAction="LeftClick"
                                                           Command="{Binding DataContext.ArmTrackCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
@@ -288,6 +303,7 @@
                              ticks (tall for major, short for minor), labels above, playhead flag. -->
                         <Canvas x:Name="RulerCanvas" Height="30" Background="{StaticResource Recess2Brush}" Cursor="SizeWE"
                                 Width="{Binding TimelineWidthPx}"
+                                ToolTip="Click or drag along the ruler to move the playhead. Scrubbing is disabled while playback is running."
                                 MouseLeftButtonDown="Ruler_MouseLeftButtonDown"
                                 MouseMove="Ruler_MouseMove"
                                 MouseLeftButtonUp="Ruler_MouseLeftButtonUp">
@@ -397,6 +413,7 @@
                                                         <Border Canvas.Top="5" Height="42" CornerRadius="5" BorderThickness="1"
                                                                 BorderBrush="#80FF9D2E"
                                                                 Cursor="SizeAll"
+                                                                ToolTip="Drag to change the start time or move this clip to another audio lane. Right-click for Replace, Loop, and Delete."
                                                                 Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=ItemsControl, AncestorLevel=2}}"
                                                                 MouseLeftButtonDown="AudioClip_MouseLeftButtonDown"
                                                                 MouseMove="AudioClip_MouseMove"
@@ -545,10 +562,11 @@
                                             <!-- Gesture clip: vertical family gradient (light top → base, reads as a
                                                  beveled highlight), name + real duration, loop badge on the two
                                                  looping gestures (mockup .clip). -->
-                                            <Border Height="42" CornerRadius="5" Padding="8,2" BorderThickness="1"
-                                                    Background="{Binding AnimId, Converter={StaticResource AnimFamilyToBrushConv}, ConverterParameter=Gradient}"
-                                                    BorderBrush="#66000000" Cursor="SizeAll"
-                                                    Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                             <Border Height="42" CornerRadius="5" Padding="8,2" BorderThickness="1"
+                                                     Background="{Binding AnimId, Converter={StaticResource AnimFamilyToBrushConv}, ConverterParameter=Gradient}"
+                                                     BorderBrush="#66000000" Cursor="SizeAll"
+                                                     ToolTip="Click to inspect this gesture. Drag to change its start time or target track; right-click to duplicate or delete it."
+                                                     Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                     MouseLeftButtonDown="Clip_MouseLeftButtonDown"
                                                     MouseMove="Clip_MouseMove"
                                                     MouseLeftButtonUp="Clip_MouseLeftButtonUp">
@@ -726,14 +744,16 @@
 
                         <TextBlock Text="GESTURE" Style="{StaticResource FieldLabelStyle}" Margin="0,0,0,4" />
                         <ComboBox Style="{StaticResource DarkComboBoxStyle}" ItemsSource="{Binding GestureNames}"
-                                  SelectedIndex="{Binding SelectedStep.AnimId}" Margin="0,0,0,4" />
+                                  SelectedIndex="{Binding SelectedStep.AnimId}" Margin="0,0,0,4"
+                                  ToolTip="Replace the selected clip's gesture while keeping its start time and target track." />
                         <!-- Family color strip under the gesture picker (mockup .clip-color). -->
                         <Rectangle Height="4" RadiusX="2" RadiusY="2" Margin="0,0,0,10"
                                    Fill="{Binding SelectedStep.AnimId, Converter={StaticResource AnimFamilyToBrushConv}}" />
 
                         <TextBlock Text="TARGET TRACK" Style="{StaticResource FieldLabelStyle}" Margin="0,0,0,4" />
                         <ComboBox Style="{StaticResource DarkComboBoxStyle}" ItemsSource="{Binding Tracks}"
-                                  DisplayMemberPath="Label" SelectedItem="{Binding SelectedStepTrack}" Margin="0,0,0,10" />
+                                  DisplayMemberPath="Label" SelectedItem="{Binding SelectedStepTrack}" Margin="0,0,0,10"
+                                  ToolTip="Move the selected gesture clip to another target track." />
 
                         <TextBlock Text="START" Style="{StaticResource FieldLabelStyle}" Margin="0,0,0,4" />
                         <Border Style="{StaticResource ValuePillStyle}" HorizontalAlignment="Stretch" Margin="0,0,0,4">
@@ -742,9 +762,9 @@
                         </Border>
                         <UniformGrid Columns="2" Margin="0,0,0,10">
                             <Button Content="−0.1s" Style="{StaticResource MiniButtonStyle}" Margin="0,0,2,0"
-                                    Command="{Binding NudgeStartBackwardCommand}" />
+                                    Command="{Binding NudgeStartBackwardCommand}" ToolTip="Move the selected clip 0.1 second earlier." />
                             <Button Content="+0.1s" Style="{StaticResource MiniButtonStyle}" Margin="2,0,0,0"
-                                    Command="{Binding NudgeStartForwardCommand}" />
+                                    Command="{Binding NudgeStartForwardCommand}" ToolTip="Move the selected clip 0.1 second later." />
                         </UniformGrid>
 
                         <UniformGrid Columns="2">
@@ -797,6 +817,7 @@
                                                 <Border Margin="0,0,7,4" Padding="9,5" CornerRadius="13" Cursor="Hand"
                                                         BorderThickness="3,1,1,1"
                                                         BorderBrush="{Binding Id, Converter={StaticResource AnimFamilyToBrushConv}}"
+                                                        ToolTip="Click to insert this gesture on the armed track at the playhead, or drag it directly onto a target track and time."
                                                         MouseLeftButtonDown="GestureChip_MouseLeftButtonDown"
                                                         MouseMove="GestureChip_MouseMove"
                                                         MouseLeftButtonUp="GestureChip_MouseLeftButtonUp">
