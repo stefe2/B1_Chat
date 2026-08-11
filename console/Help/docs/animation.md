@@ -31,6 +31,11 @@ different gesture to replace the loop, or disable Servos if motion must stop
 immediately. `TALK` is intended to accompany PC audio; see
 [Sequencer Audio](sequencer/audio.md).
 
+Animation-card commands are intentionally operator-owned and do not use the
+Sequencer's five-second safety lease. The lease applies only when Sequencer
+playback starts `POWER_DOWN` or `TALK`; do not rely on it to stop a loop started
+from this card.
+
 ## Automatic idle behavior
 
 When no manual gesture owns a droid, the master selects random non-looping idle

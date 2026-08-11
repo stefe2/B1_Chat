@@ -69,7 +69,7 @@ The dashboard is updated whenever an item changes state.
 | Epic | Description | Required items complete | Deferred ideas complete |
 |---|---|---:|---:|
 | A | Playback isolation and cancellation | 5 / 8 | — |
-| B | Infinite gestures and Stop/Pause semantics | 2 / 6 | 0 / 1 |
+| B | Infinite gestures and Stop/Pause semantics | 3 / 6 | 0 / 1 |
 | C | Dirty, Undo/Redo and editing transactions | 0 / 8 | 0 / 1 |
 | D | Import, export and local library | 0 / 8 | 0 / 1 |
 | E | Deterministic scheduler and performance | 2 / 6 | 0 / 1 |
@@ -215,7 +215,8 @@ The dashboard is updated whenever an item changes state.
   restart send targeted tracked IDLE only to remaining infinite targets. Pause
   and whole-pass Loop boundaries intentionally retain them. Successful cleanup
   is idempotent; a local write failure leaves cleanup retryable. Link-loss
-  delivery remains explicitly unguaranteed pending SEQ-B06.
+  delivery remains retryable, while SEQ-B06 provides the independent firmware
+  fallback when the console or link disappears.
 
 ### [ ] SEQ-B03 — Make Pause semantics explicit and honest
 
@@ -249,7 +250,7 @@ The dashboard is updated whenever an item changes state.
   behavior when the audio loops or is missing.
 - **Validation:** UI and playback integration test.
 
-### [ ] SEQ-B06 — Add a firmware fail-safe lease for infinite gestures
+### [x] SEQ-B06 — Add a firmware fail-safe lease for infinite gestures
 
 - **Priority:** P0
 - **Problem:** console cleanup cannot stop TALK/POWER_DOWN if the PC crashes, the
@@ -264,6 +265,15 @@ The dashboard is updated whenever an item changes state.
 - **Validation:** real and simulated tests cover normal renewal, console crash,
   cable removal, master loss/restart, delayed packets, renewal from a stale pass,
   and clean IDLE before expiry.
+- **Implemented:** Sequencer-started `TALK`/`POWER_DOWN` use a 5 s firmware
+  lease renewed every 2 s after correlated master acceptance. Pause and
+  whole-pass Loop retain renewal; Stop, natural end, restart, disconnect and
+  disposal cancel it before targeted IDLE cleanup. The firmware fails closed to
+  IDLE with an `interrupted/leaseExpired` report. Renewals carry the originating
+  mesh sequence, so an old callback or delayed packet cannot extend a newer
+  gesture. The manual Animation card remains intentionally unleased and
+  autonomous animations are unaffected. Older firmware falls back to the B02
+  cleanup behavior through the additive `animLease` capability.
 
 ### [ ] SEQ-B07 — Define Stop, Safe Stop and Emergency Stop levels
 
@@ -1266,7 +1276,7 @@ options.
 | DEC-012 | Deferred | Show-level audio transition support begins with hard cuts/fades or full crossfade? |
 | DEC-013 | Deferred | Performance journals default on or require explicit operator opt-in? |
 | DEC-014 | Deferred | First external integration target: MIDI, OSC, DMX, physical remote, or timecode? |
-| DEC-015 | Open | Infinite-gesture lease duration, renewal interval and safe expiry state? |
+| DEC-015 | Resolved 2026-08-11 | Sequencer-only infinite gestures receive a 5 s lease, renewed every 2 s after master acceptance; expiry reports `leaseExpired` and commands IDLE. Manual Animation-card and autonomous gestures remain unleased. |
 | DEC-016 | Open | Mechanical policy for Safe Stop versus Emergency Stop and servo power? |
 | DEC-017 | Resolved 2026-08-11 | Target execution is the required success signal. Missing reports warn but do not gate playback; serial-write/master-relay stages may be added diagnostically. |
 | DEC-018 | Deferred | Published Show revision naming, retention and rollback policy? |
@@ -1291,3 +1301,4 @@ Append concise evidence when closing items; do not paste full build logs.
 | 2026-08-11 | SEQ-G11 (in progress) | Added separate non-blocking start/completion deadlines, `UNCONF`/`MISS`/`TIMEOUT` clip states, late-report recovery, terminal-state duplicate protection and looping-gesture semantics. Headless WPF suite passed 39/39; offline regression passed 17/17 with report `b1-self-test-20260811-135225.json`. Serial-write/master-receipt staging and hardware loss scenarios remain. |
 | 2026-08-11 | SEQ-G11 (in progress) | Split delivery into immediate local dispatch (`NO LINK`/`NOT READY`/`WRITE FAIL` or `WRITE`), correlated master acceptance (`MASTER`) and target execution. Added additive `animAccepted` with mesh-queue/local-routing facts, preserved compatibility with older firmware, and strengthened the headless bench to require master acceptance before lifecycle reports. WPF tests passed 43/43; offline regression 17/17 (`b1-self-test-20260811-140233.json`); master `9A228A09` and slaves `1D787B84` passed hardware execution 5/5 (`b1-anim-exec-20260811-141734.json`), strict regression 29/29 (`b1-self-test-20260811-141828.json`) and preflight 6/6 (`b1-sequencer-bench-20260811-141836.json`). Final servo/auto-animation state is off on all three. Offline/weak-link/disconnect timeout observations and any true relay acknowledgement remain. |
 | 2026-08-11 | SEQ-B01, SEQ-B02 | Added per-droid/request latest-gesture tracking and targeted IDLE cleanup on Stop, non-looping natural end, application disposal and Play restart. Broadcast overrides, repeated infinite commands, failed dispatch/cleanup retry, mesh-failure rollback, disconnect retry and Loop behavior are covered; WPF suite passed 55/55 and offline regression 17/17 (`b1-self-test-20260811-143504.json`). Existing hardware benches already prove tracked TALK/POWER_DOWN interruption by IDLE; no firmware change or reflash was required. |
+| 2026-08-11 | SEQ-B06 | Added additive Sequencer-only infinite-animation leases: 5 s initial TTL, 2 s correlated renewal, fail-closed IDLE with `leaseExpired`, stale-mesh-sequence rejection, Pause/Loop retention and Stop/end/restart/disconnect cleanup. WPF suite passed 61/61. Master `7A38B49A` and slaves `673F513F` passed USB/OTA deployment, headless expiry/renewal/stale protection 8/8 (`b1-anim-exec-20260811-145900.json`), strict regression 31/31 with 15 s stable mesh (`b1-self-test-20260811-150021.json`) and read-only preflight 6/6 (`b1-sequencer-bench-20260811-150026.json`). Final servos and automatic animations are off on all three droids. |

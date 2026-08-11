@@ -45,6 +45,7 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
     [ObservableProperty] private int _lastSpeed;
 
     public bool HasCap(string c) => _caps.Contains(c);
+    public bool SupportsAnimLease => HasCap("animLease");
 
     public event Action<string>? LogTx;
     public event Action<string>? LogRx;
@@ -203,18 +204,26 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
         SendCmd(new JsonObject { ["cmd"] = "otaStart", ["target"] = target, ["size"] = size, ["md5"] = md5Hex32 });
     public void OtaChunk(int seq, string base64Data) => SendCmd(new JsonObject { ["cmd"] = "otaChunk", ["seq"] = seq, ["data"] = base64Data });
     public void OtaAbort() => SendCmd(new JsonObject { ["cmd"] = "otaAbort" });
-    public AnimDispatchResult PlayAnim(ushort target, int animId, uint seed)
+    public AnimDispatchResult PlayAnim(ushort target, int animId, uint seed, ushort leaseMs = 0)
     {
         if (_nextAnimRequestId == int.MaxValue) _nextAnimRequestId = 0;
         var requestId = (uint)++_nextAnimRequestId;
-        var state = SendCmdRaw(new JsonObject
+        var command = new JsonObject
         {
             ["cmd"] = "anim", ["target"] = target, ["animId"] = animId,
             ["seed"] = seed, ["requestId"] = requestId,
-        });
+        };
+        if (leaseMs > 0) command["leaseMs"] = leaseMs;
+        var state = SendCmdRaw(command);
         if (state == AnimDispatchState.Written) AnimSent?.Invoke(target, animId);
         return new AnimDispatchResult(requestId, state);
     }
+    public AnimDispatchState RenewAnimLease(ushort target, int meshSeq, ushort leaseMs) =>
+        SendCmdRaw(new JsonObject
+        {
+            ["cmd"] = "animLease", ["target"] = target,
+            ["meshSeq"] = meshSeq, ["leaseMs"] = leaseMs,
+        });
     public void Preview(ushort target, int pan, int tilt)
     {
         SendCmd(new JsonObject { ["cmd"] = "preview", ["target"] = target, ["pan"] = pan, ["tilt"] = tilt });
@@ -335,7 +344,8 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
                     root.TryGetProperty("animId", out var amaAnim) ? amaAnim.GetInt32() : -1,
                     root.TryGetProperty("meshSeq", out var amaSeq) ? amaSeq.GetInt32() : 0,
                     root.TryGetProperty("meshQueued", out var amaMesh) && amaMesh.GetBoolean(),
-                    root.TryGetProperty("local", out var amaLocal) && amaLocal.GetBoolean()));
+                    root.TryGetProperty("local", out var amaLocal) && amaLocal.GetBoolean(),
+                    root.TryGetProperty("leaseMs", out var amaLease) ? amaLease.GetInt32() : 0));
                 break;
             case "animExec":
                 AnimExecutionReceived?.Invoke(new AnimExecutionReport(

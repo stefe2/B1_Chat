@@ -33,6 +33,8 @@ enum MeshMsgType : uint8_t {
     MSG_LOCATE    = 15,  // toggles the targeted droid's onboard LED solid (physical "find me")
     MSG_NAME      = 16,  // persists the targeted droid's own name in its own NVS
     MSG_ANIM_EXEC = 17,  // droid -> master: tracked animation lifecycle report
+    MSG_ANIM_LEASED = 18, // safe fail-closed infinite animation with an initial lease
+    MSG_ANIM_LEASE_RENEW = 19, // renews only the matching active leased animation
 };
 
 // Lifecycle phases reported for console-originated animation commands.
@@ -46,6 +48,7 @@ enum AnimExecPhase : uint8_t {
 enum AnimExecReason : uint8_t {
     ANIM_EXEC_REASON_NONE       = 0,
     ANIM_EXEC_REASON_SERVOS_OFF = 1,
+    ANIM_EXEC_REASON_LEASE_EXPIRED = 2,
 };
 
 // Status/reason codes for OTA messages (OtaAckPayload.status, OtaAbortPayload.reason).
@@ -86,6 +89,23 @@ struct AnimPayload {
 
 static const uint16_t ANIM_EXEC_TRACKED_FLAG = 0x8000;
 static const uint16_t ANIM_SYNC_DELAY_MASK = 0x7FFF;
+static const uint16_t ANIM_LEASE_MIN_MS = 1000;
+static const uint16_t ANIM_LEASE_MAX_MS = 30000;
+
+// Separate type rather than changing AnimPayload: old nodes safely ignore the
+// unknown command instead of starting an infinite gesture without its lease.
+struct LeasedAnimPayload {
+    uint16_t targetId;
+    uint8_t  animId;      // POWER_DOWN or TALK only
+    uint16_t leaseMs;
+    uint32_t seed;
+};
+
+struct AnimLeaseRenewPayload {
+    uint16_t targetId;
+    uint16_t originSeq;   // sequence of MSG_ANIM_LEASED; rejects stale renewals
+    uint16_t leaseMs;
+};
 
 // A droid echoes the originating MSG_ANIM header sequence. The master maps
 // that wire-level correlation back to the console's requestId without
@@ -97,6 +117,11 @@ struct AnimExecPayload {
     uint8_t  reason;      // AnimExecReason
     uint32_t atMs;        // reporting droid's local uptime
 };
+
+static_assert(sizeof(LeasedAnimPayload) == 9,
+              "Leased animation wire format must remain exactly 9 bytes");
+static_assert(sizeof(AnimLeaseRenewPayload) == 6,
+              "Animation lease renewal wire format must remain exactly 6 bytes");
 
 struct ConfigPayload {
     uint16_t targetId;

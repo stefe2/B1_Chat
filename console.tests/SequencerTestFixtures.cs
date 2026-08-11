@@ -10,6 +10,7 @@ internal sealed class FakeSequencerProtocol : ISequencerProtocol
     public Dictionary<int, int> Durations { get; } = new();
     public IReadOnlyDictionary<int, int> AnimDurationMs => Durations;
     public List<SentGesture> Sent { get; } = new();
+    public List<SentLeaseRenewal> LeaseRenewals { get; } = new();
     private uint _nextRequestId;
 
     public event Action? DroidsChanged;
@@ -18,28 +19,37 @@ internal sealed class FakeSequencerProtocol : ISequencerProtocol
     public event Action<AnimMasterReceipt>? AnimMasterAccepted;
     public event Action<AnimExecutionReport>? AnimExecutionReceived;
     public AnimDispatchState NextDispatchState { get; set; } = AnimDispatchState.Written;
+    public bool SupportsAnimLease { get; set; } = true;
 
-    public AnimDispatchResult PlayAnim(ushort target, int animId, uint seed)
+    public AnimDispatchResult PlayAnim(ushort target, int animId, uint seed, ushort leaseMs = 0)
     {
         var requestId = ++_nextRequestId;
-        Sent.Add(new SentGesture(requestId, target, animId, seed));
+        Sent.Add(new SentGesture(requestId, target, animId, seed, leaseMs));
         return new AnimDispatchResult(requestId, NextDispatchState);
+    }
+
+    public AnimDispatchState RenewAnimLease(ushort target, int meshSeq, ushort leaseMs)
+    {
+        LeaseRenewals.Add(new SentLeaseRenewal(target, meshSeq, leaseMs));
+        return NextDispatchState;
     }
 
     public void RaiseDroidsChanged() => DroidsChanged?.Invoke();
     public void RaiseAnimDurationsReceived() => AnimDurationsReceived?.Invoke();
     public void RaiseLinkClosed(bool unexpected = true) => LinkClosed?.Invoke(unexpected);
     public void RaiseAnimMasterAccepted(uint requestId, ushort target, int animId,
-        int meshSeq = 77, bool meshQueued = true, bool localHandled = false) =>
+        int meshSeq = 77, bool meshQueued = true, bool localHandled = false,
+        int leaseMs = 0) =>
         AnimMasterAccepted?.Invoke(new AnimMasterReceipt(
-            requestId, target, animId, meshSeq, meshQueued, localHandled));
+            requestId, target, animId, meshSeq, meshQueued, localHandled, leaseMs));
     public void RaiseAnimExecution(uint requestId, ushort droidId, int animId,
         string phase, string? reason = null) =>
         AnimExecutionReceived?.Invoke(new AnimExecutionReport(
             requestId, droidId, animId, phase, reason, 1234, 77));
 }
 
-internal sealed record SentGesture(uint RequestId, ushort Target, int AnimId, uint Seed);
+internal sealed record SentGesture(uint RequestId, ushort Target, int AnimId, uint Seed, ushort LeaseMs);
+internal sealed record SentLeaseRenewal(ushort Target, int MeshSeq, ushort LeaseMs);
 
 internal sealed class FakeAudioPlayer : ISequencerAudioPlayer
 {

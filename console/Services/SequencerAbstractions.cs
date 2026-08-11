@@ -31,19 +31,22 @@ public readonly record struct AnimMasterReceipt(
     int AnimId,
     int MeshSeq,
     bool MeshQueued,
-    bool LocalHandled);
+    bool LocalHandled,
+    int LeaseMs = 0);
 
 /// <summary>Narrow protocol surface consumed by the Sequencer and its headless tests.</summary>
 public interface ISequencerProtocol
 {
     ObservableCollection<Droid> Droids { get; }
     IReadOnlyDictionary<int, int> AnimDurationMs { get; }
+    bool SupportsAnimLease { get; }
     event Action? DroidsChanged;
     event Action? AnimDurationsReceived;
     event Action<bool>? LinkClosed;
     event Action<AnimMasterReceipt>? AnimMasterAccepted;
     event Action<AnimExecutionReport>? AnimExecutionReceived;
-    AnimDispatchResult PlayAnim(ushort target, int animId, uint seed);
+    AnimDispatchResult PlayAnim(ushort target, int animId, uint seed, ushort leaseMs = 0);
+    AnimDispatchState RenewAnimLease(ushort target, int meshSeq, ushort leaseMs);
 }
 
 /// <summary>Audio side effects consumed by the Sequencer.</summary>

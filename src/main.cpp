@@ -188,6 +188,8 @@ struct ActiveAnimExecution {
     uint16_t originSeq = 0;
     uint8_t animId = ANIM_IDLE;
     bool broadcast = false;
+    bool leased = false;
+    uint32_t leaseDeadlineMs = 0;
 };
 static ActiveAnimExecution gActiveAnimExec;
 
@@ -253,35 +255,76 @@ static void interruptTrackedAnimation() {
     gActiveAnimExec.active = false;
 }
 
-static void startAnimationCommand(const AnimPayload& payload, uint16_t originSeq) {
-    const bool tracked = (payload.syncDelayMs & ANIM_EXEC_TRACKED_FLAG) != 0;
-    const bool broadcast = payload.targetId == MESH_TARGET_ALL;
+static void startAnimationCommand(uint16_t targetId, uint8_t animId, uint32_t seed,
+                                  uint16_t originSeq, bool tracked,
+                                  uint16_t leaseMs = 0) {
+    const bool broadcast = targetId == MESH_TARGET_ALL;
     interruptTrackedAnimation();
 
     if (!gServos) {
         if (tracked) {
-            reportAnimExec(originSeq, payload.animId, ANIM_EXEC_REJECTED,
+            reportAnimExec(originSeq, animId, ANIM_EXEC_REJECTED,
                            ANIM_EXEC_REASON_SERVOS_OFF, broadcast);
         }
         return;
     }
 
-    anim.play(payload.animId, payload.seed);
+    anim.play(animId, seed);
     if (!tracked) return;
 
-    reportAnimExec(originSeq, payload.animId, ANIM_EXEC_STARTED,
+    reportAnimExec(originSeq, animId, ANIM_EXEC_STARTED,
                    ANIM_EXEC_REASON_NONE, broadcast);
     if (anim.isPlaying()) {
-        gActiveAnimExec = {true, originSeq, payload.animId, broadcast};
+        gActiveAnimExec.active = true;
+        gActiveAnimExec.originSeq = originSeq;
+        gActiveAnimExec.animId = animId;
+        gActiveAnimExec.broadcast = broadcast;
+        gActiveAnimExec.leased = leaseMs > 0;
+        gActiveAnimExec.leaseDeadlineMs = millis() + leaseMs;
     } else {
         // IDLE has no keyframes: it centers immediately and is complete.
-        reportAnimExec(originSeq, payload.animId, ANIM_EXEC_COMPLETED,
+        reportAnimExec(originSeq, animId, ANIM_EXEC_COMPLETED,
                        ANIM_EXEC_REASON_NONE, broadcast);
     }
 }
 
+static void startAnimationCommand(const AnimPayload& payload, uint16_t originSeq) {
+    startAnimationCommand(payload.targetId, payload.animId, payload.seed, originSeq,
+                          (payload.syncDelayMs & ANIM_EXEC_TRACKED_FLAG) != 0);
+}
+
+static bool validLeasedAnimPayload(const LeasedAnimPayload& payload) {
+    return validMeshTarget(payload.targetId) &&
+           (payload.animId == ANIM_POWER_DOWN || payload.animId == ANIM_TALK) &&
+           payload.leaseMs >= ANIM_LEASE_MIN_MS &&
+           payload.leaseMs <= ANIM_LEASE_MAX_MS;
+}
+
+static void startLeasedAnimationCommand(const LeasedAnimPayload& payload,
+                                        uint16_t originSeq) {
+    startAnimationCommand(payload.targetId, payload.animId, payload.seed, originSeq,
+                          true, payload.leaseMs);
+}
+
+static void renewAnimationLease(const AnimLeaseRenewPayload& payload) {
+    if (payload.targetId != MESH_TARGET_ALL && payload.targetId != Mesh.myId()) return;
+    if (!gActiveAnimExec.active || !gActiveAnimExec.leased ||
+        gActiveAnimExec.originSeq != payload.originSeq) return;
+    gActiveAnimExec.leaseDeadlineMs = millis() + payload.leaseMs;
+}
+
 static void finishTrackedAnimationIfNeeded() {
-    if (!gActiveAnimExec.active || anim.isPlaying()) return;
+    if (!gActiveAnimExec.active) return;
+    if (gActiveAnimExec.leased &&
+        (int32_t)(millis() - gActiveAnimExec.leaseDeadlineMs) >= 0) {
+        reportAnimExec(gActiveAnimExec.originSeq, gActiveAnimExec.animId,
+                       ANIM_EXEC_INTERRUPTED, ANIM_EXEC_REASON_LEASE_EXPIRED,
+                       gActiveAnimExec.broadcast);
+        gActiveAnimExec.active = false;
+        anim.play(ANIM_IDLE, esp_random());
+        return;
+    }
+    if (anim.isPlaying()) return;
     reportAnimExec(gActiveAnimExec.originSeq, gActiveAnimExec.animId,
                    ANIM_EXEC_COMPLETED, ANIM_EXEC_REASON_NONE,
                    gActiveAnimExec.broadcast);
@@ -360,15 +403,36 @@ static void applyCalib(const CalibPayload& p) {
 // Console hook: dispatch a tracked command and play it locally when targeted.
 #if IS_MASTER
 static void onAnimCmd(uint16_t target, uint8_t animId, uint32_t seed,
-                      uint32_t requestId) {
-    AnimPayload payload{target, animId, ANIM_EXEC_TRACKED_FLAG, seed};
+                      uint32_t requestId, uint16_t leaseMs) {
     uint16_t meshSeq = 0;
-    const bool meshQueued = Mesh.send(MSG_ANIM, &payload, sizeof(payload), MESH_TTL, &meshSeq);
+    bool meshQueued;
+    if (leaseMs > 0) {
+        const LeasedAnimPayload payload{target, animId, leaseMs, seed};
+        meshQueued = Mesh.send(MSG_ANIM_LEASED, &payload, sizeof(payload), MESH_TTL, &meshSeq);
+    } else {
+        const AnimPayload payload{target, animId, ANIM_EXEC_TRACKED_FLAG, seed};
+        meshQueued = Mesh.send(MSG_ANIM, &payload, sizeof(payload), MESH_TTL, &meshSeq);
+    }
     const bool localHandled = target == MESH_TARGET_ALL || target == Mesh.myId();
     rememberAnimRequest(meshSeq, requestId, target, animId);
-    Console.pushAnimAccepted(requestId, target, animId, meshSeq, meshQueued, localHandled);
-    if (localHandled)
-        startAnimationCommand(payload, meshSeq);
+    Console.pushAnimAccepted(requestId, target, animId, meshSeq, meshQueued,
+                             localHandled, leaseMs);
+    if (localHandled) {
+        if (leaseMs > 0) {
+            const LeasedAnimPayload payload{target, animId, leaseMs, seed};
+            startLeasedAnimationCommand(payload, meshSeq);
+        } else {
+            const AnimPayload payload{target, animId, ANIM_EXEC_TRACKED_FLAG, seed};
+            startAnimationCommand(payload, meshSeq);
+        }
+    }
+}
+
+static void onAnimLeaseRenewCmd(uint16_t target, uint16_t originSeq,
+                                uint16_t leaseMs) {
+    const AnimLeaseRenewPayload payload{target, originSeq, leaseMs};
+    Mesh.send(MSG_ANIM_LEASE_RENEW, &payload, sizeof(payload));
+    renewAnimationLease(payload);
 }
 
 // Console hook: enable/disable a target's servos (master).
@@ -431,12 +495,27 @@ static void processMeshMessage(uint8_t type, const uint8_t* payload, uint8_t len
         if (p.targetId == MESH_TARGET_ALL || p.targetId == Mesh.myId()) {
             startAnimationCommand(p, seq);
         }
+    } else if (type == MSG_ANIM_LEASED && len == sizeof(LeasedAnimPayload)) {
+        LeasedAnimPayload p;
+        memcpy(&p, payload, sizeof(p));
+        if (!validLeasedAnimPayload(p)) {
+            LOGF("invalid leased ANIM payload from %04X", srcId);
+            return;
+        }
+        if (p.targetId == MESH_TARGET_ALL || p.targetId == Mesh.myId())
+            startLeasedAnimationCommand(p, seq);
+    } else if (type == MSG_ANIM_LEASE_RENEW && len == sizeof(AnimLeaseRenewPayload)) {
+        AnimLeaseRenewPayload p;
+        memcpy(&p, payload, sizeof(p));
+        if (!validMeshTarget(p.targetId) || p.leaseMs < ANIM_LEASE_MIN_MS ||
+            p.leaseMs > ANIM_LEASE_MAX_MS) return;
+        renewAnimationLease(p);
     } else if (type == MSG_ANIM_EXEC && len == sizeof(AnimExecPayload)) {
 #if IS_MASTER
         AnimExecPayload p;
         memcpy(&p, payload, sizeof(p));
         if (p.animId >= ANIM_COUNT || p.phase < ANIM_EXEC_STARTED ||
-            p.phase > ANIM_EXEC_REJECTED || p.reason > ANIM_EXEC_REASON_SERVOS_OFF) return;
+            p.phase > ANIM_EXEC_REJECTED || p.reason > ANIM_EXEC_REASON_LEASE_EXPIRED) return;
         publishAnimExec(srcId, p, false);
 #endif
     } else if (type == MSG_SERVO && len == sizeof(ServoPayload)) {
@@ -688,6 +767,7 @@ void setup() {
 #if IS_MASTER
     Console.begin();
     Console.onAnim(onAnimCmd);
+    Console.onAnimLeaseRenew(onAnimLeaseRenewCmd);
     Console.onServo(onServoCmd);
     Console.onAutoAnim(onAutoAnimCmd);
     Console.onConfig(applyAnimParamsEffect);
@@ -731,8 +811,8 @@ void loop() {
 
     head.update();
     if (gServos) anim.update();
-    finishTrackedAnimationIfNeeded();
     pumpMeshInbox();
+    finishTrackedAnimationIfNeeded();
 #if IS_MASTER
     Console.update();
     OtaM.update(now);

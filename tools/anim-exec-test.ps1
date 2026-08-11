@@ -74,14 +74,22 @@ function Set-Boolean([string]$cmd, [int]$target, [bool]$enabled) {
     $script:Port.WriteLine((@{ cmd = $cmd; target = $target; enabled = $enabled } | ConvertTo-Json -Compress))
 }
 
-function Send-TrackedAnim([int]$target, [int]$animId) {
+function Send-TrackedAnim([int]$target, [int]$animId, [int]$leaseMs = 0) {
     $script:RequestId++
     $requestId = $script:RequestId
-    $script:Port.WriteLine((@{
+    $command = @{
         cmd = "anim"; target = $target; animId = $animId
         seed = [uint32](0x62000000 + $requestId); requestId = $requestId
-    } | ConvertTo-Json -Compress))
+    }
+    if ($leaseMs -gt 0) { $command.leaseMs = $leaseMs }
+    $script:Port.WriteLine(($command | ConvertTo-Json -Compress))
     return $requestId
+}
+
+function Renew-AnimLease([int]$target, [int]$meshSeq, [int]$leaseMs) {
+    $script:Port.WriteLine((@{
+        cmd = "animLease"; target = $target; meshSeq = $meshSeq; leaseMs = $leaseMs
+    } | ConvertTo-Json -Compress))
 }
 
 function Wait-RequestReports(
@@ -151,6 +159,7 @@ try {
     Assert-Bench ($null -ne $hello) "master handshake missing"
     Assert-Bench (@($hello.caps) -contains "animExec") "firmware does not advertise animExec"
     Assert-Bench (@($hello.caps) -contains "animAccepted") "firmware does not advertise animAccepted"
+    Assert-Bench (@($hello.caps) -contains "animLease") "firmware does not advertise animLease"
     Add-Result "Execution-report capabilities" "PASS" ("master {0}, build {1}" -f $hello.id, $hello.build)
 
     $inventory = Read-Inventory
@@ -211,6 +220,43 @@ try {
     $null = Wait-RequestReports $idle @($firstSlave) @("started") 6
     $null = Wait-RequestReports $idle @($firstSlave) @("completed") 6
     Add-Result "Looping gesture interruption" "PASS" "TALK interrupted by tracked IDLE; IDLE completed"
+
+    $leased = Send-TrackedAnim $firstSlave 17 1500
+    $leasedAccepted = Wait-MasterAcceptance $leased $firstSlave 17
+    Assert-Bench ([int]$leasedAccepted.leaseMs -eq 1500) "master did not preserve the requested lease"
+    $null = Wait-RequestReports $leased @($firstSlave) @("started") 6
+    $expired = Wait-RequestReports $leased @($firstSlave) @("interrupted") 5
+    Assert-Bench (@($expired | Where-Object { "$($_.reason)" -eq "leaseExpired" }).Count -eq 1) "leased TALK did not expire with leaseExpired"
+    Add-Result "Infinite gesture lease expiry" "PASS" "unrenewed 1500 ms TALK failed closed to IDLE"
+
+    $renewed = Send-TrackedAnim $firstSlave 16 1500
+    $renewedAccepted = Wait-MasterAcceptance $renewed $firstSlave 16
+    $null = Wait-RequestReports $renewed @($firstSlave) @("started") 6
+    for ($renewal = 0; $renewal -lt 3; $renewal++) {
+        Start-Sleep -Milliseconds 700
+        Renew-AnimLease $firstSlave ([int]$renewedAccepted.meshSeq) 1500
+        $null = Read-Event 0.2
+        $earlyExpiry = @($script:Reports | Where-Object {
+            [int]$_.requestId -eq $renewed -and "$($_.reason)" -eq "leaseExpired"
+        })
+        Assert-Bench ($earlyExpiry.Count -eq 0) "POWER_DOWN expired while valid renewals were being sent"
+    }
+    $renewedExpiry = Wait-RequestReports $renewed @($firstSlave) @("interrupted") 5
+    Assert-Bench (@($renewedExpiry | Where-Object { "$($_.reason)" -eq "leaseExpired" }).Count -eq 1) "renewed POWER_DOWN did not expire after renewals stopped"
+    Add-Result "Infinite gesture lease renewal" "PASS" "three renewals extended POWER_DOWN; stopping renewals failed closed"
+
+    $staleProtected = Send-TrackedAnim $firstSlave 17 1500
+    $staleAccepted = Wait-MasterAcceptance $staleProtected $firstSlave 17
+    Assert-Bench ([int]$staleAccepted.meshSeq -ne [int]$renewedAccepted.meshSeq) "test requires distinct animation mesh sequences"
+    $null = Wait-RequestReports $staleProtected @($firstSlave) @("started") 6
+    $staleTimer = [Diagnostics.Stopwatch]::StartNew()
+    Start-Sleep -Milliseconds 900
+    Renew-AnimLease $firstSlave ([int]$renewedAccepted.meshSeq) 1500
+    $staleExpiry = Wait-RequestReports $staleProtected @($firstSlave) @("interrupted") 3
+    $staleTimer.Stop()
+    Assert-Bench (@($staleExpiry | Where-Object { "$($_.reason)" -eq "leaseExpired" }).Count -eq 1) "new TALK did not expire after stale renewal"
+    Assert-Bench ($staleTimer.ElapsedMilliseconds -lt 2100) "stale sequence renewed a newer infinite gesture"
+    Add-Result "Stale lease rejection" "PASS" ("old meshSeq ignored; new lease expired after {0} ms" -f $staleTimer.ElapsedMilliseconds)
 } catch {
     $failure = $_.Exception.Message
     Add-Result "Headless execution test" "FAIL" $failure

@@ -125,12 +125,30 @@ captured servo/auto-animation state in `finally`.
 .\tools\anim-exec-test.ps1 -ComPort COM3
 ```
 
-It requires the `animExec` and `animAccepted` capabilities. Every tracked
+It requires the `animExec`, `animAccepted`, and `animLease` capabilities. Every tracked
 command must first be accepted by the master with the expected request, target,
 animation and mesh/local routing, then the test validates targeted finite
 animation start/completion on every slave, a broadcast where the disabled master
-reports `rejected/servosOff`, and interruption of looping TALK by tracked IDLE.
+reports `rejected/servosOff`, interruption of looping TALK by tracked IDLE,
+fail-closed lease expiry, successful lease renewal, and rejection of a renewal
+carrying an older animation's mesh sequence.
 It does not flash, alter configuration/calibration, or claim physical movement.
+
+### Infinite-animation lease bench run — 2026-08-11
+
+- Master `43140` was flashed over USB with Build ID `7A38B49A`; slaves `4216`
+  and `34880` accepted the 975,520-byte OTA image and reported Build ID
+  `673F513F` with `ok=true` verdicts.
+- Headless execution and safety passed 8/8: targeted/broadcast lifecycle,
+  TALK→IDLE interruption, unrenewed lease expiry, three successful renewals,
+  expiry after renewals stopped, and rejection of an earlier gesture's
+  `meshSeq`. The stale-protected command expired normally after 1491 ms.
+  Report: `b1-anim-exec-20260811-145900.json`.
+- Strict regression passed 31/31, including both invalid lease-command guards
+  and 15 seconds of stable mesh. Read-only preflight passed 6/6 with six
+  directed links. Reports: `b1-self-test-20260811-150021.json` and
+  `b1-sequencer-bench-20260811-150026.json`.
+- Final inventory confirms Servos and Auto animation off on all three droids.
 
 ### Delivery-stage bench run — 2026-08-11
 

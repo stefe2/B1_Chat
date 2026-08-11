@@ -68,6 +68,7 @@ const char* animExecPhaseName(uint8_t phase) {
 const char* animExecReasonName(uint8_t reason) {
     switch (reason) {
     case ANIM_EXEC_REASON_SERVOS_OFF: return "servosOff";
+    case ANIM_EXEC_REASON_LEASE_EXPIRED: return "leaseExpired";
     default: return "";
     }
 }
@@ -243,7 +244,8 @@ void SerialConsole::pushAnimExec(uint32_t requestId, uint16_t droidId,
 
 void SerialConsole::pushAnimAccepted(uint32_t requestId, uint16_t target,
                                      uint8_t animId, uint16_t meshSeq,
-                                     bool meshQueued, bool localHandled) {
+                                     bool meshQueued, bool localHandled,
+                                     uint16_t leaseMs) {
     if (!_clientReady || requestId == 0) return;
     JsonDocument doc;
     doc["evt"] = "animAccepted";
@@ -253,6 +255,7 @@ void SerialConsole::pushAnimAccepted(uint32_t requestId, uint16_t target,
     doc["meshSeq"] = meshSeq;
     doc["meshQueued"] = meshQueued;
     doc["local"] = localHandled;
+    if (leaseMs > 0) doc["leaseMs"] = leaseMs;
     serializeJson(doc, Serial);
     Serial.print('\n');
 }
@@ -511,6 +514,7 @@ void SerialConsole::handleLine(const char* line) {
         caps.add("commit");
         caps.add("animExec");
         caps.add("animAccepted");
+        caps.add("animLease");
         ack["dirty"] = Config.dirty();
         _lastDirtySent = Config.dirty();
         serializeJson(ack, Serial);
@@ -568,6 +572,7 @@ void SerialConsole::handleLine(const char* line) {
         uint16_t target;
         int animIdValue;
         int requestIdValue = 0;
+        int leaseMsValue = 0;
         if (!readTargetField(command, true, target, validationWhy, sizeof(validationWhy)) ||
             !readIntField(command, "animId", 0, ANIM_COUNT - 1, animIdValue,
                           validationWhy, sizeof(validationWhy))) {
@@ -580,10 +585,39 @@ void SerialConsole::handleLine(const char* line) {
             pushErr("invalid anim: %s", validationWhy);
             return;
         }
+        if (!command["leaseMs"].isNull() &&
+            !readIntField(command, "leaseMs", 0, ANIM_LEASE_MAX_MS, leaseMsValue,
+                          validationWhy, sizeof(validationWhy))) {
+            pushErr("invalid anim: %s", validationWhy);
+            return;
+        }
         const uint8_t animId = (uint8_t)animIdValue;
+        if (leaseMsValue > 0 &&
+            (leaseMsValue < ANIM_LEASE_MIN_MS ||
+             (animId != ANIM_POWER_DOWN && animId != ANIM_TALK))) {
+            pushErr("invalid anim: lease requires TALK/POWER_DOWN and %u..%u ms",
+                    ANIM_LEASE_MIN_MS, ANIM_LEASE_MAX_MS);
+            return;
+        }
         const uint32_t seed   = doc["seed"] | (uint32_t)esp_random();
-        if (_animCb) _animCb(target, animId, seed, (uint32_t)requestIdValue);
+        if (_animCb) _animCb(target, animId, seed, (uint32_t)requestIdValue,
+                             (uint16_t)leaseMsValue);
         log("anim %u -> %04X", animId, target);
+
+    } else if (!strcmp(cmd, "animLease")) {
+        uint16_t target;
+        int originSeqValue;
+        int leaseMsValue;
+        if (!readTargetField(command, true, target, validationWhy, sizeof(validationWhy)) ||
+            !readIntField(command, "meshSeq", 0, 65535, originSeqValue,
+                          validationWhy, sizeof(validationWhy)) ||
+            !readIntField(command, "leaseMs", ANIM_LEASE_MIN_MS, ANIM_LEASE_MAX_MS,
+                          leaseMsValue, validationWhy, sizeof(validationWhy))) {
+            pushErr("invalid animLease: %s", validationWhy);
+            return;
+        }
+        if (_animLeaseRenewCb)
+            _animLeaseRenewCb(target, (uint16_t)originSeqValue, (uint16_t)leaseMsValue);
 
     } else if (!strcmp(cmd, "config")) {
         if (!validateOp(command, validationWhy, sizeof(validationWhy))) {

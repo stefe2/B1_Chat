@@ -903,20 +903,28 @@ public sealed class SequencerPlaybackIntegrationTests
         var protocol = new FakeSequencerProtocol();
         protocol.Durations[2] = 500;
         var scheduler = new FakePlaybackTimerScheduler();
-        using var vm = CreateViewModel(protocol, scheduler);
+        var executionScheduler = new FakePlaybackTimerScheduler();
+        using var vm = CreateViewModel(protocol, scheduler, executionScheduler: executionScheduler);
         vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = 17 });
         vm.Steps.Add(new SequenceStep { StartMs = 40, Target = 0x1234, AnimId = 2 });
 
         vm.PlayCommand.Execute(null);
         scheduler.Entries[0].Invoke();
+        var infiniteRequest = protocol.Sent[0].RequestId;
+        protocol.RaiseAnimMasterAccepted(infiniteRequest, 0x1234, 17,
+            meshSeq: 76, leaseMs: 5000);
+        var infiniteRenewal = executionScheduler.Entries[1];
         scheduler.Entries[1].Invoke();
         var finiteRequest = protocol.Sent[1].RequestId;
         protocol.RaiseAnimMasterAccepted(finiteRequest, 0x1234, 2,
             meshQueued: false, localHandled: false);
+        infiniteRenewal.Invoke();
         vm.StopCommand.Execute(null);
 
         Assert.Equal(new[] { 17, 2, 0 }, protocol.Sent.Select(s => s.AnimId));
         Assert.Equal((ushort)0x1234, protocol.Sent[^1].Target);
+        Assert.Equal(new SentLeaseRenewal(0x1234, 76, 5000),
+            Assert.Single(protocol.LeaseRenewals));
     }
 
     [Fact]
@@ -970,6 +978,127 @@ public sealed class SequencerPlaybackIntegrationTests
         protocol.NextDispatchState = AnimDispatchState.Written;
         vm.StopCommand.Execute(null);
         Assert.Equal(new[] { 17, 0, 0 }, protocol.Sent.Select(s => s.AnimId));
+    }
+
+    [Theory]
+    [InlineData(16)]
+    [InlineData(17)]
+    public void InfiniteGesture_UsesFiveSecondLeaseAndRenewsEveryTwoSeconds(int animId)
+    {
+        var protocol = new FakeSequencerProtocol();
+        protocol.Droids.Add(new Droid { Id = 0x1234, Online = true });
+        var scheduler = new FakePlaybackTimerScheduler();
+        var executionScheduler = new FakePlaybackTimerScheduler();
+        using var vm = CreateViewModel(protocol, scheduler, executionScheduler: executionScheduler);
+        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = animId });
+
+        vm.PlayCommand.Execute(null);
+        scheduler.Entries[0].Invoke();
+        var sent = Assert.Single(protocol.Sent);
+        Assert.Equal((ushort)5000, sent.LeaseMs);
+
+        protocol.RaiseAnimMasterAccepted(sent.RequestId, sent.Target, sent.AnimId,
+            meshSeq: 91, meshQueued: true, leaseMs: 5000);
+        var firstRenewal = executionScheduler.Entries[1];
+        Assert.Equal(2000, firstRenewal.DueTimeMs);
+        firstRenewal.Invoke();
+
+        var renewal = Assert.Single(protocol.LeaseRenewals);
+        Assert.Equal(new SentLeaseRenewal(0x1234, 91, 5000), renewal);
+        Assert.Equal(2000, executionScheduler.Entries[2].DueTimeMs);
+    }
+
+    [Fact]
+    public void FiniteGestureAndUnsupportedFirmware_DoNotUseAnimationLeases()
+    {
+        var protocol = new FakeSequencerProtocol { SupportsAnimLease = false };
+        var scheduler = new FakePlaybackTimerScheduler();
+        var executionScheduler = new FakePlaybackTimerScheduler();
+        using var vm = CreateViewModel(protocol, scheduler, executionScheduler: executionScheduler);
+        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = 17 });
+        vm.Steps.Add(new SequenceStep { StartMs = 40, Target = 0x1234, AnimId = 2 });
+
+        vm.PlayCommand.Execute(null);
+        scheduler.Entries[0].Invoke();
+        scheduler.Entries[1].Invoke();
+
+        Assert.All(protocol.Sent, sent => Assert.Equal((ushort)0, sent.LeaseMs));
+        Assert.Empty(protocol.LeaseRenewals);
+    }
+
+    [Fact]
+    public void PauseAndLoopBoundary_KeepAnAcceptedLeaseAlive()
+    {
+        var protocol = new FakeSequencerProtocol();
+        protocol.Durations[17] = 4000;
+        protocol.Droids.Add(new Droid { Id = 0x1234, Online = true });
+        var scheduler = new FakePlaybackTimerScheduler();
+        var executionScheduler = new FakePlaybackTimerScheduler();
+        using var vm = CreateViewModel(protocol, scheduler, executionScheduler: executionScheduler);
+        vm.Loop = true;
+        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = 17 });
+
+        vm.PlayCommand.Execute(null);
+        scheduler.Entries[0].Invoke();
+        var sent = Assert.Single(protocol.Sent);
+        protocol.RaiseAnimMasterAccepted(sent.RequestId, sent.Target, sent.AnimId,
+            meshSeq: 92, leaseMs: 5000);
+        var renewalTimer = executionScheduler.Entries[1];
+
+        vm.PauseCommand.Execute(null);
+        Assert.False(renewalTimer.Disposed);
+        vm.PlayCommand.Execute(null);
+        scheduler.Entries[2].Invoke();
+        Assert.False(renewalTimer.Disposed);
+
+        renewalTimer.Invoke();
+        Assert.Equal(new SentLeaseRenewal(0x1234, 92, 5000),
+            Assert.Single(protocol.LeaseRenewals));
+    }
+
+    [Fact]
+    public void StopCancelsLeaseBeforeCleanupAndQueuedCallbackCannotRenewIt()
+    {
+        var protocol = new FakeSequencerProtocol();
+        protocol.Droids.Add(new Droid { Id = 0x1234, Online = true });
+        var scheduler = new FakePlaybackTimerScheduler();
+        var executionScheduler = new FakePlaybackTimerScheduler();
+        using var vm = CreateViewModel(protocol, scheduler, executionScheduler: executionScheduler);
+        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = 17 });
+
+        vm.PlayCommand.Execute(null);
+        scheduler.Entries[0].Invoke();
+        var sent = Assert.Single(protocol.Sent);
+        protocol.RaiseAnimMasterAccepted(sent.RequestId, sent.Target, sent.AnimId,
+            meshSeq: 93, leaseMs: 5000);
+        var renewalTimer = executionScheduler.Entries[1];
+
+        vm.StopCommand.Execute(null);
+        Assert.True(renewalTimer.Disposed);
+        renewalTimer.InvokeEvenIfDisposed();
+
+        Assert.Empty(protocol.LeaseRenewals);
+        Assert.Equal(new[] { 17, 0 }, protocol.Sent.Select(item => item.AnimId));
+    }
+
+    [Fact]
+    public void FailedMeshAcceptanceDoesNotArmLeaseRenewal()
+    {
+        var protocol = new FakeSequencerProtocol();
+        protocol.Droids.Add(new Droid { Id = 0x1234, Online = true });
+        var scheduler = new FakePlaybackTimerScheduler();
+        var executionScheduler = new FakePlaybackTimerScheduler();
+        using var vm = CreateViewModel(protocol, scheduler, executionScheduler: executionScheduler);
+        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = 16 });
+
+        vm.PlayCommand.Execute(null);
+        scheduler.Entries[0].Invoke();
+        var sent = Assert.Single(protocol.Sent);
+        protocol.RaiseAnimMasterAccepted(sent.RequestId, sent.Target, sent.AnimId,
+            meshSeq: 94, meshQueued: false, localHandled: false, leaseMs: 5000);
+
+        Assert.Single(executionScheduler.Entries); // execution START timeout only
+        Assert.Empty(protocol.LeaseRenewals);
     }
 
     private static SequencerViewModel CreateViewModel(

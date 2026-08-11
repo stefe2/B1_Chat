@@ -55,10 +55,19 @@ The console remembers the latest Sequencer gesture written for each concrete
 droid. Broadcast looping gestures are expanded to the droids online at dispatch;
 a later per-droid finite gesture removes only that droid from cleanup. Repeated
 Stop is idempotent after a successful serial write. If the link is unavailable,
-cleanup cannot be guaranteed and remains retryable, but a crashed or unreachable
-console still requires the future firmware safety lease described in the
-hardening plan. A whole-sequence Loop boundary does not send IDLE; explicit Stop
-does.
+cleanup remains retryable. Current firmware also gives Sequencer-started
+`TALK`/`POWER_DOWN` a five-second safety lease, renewed every two seconds while
+the pass still owns the gesture. If the console crashes, the cable is removed,
+the master becomes unreachable, or renewal otherwise stops, the target returns
+to `IDLE` automatically. Pause and a whole-sequence Loop boundary keep renewing;
+explicit Stop cancels renewal before sending IDLE. Delayed renewal from an older
+pass cannot extend a newer gesture.
+
+This lease applies only to Sequencer playback. A looping gesture started from
+the Animation card remains a direct operator command and runs until another
+gesture is sent. Autonomous idle animations are also outside the lease policy.
+With older firmware that does not advertise `animLease`, the Sequencer retains
+targeted Stop cleanup but cannot provide the crash/link-loss fallback.
 
 Each gesture clip shows non-blocking delivery and execution feedback. `WRITE`
 means Windows accepted the write to the serial port. `MASTER` means the master
@@ -80,9 +89,10 @@ Older firmware without the additive `animAccepted` event can move directly from
 the radio stack accepted the outgoing frame; it is not proof that a slave
 received it. Target execution remains the success signal.
 
-`POWER_DOWN` and `TALK` loop indefinitely, so their healthy state remains
-`START`; they only become terminal when another gesture interrupts them or the
-firmware rejects the command. Execution feedback confirms the firmware
+`POWER_DOWN` and `TALK` loop while their Sequencer lease is renewed, so their
+healthy state remains `START`; they become terminal when another gesture
+interrupts them, the firmware rejects the command, or the lease expires
+(`STOP`, reason `leaseExpired`). Execution feedback confirms the firmware
 animation engine, not physical servo motion.
 
 A muted droid track is skipped when its scheduled start arrives. If the command

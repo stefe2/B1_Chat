@@ -6,7 +6,7 @@
 //  Protocol: one line = one JSON message (see CLAUDE.md).
 //  - PC → master: {cmd:"list"|"anim"|"config"|"name"|
 //                   "getConfig"|"calib"|"preview"|"getCalib"|"getAnimDurations"|
-//                   "servo"|"autoAnim"|"locate"|"getMeshTopology"|"getAll"|
+//                   "animLease"|"servo"|"autoAnim"|"locate"|"getMeshTopology"|"getAll"|
 //                   "setMulti"|"commit", ...}
 //  - master → PC: {evt:"droids"|"log"|"config"|"meshTopology"|"animAccepted"|
 //                   "animExec"|"err"|"allDone"|"setMultiDone"|"dirty", ...}
@@ -47,7 +47,8 @@ public:
 
     // Emits one correlated animation lifecycle report from the master or a slave.
     void pushAnimAccepted(uint32_t requestId, uint16_t target, uint8_t animId,
-                          uint16_t meshSeq, bool meshQueued, bool localHandled);
+                          uint16_t meshSeq, bool meshQueued, bool localHandled,
+                          uint16_t leaseMs = 0);
     void pushAnimExec(uint32_t requestId, uint16_t droidId, uint16_t meshSeq,
                       uint8_t animId, uint8_t phase, uint8_t reason, uint32_t atMs);
 
@@ -64,7 +65,9 @@ public:
 
     // Optional hooks triggered by incoming commands.
     void onAnim(void (*cb)(uint16_t target, uint8_t animId, uint32_t seed,
-                           uint32_t requestId)) { _animCb = cb; }
+                           uint32_t requestId, uint16_t leaseMs)) { _animCb = cb; }
+    void onAnimLeaseRenew(void (*cb)(uint16_t target, uint16_t originSeq,
+                                     uint16_t leaseMs)) { _animLeaseRenewCb = cb; }
     void onConfig(void (*cb)(uint8_t freq, uint8_t amp, uint8_t speed)) { _cfgCb = cb; }
     void onServo(void (*cb)(uint16_t target, bool enabled)) { _servoCb = cb; }
     void onAutoAnim(void (*cb)(uint16_t target, bool enabled)) { _autoAnimCb = cb; }
@@ -95,7 +98,8 @@ private:
     uint32_t _lastHelloMs = 0;
     static const uint32_t CLIENT_TIMEOUT_MS = 5000;
 
-    void (*_animCb)(uint16_t, uint8_t, uint32_t, uint32_t) = nullptr;
+    void (*_animCb)(uint16_t, uint8_t, uint32_t, uint32_t, uint16_t) = nullptr;
+    void (*_animLeaseRenewCb)(uint16_t, uint16_t, uint16_t) = nullptr;
     void (*_cfgCb)(uint8_t, uint8_t, uint8_t) = nullptr;
     void (*_servoCb)(uint16_t, bool) = nullptr;
     void (*_autoAnimCb)(uint16_t, bool) = nullptr;

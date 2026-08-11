@@ -164,7 +164,8 @@ Session guarded by a handshake: `hello` → `{evt:"hello",ok,id}`, then keepaliv
   `servo {target,enabled}` · `autoAnim {target,enabled}` ·
   `locate {target,enabled}` ·
   `adopt {target}` · `forget {target}` ·
-  `anim {target,animId,seed,requestId?}` · `preview {target,pan,tilt}` ·
+  `anim {target,animId,seed,requestId?,leaseMs?}` ·
+  `animLease {target,meshSeq,leaseMs}` · `preview {target,pan,tilt}` ·
   `calib {target,+6 limits}` · `getCalib {target}` · `getAnimDurations` ·
   `getMeshTopology` ·
   `setMulti {ops:[...]}` · `commit` ·
@@ -173,7 +174,7 @@ Session guarded by a handshake: `hello` → `{evt:"hello",ok,id}`, then keepaliv
   `droids {list:[{id,name,rssi,age,role,servos,autoAnim,adopted,fw,build?}]}` ·
   `log {msg}` · `err {msg}` · `config {target,freq,amp,speed}` · `calibData {target,+6}` ·
   `meshTopology {links:[{from,to,rssi}]}` · `animDurations {list:[{animId,ms}]}` ·
-  `animAccepted {requestId,target,animId,meshSeq,meshQueued,local}` ·
+  `animAccepted {requestId,target,animId,meshSeq,meshQueued,local,leaseMs?}` ·
   `animExec {requestId,droid,meshSeq,animId,phase,reason?,atMs}` ·
   `setMultiDone {ok,applied,failedAt?,error?}` · `dirty {dirty}` · `allDone` ·
   `otaReady {target,sessionId,chunkSize,totalChunks}` · `otaChunkAck {seq,sent,total}` ·
@@ -202,8 +203,15 @@ finite gestures that start but do not send a terminal report expire after their
 reported duration plus 1.5 s (`TIMEOUT`). Late reports recover the display, and
 delayed duplicate `started` reports cannot regress a terminal state. These
 warnings never delay or stop the show. Looping POWER_DOWN/TALK require only a
-start report because completion requires a later interruption. This proves
-firmware execution, not physical servo movement or mechanical inter-droid skew.
+start report because completion requires a later interruption. Sequencer
+playback starts those two gestures with a 5 s firmware lease and renews it every
+2 s while the owning pass remains valid. Missing renewal returns the droid to
+IDLE and reports `interrupted/leaseExpired`; renewals are correlated to the
+originating mesh sequence so stale packets cannot extend a replacement gesture.
+Pause and whole-pass Loop continue renewal, while Stop/end/restart/disconnect/
+shutdown cancel it before targeted IDLE cleanup. Manual Animation-card commands
+and autonomous animations remain unleased. This proves firmware execution, not
+physical servo movement or mechanical inter-droid skew.
 
 **Sequencer infinite-gesture cleanup:** the WPF playback controller records the
 latest successfully written gesture per concrete droid. Broadcast TALK or
@@ -211,8 +219,9 @@ POWER_DOWN expands to the online roster; later targeted finite/IDLE commands
 replace only their target. Stop, a non-looping natural end, application disposal,
 and Play restart send tracked IDLE commands only to droids whose latest state is
 still infinite. A whole-pass Loop boundary and Pause deliberately do not clean
-up. Failed serial cleanup remains retryable; delivery after link loss cannot be
-guaranteed until the planned firmware lease exists.
+up. Failed serial cleanup remains retryable. On firmware advertising
+`animLease`, the independent 5 s lease supplies the fail-closed fallback if
+cleanup cannot cross a lost serial or mesh path.
 
 **No audio in this protocol** (fw 1.6.0): `volume`/`playTrack` (console→master)
 and `config`'s `volume` field were removed when the DFPlayer was retired —

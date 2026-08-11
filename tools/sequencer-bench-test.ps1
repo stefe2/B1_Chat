@@ -172,6 +172,9 @@ try {
 
     Assert-Bench ([int]$hello.proto -ge 5) "protocol 5 or newer is required"
     Assert-Bench (@($hello.caps) -contains "err") "firmware does not advertise err capability"
+    Assert-Bench (@($hello.caps) -contains "animExec") "firmware does not advertise animExec"
+    Assert-Bench (@($hello.caps) -contains "animAccepted") "firmware does not advertise animAccepted"
+    Assert-Bench (@($hello.caps) -contains "animLease") "firmware does not advertise animLease"
     Assert-Bench ("$($hello.build)" -match '^[0-9A-Fa-f]{8}$') "master has no valid Build ID"
 
     $inventory = Read-Inventory

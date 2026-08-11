@@ -206,7 +206,10 @@ Invoke-Test "Animation execution-report pipeline present" {
     Assert-Source "console/ViewModels/SequencerViewModel.cs" '"TIMEOUT"' "execution completion timeout state missing"
     Assert-Source "console/ViewModels/SequencerViewModel.cs" '"UNCONF"' "unconfirmed execution state missing"
     Assert-Source "console/ViewModels/SequencerViewModel.cs" "StopInfiniteGestures" "infinite gesture cleanup missing"
-    "delivery stages, lifecycle reporting, timeouts and targeted infinite cleanup detected"
+    Assert-Source "src/mesh_comm.h" "MSG_ANIM_LEASE_RENEW" "firmware animation lease protocol missing"
+    Assert-Source "src/main.cpp" "ANIM_EXEC_REASON_LEASE_EXPIRED" "firmware lease expiry missing"
+    Assert-Source "console/ViewModels/SequencerViewModel.cs" "ScheduleAnimLeaseRenewal" "Sequencer lease renewal missing"
+    "delivery stages, lifecycle reporting, timeouts, cleanup and fail-safe leases detected"
 }
 
 Invoke-Test "Boot sequence randomization present" {
@@ -255,10 +258,11 @@ if (-not $SkipSerial) {
             Add-Result "B1 master handshake" "PASS" ("{0}, fw {1}, build {2}, proto {3}" -f $device.Name, $hello.fw, $hello.build, $hello.proto)
             $masterId = [int]$hello.id
 
-            Invoke-Test "Animation execution-report capability" {
+            Invoke-Test "Animation safety capabilities" {
                 Assert-True (@($hello.caps) -contains "animExec") "master does not advertise animExec"
                 Assert-True (@($hello.caps) -contains "animAccepted") "master does not advertise animAccepted"
-                "animExec + animAccepted advertised"
+                Assert-True (@($hello.caps) -contains "animLease") "master does not advertise animLease"
+                "animExec + animAccepted + animLease advertised"
             }
 
             $droids = Send-And-Wait $port '{"cmd":"list"}' { param($e) $e.evt -eq "droids" }
@@ -329,6 +333,18 @@ if (-not $SkipSerial) {
                     "$($badAnim.msg)"
                 }
 
+                $badLeasedAnim = Send-And-Wait $port '{"cmd":"anim","target":65535,"animId":2,"leaseMs":5000}' { param($e) $e.evt -eq "err" }
+                Invoke-Test "Invalid leased animation rejected" {
+                    Assert-True ($null -ne $badLeasedAnim) "finite leased anim produced no err event"
+                    "$($badLeasedAnim.msg)"
+                }
+
+                $badLeaseRenewal = Send-And-Wait $port '{"cmd":"animLease","target":65535,"meshSeq":1,"leaseMs":999}' { param($e) $e.evt -eq "err" }
+                Invoke-Test "Invalid lease renewal rejected" {
+                    Assert-True ($null -ne $badLeaseRenewal) "short lease renewal produced no err event"
+                    "$($badLeaseRenewal.msg)"
+                }
+
                 $badConfig = Send-And-Wait $port '{"cmd":"config","target":65535,"freq":101,"amp":60,"speed":50}' { param($e) $e.evt -eq "err" }
                 $configAfter = Send-And-Wait $port $configJson {
                     param($e) $e.evt -eq "config" -and [int]$e.target -eq $masterId
@@ -356,6 +372,8 @@ if (-not $SkipSerial) {
             } else {
                 $reason = "runtime validation preflight failed; command intentionally not sent"
                 Add-Result "Invalid animation rejected" "SKIP" $reason
+                Add-Result "Invalid leased animation rejected" "SKIP" $reason
+                Add-Result "Invalid lease renewal rejected" "SKIP" $reason
                 Add-Result "Invalid config rejected without mutation" "SKIP" $reason
                 Add-Result "Invalid calibration rejected without mutation" "SKIP" $reason
             }

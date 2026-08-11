@@ -25,6 +25,8 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     private const int HistoryMax = 50;
     private const int ExecutionStartTimeoutMs = 1500;
     private const int ExecutionCompletionGraceMs = 1500;
+    private const ushort InfiniteAnimLeaseMs = 5000;
+    private const int InfiniteAnimLeaseRenewMs = 2000;
     private const string AudioFileFilter = "Audio files (*.mp3;*.wav;*.wma;*.ogg)|*.mp3;*.wav;*.wma;*.ogg|All files (*.*)|*.*";
 
     public ObservableCollection<SequenceLibraryItem> Library { get; } = new();
@@ -140,6 +142,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     private readonly HashSet<int> _dispatchedPlaybackEvents = new();
     private readonly Dictionary<uint, ExecutionTracker> _executionTrackers = new();
     private readonly Dictionary<ushort, GestureTargetState> _latestGestureByDroid = new();
+    private readonly Dictionary<uint, ActiveAnimLease> _activeAnimLeases = new();
     private readonly PlaybackGeneration _playbackGeneration = new();
     private SequencerPlaybackPlan? _activePlaybackPlan;
     private int _elapsedAtPauseMs;
@@ -164,6 +167,15 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         public IDisposable? CompletionDeadline { get; set; }
         public bool StartDeadlineExpired { get; set; }
         public bool CompletionDeadlineExpired { get; set; }
+    }
+
+    private sealed class ActiveAnimLease
+    {
+        public required uint RequestId { get; init; }
+        public required ushort Target { get; init; }
+        public required int AnimId { get; init; }
+        public int MeshSeq { get; set; }
+        public IDisposable? RenewalTimer { get; set; }
     }
 
     // Persistent sequence edits are locked for the whole active pass, including Pause. The
@@ -313,7 +325,11 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
 
     private void RollBackFailedMeshDispatch(ExecutionTracker tracker, AnimMasterReceipt receipt)
     {
-        if (receipt.MeshQueued) return;
+        if (receipt.MeshQueued)
+        {
+            PruneInactiveAnimLeases();
+            return;
+        }
         var localMasterIds = receipt.LocalHandled
             ? _protocol.Droids.Where(d => d.IsMaster).Select(d => d.Id).ToHashSet()
             : new HashSet<ushort>();
@@ -330,6 +346,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
             else
                 _latestGestureByDroid.Remove(droidId);
         }
+        PruneInactiveAnimLeases();
     }
 
     private void UpdateGestureStateFromExecution(ExecutionTracker tracker, AnimExecutionReport report)
@@ -340,10 +357,87 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         // commands remain recorded as the latest state but are never selected for cleanup.
         if (current.IsInfinite && IsTerminalExecutionPhase(report.Phase))
             _latestGestureByDroid.Remove(report.DroidId);
+        PruneInactiveAnimLeases();
+    }
+
+    private void TrackAnimLease(AnimDispatchResult dispatch, GesturePlaybackEvent gesture,
+                                ushort leaseMs)
+    {
+        if (!dispatch.Written || leaseMs == 0) return;
+        _activeAnimLeases[dispatch.RequestId] = new ActiveAnimLease
+        {
+            RequestId = dispatch.RequestId,
+            Target = gesture.Target,
+            AnimId = gesture.AnimId,
+        };
+        PruneInactiveAnimLeases();
+    }
+
+    private void AcceptAnimLease(AnimMasterReceipt receipt)
+    {
+        if (!_activeAnimLeases.TryGetValue(receipt.RequestId, out var lease)) return;
+        if (receipt.Target != lease.Target || receipt.AnimId != lease.AnimId ||
+            receipt.LeaseMs != InfiniteAnimLeaseMs) return;
+        if (!receipt.MeshQueued && !receipt.LocalHandled)
+        {
+            CancelAnimLease(lease.RequestId);
+            return;
+        }
+        lease.MeshSeq = receipt.MeshSeq;
+        ScheduleAnimLeaseRenewal(lease);
+    }
+
+    private void ScheduleAnimLeaseRenewal(ActiveAnimLease lease)
+    {
+        lease.RenewalTimer?.Dispose();
+        lease.RenewalTimer = _executionTimerScheduler.Schedule(
+            InfiniteAnimLeaseRenewMs,
+            () => RunOnUiThread(() => RenewAnimLease(lease)));
+    }
+
+    private void RenewAnimLease(ActiveAnimLease lease)
+    {
+        if (!_activeAnimLeases.TryGetValue(lease.RequestId, out var current) ||
+            !ReferenceEquals(current, lease)) return;
+        if (!IsAnimLeaseOwned(lease.RequestId))
+        {
+            CancelAnimLease(lease.RequestId);
+            return;
+        }
+        _protocol.RenewAnimLease(lease.Target, lease.MeshSeq, InfiniteAnimLeaseMs);
+        ScheduleAnimLeaseRenewal(lease);
+    }
+
+    private bool IsAnimLeaseOwned(uint requestId) =>
+        _latestGestureByDroid.Values.Any(state => state.RequestId == requestId && state.IsInfinite);
+
+    private void PruneInactiveAnimLeases()
+    {
+        foreach (var requestId in _activeAnimLeases.Keys
+                     .Where(requestId => !IsAnimLeaseOwned(requestId)).ToArray())
+            CancelAnimLease(requestId);
+    }
+
+    private void CancelAnimLease(uint requestId)
+    {
+        if (!_activeAnimLeases.Remove(requestId, out var lease)) return;
+        lease.RenewalTimer?.Dispose();
+        lease.RenewalTimer = null;
+    }
+
+    private void CancelAllAnimLeases()
+    {
+        foreach (var lease in _activeAnimLeases.Values)
+            lease.RenewalTimer?.Dispose();
+        _activeAnimLeases.Clear();
     }
 
     private void StopInfiniteGestures()
     {
+        // The explicit IDLE is immediate cleanup; cancelling first guarantees that a timer
+        // already queued on the UI thread cannot revive the command. If the write fails,
+        // the firmware-side lease still expires to IDLE on its own.
+        CancelAllAnimLeases();
         var active = _latestGestureByDroid
             .Where(pair => pair.Value.IsInfinite)
             .OrderBy(pair => pair.Key)
@@ -361,6 +455,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
 
     private void OnAnimMasterAccepted(AnimMasterReceipt receipt) => RunOnUiThread(() =>
     {
+        AcceptAnimLease(receipt);
         if (!_executionTrackers.TryGetValue(receipt.RequestId, out var tracker)) return;
         if (receipt.AnimId != tracker.AnimId) return;
         if (receipt.Target != (tracker.IsBroadcast ? ushort.MaxValue : tracker.ExpectedDroids.Single())) return;
@@ -1241,8 +1336,13 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
                 switch (playbackEvent)
                 {
                     case GesturePlaybackEvent gesture when !IsTrackMuted(gesture.Target):
-                        var dispatch = _protocol.PlayAnim(gesture.Target, gesture.AnimId, gesture.Seed);
+                        var leaseMs = _protocol.SupportsAnimLease && gesture.AnimId is 16 or 17
+                            ? InfiniteAnimLeaseMs
+                            : (ushort)0;
+                        var dispatch = _protocol.PlayAnim(
+                            gesture.Target, gesture.AnimId, gesture.Seed, leaseMs);
                         TrackExecution(dispatch, gesture);
+                        TrackAnimLease(dispatch, gesture, leaseMs);
                         break;
                     case AudioPlaybackEvent audio:
                         _audioPlayer.Play(audio.FilePath, audio.Loop);
