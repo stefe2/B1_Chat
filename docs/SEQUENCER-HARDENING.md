@@ -69,7 +69,7 @@ The dashboard is updated whenever an item changes state.
 | Epic | Description | Required items complete | Deferred ideas complete |
 |---|---|---:|---:|
 | A | Playback isolation and cancellation | 5 / 8 | — |
-| B | Infinite gestures and Stop/Pause semantics | 4 / 6 | 0 / 1 |
+| B | Infinite gestures and Stop/Pause semantics | 5 / 6 | 0 / 1 |
 | C | Dirty, Undo/Redo and editing transactions | 0 / 8 | 0 / 1 |
 | D | Import, export and local library | 0 / 8 | 0 / 1 |
 | E | Deterministic scheduler and performance | 2 / 6 | 0 / 1 |
@@ -218,7 +218,7 @@ The dashboard is updated whenever an item changes state.
   delivery remains retryable, while SEQ-B06 provides the independent firmware
   fallback when the console or link disappears.
 
-### [ ] SEQ-B03 — Make Pause semantics explicit and honest
+### [x] SEQ-B03 — Make Pause semantics explicit and honest
 
 - **Priority:** P1
 - **Problem:** Pause freezes audio/timeline scheduling but cannot freeze a gesture
@@ -228,6 +228,14 @@ The dashboard is updated whenever an item changes state.
   leaves hardware gestures running, terminates only infinite gestures, or gains
   a new firmware pause capability. Resume semantics match that decision.
 - **Validation:** manual test with a long finite gesture and TALK.
+- **Implemented:** Pause is explicitly console-transport-only. It freezes the
+  playhead, future scheduled sends and local audio, but sends no hardware
+  command: already dispatched finite gestures complete normally and
+  TALK/POWER_DOWN continue with lease renewal. Execution reports continue to
+  update while paused. Play resumes only undispatched timeline events and local
+  audio; it does not resend a gesture that continued. The transport shows a
+  persistent `PAUSED · DROID MOTION CONTINUES` warning and its tooltip/Help use
+  the same wording.
 
 ### [ ] SEQ-B04 — Give infinite gesture clips explicit end semantics
 
@@ -1313,3 +1321,4 @@ Append concise evidence when closing items; do not paste full build logs.
 | 2026-08-11 | SEQ-B01, SEQ-B02 | Added per-droid/request latest-gesture tracking and targeted IDLE cleanup on Stop, non-looping natural end, application disposal and Play restart. Broadcast overrides, repeated infinite commands, failed dispatch/cleanup retry, mesh-failure rollback, disconnect retry and Loop behavior are covered; WPF suite passed 55/55 and offline regression 17/17 (`b1-self-test-20260811-143504.json`). Existing hardware benches already prove tracked TALK/POWER_DOWN interruption by IDLE; no firmware change or reflash was required. |
 | 2026-08-11 | SEQ-B06 | Added additive Sequencer-only infinite-animation leases: 5 s initial TTL, 2 s correlated renewal, fail-closed IDLE with `leaseExpired`, stale-mesh-sequence rejection, Pause/Loop retention and Stop/end/restart/disconnect cleanup. WPF suite passed 61/61. Master `7A38B49A` and slaves `673F513F` passed USB/OTA deployment, headless expiry/renewal/stale protection 8/8 (`b1-anim-exec-20260811-145900.json`), strict regression 31/31 with 15 s stable mesh (`b1-self-test-20260811-150021.json`) and read-only preflight 6/6 (`b1-sequencer-bench-20260811-150026.json`). Final servos and automatic animations are off on all three droids. |
 | 2026-08-11 | SEQ-B07 | Defined and implemented Normal Stop, transient centered/servo-powered Safe Stop, and immediate persistent fleet Servo OFF Emergency Stop. Added transport buttons, old-firmware Safe Stop fallback, stale-callback cancellation, mesh visualization and operator documentation. WPF suite passed 64/64. Master `8460B615` and slaves `D6BF5A99` passed USB/OTA deployment, headless Safe/Emergency validation 10/10 (`b1-anim-exec-20260811-153345.json`), strict regression 32/32 with 15 s stable mesh (`b1-self-test-20260811-153458.json`) and read-only preflight 6/6 (`b1-sequencer-bench-20260811-153504.json`). Final servos and automatic animations are off on all three droids. |
+| 2026-08-11 | SEQ-B03 | Formalized Pause as PC-transport-only: future dispatch/audio/playhead pause, dispatched finite motion continues, infinite leases remain renewed, reports keep updating, and Resume does not replay consumed events. Added the persistent `PAUSED · DROID MOTION CONTINUES` transport warning and aligned Help/tooltips. WPF suite passed 65/65, including finite completion during Pause plus existing boundary, repeated Resume and infinite-lease cases; offline regression passed 17/17 (`b1-self-test-20260811-154128.json`). No firmware change or reflash was required. |

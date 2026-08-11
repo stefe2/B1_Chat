@@ -35,7 +35,8 @@
                         Background="#A83232" BorderBrush="#FF6B60" Foreground="White" FontWeight="Bold"
                         ToolTip="Emergency Stop: immediately cancel the show and persistently disable servo outputs on every reachable droid. No confirmation."
                         ToolTipService.ShowOnDisabled="True" Margin="0,0,4,0" />
-                <Button Style="{StaticResource IconTransportButtonStyle}" Command="{Binding PauseCommand}" ToolTip="Pause"
+                <Button Style="{StaticResource IconTransportButtonStyle}" Command="{Binding PauseCommand}"
+                        ToolTip="Pause the PC transport and audio. Gestures already received by droids continue; TALK/POWER_DOWN safety leases remain renewed."
                         ToolTipService.ShowOnDisabled="True" Margin="0,0,10,0">
                     <TextBlock Text="⏸" />
                 </Button>
@@ -91,6 +92,13 @@
                         ToolTip="Playback is active and the playhead is following the running sequence in real time.">
                     <TextBlock Text="● LIVE" Foreground="{StaticResource OkBrush}" FontFamily="{StaticResource MonoFont}"
                                FontWeight="Bold" FontSize="11" />
+                </Border>
+                <Border Style="{StaticResource ValuePillStyle}" BorderBrush="{StaticResource WarnBrush}"
+                        Visibility="{Binding IsPaused, Converter={StaticResource BoolToVisConv}}"
+                        ToolTip="The PC playhead, future sends, and local audio are paused. Hardware gestures already dispatched continue running."
+                        Margin="6,0,0,0">
+                    <TextBlock Text="⏸ PAUSED · DROID MOTION CONTINUES" Foreground="{StaticResource WarnBrush}"
+                               FontFamily="{StaticResource MonoFont}" FontWeight="Bold" FontSize="10" />
                 </Border>
                 <Border Style="{StaticResource ValuePillStyle}" BorderBrush="{StaticResource WarnBrush}"
                         Visibility="{Binding CanEditSequence, Converter={StaticResource BoolToVisConv}, ConverterParameter=Invert}"

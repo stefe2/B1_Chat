@@ -326,6 +326,32 @@ public sealed class SequencerPlaybackIntegrationTests
     }
 
     [Fact]
+    public void PauseLeavesAnAlreadyDispatchedFiniteGestureRunningToCompletion()
+    {
+        var protocol = new FakeSequencerProtocol();
+        protocol.Durations[2] = 800;
+        protocol.Droids.Add(new Droid { Id = 0x1234, Online = true });
+        var scheduler = new FakePlaybackTimerScheduler();
+        using var vm = CreateViewModel(protocol, scheduler);
+        var step = new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = 2 };
+        vm.Steps.Add(step);
+
+        vm.PlayCommand.Execute(null);
+        scheduler.Entries[0].Invoke();
+        var sent = Assert.Single(protocol.Sent);
+        protocol.RaiseAnimExecution(sent.RequestId, sent.Target, sent.AnimId, "started");
+
+        vm.PauseCommand.Execute(null);
+        Assert.True(vm.IsPaused);
+        Assert.Single(protocol.Sent); // Pause sends no replacement/stop gesture.
+
+        protocol.RaiseAnimExecution(sent.RequestId, sent.Target, sent.AnimId, "completed");
+        Assert.Equal("DONE", step.ExecutionSummary);
+        Assert.Equal("completed", step.ExecutionTone);
+        Assert.True(vm.IsPaused); // target completion does not resume the PC transport.
+    }
+
+    [Fact]
     public void PauseAtEventBoundary_DoesNotDispatchTheSameEventTwiceAfterResume()
     {
         var protocol = new FakeSequencerProtocol();

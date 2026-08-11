@@ -27,7 +27,9 @@ Muted or offline rows do not create a queue for missed commands.*
 - **Play** while stopped starts from t = 0. Pressing Play during playback restarts
   cleanly from t = 0.
 - **Pause** freezes the console playhead, pauses active PC audio, and cancels
-  future scheduled sends.
+  future scheduled sends. It sends no pause/stop command to the droids: every
+  finite gesture already received continues to its natural completion, and a
+  running `TALK`/`POWER_DOWN` continues while its safety lease is renewed.
 - **Play** while paused resumes local audio and schedules items that have not yet
   reached their start time.
 - **Stop** cancels future sends, stops local audio, sends targeted `IDLE` cleanup
@@ -58,6 +60,12 @@ not an automatic fallback for a lost master.
 > finishes naturally. For a tracked looping `POWER_DOWN` or `TALK`, Stop,
 > non-looping natural end, application shutdown, or restarting Play sends a
 > targeted `IDLE` to each affected droid without disturbing other targets.
+
+While paused, the transport displays **PAUSED · DROID MOTION CONTINUES**. Target
+execution reports still update the clips, so a finite gesture may change from
+`START` to `DONE` while the PC playhead remains frozen. Pressing Play resumes
+only local audio and timeline events that were not already dispatched; it does
+not resend or restart a gesture that continued during Pause.
 
 The console remembers the latest Sequencer gesture written for each concrete
 droid. Broadcast looping gestures are expanded to the droids online at dispatch;

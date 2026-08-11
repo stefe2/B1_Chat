@@ -236,6 +236,14 @@ fall; that behavior is explicitly accepted for this project. Older firmware
 without the additive `safeStop` cap receives broadcast IDLE as a best-effort
 fallback but cannot suppress subsequent automatic motion.
 
+**Pause is not a hardware stop:** it freezes the PC playhead, future timer
+dispatches and local audio only. Already received finite gestures continue to
+completion, TALK/POWER_DOWN keep running under their renewed lease, and their
+execution reports may update while paused. Play resumes undispatched events and
+audio without resending gestures that continued. The transport shows
+`PAUSED · DROID MOTION CONTINUES` so this behavior is never implied to be a
+physical freeze; use Stop, SAFE or E-STOP for their distinct policies above.
+
 **No audio in this protocol** (fw 1.6.0): `volume`/`playTrack` (console→master)
 and `config`'s `volume` field were removed when the DFPlayer was retired —
 see the Progress log.
