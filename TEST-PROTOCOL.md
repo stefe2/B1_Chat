@@ -22,7 +22,9 @@ enables/disables a servo, previews a position, or starts an animation.
   natural end, repeated Stop, cleanup, numeric duration limits and aggregation
   of per-droid animation execution reports, including missing-start and
   missing-completion timeouts, late recovery, delayed duplicate reports, local
-  dispatch failures and correlated master acceptance;
+  dispatch failures, correlated master acceptance, and targeted cleanup of
+  infinite gestures across broadcast overrides, Stop, restart, natural end and
+  Loop boundaries;
 - runs `git diff --check`;
 - verifies that the callback-to-loop mesh inbox is present;
 - verifies the per-droid animation-parameter store and targeted protocol;

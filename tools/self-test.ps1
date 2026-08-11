@@ -205,7 +205,8 @@ Invoke-Test "Animation execution-report pipeline present" {
     Assert-Source "console/ViewModels/SequencerViewModel.cs" "ExecutionStartTimeoutMs" "execution start timeout missing"
     Assert-Source "console/ViewModels/SequencerViewModel.cs" '"TIMEOUT"' "execution completion timeout state missing"
     Assert-Source "console/ViewModels/SequencerViewModel.cs" '"UNCONF"' "unconfirmed execution state missing"
-    "serial write, master acceptance, lifecycle reporting and missing-report expiration detected"
+    Assert-Source "console/ViewModels/SequencerViewModel.cs" "StopInfiniteGestures" "infinite gesture cleanup missing"
+    "delivery stages, lifecycle reporting, timeouts and targeted infinite cleanup detected"
 }
 
 Invoke-Test "Boot sequence randomization present" {

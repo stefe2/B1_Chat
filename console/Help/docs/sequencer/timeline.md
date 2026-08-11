@@ -73,7 +73,8 @@ audio-synchronized Talk loop.*
   text-entry field in the current release.
 
 Clip widths use durations reported by firmware. The loop badge means the droid
-continues that gesture until another gesture replaces it; the displayed width is
+continues that gesture until another gesture replaces it or the Sequencer sends
+targeted IDLE during Stop/non-looping end cleanup; the displayed width is
 only an indicative timeline duration.
 
 ## Undo and Redo

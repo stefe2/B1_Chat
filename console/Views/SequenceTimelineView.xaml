@@ -24,7 +24,7 @@
                         ToolTipService.ShowOnDisabled="True" Margin="0,0,4,0">
                     <TextBlock Text="▶" />
                 </Button>
-                <Button Style="{StaticResource IconTransportButtonStyle}" Command="{Binding StopCommand}" ToolTip="Stop"
+                <Button Style="{StaticResource IconTransportButtonStyle}" Command="{Binding StopCommand}" ToolTip="Stop playback/audio and send targeted IDLE to Sequencer-started TALK or POWER_DOWN gestures."
                         ToolTipService.ShowOnDisabled="True" Margin="0,0,4,0">
                     <TextBlock Text="■" />
                 </Button>

@@ -759,6 +759,219 @@ public sealed class SequencerPlaybackIntegrationTests
         Assert.Equal("interrupted", step.ExecutionTone);
     }
 
+    [Theory]
+    [InlineData(16)]
+    [InlineData(17)]
+    public void Stop_SendsTargetedIdleToAnActiveInfiniteGestureExactlyOnce(int infiniteAnimId)
+    {
+        var protocol = new FakeSequencerProtocol();
+        protocol.Durations[infiniteAnimId] = 4000;
+        protocol.Droids.Add(new Droid { Id = 0x1234, Online = true });
+        var scheduler = new FakePlaybackTimerScheduler();
+        using var vm = CreateViewModel(protocol, scheduler);
+        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = infiniteAnimId });
+
+        vm.PlayCommand.Execute(null);
+        scheduler.Entries[0].Invoke();
+        vm.StopCommand.Execute(null);
+        vm.StopCommand.Execute(null);
+
+        Assert.Collection(protocol.Sent,
+            sent => { Assert.Equal((ushort)0x1234, sent.Target); Assert.Equal(infiniteAnimId, sent.AnimId); },
+            sent => { Assert.Equal((ushort)0x1234, sent.Target); Assert.Equal(0, sent.AnimId); });
+    }
+
+    [Fact]
+    public void BroadcastInfinite_WithPerDroidFiniteOverride_CleansOnlyRemainingTargets()
+    {
+        var protocol = new FakeSequencerProtocol();
+        protocol.Durations[17] = 4000;
+        protocol.Durations[2] = 500;
+        foreach (var id in new ushort[] { 100, 200, 300 })
+            protocol.Droids.Add(new Droid { Id = id, Online = true });
+        var scheduler = new FakePlaybackTimerScheduler();
+        using var vm = CreateViewModel(protocol, scheduler);
+        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = ushort.MaxValue, AnimId = 17 });
+        vm.Steps.Add(new SequenceStep { StartMs = 40, Target = 200, AnimId = 2 });
+
+        vm.PlayCommand.Execute(null);
+        scheduler.Entries[0].Invoke();
+        scheduler.Entries[1].Invoke();
+        vm.StopCommand.Execute(null);
+
+        Assert.Equal(4, protocol.Sent.Count);
+        Assert.Equal((ushort)ushort.MaxValue, protocol.Sent[0].Target);
+        Assert.Equal((ushort)200, protocol.Sent[1].Target);
+        Assert.Equal(new ushort[] { 100, 300 }, protocol.Sent.Skip(2).Select(s => s.Target));
+        Assert.All(protocol.Sent.Skip(2), sent => Assert.Equal(0, sent.AnimId));
+    }
+
+    [Fact]
+    public void RepeatedInfiniteGestures_OnTheSameDroid_RequireOneCleanup()
+    {
+        var protocol = new FakeSequencerProtocol();
+        protocol.Durations[16] = 3000;
+        protocol.Durations[17] = 4000;
+        var scheduler = new FakePlaybackTimerScheduler();
+        using var vm = CreateViewModel(protocol, scheduler);
+        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = 16 });
+        vm.Steps.Add(new SequenceStep { StartMs = 40, Target = 0x1234, AnimId = 17 });
+
+        vm.PlayCommand.Execute(null);
+        scheduler.Entries[0].Invoke();
+        scheduler.Entries[1].Invoke();
+        vm.StopCommand.Execute(null);
+
+        Assert.Equal(new[] { 16, 17, 0 }, protocol.Sent.Select(s => s.AnimId));
+        Assert.All(protocol.Sent, sent => Assert.Equal((ushort)0x1234, sent.Target));
+    }
+
+    [Fact]
+    public void FailedInfiniteDispatch_DoesNotCreateAFalseCleanupTarget()
+    {
+        var protocol = new FakeSequencerProtocol { NextDispatchState = AnimDispatchState.WriteFailed };
+        var scheduler = new FakePlaybackTimerScheduler();
+        using var vm = CreateViewModel(protocol, scheduler);
+        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = 17 });
+
+        vm.PlayCommand.Execute(null);
+        scheduler.Entries[0].Invoke();
+        vm.StopCommand.Execute(null);
+
+        Assert.Single(protocol.Sent);
+        Assert.Equal(17, protocol.Sent[0].AnimId);
+    }
+
+    [Fact]
+    public void FailedIdleCleanup_RemainsRetryableOnARepeatedStop()
+    {
+        var protocol = new FakeSequencerProtocol();
+        var scheduler = new FakePlaybackTimerScheduler();
+        using var vm = CreateViewModel(protocol, scheduler);
+        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = 17 });
+
+        vm.PlayCommand.Execute(null);
+        scheduler.Entries[0].Invoke();
+        protocol.NextDispatchState = AnimDispatchState.WriteFailed;
+        vm.StopCommand.Execute(null);
+        protocol.NextDispatchState = AnimDispatchState.Written;
+        vm.StopCommand.Execute(null);
+
+        Assert.Equal(new[] { 17, 0, 0 }, protocol.Sent.Select(s => s.AnimId));
+    }
+
+    [Fact]
+    public void NaturalEnd_CleansAnInfiniteGesture()
+    {
+        var protocol = new FakeSequencerProtocol();
+        protocol.Durations[17] = 4000;
+        var scheduler = new FakePlaybackTimerScheduler();
+        using var vm = CreateViewModel(protocol, scheduler);
+        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = 17 });
+
+        vm.PlayCommand.Execute(null);
+        scheduler.Entries[0].Invoke();
+        scheduler.Entries[1].Invoke();
+
+        Assert.Equal(new[] { 17, 0 }, protocol.Sent.Select(s => s.AnimId));
+        Assert.False(vm.IsPlaying);
+    }
+
+    [Fact]
+    public void LoopBoundary_KeepsInfiniteStateUntilAnExplicitStop()
+    {
+        var protocol = new FakeSequencerProtocol();
+        protocol.Durations[17] = 4000;
+        var scheduler = new FakePlaybackTimerScheduler();
+        using var vm = CreateViewModel(protocol, scheduler);
+        vm.Loop = true;
+        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = 17 });
+
+        vm.PlayCommand.Execute(null);
+        scheduler.Entries[0].Invoke();
+        scheduler.Entries[1].Invoke();
+        Assert.Single(protocol.Sent);
+        Assert.True(vm.IsPlaying);
+
+        vm.StopCommand.Execute(null);
+        Assert.Equal(new[] { 17, 0 }, protocol.Sent.Select(s => s.AnimId));
+    }
+
+    [Fact]
+    public void MeshFailureOnFiniteOverride_RestoresThePreviousInfiniteStateForCleanup()
+    {
+        var protocol = new FakeSequencerProtocol();
+        protocol.Durations[2] = 500;
+        var scheduler = new FakePlaybackTimerScheduler();
+        using var vm = CreateViewModel(protocol, scheduler);
+        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = 17 });
+        vm.Steps.Add(new SequenceStep { StartMs = 40, Target = 0x1234, AnimId = 2 });
+
+        vm.PlayCommand.Execute(null);
+        scheduler.Entries[0].Invoke();
+        scheduler.Entries[1].Invoke();
+        var finiteRequest = protocol.Sent[1].RequestId;
+        protocol.RaiseAnimMasterAccepted(finiteRequest, 0x1234, 2,
+            meshQueued: false, localHandled: false);
+        vm.StopCommand.Execute(null);
+
+        Assert.Equal(new[] { 17, 2, 0 }, protocol.Sent.Select(s => s.AnimId));
+        Assert.Equal((ushort)0x1234, protocol.Sent[^1].Target);
+    }
+
+    [Fact]
+    public void Restart_CleansTheOldInfiniteGestureBeforeArmingTheNewPass()
+    {
+        var protocol = new FakeSequencerProtocol();
+        protocol.Durations[17] = 4000;
+        var scheduler = new FakePlaybackTimerScheduler();
+        using var vm = CreateViewModel(protocol, scheduler);
+        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = 17 });
+
+        vm.PlayCommand.Execute(null);
+        scheduler.Entries[0].Invoke();
+        vm.PlayCommand.Execute(null);
+
+        Assert.Equal(new[] { 17, 0 }, protocol.Sent.Select(s => s.AnimId));
+        Assert.True(vm.IsPlaying);
+    }
+
+    [Fact]
+    public void Dispose_CleansAnActiveInfiniteGesture()
+    {
+        var protocol = new FakeSequencerProtocol();
+        var scheduler = new FakePlaybackTimerScheduler();
+        var vm = CreateViewModel(protocol, scheduler);
+        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = 16 });
+
+        vm.PlayCommand.Execute(null);
+        scheduler.Entries[0].Invoke();
+        vm.Dispose();
+
+        Assert.Equal(new[] { 16, 0 }, protocol.Sent.Select(s => s.AnimId));
+        Assert.False(vm.IsPlaying);
+    }
+
+    [Fact]
+    public void LinkLossCleanupFailure_RemainsRetryableAfterTransportStops()
+    {
+        var protocol = new FakeSequencerProtocol();
+        var scheduler = new FakePlaybackTimerScheduler();
+        using var vm = CreateViewModel(protocol, scheduler);
+        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = 17 });
+
+        vm.PlayCommand.Execute(null);
+        scheduler.Entries[0].Invoke();
+        protocol.NextDispatchState = AnimDispatchState.NotConnected;
+        protocol.RaiseLinkClosed();
+        Assert.False(vm.IsPlaying);
+        Assert.Equal(new[] { 17, 0 }, protocol.Sent.Select(s => s.AnimId));
+
+        protocol.NextDispatchState = AnimDispatchState.Written;
+        vm.StopCommand.Execute(null);
+        Assert.Equal(new[] { 17, 0, 0 }, protocol.Sent.Select(s => s.AnimId));
+    }
+
     private static SequencerViewModel CreateViewModel(
         FakeSequencerProtocol protocol,
         FakePlaybackTimerScheduler scheduler,

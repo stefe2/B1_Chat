@@ -30,7 +30,9 @@ Muted or offline rows do not create a queue for missed commands.*
   future scheduled sends.
 - **Play** while paused resumes local audio and schedules items that have not yet
   reached their start time.
-- **Stop** cancels future sends, stops local audio, and resets the playhead to 0.
+- **Stop** cancels future sends, stops local audio, sends targeted `IDLE` cleanup
+  to droids whose latest Sequencer gesture is `TALK` or `POWER_DOWN`, and resets
+  the playhead to 0.
 - **Loop** starts a new pass when the calculated sequence duration ends.
 
 Persistent timeline editing is locked during both Play and Pause. You can still
@@ -43,10 +45,20 @@ than silently continuing a partial audio-only performance. Closing the console
 does the same cleanup. A deliberate audio-only Dry Run mode is a future feature,
 not an automatic fallback for a lost master.
 
-> **Important:** Pause and Stop cannot freeze or retract a gesture already sent
-> to a droid. A one-shot gesture finishes naturally. A looping `POWER_DOWN` or
-> `TALK` gesture continues until another gesture replaces it or Servos is
-> disabled.
+> **Important:** Pause cannot freeze or retract a gesture already sent to a
+> droid, and Stop does not interrupt finite one-shot gestures. A one-shot gesture
+> finishes naturally. For a tracked looping `POWER_DOWN` or `TALK`, Stop,
+> non-looping natural end, application shutdown, or restarting Play sends a
+> targeted `IDLE` to each affected droid without disturbing other targets.
+
+The console remembers the latest Sequencer gesture written for each concrete
+droid. Broadcast looping gestures are expanded to the droids online at dispatch;
+a later per-droid finite gesture removes only that droid from cleanup. Repeated
+Stop is idempotent after a successful serial write. If the link is unavailable,
+cleanup cannot be guaranteed and remains retryable, but a crashed or unreachable
+console still requires the future firmware safety lease described in the
+hardening plan. A whole-sequence Loop boundary does not send IDLE; explicit Stop
+does.
 
 Each gesture clip shows non-blocking delivery and execution feedback. `WRITE`
 means Windows accepted the write to the serial port. `MASTER` means the master

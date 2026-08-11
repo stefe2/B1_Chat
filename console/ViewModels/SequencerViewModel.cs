@@ -139,10 +139,16 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     private readonly List<IDisposable> _playbackTimers = new();
     private readonly HashSet<int> _dispatchedPlaybackEvents = new();
     private readonly Dictionary<uint, ExecutionTracker> _executionTrackers = new();
+    private readonly Dictionary<ushort, GestureTargetState> _latestGestureByDroid = new();
     private readonly PlaybackGeneration _playbackGeneration = new();
     private SequencerPlaybackPlan? _activePlaybackPlan;
     private int _elapsedAtPauseMs;
     private bool _disposed;
+
+    private readonly record struct GestureTargetState(uint RequestId, int AnimId)
+    {
+        public bool IsInfinite => AnimId is 16 or 17;
+    }
 
     private sealed class ExecutionTracker
     {
@@ -151,6 +157,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         public required HashSet<ushort> ExpectedDroids { get; init; }
         public required int AnimId { get; init; }
         public required bool IsBroadcast { get; init; }
+        public Dictionary<ushort, GestureTargetState?> PreviousTargetStates { get; } = new();
         public AnimMasterReceipt? MasterReceipt { get; set; }
         public Dictionary<ushort, AnimExecutionReport> Reports { get; } = new();
         public IDisposable? StartDeadline { get; set; }
@@ -263,6 +270,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
             IsBroadcast = isBroadcast,
         };
         _executionTrackers[dispatch.RequestId] = tracker;
+        RecordGestureDispatch(tracker);
         step.ExecutionSummary = "WRITE";
         step.ExecutionDetail = $"Request {dispatch.RequestId}: serial write completed; awaiting master acceptance.";
         step.ExecutionTone = "sent";
@@ -292,12 +300,72 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         _ => "written",
     };
 
+    private void RecordGestureDispatch(ExecutionTracker tracker)
+    {
+        foreach (var droidId in tracker.ExpectedDroids)
+        {
+            tracker.PreviousTargetStates[droidId] =
+                _latestGestureByDroid.TryGetValue(droidId, out var previous) ? previous : null;
+            _latestGestureByDroid[droidId] = new GestureTargetState(
+                tracker.RequestId, tracker.AnimId);
+        }
+    }
+
+    private void RollBackFailedMeshDispatch(ExecutionTracker tracker, AnimMasterReceipt receipt)
+    {
+        if (receipt.MeshQueued) return;
+        var localMasterIds = receipt.LocalHandled
+            ? _protocol.Droids.Where(d => d.IsMaster).Select(d => d.Id).ToHashSet()
+            : new HashSet<ushort>();
+
+        foreach (var droidId in tracker.ExpectedDroids)
+        {
+            // A local master target does not depend on the failed ESP-NOW queue.
+            if (localMasterIds.Contains(droidId)) continue;
+            if (!_latestGestureByDroid.TryGetValue(droidId, out var current)
+                || current.RequestId != tracker.RequestId) continue;
+            if (tracker.PreviousTargetStates.TryGetValue(droidId, out var previous)
+                && previous.HasValue)
+                _latestGestureByDroid[droidId] = previous.Value;
+            else
+                _latestGestureByDroid.Remove(droidId);
+        }
+    }
+
+    private void UpdateGestureStateFromExecution(ExecutionTracker tracker, AnimExecutionReport report)
+    {
+        if (!_latestGestureByDroid.TryGetValue(report.DroidId, out var current)
+            || current.RequestId != tracker.RequestId) return;
+        // A terminal result for an infinite command proves it is no longer active. Finite
+        // commands remain recorded as the latest state but are never selected for cleanup.
+        if (current.IsInfinite && IsTerminalExecutionPhase(report.Phase))
+            _latestGestureByDroid.Remove(report.DroidId);
+    }
+
+    private void StopInfiniteGestures()
+    {
+        var active = _latestGestureByDroid
+            .Where(pair => pair.Value.IsInfinite)
+            .OrderBy(pair => pair.Key)
+            .ToArray();
+        foreach (var (droidId, previous) in active)
+        {
+            var seed = (uint)Random.Shared.NextInt64(1, (long)uint.MaxValue + 1);
+            var dispatch = _protocol.PlayAnim(droidId, 0, seed);
+            if (!dispatch.Written) continue;
+            if (_latestGestureByDroid.TryGetValue(droidId, out var current)
+                && current == previous)
+                _latestGestureByDroid[droidId] = new GestureTargetState(dispatch.RequestId, 0);
+        }
+    }
+
     private void OnAnimMasterAccepted(AnimMasterReceipt receipt) => RunOnUiThread(() =>
     {
         if (!_executionTrackers.TryGetValue(receipt.RequestId, out var tracker)) return;
         if (receipt.AnimId != tracker.AnimId) return;
         if (receipt.Target != (tracker.IsBroadcast ? ushort.MaxValue : tracker.ExpectedDroids.Single())) return;
         tracker.MasterReceipt = receipt;
+        RollBackFailedMeshDispatch(tracker, receipt);
         UpdateExecutionSummary(tracker);
     });
 
@@ -315,6 +383,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
             && IsTerminalExecutionPhase(previous.Phase))
             return;
         tracker.Reports[report.DroidId] = report;
+        UpdateGestureStateFromExecution(tracker, report);
         UpdateExecutionSummary(tracker);
         if (AllExpectedDroidsTerminal(tracker)) DisposeExecutionDeadlines(tracker);
     });
@@ -1101,6 +1170,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         _playbackGeneration.Cancel();
         DisposePlaybackTimers();
         _audioPlayer.StopAll(); // Play pressed mid-playback restarts clean, no overlapped audio
+        StopInfiniteGestures(); // a restart must not inherit TALK/POWER_DOWN from the old pass
         ResetExecutionTracking();
         _activePlaybackPlan = SequencerPlaybackPlan.Capture(
             Steps, AudioLanes, AnimDurationMsLookup, Loop);
@@ -1121,6 +1191,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         IsPaused = false;
         DisposePlaybackTimers();
         _audioPlayer.StopAll();
+        StopInfiniteGestures();
         _activePlaybackPlan = null;
         _dispatchedPlaybackEvents.Clear();
         StopPlayheadTimer();

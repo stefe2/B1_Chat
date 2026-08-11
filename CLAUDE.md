@@ -205,6 +205,15 @@ warnings never delay or stop the show. Looping POWER_DOWN/TALK require only a
 start report because completion requires a later interruption. This proves
 firmware execution, not physical servo movement or mechanical inter-droid skew.
 
+**Sequencer infinite-gesture cleanup:** the WPF playback controller records the
+latest successfully written gesture per concrete droid. Broadcast TALK or
+POWER_DOWN expands to the online roster; later targeted finite/IDLE commands
+replace only their target. Stop, a non-looping natural end, application disposal,
+and Play restart send tracked IDLE commands only to droids whose latest state is
+still infinite. A whole-pass Loop boundary and Pause deliberately do not clean
+up. Failed serial cleanup remains retryable; delivery after link loss cannot be
+guaranteed until the planned firmware lease exists.
+
 **No audio in this protocol** (fw 1.6.0): `volume`/`playTrack` (console→master)
 and `config`'s `volume` field were removed when the DFPlayer was retired —
 see the Progress log.
@@ -386,11 +395,15 @@ Full detailed history: see [PROGRESS-ARCHIVE.md](PROGRESS-ARCHIVE.md).
 - Sequencer execution correlation now expires missing start and finite-gesture
   completion reports without blocking transport. Timeline clips distinguish
   `UNCONF`/`MISS` from `TIMEOUT`, accept late recovery, and ignore delayed START
-  regressions after a terminal report; the headless suite passes 43/43.
+  regressions after a terminal report; the headless suite passes 55/55.
 - Animation delivery now exposes the stages the current transport can prove:
   local serial write (`WRITE`), parsed/validated master acceptance (`MASTER`),
   and per-target execution. Disconnected, pre-handshake and failed writes are
   rejected immediately instead of receiving a misleading sent state.
+- Sequencer Stop/end now tracks and terminates only its own active TALK and
+  POWER_DOWN targets with per-droid IDLE. Broadcast plus targeted overrides,
+  repeat/restart, failed cleanup retry, natural end and Loop boundaries are
+  covered by the headless transport suite.
 - Firmware identity now has two layers: human `FW_VERSION` and an automatic,
   deterministic 8-hex Build ID derived from normalized firmware source,
   PlatformIO configuration and role. It is generated before every build,

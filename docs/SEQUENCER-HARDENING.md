@@ -69,7 +69,7 @@ The dashboard is updated whenever an item changes state.
 | Epic | Description | Required items complete | Deferred ideas complete |
 |---|---|---:|---:|
 | A | Playback isolation and cancellation | 5 / 8 | — |
-| B | Infinite gestures and Stop/Pause semantics | 0 / 6 | 0 / 1 |
+| B | Infinite gestures and Stop/Pause semantics | 2 / 6 | 0 / 1 |
 | C | Dirty, Undo/Redo and editing transactions | 0 / 8 | 0 / 1 |
 | D | Import, export and local library | 0 / 8 | 0 / 1 |
 | E | Deterministic scheduler and performance | 2 / 6 | 0 / 1 |
@@ -183,7 +183,7 @@ The dashboard is updated whenever an item changes state.
 
 ## EPIC B — Infinite gestures and Stop/Pause semantics
 
-### [ ] SEQ-B01 — Track infinite gestures activated by the pass
+### [x] SEQ-B01 — Track infinite gestures activated by the pass
 
 - **Priority:** P0
 - **Problem:** `POWER_DOWN` and `TALK` loop on a droid until another animation is
@@ -194,8 +194,12 @@ The dashboard is updated whenever an item changes state.
   gestures update that state correctly.
 - **Validation:** tests cover broadcast plus per-droid overrides and repeated
   infinite gestures.
+- **Implemented:** the latest successfully written gesture is tracked per
+  concrete droid and request. Broadcast uses the online roster, later targeted
+  gestures replace only their droid, stale terminal reports cannot clear a
+  newer command, and a failed mesh queue restores the prior known state.
 
-### [ ] SEQ-B02 — Stop infinite gestures on Stop and natural end
+### [x] SEQ-B02 — Stop infinite gestures on Stop and natural end
 
 - **Priority:** P0
 - **Problem:** Stop currently cancels console work only; TALK/POWER_DOWN can keep
@@ -207,6 +211,11 @@ The dashboard is updated whenever an item changes state.
   is documented because delivery cannot be guaranteed.
 - **Validation:** protocol fake asserts exact target cleanup; real droid confirms
   TALK and POWER_DOWN end safely.
+- **Implemented:** Stop, non-looping natural end, application disposal and Play
+  restart send targeted tracked IDLE only to remaining infinite targets. Pause
+  and whole-pass Loop boundaries intentionally retain them. Successful cleanup
+  is idempotent; a local write failure leaves cleanup retryable. Link-loss
+  delivery remains explicitly unguaranteed pending SEQ-B06.
 
 ### [ ] SEQ-B03 — Make Pause semantics explicit and honest
 
@@ -1244,7 +1253,7 @@ options.
 | ID | Status | Decision |
 |---|---|---|
 | DEC-001 | Resolved 2026-08-11 | Lock persistent editing during Play/Pause; allow transient inspection, zoom/scroll and dynamic track mute. |
-| DEC-002 | Open | Stop infinite gestures by sending IDLE, or add a dedicated firmware stop command? |
+| DEC-002 | Resolved 2026-08-11 | Normal Sequencer Stop uses existing targeted tracked IDLE for compatibility and execution telemetry; Safe/Emergency Stop remain separate under SEQ-B07. |
 | DEC-003 | Open | Keep and restore Local Library Save, or remove the legacy library? |
 | DEC-004 | Open | Unknown/offline targets: warning or blocking preflight error? |
 | DEC-005 | Open | Same-time broadcast and targeted command precedence? |
@@ -1281,3 +1290,4 @@ Append concise evidence when closing items; do not paste full build logs.
 | 2026-08-11 | Execution telemetry / SEQ-H07 | Added backward-compatible, non-blocking `MSG_ANIM_EXEC` lifecycle reports correlated through the existing mesh sequence and console `requestId`; WPF clips aggregate started/completed/interrupted/rejected per droid. Master `00FD6D8C` plus slaves `65440D15` passed headless targeted/broadcast/TALK→IDLE lifecycle 5/5, WPF tests 35/35, offline regression 17/17 and strict hardware regression 24/24. Final servo/auto-animation state is off on all three. Reports `b1-anim-exec-20260811-133214.json`, `b1-self-test-20260811-131949.json`, `b1-sequencer-bench-20260811-133234.json`, `b1-self-test-20260811-133306.json`. Physical motion/skew, WPF+audio, disconnect and weak-link tests remain deferred until operator/hardware availability. |
 | 2026-08-11 | SEQ-G11 (in progress) | Added separate non-blocking start/completion deadlines, `UNCONF`/`MISS`/`TIMEOUT` clip states, late-report recovery, terminal-state duplicate protection and looping-gesture semantics. Headless WPF suite passed 39/39; offline regression passed 17/17 with report `b1-self-test-20260811-135225.json`. Serial-write/master-receipt staging and hardware loss scenarios remain. |
 | 2026-08-11 | SEQ-G11 (in progress) | Split delivery into immediate local dispatch (`NO LINK`/`NOT READY`/`WRITE FAIL` or `WRITE`), correlated master acceptance (`MASTER`) and target execution. Added additive `animAccepted` with mesh-queue/local-routing facts, preserved compatibility with older firmware, and strengthened the headless bench to require master acceptance before lifecycle reports. WPF tests passed 43/43; offline regression 17/17 (`b1-self-test-20260811-140233.json`); master `9A228A09` and slaves `1D787B84` passed hardware execution 5/5 (`b1-anim-exec-20260811-141734.json`), strict regression 29/29 (`b1-self-test-20260811-141828.json`) and preflight 6/6 (`b1-sequencer-bench-20260811-141836.json`). Final servo/auto-animation state is off on all three. Offline/weak-link/disconnect timeout observations and any true relay acknowledgement remain. |
+| 2026-08-11 | SEQ-B01, SEQ-B02 | Added per-droid/request latest-gesture tracking and targeted IDLE cleanup on Stop, non-looping natural end, application disposal and Play restart. Broadcast overrides, repeated infinite commands, failed dispatch/cleanup retry, mesh-failure rollback, disconnect retry and Loop behavior are covered; WPF suite passed 55/55 and offline regression 17/17 (`b1-self-test-20260811-143504.json`). Existing hardware benches already prove tracked TALK/POWER_DOWN interruption by IDLE; no firmware change or reflash was required. |
