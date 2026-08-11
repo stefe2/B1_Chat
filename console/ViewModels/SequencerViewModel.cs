@@ -228,6 +228,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         DeleteStepCommand.NotifyCanExecuteChanged();
         DuplicateStepCommand.NotifyCanExecuteChanged();
         LoadFromLibraryCommand.NotifyCanExecuteChanged();
+        DeleteFromLibraryCommand.NotifyCanExecuteChanged();
         ImportCommand.NotifyCanExecuteChanged();
     }
 
@@ -1137,10 +1138,10 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         Dirty = false;
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanEditSequence))]
     private void DeleteFromLibrary(SequenceLibraryItem? item)
     {
-        if (item == null) return;
+        if (!CanEditSequence || item == null) return;
         _library.Delete(item.Id);
         RefreshLibrary();
     }

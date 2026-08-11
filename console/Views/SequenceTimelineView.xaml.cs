@@ -94,7 +94,7 @@ public partial class SequenceTimelineView : UserControl
 
     private void Clip_MouseMove(object sender, MouseEventArgs e)
     {
-        if (!_draggingClip || _dragStep == null || Vm is not { } vm || vm.PxPerMs <= 0) return;
+        if (!_draggingClip || _dragStep == null || Vm is not { CanEditSequence: true } vm || vm.PxPerMs <= 0) return;
         var pos = e.GetPosition(TracksCanvas);
         var deltaMs = (pos.X - _dragStartMouseX) / vm.PxPerMs;
         // Free pixel-level movement while dragging, on BOTH axes — Snap (horizontal grid) and
@@ -108,14 +108,19 @@ public partial class SequenceTimelineView : UserControl
     {
         if (!_draggingClip) return;
         _draggingClip = false;
-        if (_dragStep != null && Vm is { } vm)
+        if (_dragStep != null)
         {
-            _dragStep.StartMs = Math.Max(0, vm.RoundToGrid(_dragStep.StartMs)); // snap settles here
-            // The row settles here too: retarget to whichever track is under the cursor —
-            // released outside the tracks area vertically, the clip snaps back to its own row.
-            var pos = e.GetPosition(TracksCanvas);
-            if (pos.Y >= 0 && pos.Y <= TracksCanvas.ActualHeight && vm.TrackAtY(pos.Y) is { } track)
-                _dragStep.Target = track.Id;
+            if (Vm is { CanEditSequence: true } vm)
+            {
+                _dragStep.StartMs = Math.Max(0, vm.RoundToGrid(_dragStep.StartMs)); // snap settles here
+                // The row settles here too: retarget to whichever track is under the cursor —
+                // released outside the tracks area vertically, the clip snaps back to its own row.
+                var pos = e.GetPosition(TracksCanvas);
+                if (pos.Y >= 0 && pos.Y <= TracksCanvas.ActualHeight && vm.TrackAtY(pos.Y) is { } track)
+                    _dragStep.Target = track.Id;
+            }
+            // A Play transition can lock editing while the mouse is still captured. In that
+            // case preserve the position captured by Play, but always clear visual drag state.
             _dragStep.DragOffsetY = 0;
             _dragStep.Dragging = false;
         }
@@ -164,7 +169,7 @@ public partial class SequenceTimelineView : UserControl
 
     private void AudioClip_MouseMove(object sender, MouseEventArgs e)
     {
-        if (!_draggingAudioClip || _dragAudioClip == null || Vm is not { } vm || vm.PxPerMs <= 0) return;
+        if (!_draggingAudioClip || _dragAudioClip == null || Vm is not { CanEditSequence: true } vm || vm.PxPerMs <= 0) return;
         var posRoot = e.GetPosition(RootGrid);
         var deltaMs = (posRoot.X - _dragAudioStartMouseX) / vm.PxPerMs;
         // Same smooth-drag rule as gesture clips: free on both axes while moving, snap (time
@@ -179,15 +184,20 @@ public partial class SequenceTimelineView : UserControl
         _draggingAudioClip = false;
         if (sender is FrameworkElement fe) fe.ReleaseMouseCapture();
 
-        if (_dragAudioClip != null && Vm is { } vm)
+        if (_dragAudioClip != null)
         {
-            _dragAudioClip.StartMs = Math.Max(0, vm.RoundToGrid(_dragAudioClip.StartMs));
-            // The lane settles here: released over another lane's row → move the clip there;
-            // released outside the lanes area entirely → snap back to its own lane.
-            var yInLanes = e.GetPosition(AudioLanesItemsControl).Y;
-            if (yInLanes >= 0 && yInLanes <= AudioLanesItemsControl.ActualHeight
-                && vm.AudioLaneAtY(yInLanes) is { } lane && !ReferenceEquals(lane, _dragAudioSourceLane))
-                vm.MoveAudioClipToLane(_dragAudioClip, lane);
+            if (Vm is { CanEditSequence: true } vm)
+            {
+                _dragAudioClip.StartMs = Math.Max(0, vm.RoundToGrid(_dragAudioClip.StartMs));
+                // The lane settles here: released over another lane's row → move the clip there;
+                // released outside the lanes area entirely → snap back to its own lane.
+                var yInLanes = e.GetPosition(AudioLanesItemsControl).Y;
+                if (yInLanes >= 0 && yInLanes <= AudioLanesItemsControl.ActualHeight
+                    && vm.AudioLaneAtY(yInLanes) is { } lane && !ReferenceEquals(lane, _dragAudioSourceLane))
+                    vm.MoveAudioClipToLane(_dragAudioClip, lane);
+            }
+            // See the gesture drag path above: transient visuals must be released even if
+            // transport became active during capture, but persistent placement stays frozen.
             _dragAudioClip.DragOffsetY = 0;
             _dragAudioClip.Dragging = false;
         }

@@ -45,10 +45,16 @@ Muted or offline rows do not create a queue for missed commands.*
   the Droids card after inspecting the hardware.
 - **Loop** starts a new pass when the calculated sequence duration ends.
 
-Persistent timeline editing is locked during both Play and Pause. You can still
-inspect the timeline and change track mute switches, but press **Stop** before
-inserting, moving, deleting, importing, or otherwise changing sequence content.
-This keeps the visible document identical to the immutable pass being performed.
+Persistent timeline and local-library editing is locked during both Play and
+Pause. Press **Stop** before inserting, moving, duplicating, deleting, using the
+inspector, changing Loop or audio lanes, Undo/Redo, Import/Clear, or loading or
+deleting a Local Library entry. The disabled controls, their tooltips, and the
+**EDIT LOCKED** badge expose that policy.
+
+Selection and inspection, track arming, dynamic droid-track mute, zoom, Snap,
+Fit, scrolling, and Export remain available because they do not alter the
+document being performed. This keeps the visible sequence content identical to
+the immutable pass while preserving useful monitoring and snapshot tools.
 
 An unexpected serial disconnect stops the active pass and its local audio rather
 than silently continuing a partial audio-only performance. Closing the console

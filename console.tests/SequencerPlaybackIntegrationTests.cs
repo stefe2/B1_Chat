@@ -293,60 +293,105 @@ public sealed class SequencerPlaybackIntegrationTests
     public void PersistentEditingCommands_AreLockedForPlayAndPause()
     {
         var protocol = new FakeSequencerProtocol();
+        protocol.Droids.Add(new Droid { Id = 0x1234, Name = "Test droid" });
         var scheduler = new FakePlaybackTimerScheduler();
-        var vm = CreateViewModel(protocol, scheduler);
-        var step = new SequenceStep { StartMs = 1_000, Target = 0xFFFF, AnimId = 2 };
+        using var vm = CreateViewModel(protocol, scheduler);
+        var step = new SequenceStep { StartMs = 1_000, Target = 0x1234, AnimId = 2 };
         vm.Steps.Add(step);
         vm.SelectedStep = step;
         var sourceLane = vm.AudioLanes[0];
         var targetLane = vm.AudioLanes[1];
         var audio = new AudioClip { StartMs = 500, DurationMs = 100, FilePath = "fixture.wav" };
         sourceLane.Clips.Add(audio);
+        var libraryItem = new SequenceLibraryItem();
+
+        void AssertPersistentCommands(bool expected)
+        {
+            Assert.Equal(expected, vm.InsertGestureCommand.CanExecute(1));
+            Assert.Equal(expected, vm.NudgeStartForwardCommand.CanExecute(null));
+            Assert.Equal(expected, vm.NudgeStartBackwardCommand.CanExecute(null));
+            Assert.Equal(expected, vm.AddAudioLaneCommand.CanExecute(null));
+            Assert.Equal(expected, vm.DeleteAudioLaneCommand.CanExecute(sourceLane));
+            Assert.Equal(expected, vm.AddAudioClipCommand.CanExecute(sourceLane));
+            Assert.Equal(expected, vm.ReplaceAudioClipCommand.CanExecute(audio));
+            Assert.Equal(expected, vm.DeleteAudioClipCommand.CanExecute(audio));
+            Assert.Equal(expected, vm.ClearTimelineCommand.CanExecute(null));
+            Assert.Equal(expected, vm.DeleteStepCommand.CanExecute(step));
+            Assert.Equal(expected, vm.DuplicateStepCommand.CanExecute(step));
+            Assert.Equal(expected, vm.LoadFromLibraryCommand.CanExecute(libraryItem));
+            Assert.Equal(expected, vm.DeleteFromLibraryCommand.CanExecute(libraryItem));
+            Assert.Equal(expected, vm.ImportCommand.CanExecute(null));
+        }
+
+        void AssertInspectionAndRuntimeControlsRemainAvailable()
+        {
+            Assert.True(vm.ArmTrackCommand.CanExecute(vm.Tracks[0]));
+            Assert.True(vm.ToggleMuteCommand.CanExecute(vm.Tracks[0]));
+            Assert.True(vm.ExportCommand.CanExecute(null));
+        }
+
+        void AssertDirectMutationGuards()
+        {
+            var originalTarget = step.Target;
+            var originalStepCount = vm.Steps.Count;
+            vm.InsertGestureAt(3, vm.Tracks[0], 200);
+            vm.MoveAudioClipToLane(audio, targetLane);
+            vm.SelectedStepTrack = vm.Tracks.Single(t => t.IsBroadcast);
+            Assert.Equal(originalStepCount, vm.Steps.Count);
+            Assert.Equal(originalTarget, step.Target);
+            Assert.Contains(audio, sourceLane.Clips);
+            Assert.DoesNotContain(audio, targetLane.Clips);
+        }
 
         Assert.True(vm.CanEditSequence);
-        Assert.True(vm.InsertGestureCommand.CanExecute(1));
+        AssertPersistentCommands(expected: true);
+        AssertInspectionAndRuntimeControlsRemainAvailable();
         vm.PlayCommand.Execute(null);
 
         Assert.False(vm.CanEditSequence);
-        Assert.False(vm.InsertGestureCommand.CanExecute(1));
-        Assert.False(vm.NudgeStartForwardCommand.CanExecute(null));
-        Assert.False(vm.NudgeStartBackwardCommand.CanExecute(null));
-        Assert.False(vm.AddAudioLaneCommand.CanExecute(null));
-        Assert.False(vm.DeleteAudioLaneCommand.CanExecute(sourceLane));
-        Assert.False(vm.AddAudioClipCommand.CanExecute(sourceLane));
-        Assert.False(vm.ReplaceAudioClipCommand.CanExecute(audio));
-        Assert.False(vm.DeleteAudioClipCommand.CanExecute(audio));
-        Assert.False(vm.ClearTimelineCommand.CanExecute(null));
-        Assert.False(vm.DeleteStepCommand.CanExecute(step));
-        Assert.False(vm.DuplicateStepCommand.CanExecute(step));
-        Assert.False(vm.LoadFromLibraryCommand.CanExecute(new SequenceLibraryItem()));
-        Assert.False(vm.ImportCommand.CanExecute(null));
-        vm.InsertGestureAt(3, vm.Tracks[0], 200);
-        vm.MoveAudioClipToLane(audio, targetLane);
-        Assert.Single(vm.Steps);
-        Assert.Contains(audio, sourceLane.Clips);
-        Assert.DoesNotContain(audio, targetLane.Clips);
+        AssertPersistentCommands(expected: false);
+        AssertInspectionAndRuntimeControlsRemainAvailable();
+        AssertDirectMutationGuards();
 
         vm.PauseCommand.Execute(null);
         Assert.True(vm.IsPaused);
         Assert.False(vm.CanEditSequence);
-        Assert.False(vm.DuplicateStepCommand.CanExecute(step));
+        AssertPersistentCommands(expected: false);
+        AssertInspectionAndRuntimeControlsRemainAvailable();
+        AssertDirectMutationGuards();
 
         vm.StopCommand.Execute(null);
         Assert.True(vm.CanEditSequence);
-        Assert.True(vm.InsertGestureCommand.CanExecute(1));
-        Assert.True(vm.NudgeStartForwardCommand.CanExecute(null));
-        Assert.True(vm.NudgeStartBackwardCommand.CanExecute(null));
-        Assert.True(vm.AddAudioLaneCommand.CanExecute(null));
-        Assert.True(vm.DeleteAudioLaneCommand.CanExecute(sourceLane));
-        Assert.True(vm.AddAudioClipCommand.CanExecute(sourceLane));
-        Assert.True(vm.ReplaceAudioClipCommand.CanExecute(audio));
-        Assert.True(vm.DeleteAudioClipCommand.CanExecute(audio));
-        Assert.True(vm.ClearTimelineCommand.CanExecute(null));
-        Assert.True(vm.DeleteStepCommand.CanExecute(step));
-        Assert.True(vm.DuplicateStepCommand.CanExecute(step));
-        Assert.True(vm.LoadFromLibraryCommand.CanExecute(new SequenceLibraryItem()));
-        Assert.True(vm.ImportCommand.CanExecute(null));
+        AssertPersistentCommands(expected: true);
+        AssertInspectionAndRuntimeControlsRemainAvailable();
+    }
+
+    [Fact]
+    public void UndoAndRedoAvailability_FollowsTheSamePlayAndPauseEditLock()
+    {
+        var protocol = new FakeSequencerProtocol();
+        protocol.Durations[2] = 100;
+        var scheduler = new FakePlaybackTimerScheduler();
+        using var vm = CreateViewModel(protocol, scheduler);
+        vm.Steps.Add(new SequenceStep { StartMs = 100, Target = 0xFFFF, AnimId = 2 });
+        vm.BeginStepDrag(); // creates a valid Undo snapshot without opening any UI
+
+        Assert.True(vm.UndoCommand.CanExecute(null));
+        vm.PlayCommand.Execute(null);
+        Assert.False(vm.UndoCommand.CanExecute(null));
+        vm.PauseCommand.Execute(null);
+        Assert.False(vm.UndoCommand.CanExecute(null));
+        vm.StopCommand.Execute(null);
+        Assert.True(vm.UndoCommand.CanExecute(null));
+
+        vm.UndoCommand.Execute(null); // creates a valid Redo snapshot
+        Assert.True(vm.RedoCommand.CanExecute(null));
+        vm.PlayCommand.Execute(null);
+        Assert.False(vm.RedoCommand.CanExecute(null));
+        vm.PauseCommand.Execute(null);
+        Assert.False(vm.RedoCommand.CanExecute(null));
+        vm.StopCommand.Execute(null);
+        Assert.True(vm.RedoCommand.CanExecute(null));
     }
 
     [Fact]

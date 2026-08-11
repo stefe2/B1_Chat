@@ -68,7 +68,7 @@ The dashboard is updated whenever an item changes state.
 
 | Epic | Description | Required items complete | Deferred ideas complete |
 |---|---|---:|---:|
-| A | Playback isolation and cancellation | 6 / 8 | — |
+| A | Playback isolation and cancellation | 7 / 8 | — |
 | B | Infinite gestures and Stop/Pause semantics | 5 / 6 | 0 / 1 |
 | C | Dirty, Undo/Redo and editing transactions | 0 / 8 | 0 / 1 |
 | D | Import, export and local library | 0 / 8 | 0 / 1 |
@@ -107,7 +107,7 @@ The dashboard is updated whenever an item changes state.
 - **Validation:** stress test rapid Play/Stop/Play and Loop transitions; no event
   from an earlier generation reaches the protocol or audio fake.
 
-### [~] SEQ-A03 — Define and enforce the editing policy during playback
+### [x] SEQ-A03 — Define and enforce the editing policy during playback
 
 - **Priority:** P0
 - **Problem:** Clear, Import, library Load, deletion, and inspector edits can
@@ -119,6 +119,26 @@ The dashboard is updated whenever an item changes state.
   may remain available.
 - **Validation:** manual UI matrix covers every editing command in stopped,
   playing, and paused states.
+- **Implemented:** persistent document and Local Library mutations are enabled
+  only in `Stopped`. Relay-command `CanExecute`, direct ViewModel guards,
+  inspector/container disabling and pointer-drag rechecks all derive from
+  `CanEditSequence`; the transport displays `EDIT LOCKED` and disabled controls
+  explain that Stop is required. A transport transition during a captured drag
+  now releases transient visuals without applying a late placement change.
+- **Policy/validation matrix:**
+
+  | Operation group | Stopped | Playing | Paused |
+  |---|---|---|---|
+  | Insert, drag, retarget, inspector, duplicate/delete, Loop | edit | locked | locked |
+  | Audio lane/clip edits, Undo/Redo, Import, Clear | edit | locked | locked |
+  | Local Library Load/Delete | edit | locked | locked |
+  | Select/inspect, arm track, dynamic track mute | allowed | allowed | allowed |
+  | Zoom, Snap, Fit, scroll and Export snapshot | allowed | allowed | allowed |
+
+  The compiled XAML bindings/tooltips and context-menu command paths were
+  reviewed against this matrix. The automated three-state command/guard matrix,
+  including separately available Undo and Redo histories, passes within the
+  complete 76/76 WPF suite.
 
 ### [x] SEQ-A04 — Evaluate track mute at dispatch time
 
@@ -1331,3 +1351,4 @@ Append concise evidence when closing items; do not paste full build logs.
 | 2026-08-11 | SEQ-B07 | Defined and implemented Normal Stop, transient centered/servo-powered Safe Stop, and immediate persistent fleet Servo OFF Emergency Stop. Added transport buttons, old-firmware Safe Stop fallback, stale-callback cancellation, mesh visualization and operator documentation. WPF suite passed 64/64. Master `8460B615` and slaves `D6BF5A99` passed USB/OTA deployment, headless Safe/Emergency validation 10/10 (`b1-anim-exec-20260811-153345.json`), strict regression 32/32 with 15 s stable mesh (`b1-self-test-20260811-153458.json`) and read-only preflight 6/6 (`b1-sequencer-bench-20260811-153504.json`). Final servos and automatic animations are off on all three droids. |
 | 2026-08-11 | SEQ-B03 | Formalized Pause as PC-transport-only: future dispatch/audio/playhead pause, dispatched finite motion continues, infinite leases remain renewed, reports keep updating, and Resume does not replay consumed events. Added the persistent `PAUSED · DROID MOTION CONTINUES` transport warning and aligned Help/tooltips. WPF suite passed 65/65, including finite completion during Pause plus existing boundary, repeated Resume and infinite-lease cases; offline regression passed 17/17 (`b1-self-test-20260811-154128.json`). No firmware change or reflash was required. |
 | 2026-08-11 | SEQ-A06 | Replaced independently writable transport booleans with the guarded `Stopped`/`Playing`/`Paused` state machine and one shared pass-start path. All command/badge/edit-lock flags derive from that state; partial scheduler startup failure now rolls back cleanly. The nine-path transition table and UI notification check passed within the full WPF suite at 75/75; offline regression passed 17/17 (`b1-self-test-20260811-174442.json`). No firmware change or hardware run was required. |
+| 2026-08-11 | SEQ-A03 | Closed the Play/Pause editing policy across the complete UI surface: document and Local Library mutations lock, while inspection, arm, runtime mute, viewport tools and Export remain available. Added late-drag transition guards, disabled-control guidance and a three-state command/direct-guard matrix including Undo/Redo; WPF suite passed 76/76 and offline regression passed 17/17 (`b1-self-test-20260811-175250.json`). No firmware change or hardware run was required. |

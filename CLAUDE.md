@@ -251,6 +251,12 @@ states cannot be constructed. Play, Resume and Loop also share one pass-start
 path; a scheduler startup failure invalidates the generation and returns to
 Stopped after disposing partial timers/audio.
 
+Persistent Sequencer editing is permitted only in `Stopped`: timeline content,
+Loop, inspector fields, audio lanes/clips, Undo/Redo, Import/Clear, and Local
+Library Load/Delete all lock during Play and Pause. Selection/inspection, track
+arming, runtime track mute, zoom/Snap/Fit/scroll, and Export remain available
+because they do not change the immutable pass being performed.
+
 **No audio in this protocol** (fw 1.6.0): `volume`/`playTrack` (console→master)
 and `config`'s `volume` field were removed when the DFPlayer was retired —
 see the Progress log.
