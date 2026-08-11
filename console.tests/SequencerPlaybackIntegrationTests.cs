@@ -593,11 +593,122 @@ public sealed class SequencerPlaybackIntegrationTests
         Assert.True(vm.IsPlaying);
     }
 
+    [Fact]
+    public void MissingTargetReport_ExpiresAsUnconfirmedWithoutStoppingPlayback()
+    {
+        var protocol = new FakeSequencerProtocol();
+        protocol.Durations[2] = 500;
+        protocol.Droids.Add(new Droid { Id = 0x1234, Online = true });
+        var scheduler = new FakePlaybackTimerScheduler();
+        var executionScheduler = new FakePlaybackTimerScheduler();
+        using var vm = CreateViewModel(protocol, scheduler, executionScheduler: executionScheduler);
+        var step = new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = 2 };
+        vm.Steps.Add(step);
+
+        vm.PlayCommand.Execute(null);
+        scheduler.Entries[0].Invoke();
+        Assert.Equal(2, executionScheduler.Entries.Count);
+        Assert.Equal(1500, executionScheduler.Entries[0].DueTimeMs);
+
+        executionScheduler.Entries[0].Invoke();
+
+        Assert.Equal("UNCONF", step.ExecutionSummary);
+        Assert.Equal("timeout", step.ExecutionTone);
+        Assert.Contains("4660: no start report", step.ExecutionDetail);
+        Assert.True(vm.IsPlaying);
+    }
+
+    [Fact]
+    public void PartialBroadcastTimeout_RecoversWhenTheMissingReportArrivesLate()
+    {
+        var protocol = new FakeSequencerProtocol();
+        protocol.Durations[3] = 500;
+        foreach (var id in new ushort[] { 100, 200, 300 })
+            protocol.Droids.Add(new Droid { Id = id, Online = true });
+        var scheduler = new FakePlaybackTimerScheduler();
+        var executionScheduler = new FakePlaybackTimerScheduler();
+        using var vm = CreateViewModel(protocol, scheduler, executionScheduler: executionScheduler);
+        var step = new SequenceStep { StartMs = 20, Target = ushort.MaxValue, AnimId = 3 };
+        vm.Steps.Add(step);
+
+        vm.PlayCommand.Execute(null);
+        scheduler.Entries[0].Invoke();
+        var requestId = Assert.Single(protocol.Sent).RequestId;
+        protocol.RaiseAnimExecution(requestId, 100, 3, "started");
+        protocol.RaiseAnimExecution(requestId, 200, 3, "started");
+
+        executionScheduler.Entries[0].Invoke();
+        Assert.Equal("MISS 1/3", step.ExecutionSummary);
+        Assert.Contains("300: no start report", step.ExecutionDetail);
+
+        protocol.RaiseAnimExecution(requestId, 300, 3, "started");
+        Assert.Equal("ACK 3/3", step.ExecutionSummary);
+        Assert.Equal("started", step.ExecutionTone);
+        Assert.DoesNotContain("no start report", step.ExecutionDetail);
+    }
+
+    [Fact]
+    public void StartedGesture_ExpiresAtCompletionDeadlineAndRecoversFromLateCompletion()
+    {
+        var protocol = new FakeSequencerProtocol();
+        protocol.Durations[2] = 500;
+        protocol.Droids.Add(new Droid { Id = 0x1234, Online = true });
+        var scheduler = new FakePlaybackTimerScheduler();
+        var executionScheduler = new FakePlaybackTimerScheduler();
+        using var vm = CreateViewModel(protocol, scheduler, executionScheduler: executionScheduler);
+        var step = new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = 2 };
+        vm.Steps.Add(step);
+
+        vm.PlayCommand.Execute(null);
+        scheduler.Entries[0].Invoke();
+        var requestId = Assert.Single(protocol.Sent).RequestId;
+        protocol.RaiseAnimExecution(requestId, 0x1234, 2, "started");
+        Assert.Equal(2000, executionScheduler.Entries[1].DueTimeMs);
+
+        executionScheduler.Entries[1].Invoke();
+        Assert.Equal("TIMEOUT", step.ExecutionSummary);
+        Assert.Contains("4660: completion timeout", step.ExecutionDetail);
+
+        protocol.RaiseAnimExecution(requestId, 0x1234, 2, "completed");
+        Assert.Equal("DONE", step.ExecutionSummary);
+        Assert.Equal("completed", step.ExecutionTone);
+        Assert.DoesNotContain("completion timeout", step.ExecutionDetail);
+    }
+
+    [Fact]
+    public void LoopingGesture_OnlyRequiresStartAndDelayedStartCannotRegressCompletion()
+    {
+        var protocol = new FakeSequencerProtocol();
+        protocol.Durations[17] = 4000;
+        protocol.Droids.Add(new Droid { Id = 0x1234, Online = true });
+        var scheduler = new FakePlaybackTimerScheduler();
+        var executionScheduler = new FakePlaybackTimerScheduler();
+        using var vm = CreateViewModel(protocol, scheduler, executionScheduler: executionScheduler);
+        var step = new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = 17 };
+        vm.Steps.Add(step);
+
+        vm.PlayCommand.Execute(null);
+        scheduler.Entries[0].Invoke();
+        var requestId = Assert.Single(protocol.Sent).RequestId;
+        Assert.Single(executionScheduler.Entries);
+
+        protocol.RaiseAnimExecution(requestId, 0x1234, 17, "started");
+        executionScheduler.Entries[0].Invoke();
+        Assert.Equal("START", step.ExecutionSummary);
+
+        protocol.RaiseAnimExecution(requestId, 0x1234, 17, "interrupted");
+        protocol.RaiseAnimExecution(requestId, 0x1234, 17, "started");
+        Assert.Equal("STOP", step.ExecutionSummary);
+        Assert.Equal("interrupted", step.ExecutionTone);
+    }
+
     private static SequencerViewModel CreateViewModel(
         FakeSequencerProtocol protocol,
         FakePlaybackTimerScheduler scheduler,
         IPlaybackClock? clock = null,
-        FakeAudioPlayer? audio = null) =>
-        new(protocol, new SettingsService(), audio ?? new FakeAudioPlayer(), scheduler, clock);
+        FakeAudioPlayer? audio = null,
+        FakePlaybackTimerScheduler? executionScheduler = null) =>
+        new(protocol, new SettingsService(), audio ?? new FakeAudioPlayer(), scheduler, clock,
+            executionScheduler ?? new FakePlaybackTimerScheduler());
 
 }

@@ -199,7 +199,10 @@ Invoke-Test "Animation execution-report pipeline present" {
     Assert-Source "src/serial_console.cpp" 'doc\["evt"\] = "animExec"' "serial execution event missing"
     Assert-Source "console/Services/ProtocolClient.cs" "AnimExecutionReceived" "console execution parser missing"
     Assert-Source "console/ViewModels/SequencerViewModel.cs" "TrackExecution" "Sequencer execution aggregation missing"
-    "non-blocking started/completed/interrupted/rejected reporting detected"
+    Assert-Source "console/ViewModels/SequencerViewModel.cs" "ExecutionStartTimeoutMs" "execution start timeout missing"
+    Assert-Source "console/ViewModels/SequencerViewModel.cs" '"TIMEOUT"' "execution completion timeout state missing"
+    Assert-Source "console/ViewModels/SequencerViewModel.cs" '"UNCONF"' "unconfirmed execution state missing"
+    "non-blocking lifecycle reporting and missing-report expiration detected"
 }
 
 Invoke-Test "Boot sequence randomization present" {

@@ -761,7 +761,7 @@ The dashboard is updated whenever an item changes state.
   authored times; UI shows compensated timing and export preserves settings.
 - **Validation:** measured fleet synchronization comparison.
 
-### [ ] SEQ-G11 — Monitor command delivery and runtime execution health
+### [~] SEQ-G11 — Monitor command delivery and runtime execution health
 
 - **Priority:** P1
 - **Problem:** writing an `anim` command to serial is not proof that the target
@@ -775,6 +775,14 @@ The dashboard is updated whenever an item changes state.
   missing acknowledgements warn, pause or stop a performance.
 - **Validation:** protocol fake plus hardware tests for success, target offline,
   mesh loss, duplicate/delayed acknowledgement, disconnect and timeout.
+- **Implemented:** target-execution correlation now reports per-droid
+  started/completed/interrupted/rejected states. Missing starts expire after
+  1.5 s; missing finite-gesture completion expires after the reported duration
+  plus 1.5 s. Late reports recover warning states and delayed START duplicates
+  cannot regress a terminal report. Warnings remain observational and never
+  pause/stop playback. Remaining work: distinguish serial write/master receipt
+  from target execution and exercise offline/weak-link/disconnect timeouts on
+  hardware.
 
 ### [ ] SEQ-G12 — Analyze mechanical workload before playback
 
@@ -1247,7 +1255,7 @@ options.
 | DEC-014 | Deferred | First external integration target: MIDI, OSC, DMX, physical remote, or timecode? |
 | DEC-015 | Open | Infinite-gesture lease duration, renewal interval and safe expiry state? |
 | DEC-016 | Open | Mechanical policy for Safe Stop versus Emergency Stop and servo power? |
-| DEC-017 | Open | Required acknowledgement depth: master receipt, mesh relay, or target execution? |
+| DEC-017 | Resolved 2026-08-11 | Target execution is the required success signal. Missing reports warn but do not gate playback; serial-write/master-relay stages may be added diagnostically. |
 | DEC-018 | Deferred | Published Show revision naming, retention and rollback policy? |
 
 ## Completion evidence log
@@ -1267,3 +1275,4 @@ Append concise evidence when closing items; do not paste full build logs.
 | 2026-08-11 | SEQ-H07 (in progress) | Master USB flash succeeded; two slave OTA payloads completed at 5128/5128 chunks and stayed healthy beyond 20 s. Same-version 1.9.0 falsely yields `rolledBack`, exposing a version-only verdict limitation. Active serial/mesh bench passed 15/15, then strict serial regression passed 20/20. Final state: master `59/60/50`, slaves `50/60/50`, original calibrations, servos/auto-animation off. Reports `b1-sequencer-bench-20260811-092352.json` and `b1-self-test-20260811-092501.json`. Physical movement/skew, WPF+audio and disconnect/weak-link observations remain. |
 | 2026-08-11 | Build ID / SEQ-H07 | Added deterministic 8-hex firmware identities throughout PlatformIO, heartbeat/registry, serial protocol, WPF inventory/status, OTA verdicts and release manifests. The new master accepted both legacy slaves during the rolling upgrade; same-version OTA then returned `ok=true` for 4216 and 34880 with master build `4DAD66EF` and slave build `72349AFE`. Read-only bench passed 6/6 and strict serial regression passed 22/22, including 15 s stable mesh observation. Reports `b1-sequencer-bench-20260811-101337.json` and `b1-self-test-20260811-101406.json`. |
 | 2026-08-11 | Execution telemetry / SEQ-H07 | Added backward-compatible, non-blocking `MSG_ANIM_EXEC` lifecycle reports correlated through the existing mesh sequence and console `requestId`; WPF clips aggregate started/completed/interrupted/rejected per droid. Master `00FD6D8C` plus slaves `65440D15` passed headless targeted/broadcast/TALK→IDLE lifecycle 5/5, WPF tests 35/35, offline regression 17/17 and strict hardware regression 24/24. Final servo/auto-animation state is off on all three. Reports `b1-anim-exec-20260811-133214.json`, `b1-self-test-20260811-131949.json`, `b1-sequencer-bench-20260811-133234.json`, `b1-self-test-20260811-133306.json`. Physical motion/skew, WPF+audio, disconnect and weak-link tests remain deferred until operator/hardware availability. |
+| 2026-08-11 | SEQ-G11 (in progress) | Added separate non-blocking start/completion deadlines, `UNCONF`/`MISS`/`TIMEOUT` clip states, late-report recovery, terminal-state duplicate protection and looping-gesture semantics. Headless WPF suite passed 39/39; offline regression passed 17/17 with report `b1-self-test-20260811-135225.json`. Serial-write/master-receipt staging and hardware loss scenarios remain. |

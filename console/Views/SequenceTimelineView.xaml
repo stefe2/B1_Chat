@@ -741,6 +741,9 @@
                                                                     <DataTrigger Binding="{Binding ExecutionTone}" Value="rejected">
                                                                         <Setter Property="Foreground" Value="#FF8B1E1E" />
                                                                     </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding ExecutionTone}" Value="timeout">
+                                                                        <Setter Property="Foreground" Value="#FF9A3F16" />
+                                                                    </DataTrigger>
                                                                 </Style.Triggers>
                                                             </Style>
                                                         </TextBlock.Style>

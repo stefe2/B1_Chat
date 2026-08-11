@@ -55,7 +55,9 @@ A single repo, two halves:
   Play/Pause/Resume/Loop, a local library, and `.b1seq.json` export/import.
 - **Execution feedback**: tracked Sequencer gestures report software lifecycle
   per droid (started, completed, interrupted, or rejected) without blocking the
-  timeline; broadcast clips aggregate the fleet's replies directly in the UI.
+  timeline; broadcast clips aggregate the fleet's replies directly in the UI,
+  and missing start/completion reports expire visibly instead of remaining
+  indefinitely at `SENT`.
 - **Firmware**: USB flashing (app-only or full erase+flash for a virgin
   board) and OTA updates over the mesh, both with GitHub-release
   auto-discovery and SHA-256 verification.

@@ -43,10 +43,24 @@ than silently continuing a partial audio-only performance. Closing the console
 does the same cleanup. A deliberate audio-only Dry Run mode is a future feature,
 not an automatic fallback for a lost master.
 
-> **Important:** gestures are fire-and-forget commands. Pause and Stop cannot
-> freeze or retract a gesture already sent to a droid. A one-shot gesture finishes
-> naturally. A looping `POWER_DOWN` or `TALK` gesture continues until another
-> gesture replaces it or Servos is disabled.
+> **Important:** Pause and Stop cannot freeze or retract a gesture already sent
+> to a droid. A one-shot gesture finishes naturally. A looping `POWER_DOWN` or
+> `TALK` gesture continues until another gesture replaces it or Servos is
+> disabled.
+
+Each gesture clip shows non-blocking execution feedback from its target. `SENT`
+means the command was issued, `START`/`ACK n/N` means one or more software
+animation engines started it, and `DONE`, `STOP`, or `REJECT` reports the final
+result. If no start report arrives within 1.5 seconds, the clip changes to
+`UNCONF` (or `MISS n/N` for a broadcast). A finite gesture that started but did
+not report completion by its expected duration plus 1.5 seconds changes to
+`TIMEOUT`. These are warnings: they never pause the timeline. A delayed valid
+report updates the clip again. Hover over the clip for per-droid details.
+
+`POWER_DOWN` and `TALK` loop indefinitely, so their healthy state remains
+`START`; they only become terminal when another gesture interrupts them or the
+firmware rejects the command. Execution feedback confirms the firmware
+animation engine, not physical servo motion.
 
 A muted droid track is skipped when its scheduled start arrives. If the command
 was already sent before you mute or pause, the target continues it.

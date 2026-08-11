@@ -190,9 +190,13 @@ older slaves. New droids report when the software animation engine starts,
 finishes, is interrupted, or refuses the command because servos are disabled;
 broadcast replies are deterministically jittered to avoid a response burst.
 The timeline aggregates reports per online target (`ACK 2/3`, `DONE 3/3`,
-`REJ 1/3`). A missing report leaves the clip unconfirmed but cannot delay the
-show. This proves firmware execution, not physical servo movement or mechanical
-inter-droid skew.
+`REJ 1/3`). A missing start report expires after 1.5 s (`UNCONF`/`MISS n/N`);
+finite gestures that start but do not send a terminal report expire after their
+reported duration plus 1.5 s (`TIMEOUT`). Late reports recover the display, and
+delayed duplicate `started` reports cannot regress a terminal state. These
+warnings never delay or stop the show. Looping POWER_DOWN/TALK require only a
+start report because completion requires a later interruption. This proves
+firmware execution, not physical servo movement or mechanical inter-droid skew.
 
 **No audio in this protocol** (fw 1.6.0): `volume`/`playTrack` (console→master)
 and `config`'s `volume` field were removed when the DFPlayer was retired —
@@ -372,6 +376,10 @@ Full detailed history: see [PROGRESS-ARCHIVE.md](PROGRESS-ARCHIVE.md).
   broadcast replies are jittered and legacy slaves still execute normally.
   A no-hardware-slave bench passed targeted, broadcast and TALK→IDLE lifecycle
   checks 5/5, followed by 24/24 strict serial checks.
+- Sequencer execution correlation now expires missing start and finite-gesture
+  completion reports without blocking transport. Timeline clips distinguish
+  `UNCONF`/`MISS` from `TIMEOUT`, accept late recovery, and ignore delayed START
+  regressions after a terminal report; the headless suite passes 39/39.
 - Firmware identity now has two layers: human `FW_VERSION` and an automatic,
   deterministic 8-hex Build ID derived from normalized firmware source,
   PlatformIO configuration and role. It is generated before every build,

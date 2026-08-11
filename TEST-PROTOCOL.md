@@ -20,7 +20,8 @@ enables/disables a servo, previews a position, or starts an animation.
   changing `console/build.number`; the suite covers immutable playback plans,
   restart/cancellation, Loop boundaries, Pause/Resume edges, mute, disconnect,
   natural end, repeated Stop, cleanup, numeric duration limits and aggregation
-  of per-droid animation execution reports;
+  of per-droid animation execution reports, including missing-start and
+  missing-completion timeouts, late recovery and delayed duplicate reports;
 - runs `git diff --check`;
 - verifies that the callback-to-loop mesh inbox is present;
 - verifies the per-droid animation-parameter store and targeted protocol;

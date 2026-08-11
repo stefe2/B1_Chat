@@ -20,8 +20,11 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     private readonly LibraryService _library = new();
     private readonly ISequencerAudioPlayer _audioPlayer;
     private readonly IPlaybackTimerScheduler _timerScheduler;
+    private readonly IPlaybackTimerScheduler _executionTimerScheduler;
     private readonly IPlaybackClock _playbackClock;
     private const int HistoryMax = 50;
+    private const int ExecutionStartTimeoutMs = 1500;
+    private const int ExecutionCompletionGraceMs = 1500;
     private const string AudioFileFilter = "Audio files (*.mp3;*.wav;*.wma;*.ogg)|*.mp3;*.wav;*.wma;*.ogg|All files (*.*)|*.*";
 
     public ObservableCollection<SequenceLibraryItem> Library { get; } = new();
@@ -143,9 +146,16 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
 
     private sealed class ExecutionTracker
     {
+        public required uint RequestId { get; init; }
         public required SequenceStep Step { get; init; }
         public required HashSet<ushort> ExpectedDroids { get; init; }
+        public required int AnimId { get; init; }
+        public required bool IsBroadcast { get; init; }
         public Dictionary<ushort, AnimExecutionReport> Reports { get; } = new();
+        public IDisposable? StartDeadline { get; set; }
+        public IDisposable? CompletionDeadline { get; set; }
+        public bool StartDeadlineExpired { get; set; }
+        public bool CompletionDeadlineExpired { get; set; }
     }
 
     // Persistent sequence edits are locked for the whole active pass, including Pause. The
@@ -181,12 +191,14 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         SettingsService settings,
         ISequencerAudioPlayer? audioPlayer = null,
         IPlaybackTimerScheduler? timerScheduler = null,
-        IPlaybackClock? playbackClock = null)
+        IPlaybackClock? playbackClock = null,
+        IPlaybackTimerScheduler? executionTimerScheduler = null)
     {
         _protocol = protocol;
         _settings = settings;
         _audioPlayer = audioPlayer ?? new AudioPlaybackService();
         _timerScheduler = timerScheduler ?? new ThreadPoolPlaybackTimerScheduler();
+        _executionTimerScheduler = executionTimerScheduler ?? new ThreadPoolPlaybackTimerScheduler();
         _playbackClock = playbackClock ?? new StopwatchPlaybackClock();
         _protocol.DroidsChanged += RebuildTracks;
         _protocol.AnimDurationsReceived += OnAnimDurationsReceived;
@@ -208,6 +220,8 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
 
     private void ResetExecutionTracking()
     {
+        foreach (var tracker in _executionTrackers.Values)
+            DisposeExecutionDeadlines(tracker);
         _executionTrackers.Clear();
         foreach (var step in Steps)
         {
@@ -221,27 +235,94 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     {
         if (gesture.SourceOrder < 0 || gesture.SourceOrder >= Steps.Count) return;
         var step = Steps[gesture.SourceOrder];
-        var expected = gesture.Target == ushort.MaxValue
+        var isBroadcast = gesture.Target == ushort.MaxValue;
+        var expected = isBroadcast
             ? _protocol.Droids.Where(d => d.Online).Select(d => d.Id).ToHashSet()
             : new HashSet<ushort> { gesture.Target };
-        _executionTrackers[requestId] = new ExecutionTracker
+        var tracker = new ExecutionTracker
         {
+            RequestId = requestId,
             Step = step,
             ExpectedDroids = expected,
+            AnimId = gesture.AnimId,
+            IsBroadcast = isBroadcast,
         };
+        _executionTrackers[requestId] = tracker;
         step.ExecutionSummary = expected.Count > 1 ? $"SENT 0/{expected.Count}" : "SENT";
         step.ExecutionDetail = $"Request {requestId}: awaiting execution report.";
         step.ExecutionTone = "sent";
+
+        tracker.StartDeadline = _executionTimerScheduler.Schedule(
+            ExecutionStartTimeoutMs,
+            () => RunOnUiThread(() => ExpireExecutionDeadline(requestId, completion: false)));
+
+        // POWER_DOWN and TALK deliberately loop until another gesture interrupts them. Once
+        // their START arrives, absence of COMPLETED is therefore healthy rather than a timeout.
+        if (gesture.AnimId is not (16 or 17))
+        {
+            var completionDueMs = (int)Math.Min(
+                int.MaxValue, Math.Max(ExecutionStartTimeoutMs,
+                    (long)Math.Max(0, gesture.DurationMs) + ExecutionCompletionGraceMs));
+            tracker.CompletionDeadline = _executionTimerScheduler.Schedule(
+                completionDueMs,
+                () => RunOnUiThread(() => ExpireExecutionDeadline(requestId, completion: true)));
+        }
     }
 
     private void OnAnimExecutionReceived(AnimExecutionReport report) => RunOnUiThread(() =>
     {
         if (!_executionTrackers.TryGetValue(report.RequestId, out var tracker)) return;
+        if (report.AnimId != tracker.AnimId || !IsKnownExecutionPhase(report.Phase)) return;
+        if (!tracker.IsBroadcast && !tracker.ExpectedDroids.Contains(report.DroidId)) return;
         // A broadcast can discover a droid that came online after dispatch.
-        tracker.ExpectedDroids.Add(report.DroidId);
+        if (tracker.IsBroadcast) tracker.ExpectedDroids.Add(report.DroidId);
+
+        // A delayed duplicate START must never replace COMPLETED/INTERRUPTED/REJECTED and make
+        // a finished clip look active again. The first terminal report is authoritative.
+        if (tracker.Reports.TryGetValue(report.DroidId, out var previous)
+            && IsTerminalExecutionPhase(previous.Phase))
+            return;
         tracker.Reports[report.DroidId] = report;
         UpdateExecutionSummary(tracker);
+        if (AllExpectedDroidsTerminal(tracker)) DisposeExecutionDeadlines(tracker);
     });
+
+    private void ExpireExecutionDeadline(uint requestId, bool completion)
+    {
+        if (!_executionTrackers.TryGetValue(requestId, out var tracker)) return;
+        if (completion)
+        {
+            tracker.CompletionDeadlineExpired = true;
+            tracker.CompletionDeadline?.Dispose();
+            tracker.CompletionDeadline = null;
+        }
+        else
+        {
+            tracker.StartDeadlineExpired = true;
+            tracker.StartDeadline?.Dispose();
+            tracker.StartDeadline = null;
+        }
+        UpdateExecutionSummary(tracker);
+    }
+
+    private static bool IsKnownExecutionPhase(string phase) =>
+        phase is "started" or "completed" or "interrupted" or "rejected";
+
+    private static bool IsTerminalExecutionPhase(string phase) =>
+        phase is "completed" or "interrupted" or "rejected";
+
+    private static bool AllExpectedDroidsTerminal(ExecutionTracker tracker) =>
+        tracker.ExpectedDroids.Count > 0
+        && tracker.ExpectedDroids.All(id => tracker.Reports.TryGetValue(id, out var report)
+            && IsTerminalExecutionPhase(report.Phase));
+
+    private static void DisposeExecutionDeadlines(ExecutionTracker tracker)
+    {
+        tracker.StartDeadline?.Dispose();
+        tracker.CompletionDeadline?.Dispose();
+        tracker.StartDeadline = null;
+        tracker.CompletionDeadline = null;
+    }
 
     private static void UpdateExecutionSummary(ExecutionTracker tracker)
     {
@@ -251,6 +332,14 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         var interrupted = reports.Count(r => r.Phase == "interrupted");
         var completed = reports.Count(r => r.Phase == "completed");
         var confirmed = reports.Count(r => r.Phase is "started" or "completed" or "interrupted");
+        var missing = tracker.ExpectedDroids
+            .Where(id => !tracker.Reports.ContainsKey(id))
+            .OrderBy(id => id)
+            .ToArray();
+        var awaitingCompletion = tracker.ExpectedDroids
+            .Where(id => tracker.Reports.TryGetValue(id, out var report) && report.Phase == "started")
+            .OrderBy(id => id)
+            .ToArray();
 
         if (rejected > 0)
         {
@@ -267,15 +356,37 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
             tracker.Step.ExecutionSummary = expected == 1 ? "STOP" : $"STOP {interrupted}/{expected}";
             tracker.Step.ExecutionTone = "interrupted";
         }
+        else if (tracker.CompletionDeadlineExpired && awaitingCompletion.Length > 0)
+        {
+            var unresolved = awaitingCompletion.Length + missing.Length;
+            tracker.Step.ExecutionSummary = expected == 1 ? "TIMEOUT" : $"TIMEOUT {unresolved}/{expected}";
+            tracker.Step.ExecutionTone = "timeout";
+        }
+        else if ((tracker.StartDeadlineExpired || tracker.CompletionDeadlineExpired)
+                 && (missing.Length > 0 || tracker.ExpectedDroids.Count == 0))
+        {
+            tracker.Step.ExecutionSummary = expected == 1 ? "UNCONF" : $"MISS {missing.Length}/{expected}";
+            tracker.Step.ExecutionTone = "timeout";
+        }
         else
         {
-            tracker.Step.ExecutionSummary = expected == 1 ? "START" : $"ACK {confirmed}/{expected}";
-            tracker.Step.ExecutionTone = "started";
+            tracker.Step.ExecutionSummary = reports.Length == 0
+                ? (expected == 1 ? "SENT" : $"SENT 0/{expected}")
+                : (expected == 1 ? "START" : $"ACK {confirmed}/{expected}");
+            tracker.Step.ExecutionTone = reports.Length == 0 ? "sent" : "started";
         }
 
-        tracker.Step.ExecutionDetail = string.Join("; ", reports
+        var details = reports
             .OrderBy(r => r.DroidId)
-            .Select(r => $"{r.DroidId}: {r.Phase}{(string.IsNullOrWhiteSpace(r.Reason) ? "" : $" ({r.Reason})")}"));
+            .Select(r => $"{r.DroidId}: {r.Phase}{(string.IsNullOrWhiteSpace(r.Reason) ? "" : $" ({r.Reason})")}")
+            .ToList();
+        if (tracker.StartDeadlineExpired || tracker.CompletionDeadlineExpired)
+            details.AddRange(missing.Select(id => $"{id}: no start report"));
+        if (tracker.CompletionDeadlineExpired)
+            details.AddRange(awaitingCompletion.Select(id => $"{id}: completion timeout"));
+        if (tracker.ExpectedDroids.Count == 0 && tracker.StartDeadlineExpired)
+            details.Add("no online target reported execution");
+        tracker.Step.ExecutionDetail = $"Request {tracker.RequestId}: {string.Join("; ", details)}.";
     }
 
     private void OnProtocolLinkClosed(bool unexpected) => RunOnUiThread(() =>
@@ -288,6 +399,9 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         if (_disposed) return;
         _disposed = true;
         Stop();
+        foreach (var tracker in _executionTrackers.Values)
+            DisposeExecutionDeadlines(tracker);
+        _executionTrackers.Clear();
         _protocol.DroidsChanged -= RebuildTracks;
         _protocol.AnimDurationsReceived -= OnAnimDurationsReceived;
         _protocol.AnimExecutionReceived -= OnAnimExecutionReceived;
