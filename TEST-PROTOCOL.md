@@ -21,7 +21,8 @@ enables/disables a servo, previews a position, or starts an animation.
   restart/cancellation, Loop boundaries, Pause/Resume edges, mute, disconnect,
   natural end, repeated Stop, cleanup, numeric duration limits and aggregation
   of per-droid animation execution reports, including missing-start and
-  missing-completion timeouts, late recovery and delayed duplicate reports;
+  missing-completion timeouts, late recovery, delayed duplicate reports, local
+  dispatch failures and correlated master acceptance;
 - runs `git diff --check`;
 - verifies that the callback-to-loop mesh inbox is present;
 - verifies the per-droid animation-parameter store and targeted protocol;
@@ -122,10 +123,27 @@ captured servo/auto-animation state in `finally`.
 .\tools\anim-exec-test.ps1 -ComPort COM3
 ```
 
-It requires the `animExec` capability and validates targeted finite animation
-start/completion on every slave, a broadcast where the disabled master reports
-`rejected/servosOff`, and interruption of looping TALK by tracked IDLE. It does
-not flash, alter configuration/calibration, or claim physical movement.
+It requires the `animExec` and `animAccepted` capabilities. Every tracked
+command must first be accepted by the master with the expected request, target,
+animation and mesh/local routing, then the test validates targeted finite
+animation start/completion on every slave, a broadcast where the disabled master
+reports `rejected/servosOff`, and interruption of looping TALK by tracked IDLE.
+It does not flash, alter configuration/calibration, or claim physical movement.
+
+### Delivery-stage bench run — 2026-08-11
+
+- Master `43140` flashed over USB with Build ID `9A228A09`; slaves `4216`
+  and `34880` updated by OTA to Build ID `1D787B84` with explicit
+  `otaResult ok=true` verdicts.
+- The headless execution test passed 5/5 with `animAccepted` correlation before
+  every targeted, broadcast and TALK→IDLE lifecycle check. Report:
+  `b1-anim-exec-20260811-141734.json`.
+- Strict autonomous regression passed 29/29, including both execution
+  capabilities and a stable mesh observation. Report:
+  `b1-self-test-20260811-141828.json`.
+- Read-only Sequencer preflight passed 6/6 with six directed mesh links.
+  Report: `b1-sequencer-bench-20260811-141836.json`.
+- Final inventory: master and both slaves have Servos and Auto animation off.
 
 ### Bench run — 2026-08-11
 

@@ -151,6 +151,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         public required HashSet<ushort> ExpectedDroids { get; init; }
         public required int AnimId { get; init; }
         public required bool IsBroadcast { get; init; }
+        public AnimMasterReceipt? MasterReceipt { get; set; }
         public Dictionary<ushort, AnimExecutionReport> Reports { get; } = new();
         public IDisposable? StartDeadline { get; set; }
         public IDisposable? CompletionDeadline { get; set; }
@@ -202,6 +203,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         _playbackClock = playbackClock ?? new StopwatchPlaybackClock();
         _protocol.DroidsChanged += RebuildTracks;
         _protocol.AnimDurationsReceived += OnAnimDurationsReceived;
+        _protocol.AnimMasterAccepted += OnAnimMasterAccepted;
         _protocol.AnimExecutionReceived += OnAnimExecutionReceived;
         _protocol.LinkClosed += OnProtocolLinkClosed;
         Steps.CollectionChanged += (_, _) => RebuildRulerTicks();
@@ -231,30 +233,43 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         }
     }
 
-    private void TrackExecution(uint requestId, GesturePlaybackEvent gesture)
+    private void TrackExecution(AnimDispatchResult dispatch, GesturePlaybackEvent gesture)
     {
         if (gesture.SourceOrder < 0 || gesture.SourceOrder >= Steps.Count) return;
         var step = Steps[gesture.SourceOrder];
+        if (!dispatch.Written)
+        {
+            step.ExecutionSummary = dispatch.State switch
+            {
+                AnimDispatchState.NotConnected => "NO LINK",
+                AnimDispatchState.HandshakePending => "NOT READY",
+                _ => "WRITE FAIL",
+            };
+            step.ExecutionDetail = $"Request {dispatch.RequestId}: serial dispatch failed ({DispatchStateName(dispatch.State)}).";
+            step.ExecutionTone = "rejected";
+            return;
+        }
+
         var isBroadcast = gesture.Target == ushort.MaxValue;
         var expected = isBroadcast
             ? _protocol.Droids.Where(d => d.Online).Select(d => d.Id).ToHashSet()
             : new HashSet<ushort> { gesture.Target };
         var tracker = new ExecutionTracker
         {
-            RequestId = requestId,
+            RequestId = dispatch.RequestId,
             Step = step,
             ExpectedDroids = expected,
             AnimId = gesture.AnimId,
             IsBroadcast = isBroadcast,
         };
-        _executionTrackers[requestId] = tracker;
-        step.ExecutionSummary = expected.Count > 1 ? $"SENT 0/{expected.Count}" : "SENT";
-        step.ExecutionDetail = $"Request {requestId}: awaiting execution report.";
+        _executionTrackers[dispatch.RequestId] = tracker;
+        step.ExecutionSummary = "WRITE";
+        step.ExecutionDetail = $"Request {dispatch.RequestId}: serial write completed; awaiting master acceptance.";
         step.ExecutionTone = "sent";
 
         tracker.StartDeadline = _executionTimerScheduler.Schedule(
             ExecutionStartTimeoutMs,
-            () => RunOnUiThread(() => ExpireExecutionDeadline(requestId, completion: false)));
+            () => RunOnUiThread(() => ExpireExecutionDeadline(dispatch.RequestId, completion: false)));
 
         // POWER_DOWN and TALK deliberately loop until another gesture interrupts them. Once
         // their START arrives, absence of COMPLETED is therefore healthy rather than a timeout.
@@ -265,9 +280,26 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
                     (long)Math.Max(0, gesture.DurationMs) + ExecutionCompletionGraceMs));
             tracker.CompletionDeadline = _executionTimerScheduler.Schedule(
                 completionDueMs,
-                () => RunOnUiThread(() => ExpireExecutionDeadline(requestId, completion: true)));
+                () => RunOnUiThread(() => ExpireExecutionDeadline(dispatch.RequestId, completion: true)));
         }
     }
+
+    private static string DispatchStateName(AnimDispatchState state) => state switch
+    {
+        AnimDispatchState.NotConnected => "not connected",
+        AnimDispatchState.HandshakePending => "handshake pending",
+        AnimDispatchState.WriteFailed => "serial write error",
+        _ => "written",
+    };
+
+    private void OnAnimMasterAccepted(AnimMasterReceipt receipt) => RunOnUiThread(() =>
+    {
+        if (!_executionTrackers.TryGetValue(receipt.RequestId, out var tracker)) return;
+        if (receipt.AnimId != tracker.AnimId) return;
+        if (receipt.Target != (tracker.IsBroadcast ? ushort.MaxValue : tracker.ExpectedDroids.Single())) return;
+        tracker.MasterReceipt = receipt;
+        UpdateExecutionSummary(tracker);
+    });
 
     private void OnAnimExecutionReceived(AnimExecutionReport report) => RunOnUiThread(() =>
     {
@@ -340,6 +372,8 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
             .Where(id => tracker.Reports.TryGetValue(id, out var report) && report.Phase == "started")
             .OrderBy(id => id)
             .ToArray();
+        var meshDispatchFailed = tracker.MasterReceipt is { MeshQueued: false } receipt
+            && (!receipt.LocalHandled || receipt.Target == ushort.MaxValue);
 
         if (rejected > 0)
         {
@@ -356,6 +390,11 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
             tracker.Step.ExecutionSummary = expected == 1 ? "STOP" : $"STOP {interrupted}/{expected}";
             tracker.Step.ExecutionTone = "interrupted";
         }
+        else if (reports.Length == 0 && meshDispatchFailed)
+        {
+            tracker.Step.ExecutionSummary = "MESH FAIL";
+            tracker.Step.ExecutionTone = "rejected";
+        }
         else if (tracker.CompletionDeadlineExpired && awaitingCompletion.Length > 0)
         {
             var unresolved = awaitingCompletion.Length + missing.Length;
@@ -371,15 +410,22 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         else
         {
             tracker.Step.ExecutionSummary = reports.Length == 0
-                ? (expected == 1 ? "SENT" : $"SENT 0/{expected}")
+                ? (tracker.MasterReceipt.HasValue ? "MASTER" : "WRITE")
                 : (expected == 1 ? "START" : $"ACK {confirmed}/{expected}");
             tracker.Step.ExecutionTone = reports.Length == 0 ? "sent" : "started";
         }
 
-        var details = reports
+        var details = new List<string> { "serial: written" };
+        if (tracker.MasterReceipt is { } master)
+        {
+            var meshState = master.MeshQueued ? "mesh queued" : "mesh queue failed";
+            var localState = master.LocalHandled ? ", local target handled" : "";
+            details.Add($"master: accepted (meshSeq {master.MeshSeq}, {meshState}{localState})");
+        }
+        details.AddRange(reports
             .OrderBy(r => r.DroidId)
             .Select(r => $"{r.DroidId}: {r.Phase}{(string.IsNullOrWhiteSpace(r.Reason) ? "" : $" ({r.Reason})")}")
-            .ToList();
+            .ToList());
         if (tracker.StartDeadlineExpired || tracker.CompletionDeadlineExpired)
             details.AddRange(missing.Select(id => $"{id}: no start report"));
         if (tracker.CompletionDeadlineExpired)
@@ -404,6 +450,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         _executionTrackers.Clear();
         _protocol.DroidsChanged -= RebuildTracks;
         _protocol.AnimDurationsReceived -= OnAnimDurationsReceived;
+        _protocol.AnimMasterAccepted -= OnAnimMasterAccepted;
         _protocol.AnimExecutionReceived -= OnAnimExecutionReceived;
         _protocol.LinkClosed -= OnProtocolLinkClosed;
     }
@@ -1123,8 +1170,8 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
                 switch (playbackEvent)
                 {
                     case GesturePlaybackEvent gesture when !IsTrackMuted(gesture.Target):
-                        var requestId = _protocol.PlayAnim(gesture.Target, gesture.AnimId, gesture.Seed);
-                        TrackExecution(requestId, gesture);
+                        var dispatch = _protocol.PlayAnim(gesture.Target, gesture.AnimId, gesture.Seed);
+                        TrackExecution(dispatch, gesture);
                         break;
                     case AudioPlaybackEvent audio:
                         _audioPlayer.Play(audio.FilePath, audio.Loop);

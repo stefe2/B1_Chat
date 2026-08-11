@@ -173,6 +173,7 @@ Session guarded by a handshake: `hello` → `{evt:"hello",ok,id}`, then keepaliv
   `droids {list:[{id,name,rssi,age,role,servos,autoAnim,adopted,fw,build?}]}` ·
   `log {msg}` · `err {msg}` · `config {target,freq,amp,speed}` · `calibData {target,+6}` ·
   `meshTopology {links:[{from,to,rssi}]}` · `animDurations {list:[{animId,ms}]}` ·
+  `animAccepted {requestId,target,animId,meshSeq,meshQueued,local}` ·
   `animExec {requestId,droid,meshSeq,animId,phase,reason?,atMs}` ·
   `setMultiDone {ok,applied,failedAt?,error?}` · `dirty {dirty}` · `allDone` ·
   `otaReady {target,sessionId,chunkSize,totalChunks}` · `otaChunkAck {seq,sent,total}` ·
@@ -184,13 +185,19 @@ firmware). Responses routed exclusively on `evt`. Line buffer: 4 KB
 (`lineMax` announced at handshake; any longer line → `err`).
 
 **Animation execution telemetry** is observational and never gates the
-console-side timeline. The master maps the console's `requestId` to the
-existing mesh-header sequence, so `AnimPayload` remains byte-compatible with
-older slaves. New droids report when the software animation engine starts,
-finishes, is interrupted, or refuses the command because servos are disabled;
-broadcast replies are deterministically jittered to avoid a response burst.
-The timeline aggregates reports per online target (`ACK 2/3`, `DONE 3/3`,
-`REJ 1/3`). A missing start report expires after 1.5 s (`UNCONF`/`MISS n/N`);
+console-side timeline. `WRITE` means the OS serial write completed, not that the
+master received it. New masters then emit `animAccepted` after parsing and
+validating the command (`MASTER` in the timeline), including whether ESP-NOW
+accepted the broadcast frame and whether the master itself is a local target.
+The master maps the console's `requestId` to the existing mesh-header sequence,
+so `AnimPayload` remains byte-compatible with older slaves. New droids report
+when the software animation engine starts, finishes, is interrupted, or refuses
+the command because servos are disabled; broadcast replies are deterministically
+jittered to avoid a response burst. The timeline aggregates reports per online
+target (`ACK 2/3`, `DONE 3/3`, `REJ 1/3`). Local refusal is immediate (`NO LINK`,
+`NOT READY`, `WRITE FAIL`); a failed required ESP-NOW queue is `MESH FAIL`. A
+missing start report expires after 1.5 s
+(`UNCONF`/`MISS n/N`);
 finite gestures that start but do not send a terminal report expire after their
 reported duration plus 1.5 s (`TIMEOUT`). Late reports recover the display, and
 delayed duplicate `started` reports cannot regress a terminal state. These
@@ -379,7 +386,11 @@ Full detailed history: see [PROGRESS-ARCHIVE.md](PROGRESS-ARCHIVE.md).
 - Sequencer execution correlation now expires missing start and finite-gesture
   completion reports without blocking transport. Timeline clips distinguish
   `UNCONF`/`MISS` from `TIMEOUT`, accept late recovery, and ignore delayed START
-  regressions after a terminal report; the headless suite passes 39/39.
+  regressions after a terminal report; the headless suite passes 43/43.
+- Animation delivery now exposes the stages the current transport can prove:
+  local serial write (`WRITE`), parsed/validated master acceptance (`MASTER`),
+  and per-target execution. Disconnected, pre-handshake and failed writes are
+  rejected immediately instead of receiving a misleading sent state.
 - Firmware identity now has two layers: human `FW_VERSION` and an automatic,
   deterministic 8-hex Build ID derived from normalized firmware source,
   PlatformIO configuration and role. It is generated before every build,

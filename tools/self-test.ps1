@@ -196,13 +196,16 @@ Invoke-Test "Animation execution-report pipeline present" {
     Assert-Source "src/mesh_comm.h" "MSG_ANIM_EXEC" "mesh execution report type missing"
     Assert-Source "src/mesh_comm.cpp" "hdr\.seq" "mesh sequence correlation missing"
     Assert-Source "src/main.cpp" "ANIM_EXEC_INTERRUPTED" "firmware lifecycle reporting missing"
+    Assert-Source "src/serial_console.cpp" 'doc\["evt"\] = "animAccepted"' "master animation acceptance event missing"
     Assert-Source "src/serial_console.cpp" 'doc\["evt"\] = "animExec"' "serial execution event missing"
     Assert-Source "console/Services/ProtocolClient.cs" "AnimExecutionReceived" "console execution parser missing"
+    Assert-Source "console/Services/ProtocolClient.cs" "AnimMasterAccepted" "console master acceptance parser missing"
+    Assert-Source "console/Services/SerialLinkService.cs" "public bool Write" "serial write result is not observable"
     Assert-Source "console/ViewModels/SequencerViewModel.cs" "TrackExecution" "Sequencer execution aggregation missing"
     Assert-Source "console/ViewModels/SequencerViewModel.cs" "ExecutionStartTimeoutMs" "execution start timeout missing"
     Assert-Source "console/ViewModels/SequencerViewModel.cs" '"TIMEOUT"' "execution completion timeout state missing"
     Assert-Source "console/ViewModels/SequencerViewModel.cs" '"UNCONF"' "unconfirmed execution state missing"
-    "non-blocking lifecycle reporting and missing-report expiration detected"
+    "serial write, master acceptance, lifecycle reporting and missing-report expiration detected"
 }
 
 Invoke-Test "Boot sequence randomization present" {
@@ -253,7 +256,8 @@ if (-not $SkipSerial) {
 
             Invoke-Test "Animation execution-report capability" {
                 Assert-True (@($hello.caps) -contains "animExec") "master does not advertise animExec"
-                "animExec advertised"
+                Assert-True (@($hello.caps) -contains "animAccepted") "master does not advertise animAccepted"
+                "animExec + animAccepted advertised"
             }
 
             $droids = Send-And-Wait $port '{"cmd":"list"}' { param($e) $e.evt -eq "droids" }

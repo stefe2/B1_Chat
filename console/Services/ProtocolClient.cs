@@ -57,6 +57,7 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
     public event Action? MeshTopologyChanged;
     public event Action? DroidsChanged;
     public event Action<ushort, int>? AnimSent; // target, animId — used to drive the mesh topology's broadcast ripple
+    public event Action<AnimMasterReceipt>? AnimMasterAccepted;
     public event Action<AnimExecutionReport>? AnimExecutionReceived;
     public event Action<ushort, string>? PacketSent; // target, kind — every other command with a real mesh frame (see MeshTopologyViewModel's traveling-packet dots)
     public event Action<ushort, int, int, int>? OtaReadyReceived;      // target, sessionId, chunkSize, totalChunks
@@ -145,15 +146,25 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
 
     public void SendCmd(JsonObject obj) => SendCmdRaw(obj);
 
-    private void SendCmdRaw(JsonObject obj)
+    private AnimDispatchState SendCmdRaw(JsonObject obj)
     {
         var cmd = obj.TryGetPropertyValue("cmd", out var cNode) ? cNode?.GetValue<string>() : null;
         var line = obj.ToJsonString();
         LogTx?.Invoke(line);
-        if (!PortOpen) { LogSys?.Invoke("Not connected — command ignored."); return; }
+        if (!PortOpen)
+        {
+            LogSys?.Invoke("Not connected — command ignored.");
+            return AnimDispatchState.NotConnected;
+        }
         var preHandshake = cmd is "hello" or "ping";
-        if (!SessionReady && !preHandshake) { LogSys?.Invoke("Handshake pending — command deferred."); return; }
-        _link.Write(line + "\n");
+        if (!SessionReady && !preHandshake)
+        {
+            LogSys?.Invoke("Handshake pending — command ignored.");
+            return AnimDispatchState.HandshakePending;
+        }
+        return _link.Write(line + "\n")
+            ? AnimDispatchState.Written
+            : AnimDispatchState.WriteFailed;
     }
 
     // Typed helpers for the commands the ViewModels use most.
@@ -192,17 +203,17 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
         SendCmd(new JsonObject { ["cmd"] = "otaStart", ["target"] = target, ["size"] = size, ["md5"] = md5Hex32 });
     public void OtaChunk(int seq, string base64Data) => SendCmd(new JsonObject { ["cmd"] = "otaChunk", ["seq"] = seq, ["data"] = base64Data });
     public void OtaAbort() => SendCmd(new JsonObject { ["cmd"] = "otaAbort" });
-    public uint PlayAnim(ushort target, int animId, uint seed)
+    public AnimDispatchResult PlayAnim(ushort target, int animId, uint seed)
     {
         if (_nextAnimRequestId == int.MaxValue) _nextAnimRequestId = 0;
         var requestId = (uint)++_nextAnimRequestId;
-        SendCmd(new JsonObject
+        var state = SendCmdRaw(new JsonObject
         {
             ["cmd"] = "anim", ["target"] = target, ["animId"] = animId,
             ["seed"] = seed, ["requestId"] = requestId,
         });
-        AnimSent?.Invoke(target, animId);
-        return requestId;
+        if (state == AnimDispatchState.Written) AnimSent?.Invoke(target, animId);
+        return new AnimDispatchResult(requestId, state);
     }
     public void Preview(ushort target, int pan, int tilt)
     {
@@ -316,6 +327,16 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
             case "calibData": CalibDataReceived?.Invoke(root); break;
             case "meshTopology": HandleMeshTopology(root); break;
             case "animDurations": HandleAnimDurations(root); break;
+            case "animAccepted":
+                AnimMasterAccepted?.Invoke(new AnimMasterReceipt(
+                    root.TryGetProperty("requestId", out var amaRequest)
+                        && amaRequest.TryGetUInt32(out var acceptedRequestId) ? acceptedRequestId : 0,
+                    (ushort)(root.TryGetProperty("target", out var amaTarget) ? amaTarget.GetInt32() : 0),
+                    root.TryGetProperty("animId", out var amaAnim) ? amaAnim.GetInt32() : -1,
+                    root.TryGetProperty("meshSeq", out var amaSeq) ? amaSeq.GetInt32() : 0,
+                    root.TryGetProperty("meshQueued", out var amaMesh) && amaMesh.GetBoolean(),
+                    root.TryGetProperty("local", out var amaLocal) && amaLocal.GetBoolean()));
+                break;
             case "animExec":
                 AnimExecutionReceived?.Invoke(new AnimExecutionReport(
                     root.TryGetProperty("requestId", out var aer) && aer.TryGetUInt32(out var requestId) ? requestId : 0,

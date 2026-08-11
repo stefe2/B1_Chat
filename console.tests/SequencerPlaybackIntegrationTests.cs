@@ -552,8 +552,13 @@ public sealed class SequencerPlaybackIntegrationTests
         scheduler.Entries[0].Invoke();
         var sent = Assert.Single(protocol.Sent);
 
-        Assert.Equal("SENT", step.ExecutionSummary);
+        Assert.Equal("WRITE", step.ExecutionSummary);
         Assert.True(vm.IsPlaying);
+
+        protocol.RaiseAnimMasterAccepted(sent.RequestId, 0x1234, 2,
+            meshSeq: 77, meshQueued: true, localHandled: false);
+        Assert.Equal("MASTER", step.ExecutionSummary);
+        Assert.Contains("master: accepted", step.ExecutionDetail);
 
         protocol.RaiseAnimExecution(sent.RequestId, 0x1234, 2, "started");
         Assert.Equal("START", step.ExecutionSummary);
@@ -580,7 +585,11 @@ public sealed class SequencerPlaybackIntegrationTests
         vm.PlayCommand.Execute(null);
         scheduler.Entries[0].Invoke();
         var requestId = Assert.Single(protocol.Sent).RequestId;
-        Assert.Equal("SENT 0/3", step.ExecutionSummary);
+        Assert.Equal("WRITE", step.ExecutionSummary);
+
+        protocol.RaiseAnimMasterAccepted(requestId, ushort.MaxValue, 3,
+            meshSeq: 77, meshQueued: true, localHandled: true);
+        Assert.Equal("MASTER", step.ExecutionSummary);
 
         protocol.RaiseAnimExecution(requestId, 100, 3, "started");
         protocol.RaiseAnimExecution(requestId, 200, 3, "started");
@@ -591,6 +600,54 @@ public sealed class SequencerPlaybackIntegrationTests
         Assert.Equal("rejected", step.ExecutionTone);
         Assert.Contains("300: rejected (servosOff)", step.ExecutionDetail);
         Assert.True(vm.IsPlaying);
+    }
+
+    [Theory]
+    [InlineData(AnimDispatchState.NotConnected, "NO LINK")]
+    [InlineData(AnimDispatchState.HandshakePending, "NOT READY")]
+    [InlineData(AnimDispatchState.WriteFailed, "WRITE FAIL")]
+    public void LocalDispatchFailure_IsImmediateAndDoesNotArmExecutionTimeouts(
+        AnimDispatchState state, string expectedSummary)
+    {
+        var protocol = new FakeSequencerProtocol { NextDispatchState = state };
+        var scheduler = new FakePlaybackTimerScheduler();
+        var executionScheduler = new FakePlaybackTimerScheduler();
+        using var vm = CreateViewModel(protocol, scheduler, executionScheduler: executionScheduler);
+        var step = new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = 2 };
+        vm.Steps.Add(step);
+
+        vm.PlayCommand.Execute(null);
+        scheduler.Entries[0].Invoke();
+
+        Assert.Equal(expectedSummary, step.ExecutionSummary);
+        Assert.Equal("rejected", step.ExecutionTone);
+        Assert.Contains("serial dispatch failed", step.ExecutionDetail);
+        Assert.Empty(executionScheduler.Entries);
+        Assert.True(vm.IsPlaying);
+    }
+
+    [Fact]
+    public void MismatchedMasterReceipt_CannotClaimAcceptanceForAnotherCommand()
+    {
+        var protocol = new FakeSequencerProtocol();
+        var scheduler = new FakePlaybackTimerScheduler();
+        using var vm = CreateViewModel(protocol, scheduler);
+        var step = new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = 2 };
+        vm.Steps.Add(step);
+
+        vm.PlayCommand.Execute(null);
+        scheduler.Entries[0].Invoke();
+        var requestId = Assert.Single(protocol.Sent).RequestId;
+
+        protocol.RaiseAnimMasterAccepted(requestId, 0x9999, 2);
+        protocol.RaiseAnimMasterAccepted(requestId, 0x1234, 9);
+        Assert.Equal("WRITE", step.ExecutionSummary);
+
+        protocol.RaiseAnimMasterAccepted(requestId, 0x1234, 2,
+            meshSeq: 91, meshQueued: false, localHandled: false);
+        Assert.Equal("MESH FAIL", step.ExecutionSummary);
+        Assert.Equal("rejected", step.ExecutionTone);
+        Assert.Contains("mesh queue failed", step.ExecutionDetail);
     }
 
     [Fact]

@@ -15,6 +15,7 @@ $ErrorActionPreference = "Stop"
 $script:Port = $null
 $script:RequestId = 1000
 $script:Reports = [System.Collections.Generic.List[object]]::new()
+$script:Acceptances = [System.Collections.Generic.List[object]]::new()
 $script:Snapshot = @()
 $results = [System.Collections.Generic.List[object]]::new()
 $reportPath = Join-Path ([IO.Path]::GetTempPath()) (
@@ -39,6 +40,7 @@ function Read-Event([double]$timeoutSeconds = 0.5) {
         try { $evt = $line | ConvertFrom-Json }
         catch { continue }
         if ($evt.evt -eq "animExec") { $script:Reports.Add($evt) }
+        if ($evt.evt -eq "animAccepted") { $script:Acceptances.Add($evt) }
         return $evt
     }
     return $null
@@ -104,6 +106,25 @@ function Wait-RequestReports(
     throw "request $requestId missing phase [$($phases -join '/')]; received: $got"
 }
 
+function Wait-MasterAcceptance(
+    [int]$requestId,
+    [int]$target,
+    [int]$animId,
+    [double]$timeoutSeconds = 4
+) {
+    $deadline = [DateTime]::UtcNow.AddSeconds($timeoutSeconds)
+    while ([DateTime]::UtcNow -lt $deadline) {
+        $matched = @($script:Acceptances | Where-Object {
+            [int]$_.requestId -eq $requestId -and
+            [int]$_.target -eq $target -and
+            [int]$_.animId -eq $animId
+        })
+        if ($matched.Count -gt 0) { return $matched[-1] }
+        $null = Read-Event 0.25
+    }
+    throw "request $requestId was not accepted by the master"
+}
+
 function Restore-State {
     if ($null -eq $script:Port -or -not $script:Port.IsOpen) { return }
     foreach ($droid in $script:Snapshot) {
@@ -129,7 +150,8 @@ try {
     $hello = Send-And-Wait @{ cmd = "hello" } { param($e) $e.evt -eq "hello" -and $e.ok } 6
     Assert-Bench ($null -ne $hello) "master handshake missing"
     Assert-Bench (@($hello.caps) -contains "animExec") "firmware does not advertise animExec"
-    Add-Result "Execution-report capability" "PASS" ("master {0}, build {1}" -f $hello.id, $hello.build)
+    Assert-Bench (@($hello.caps) -contains "animAccepted") "firmware does not advertise animAccepted"
+    Add-Result "Execution-report capabilities" "PASS" ("master {0}, build {1}" -f $hello.id, $hello.build)
 
     $inventory = Read-Inventory
     Assert-Bench ($null -ne $inventory) "inventory missing"
@@ -161,6 +183,8 @@ try {
 
     foreach ($slave in $slaves) {
         $request = Send-TrackedAnim ([int]$slave.id) 2
+        $accepted = Wait-MasterAcceptance $request ([int]$slave.id) 2
+        Assert-Bench ([bool]$accepted.meshQueued) "master did not queue targeted animation on mesh"
         $null = Wait-RequestReports $request @([int]$slave.id) @("started") 6
         $null = Wait-RequestReports $request @([int]$slave.id) @("completed") 8
     }
@@ -168,6 +192,8 @@ try {
 
     $allIds = @($script:Snapshot | ForEach-Object { [int]$_.id })
     $broadcast = Send-TrackedAnim 65535 3
+    $accepted = Wait-MasterAcceptance $broadcast 65535 3
+    Assert-Bench ([bool]$accepted.meshQueued -and [bool]$accepted.local) "master did not accept broadcast for mesh + local execution"
     $initial = Wait-RequestReports $broadcast $allIds @("started", "rejected") 8
     $masterReport = @($initial | Where-Object { [int]$_.droid -eq [int]$master[0].id })
     Assert-Bench ($masterReport.Count -eq 1 -and "$($masterReport[0].phase)" -eq "rejected" -and "$($masterReport[0].reason)" -eq "servosOff") "master did not explicitly reject while servo-off"
@@ -176,9 +202,11 @@ try {
 
     $firstSlave = [int]$slaves[0].id
     $looping = Send-TrackedAnim $firstSlave 17
+    $null = Wait-MasterAcceptance $looping $firstSlave 17
     $null = Wait-RequestReports $looping @($firstSlave) @("started") 6
     Start-Sleep -Milliseconds 300
     $idle = Send-TrackedAnim $firstSlave 0
+    $null = Wait-MasterAcceptance $idle $firstSlave 0
     $null = Wait-RequestReports $looping @($firstSlave) @("interrupted") 6
     $null = Wait-RequestReports $idle @($firstSlave) @("started") 6
     $null = Wait-RequestReports $idle @($firstSlave) @("completed") 6
@@ -202,6 +230,7 @@ $failed = @($results | Where-Object Status -eq "FAIL").Count
     Failed = $failed
     Results = $results
     Reports = $script:Reports
+    Acceptances = $script:Acceptances
 } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $reportPath -Encoding UTF8
 
 Write-Host ""

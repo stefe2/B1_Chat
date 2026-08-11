@@ -113,7 +113,7 @@ public class SerialLinkService : IDisposable
         try { _readTask?.Wait(1000); } catch { /* thread already finished/expected exception, doesn't matter here */ }
     }
 
-    public void Write(string data)
+    public bool Write(string data)
     {
         var port = _port;
         if (port == null)
@@ -122,14 +122,19 @@ public class SerialLinkService : IDisposable
             // watchdog kept retrying its chunks into the void with nothing to warn it.
             TraceLog.Write("TX!", "port closed — " + TraceLog.Trunc(data));
             RunOnUi(() => ErrorOccurred?.Invoke("port closed (write impossible)"));
-            return;
+            return false;
         }
         TraceLog.Write("TX", TraceLog.Trunc(data));
-        try { port.Write(data); }
+        try
+        {
+            port.Write(data);
+            return true;
+        }
         catch (Exception ex)
         {
             TraceLog.Write("ERR", "Write: " + ex.Message);
             RunOnUi(() => ErrorOccurred?.Invoke(ex.Message));
+            return false;
         }
     }
 

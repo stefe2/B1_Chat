@@ -8,8 +8,8 @@
 //                   "getConfig"|"calib"|"preview"|"getCalib"|"getAnimDurations"|
 //                   "servo"|"autoAnim"|"locate"|"getMeshTopology"|"getAll"|
 //                   "setMulti"|"commit", ...}
-//  - master → PC: {evt:"droids"|"log"|"config"|"meshTopology"|"err"|"allDone"|
-//                   "setMultiDone"|"dirty", ...}
+//  - master → PC: {evt:"droids"|"log"|"config"|"meshTopology"|"animAccepted"|
+//                   "animExec"|"err"|"allDone"|"setMultiDone"|"dirty", ...}
 //  (The seq* commands/events — the 8 NVS sequence slots and the onboard
 //  player — were removed in fw 1.7.0: sequences are console-driven only.
 //  "revert" was removed in fw 1.8.0: the console now auto-commits 2s after
@@ -46,6 +46,8 @@ public:
     void pushAnimDurations();
 
     // Emits one correlated animation lifecycle report from the master or a slave.
+    void pushAnimAccepted(uint32_t requestId, uint16_t target, uint8_t animId,
+                          uint16_t meshSeq, bool meshQueued, bool localHandled);
     void pushAnimExec(uint32_t requestId, uint16_t droidId, uint16_t meshSeq,
                       uint8_t animId, uint8_t phase, uint8_t reason, uint32_t atMs);
 

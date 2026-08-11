@@ -15,18 +15,24 @@ internal sealed class FakeSequencerProtocol : ISequencerProtocol
     public event Action? DroidsChanged;
     public event Action? AnimDurationsReceived;
     public event Action<bool>? LinkClosed;
+    public event Action<AnimMasterReceipt>? AnimMasterAccepted;
     public event Action<AnimExecutionReport>? AnimExecutionReceived;
+    public AnimDispatchState NextDispatchState { get; set; } = AnimDispatchState.Written;
 
-    public uint PlayAnim(ushort target, int animId, uint seed)
+    public AnimDispatchResult PlayAnim(ushort target, int animId, uint seed)
     {
         var requestId = ++_nextRequestId;
         Sent.Add(new SentGesture(requestId, target, animId, seed));
-        return requestId;
+        return new AnimDispatchResult(requestId, NextDispatchState);
     }
 
     public void RaiseDroidsChanged() => DroidsChanged?.Invoke();
     public void RaiseAnimDurationsReceived() => AnimDurationsReceived?.Invoke();
     public void RaiseLinkClosed(bool unexpected = true) => LinkClosed?.Invoke(unexpected);
+    public void RaiseAnimMasterAccepted(uint requestId, ushort target, int animId,
+        int meshSeq = 77, bool meshQueued = true, bool localHandled = false) =>
+        AnimMasterAccepted?.Invoke(new AnimMasterReceipt(
+            requestId, target, animId, meshSeq, meshQueued, localHandled));
     public void RaiseAnimExecution(uint requestId, ushort droidId, int animId,
         string phase, string? reason = null) =>
         AnimExecutionReceived?.Invoke(new AnimExecutionReport(

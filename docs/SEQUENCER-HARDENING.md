@@ -780,9 +780,13 @@ The dashboard is updated whenever an item changes state.
   1.5 s; missing finite-gesture completion expires after the reported duration
   plus 1.5 s. Late reports recover warning states and delayed START duplicates
   cannot regress a terminal report. Warnings remain observational and never
-  pause/stop playback. Remaining work: distinguish serial write/master receipt
-  from target execution and exercise offline/weak-link/disconnect timeouts on
-  hardware.
+  pause/stop playback. Local serial refusal/write and correlated master
+  acceptance are now separate stages (`WRITE` then `MASTER`); disconnected,
+  pre-handshake and failed writes produce an immediate local failure without
+  arming timeouts. The master also exposes mesh-queue and local-target facts,
+  explicitly without calling the former a slave receipt. Remaining work:
+  exercise offline/weak-link/disconnect timeouts on hardware and decide whether
+  a true per-hop relay acknowledgement is worth the added mesh traffic.
 
 ### [ ] SEQ-G12 — Analyze mechanical workload before playback
 
@@ -1276,3 +1280,4 @@ Append concise evidence when closing items; do not paste full build logs.
 | 2026-08-11 | Build ID / SEQ-H07 | Added deterministic 8-hex firmware identities throughout PlatformIO, heartbeat/registry, serial protocol, WPF inventory/status, OTA verdicts and release manifests. The new master accepted both legacy slaves during the rolling upgrade; same-version OTA then returned `ok=true` for 4216 and 34880 with master build `4DAD66EF` and slave build `72349AFE`. Read-only bench passed 6/6 and strict serial regression passed 22/22, including 15 s stable mesh observation. Reports `b1-sequencer-bench-20260811-101337.json` and `b1-self-test-20260811-101406.json`. |
 | 2026-08-11 | Execution telemetry / SEQ-H07 | Added backward-compatible, non-blocking `MSG_ANIM_EXEC` lifecycle reports correlated through the existing mesh sequence and console `requestId`; WPF clips aggregate started/completed/interrupted/rejected per droid. Master `00FD6D8C` plus slaves `65440D15` passed headless targeted/broadcast/TALK→IDLE lifecycle 5/5, WPF tests 35/35, offline regression 17/17 and strict hardware regression 24/24. Final servo/auto-animation state is off on all three. Reports `b1-anim-exec-20260811-133214.json`, `b1-self-test-20260811-131949.json`, `b1-sequencer-bench-20260811-133234.json`, `b1-self-test-20260811-133306.json`. Physical motion/skew, WPF+audio, disconnect and weak-link tests remain deferred until operator/hardware availability. |
 | 2026-08-11 | SEQ-G11 (in progress) | Added separate non-blocking start/completion deadlines, `UNCONF`/`MISS`/`TIMEOUT` clip states, late-report recovery, terminal-state duplicate protection and looping-gesture semantics. Headless WPF suite passed 39/39; offline regression passed 17/17 with report `b1-self-test-20260811-135225.json`. Serial-write/master-receipt staging and hardware loss scenarios remain. |
+| 2026-08-11 | SEQ-G11 (in progress) | Split delivery into immediate local dispatch (`NO LINK`/`NOT READY`/`WRITE FAIL` or `WRITE`), correlated master acceptance (`MASTER`) and target execution. Added additive `animAccepted` with mesh-queue/local-routing facts, preserved compatibility with older firmware, and strengthened the headless bench to require master acceptance before lifecycle reports. WPF tests passed 43/43; offline regression 17/17 (`b1-self-test-20260811-140233.json`); master `9A228A09` and slaves `1D787B84` passed hardware execution 5/5 (`b1-anim-exec-20260811-141734.json`), strict regression 29/29 (`b1-self-test-20260811-141828.json`) and preflight 6/6 (`b1-sequencer-bench-20260811-141836.json`). Final servo/auto-animation state is off on all three. Offline/weak-link/disconnect timeout observations and any true relay acknowledgement remain. |

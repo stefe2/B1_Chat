@@ -719,8 +719,8 @@
                                                             </Style>
                                                         </TextBlock.Style>
                                                     </TextBlock>
-                                                    <!-- Non-blocking firmware execution telemetry. Broadcast clips
-                                                         aggregate one report per online droid (for example ACK 2/3). -->
+                                                    <!-- Non-blocking delivery/execution telemetry: WRITE (local),
+                                                         MASTER (parsed), then per-target START/ACK/DONE or warning. -->
                                                     <TextBlock HorizontalAlignment="Right" VerticalAlignment="Bottom"
                                                                Margin="0,0,1,0" Text="{Binding ExecutionSummary}"
                                                                FontFamily="{StaticResource MonoFont}"

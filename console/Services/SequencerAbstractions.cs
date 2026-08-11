@@ -12,6 +12,27 @@ public readonly record struct AnimExecutionReport(
     uint AtMs,
     int MeshSeq);
 
+public enum AnimDispatchState
+{
+    Written,
+    NotConnected,
+    HandshakePending,
+    WriteFailed,
+}
+
+public readonly record struct AnimDispatchResult(uint RequestId, AnimDispatchState State)
+{
+    public bool Written => State == AnimDispatchState.Written;
+}
+
+public readonly record struct AnimMasterReceipt(
+    uint RequestId,
+    ushort Target,
+    int AnimId,
+    int MeshSeq,
+    bool MeshQueued,
+    bool LocalHandled);
+
 /// <summary>Narrow protocol surface consumed by the Sequencer and its headless tests.</summary>
 public interface ISequencerProtocol
 {
@@ -20,8 +41,9 @@ public interface ISequencerProtocol
     event Action? DroidsChanged;
     event Action? AnimDurationsReceived;
     event Action<bool>? LinkClosed;
+    event Action<AnimMasterReceipt>? AnimMasterAccepted;
     event Action<AnimExecutionReport>? AnimExecutionReceived;
-    uint PlayAnim(ushort target, int animId, uint seed);
+    AnimDispatchResult PlayAnim(ushort target, int animId, uint seed);
 }
 
 /// <summary>Audio side effects consumed by the Sequencer.</summary>

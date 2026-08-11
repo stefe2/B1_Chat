@@ -241,6 +241,22 @@ void SerialConsole::pushAnimExec(uint32_t requestId, uint16_t droidId,
     Serial.print('\n');
 }
 
+void SerialConsole::pushAnimAccepted(uint32_t requestId, uint16_t target,
+                                     uint8_t animId, uint16_t meshSeq,
+                                     bool meshQueued, bool localHandled) {
+    if (!_clientReady || requestId == 0) return;
+    JsonDocument doc;
+    doc["evt"] = "animAccepted";
+    doc["requestId"] = requestId;
+    doc["target"] = target;
+    doc["animId"] = animId;
+    doc["meshSeq"] = meshSeq;
+    doc["meshQueued"] = meshQueued;
+    doc["local"] = localHandled;
+    serializeJson(doc, Serial);
+    Serial.print('\n');
+}
+
 void SerialConsole::pushMeshTopology() {
     if (!_clientReady) return;
 
@@ -494,6 +510,7 @@ void SerialConsole::handleLine(const char* line) {
         caps.add("setMulti");
         caps.add("commit");
         caps.add("animExec");
+        caps.add("animAccepted");
         ack["dirty"] = Config.dirty();
         _lastDirtySent = Config.dirty();
         serializeJson(ack, Serial);

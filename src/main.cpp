@@ -363,9 +363,11 @@ static void onAnimCmd(uint16_t target, uint8_t animId, uint32_t seed,
                       uint32_t requestId) {
     AnimPayload payload{target, animId, ANIM_EXEC_TRACKED_FLAG, seed};
     uint16_t meshSeq = 0;
-    Mesh.send(MSG_ANIM, &payload, sizeof(payload), MESH_TTL, &meshSeq);
+    const bool meshQueued = Mesh.send(MSG_ANIM, &payload, sizeof(payload), MESH_TTL, &meshSeq);
+    const bool localHandled = target == MESH_TARGET_ALL || target == Mesh.myId();
     rememberAnimRequest(meshSeq, requestId, target, animId);
-    if (target == MESH_TARGET_ALL || target == Mesh.myId())
+    Console.pushAnimAccepted(requestId, target, animId, meshSeq, meshQueued, localHandled);
+    if (localHandled)
         startAnimationCommand(payload, meshSeq);
 }
 

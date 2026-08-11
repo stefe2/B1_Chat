@@ -48,14 +48,25 @@ not an automatic fallback for a lost master.
 > `TALK` gesture continues until another gesture replaces it or Servos is
 > disabled.
 
-Each gesture clip shows non-blocking execution feedback from its target. `SENT`
-means the command was issued, `START`/`ACK n/N` means one or more software
-animation engines started it, and `DONE`, `STOP`, or `REJECT` reports the final
-result. If no start report arrives within 1.5 seconds, the clip changes to
+Each gesture clip shows non-blocking delivery and execution feedback. `WRITE`
+means Windows accepted the write to the serial port. `MASTER` means the master
+parsed, validated, and dispatched that correlated command. `START`/`ACK n/N`
+means one or more software animation engines started it, and `DONE`, `STOP`, or
+`REJECT` reports the final result. `NO LINK`, `NOT READY`, or `WRITE FAIL`
+appears immediately when the command cannot leave the console; no execution
+timeout is armed for such a command. `MESH FAIL` means the master accepted the
+command but its radio stack could not queue a frame needed by the selected
+remote/broadcast target. If no start report arrives within 1.5 seconds, the
+clip changes to
 `UNCONF` (or `MISS n/N` for a broadcast). A finite gesture that started but did
 not report completion by its expected duration plus 1.5 seconds changes to
 `TIMEOUT`. These are warnings: they never pause the timeline. A delayed valid
 report updates the clip again. Hover over the clip for per-droid details.
+
+Older firmware without the additive `animAccepted` event can move directly from
+`WRITE` to a target execution state. ESP-NOW's `meshQueued` indication only says
+the radio stack accepted the outgoing frame; it is not proof that a slave
+received it. Target execution remains the success signal.
 
 `POWER_DOWN` and `TALK` loop indefinitely, so their healthy state remains
 `START`; they only become terminal when another gesture interrupts them or the
