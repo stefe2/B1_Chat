@@ -6,6 +6,99 @@ namespace b1_chat_console.Tests;
 
 public sealed class SequencerPlaybackIntegrationTests
 {
+    [Theory]
+    [InlineData("Play", SequencerTransportState.Playing)]
+    [InlineData("Restart", SequencerTransportState.Playing)]
+    [InlineData("Pause", SequencerTransportState.Paused)]
+    [InlineData("Resume", SequencerTransportState.Playing)]
+    [InlineData("Stop", SequencerTransportState.Stopped)]
+    [InlineData("NaturalEnd", SequencerTransportState.Stopped)]
+    [InlineData("Loop", SequencerTransportState.Playing)]
+    [InlineData("Disconnect", SequencerTransportState.Stopped)]
+    [InlineData("FailedStart", SequencerTransportState.Stopped)]
+    public void TransportTransitionTable_HasOneConsistentObservableState(
+        string transition, SequencerTransportState expected)
+    {
+        var protocol = new FakeSequencerProtocol();
+        protocol.Durations[2] = 100;
+        var scheduler = new FakePlaybackTimerScheduler();
+        using var vm = CreateViewModel(protocol, scheduler);
+        vm.Steps.Add(new SequenceStep { StartMs = 0, Target = 0xFFFF, AnimId = 2 });
+
+        switch (transition)
+        {
+            case "Play":
+                vm.PlayCommand.Execute(null);
+                break;
+            case "Restart":
+                vm.PlayCommand.Execute(null);
+                vm.PlayCommand.Execute(null);
+                break;
+            case "Pause":
+                vm.PlayCommand.Execute(null);
+                vm.PauseCommand.Execute(null);
+                break;
+            case "Resume":
+                vm.PlayCommand.Execute(null);
+                vm.PauseCommand.Execute(null);
+                vm.PlayCommand.Execute(null);
+                break;
+            case "Stop":
+                vm.PlayCommand.Execute(null);
+                vm.StopCommand.Execute(null);
+                break;
+            case "NaturalEnd":
+                vm.PlayCommand.Execute(null);
+                scheduler.Entries[1].Invoke();
+                break;
+            case "Loop":
+                vm.Loop = true;
+                vm.PlayCommand.Execute(null);
+                scheduler.Entries[1].Invoke();
+                break;
+            case "Disconnect":
+                vm.PlayCommand.Execute(null);
+                protocol.RaiseLinkClosed();
+                break;
+            case "FailedStart":
+                scheduler.FailNextSchedule = true;
+                Assert.Throws<InvalidOperationException>(() => vm.PlayCommand.Execute(null));
+                break;
+            default:
+                throw new InvalidOperationException($"Unknown transition fixture: {transition}.");
+        }
+
+        Assert.Equal(expected, vm.TransportState);
+        Assert.Equal(expected == SequencerTransportState.Playing, vm.IsPlaying);
+        Assert.Equal(expected == SequencerTransportState.Paused, vm.IsPaused);
+        Assert.Equal(expected == SequencerTransportState.Playing, vm.IsLiveTracking);
+        Assert.Equal(expected == SequencerTransportState.Stopped, vm.CanEditSequence);
+        Assert.Equal(expected == SequencerTransportState.Playing, vm.PauseCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void TransportTransition_NotifiesEveryDerivedUiProperty()
+    {
+        var protocol = new FakeSequencerProtocol();
+        protocol.Durations[2] = 100;
+        var scheduler = new FakePlaybackTimerScheduler();
+        using var vm = CreateViewModel(protocol, scheduler);
+        vm.Steps.Add(new SequenceStep { StartMs = 0, Target = 0xFFFF, AnimId = 2 });
+        var changed = new HashSet<string>();
+        vm.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName != null) changed.Add(args.PropertyName);
+        };
+
+        vm.PlayCommand.Execute(null);
+
+        Assert.Contains(nameof(vm.TransportState), changed);
+        Assert.Contains(nameof(vm.IsPlaying), changed);
+        Assert.Contains(nameof(vm.IsPaused), changed);
+        Assert.Contains(nameof(vm.IsLiveTracking), changed);
+        Assert.Contains(nameof(vm.CanEditSequence), changed);
+    }
+
     [Fact]
     public void EmptyDocument_PlayIsANoOp()
     {

@@ -13,6 +13,13 @@ using Microsoft.Win32;
 
 namespace b1_chat_console.ViewModels;
 
+public enum SequencerTransportState
+{
+    Stopped,
+    Playing,
+    Paused,
+}
+
 public partial class SequencerViewModel : ObservableObject, IDisposable
 {
     private readonly ISequencerProtocol _protocol;
@@ -66,7 +73,12 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     [ObservableProperty] private double _pxPerSecond = 80;
     [ObservableProperty] private bool _snapToGrid = true;
     [ObservableProperty] private double _playheadMs;
-    [ObservableProperty] private bool _isLiveTracking;
+
+    private SequencerTransportState _transportState = SequencerTransportState.Stopped;
+    public SequencerTransportState TransportState => _transportState;
+    public bool IsPlaying => TransportState == SequencerTransportState.Playing;
+    public bool IsPaused => TransportState == SequencerTransportState.Paused;
+    public bool IsLiveTracking => TransportState == SequencerTransportState.Playing;
 
     public double PxPerMs => PxPerSecond / 1000.0;
     partial void OnPxPerSecondChanged(double value)
@@ -107,21 +119,12 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         : $"\"{Name.ToUpperInvariant()}\"";
     partial void OnNameChanged(string value) => OnPropertyChanged(nameof(SequenceBadgeText));
 
-    // NotifyCanExecuteChangedFor is load-bearing: a [RelayCommand(CanExecute=...)] never
-    // re-evaluates on its own — without these, Pause stayed permanently disabled (the
-    // condition was checked once at startup, while nothing played, and never again).
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(UndoCommand))]
     private bool _canUndo;
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(RedoCommand))]
     private bool _canRedo;
-    [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(PauseCommand))]
-    private bool _isPlaying;
-    [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(PauseCommand))]
-    private bool _isPaused;
     [ObservableProperty] private SequenceStep? _selectedStep;
 
     // SelectedStep.Target as a TimelineTrack, for the inspector's Target ComboBox.
@@ -181,10 +184,32 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     // Persistent sequence edits are locked for the whole active pass, including Pause. The
     // playback plan is a snapshot, so allowing the editor to show one document while another
     // keeps running would be misleading even though the snapshot itself is now race-free.
-    public bool CanEditSequence => !IsPlaying && !IsPaused;
+    public bool CanEditSequence => TransportState == SequencerTransportState.Stopped;
 
-    partial void OnIsPlayingChanged(bool value) => RefreshEditAvailability();
-    partial void OnIsPausedChanged(bool value) => RefreshEditAvailability();
+    private void TransitionTransportTo(SequencerTransportState next)
+    {
+        if (_transportState == next) return;
+        var allowed = (_transportState, next) switch
+        {
+            (SequencerTransportState.Stopped, SequencerTransportState.Playing) => true,
+            (SequencerTransportState.Playing, SequencerTransportState.Paused) => true,
+            (SequencerTransportState.Playing, SequencerTransportState.Stopped) => true,
+            (SequencerTransportState.Paused, SequencerTransportState.Playing) => true,
+            (SequencerTransportState.Paused, SequencerTransportState.Stopped) => true,
+            _ => false,
+        };
+        if (!allowed)
+            throw new InvalidOperationException($"Invalid Sequencer transport transition: {_transportState} -> {next}.");
+
+        SetProperty(ref _transportState, next, nameof(TransportState));
+        OnPropertyChanged(nameof(IsPlaying));
+        OnPropertyChanged(nameof(IsPaused));
+        OnPropertyChanged(nameof(IsLiveTracking));
+        // Relay commands do not re-evaluate CanExecute automatically when a derived property
+        // changes. Keep every transport-dependent command synchronized from this one source.
+        PauseCommand.NotifyCanExecuteChanged();
+        RefreshEditAvailability();
+    }
 
     private void RefreshEditAvailability()
     {
@@ -601,7 +626,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
 
     private void OnProtocolLinkClosed(bool unexpected) => RunOnUiThread(() =>
     {
-        if (IsPlaying || IsPaused) Stop();
+        if (TransportState != SequencerTransportState.Stopped) Stop();
     });
 
     public void Dispose()
@@ -981,7 +1006,6 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     // removed with the rest of the ESP32 slot machinery, fw 1.7.0.)
     private void StartPlayheadTicker(double fromElapsedMs)
     {
-        IsLiveTracking = true;
         _playbackClock.Restart();
         _liveAnchorElapsedMs = fromElapsedMs;
         PlayheadMs = fromElapsedMs;
@@ -1254,11 +1278,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         if (IsPaused)
         {
             if (_activePlaybackPlan == null) { Stop(); return; }
-            var generation = _playbackGeneration.Begin();
-            _audioPlayer.ResumeAll(); // continues from each clip's retained position, no seek math
-            ScheduleTimers(_activePlaybackPlan, _elapsedAtPauseMs, generation);
-            StartPlayheadTicker(_elapsedAtPauseMs);
-            IsPaused = false;
+            StartPlaybackPass(_elapsedAtPauseMs, resumeAudio: true);
             return;
         }
         if (Steps.Count == 0 && AudioLanes.All(l => l.Clips.Count == 0)) return;
@@ -1270,12 +1290,8 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         _activePlaybackPlan = SequencerPlaybackPlan.Capture(
             Steps, AudioLanes, AnimDurationMsLookup, Loop);
         _dispatchedPlaybackEvents.Clear();
-        var newGeneration = _playbackGeneration.Begin();
-        IsPlaying = true;
-        IsPaused = false;
         _elapsedAtPauseMs = 0;
-        ScheduleTimers(_activePlaybackPlan, 0, newGeneration);
-        StartPlayheadTicker(0);
+        StartPlaybackPass(0, resumeAudio: false);
     }
 
     [RelayCommand]
@@ -1311,15 +1327,13 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     private void StopTransportCore()
     {
         _playbackGeneration.Cancel();
-        IsPlaying = false;
-        IsPaused = false;
+        TransitionTransportTo(SequencerTransportState.Stopped);
         DisposePlaybackTimers();
         _audioPlayer.StopAll();
         _activePlaybackPlan = null;
         _dispatchedPlaybackEvents.Clear();
         StopPlayheadTimer();
         PlayheadMs = 0;
-        IsLiveTracking = false;
     }
 
     [RelayCommand(CanExecute = nameof(CanPause))]
@@ -1328,16 +1342,36 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         if (!CanPause()) return;
         var elapsed = _liveAnchorElapsedMs + _playbackClock.Elapsed.TotalMilliseconds;
         _playbackGeneration.Cancel();
+        TransitionTransportTo(SequencerTransportState.Paused);
         DisposePlaybackTimers();
         _audioPlayer.PauseAll(); // clips already mid-playback keep their position natively
         _elapsedAtPauseMs = (int)elapsed;
         StopPlayheadTimer();
         PlayheadMs = elapsed;
-        IsPaused = true;
-        IsLiveTracking = false;
     }
 
-    private bool CanPause() => IsPlaying && !IsPaused;
+    private bool CanPause() => TransportState == SequencerTransportState.Playing;
+
+    private void StartPlaybackPass(int fromMs, bool resumeAudio)
+    {
+        var plan = _activePlaybackPlan
+            ?? throw new InvalidOperationException("Cannot start Sequencer transport without a playback plan.");
+        var generation = _playbackGeneration.Begin();
+        try
+        {
+            TransitionTransportTo(SequencerTransportState.Playing);
+            if (resumeAudio)
+                _audioPlayer.ResumeAll(); // continues from each clip's retained position, no seek math
+            ScheduleTimers(plan, fromMs, generation);
+            StartPlayheadTicker(fromMs);
+        }
+        catch
+        {
+            // A partial timer/audio start must never leave the UI claiming that transport is live.
+            StopTransportCore();
+            throw;
+        }
+    }
 
     // Absolute-time model (FIRMWARE-CONTRACT.md §6): the immutable pass plan schedules each
     // event at StartMs relative to fromMs. Every callback checks its generation after reaching
@@ -1359,7 +1393,8 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
             var dueTimeMs = Math.Max(0, playbackEvent.StartMs - fromMs);
             var timer = _timerScheduler.Schedule(dueTimeMs, () => RunOnUiThread(() =>
             {
-                if (!_playbackGeneration.IsCurrent(generation) || !IsPlaying || IsPaused) return;
+                if (!_playbackGeneration.IsCurrent(generation) ||
+                    TransportState != SequencerTransportState.Playing) return;
                 _dispatchedPlaybackEvents.Add(playbackEvent.SourceOrder);
                 switch (playbackEvent)
                 {
@@ -1383,7 +1418,8 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         var endDelay = Math.Max(0, totalMs - fromMs);
         var endTimer = _timerScheduler.Schedule(endDelay, () => RunOnUiThread(() =>
         {
-            if (!_playbackGeneration.IsCurrent(generation) || !IsPlaying || IsPaused) return;
+            if (!_playbackGeneration.IsCurrent(generation) ||
+                TransportState != SequencerTransportState.Playing) return;
             if (plan.Loop)
             {
                 // Stop every player (including a looping ambient clip) before rearming the next
@@ -1393,9 +1429,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
                 _elapsedAtPauseMs = 0;
                 _dispatchedPlaybackEvents.Clear();
                 ResetExecutionTracking();
-                var nextGeneration = _playbackGeneration.Begin();
-                ScheduleTimers(plan, 0, nextGeneration);
-                StartPlayheadTicker(0);
+                StartPlaybackPass(0, resumeAudio: false);
             }
             else Stop();
         }));

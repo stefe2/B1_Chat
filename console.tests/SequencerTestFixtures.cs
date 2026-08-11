@@ -78,9 +78,15 @@ internal sealed record AudioAction(string Kind, string? Path, bool Loop);
 internal sealed class FakePlaybackTimerScheduler : IPlaybackTimerScheduler
 {
     public List<Entry> Entries { get; } = new();
+    public bool FailNextSchedule { get; set; }
 
     public IDisposable Schedule(int dueTimeMs, Action callback)
     {
+        if (FailNextSchedule)
+        {
+            FailNextSchedule = false;
+            throw new InvalidOperationException("Simulated playback scheduler failure.");
+        }
         var entry = new Entry(dueTimeMs, callback);
         Entries.Add(entry);
         return entry;

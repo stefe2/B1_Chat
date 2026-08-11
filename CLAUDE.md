@@ -244,6 +244,13 @@ audio without resending gestures that continued. The transport shows
 `PAUSED · DROID MOTION CONTINUES` so this behavior is never implied to be a
 physical freeze; use Stop, SAFE or E-STOP for their distinct policies above.
 
+**Sequencer transport state is single-source:** the WPF controller owns one
+guarded `Stopped`/`Playing`/`Paused` value. Play/Pause badges, LIVE tracking,
+editing locks and command availability are derived from it, so contradictory UI
+states cannot be constructed. Play, Resume and Loop also share one pass-start
+path; a scheduler startup failure invalidates the generation and returns to
+Stopped after disposing partial timers/audio.
+
 **No audio in this protocol** (fw 1.6.0): `volume`/`playTrack` (console→master)
 and `config`'s `volume` field were removed when the DFPlayer was retired —
 see the Progress log.
