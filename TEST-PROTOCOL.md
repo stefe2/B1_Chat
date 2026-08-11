@@ -125,14 +125,34 @@ captured servo/auto-animation state in `finally`.
 .\tools\anim-exec-test.ps1 -ComPort COM3
 ```
 
-It requires the `animExec`, `animAccepted`, and `animLease` capabilities. Every tracked
+It requires the `animExec`, `animAccepted`, `animLease`, and `safeStop`
+capabilities. Every tracked
 command must first be accepted by the master with the expected request, target,
 animation and mesh/local routing, then the test validates targeted finite
 animation start/completion on every slave, a broadcast where the disabled master
 reports `rejected/servosOff`, interruption of looping TALK by tracked IDLE,
 fail-closed lease expiry, successful lease renewal, and rejection of a renewal
-carrying an older animation's mesh sequence.
+carrying an older animation's mesh sequence. It also verifies that Safe Stop
+interrupts TALK and permits a later explicit release gesture, then confirms
+fleet-wide Servo OFF as the Emergency Stop policy.
 It does not flash, alter configuration/calibration, or claim physical movement.
+
+### Three-level Stop bench run — 2026-08-11
+
+- Master `43140` was flashed over USB with Build ID `8460B615`; slaves `4216`
+  and `34880` accepted the 975,728-byte OTA image and reported Build ID
+  `D6BF5A99` with `ok=true` verdicts. An intentionally interrupted first OTA
+  attempt left the prior boot image intact and the clean retry succeeded.
+- Headless execution/safety passed 10/10. Safe Stop interrupted tracked TALK,
+  and a later explicit finite animation started/completed, proving release of
+  the transient hold. Broadcast Servo OFF then reached all three droids.
+  Report: `b1-anim-exec-20260811-153345.json`.
+- WPF/headless tests passed 64/64. Strict regression passed 32/32, including
+  `safeStop` capability/validation and 15 seconds of stable mesh. Read-only
+  preflight passed 6/6 with six directed links. Reports:
+  `b1-self-test-20260811-153458.json` and
+  `b1-sequencer-bench-20260811-153504.json`.
+- Final inventory confirms Servos and Auto animation off on all three droids.
 
 ### Infinite-animation lease bench run — 2026-08-11
 

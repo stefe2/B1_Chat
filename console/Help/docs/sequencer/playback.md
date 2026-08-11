@@ -33,6 +33,14 @@ Muted or offline rows do not create a queue for missed commands.*
 - **Stop** cancels future sends, stops local audio, sends targeted `IDLE` cleanup
   to droids whose latest Sequencer gesture is `TALK` or `POWER_DOWN`, and resets
   the playhead to 0.
+- **Safe Stop** cancels the same console work, then tells every reachable droid
+  to interrupt its current gesture, move to calibrated center, retain servo
+  holding torque, and suppress automatic animation until a later explicit
+  gesture is sent.
+- **E-STOP** cancels the show and persistently disables servo outputs on every
+  reachable droid immediately. It has no confirmation dialog. With no holding
+  torque, unsupported mechanics may fall; re-enable Servos deliberately from
+  the Droids card after inspecting the hardware.
 - **Loop** starts a new pass when the calculated sequence duration ends.
 
 Persistent timeline editing is locked during both Play and Pause. You can still
@@ -68,6 +76,11 @@ the Animation card remains a direct operator command and runs until another
 gesture is sent. Autonomous idle animations are also outside the lease policy.
 With older firmware that does not advertise `animLease`, the Sequencer retains
 targeted Stop cleanup but cannot provide the crash/link-loss fallback.
+
+Safe Stop requires firmware advertising `safeStop`. With older firmware the
+console sends broadcast `IDLE` as a best-effort fallback, but automatic movement
+may resume afterward. Emergency Stop uses the older fleet Servo OFF command and
+therefore remains available across that compatibility boundary.
 
 Each gesture clip shows non-blocking delivery and execution feedback. `WRITE`
 means Windows accepted the write to the serial port. `MASTER` means the master

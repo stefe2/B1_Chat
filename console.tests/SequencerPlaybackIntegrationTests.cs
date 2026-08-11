@@ -1101,6 +1101,72 @@ public sealed class SequencerPlaybackIntegrationTests
         Assert.Empty(protocol.LeaseRenewals);
     }
 
+    [Fact]
+    public void SafeStopCancelsTheShowAndUsesFleetSafeHoldWithoutTargetedIdle()
+    {
+        var protocol = new FakeSequencerProtocol();
+        protocol.Droids.Add(new Droid { Id = 0x1234, Online = true });
+        var scheduler = new FakePlaybackTimerScheduler();
+        var executionScheduler = new FakePlaybackTimerScheduler();
+        using var vm = CreateViewModel(protocol, scheduler, executionScheduler: executionScheduler);
+        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = 17 });
+
+        vm.PlayCommand.Execute(null);
+        scheduler.Entries[0].Invoke();
+        var sent = Assert.Single(protocol.Sent);
+        protocol.RaiseAnimMasterAccepted(sent.RequestId, sent.Target, sent.AnimId,
+            meshSeq: 95, leaseMs: 5000);
+        var renewalTimer = executionScheduler.Entries[1];
+
+        vm.SafeStopCommand.Execute(null);
+        scheduler.Entries[1].InvokeEvenIfDisposed();
+        renewalTimer.InvokeEvenIfDisposed();
+
+        Assert.Equal((ushort)ushort.MaxValue, Assert.Single(protocol.SafeStops));
+        Assert.Single(protocol.Sent);
+        Assert.Empty(protocol.LeaseRenewals);
+        Assert.False(vm.IsPlaying);
+        Assert.False(vm.IsPaused);
+    }
+
+    [Fact]
+    public void SafeStopFallsBackToBroadcastIdleOnOlderFirmware()
+    {
+        var protocol = new FakeSequencerProtocol { SupportsSafeStop = false };
+        var scheduler = new FakePlaybackTimerScheduler();
+        using var vm = CreateViewModel(protocol, scheduler);
+        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = 2 });
+
+        vm.PlayCommand.Execute(null);
+        vm.SafeStopCommand.Execute(null);
+
+        Assert.Empty(protocol.SafeStops);
+        var fallback = Assert.Single(protocol.Sent);
+        Assert.Equal((ushort)ushort.MaxValue, fallback.Target);
+        Assert.Equal(0, fallback.AnimId);
+        Assert.Equal((ushort)0, fallback.LeaseMs);
+    }
+
+    [Fact]
+    public void EmergencyStopCancelsQueuedEventsAndDisablesFleetServosImmediately()
+    {
+        var protocol = new FakeSequencerProtocol();
+        var scheduler = new FakePlaybackTimerScheduler();
+        using var vm = CreateViewModel(protocol, scheduler);
+        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = 2 });
+
+        vm.PlayCommand.Execute(null);
+        var queuedGesture = scheduler.Entries[0];
+        vm.EmergencyStopCommand.Execute(null);
+        queuedGesture.InvokeEvenIfDisposed();
+
+        Assert.Empty(protocol.Sent);
+        Assert.Equal(new SentServoCommand(ushort.MaxValue, false),
+            Assert.Single(protocol.ServoCommands));
+        Assert.False(vm.IsPlaying);
+        Assert.False(vm.IsPaused);
+    }
+
     private static SequencerViewModel CreateViewModel(
         FakeSequencerProtocol protocol,
         FakePlaybackTimerScheduler scheduler,

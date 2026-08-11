@@ -35,6 +35,7 @@ enum MeshMsgType : uint8_t {
     MSG_ANIM_EXEC = 17,  // droid -> master: tracked animation lifecycle report
     MSG_ANIM_LEASED = 18, // safe fail-closed infinite animation with an initial lease
     MSG_ANIM_LEASE_RENEW = 19, // renews only the matching active leased animation
+    MSG_SAFE_STOP = 20, // transient safe hold: center and suppress auto anims
 };
 
 // Lifecycle phases reported for console-originated animation commands.
@@ -107,6 +108,10 @@ struct AnimLeaseRenewPayload {
     uint16_t leaseMs;
 };
 
+struct SafeStopPayload {
+    uint16_t targetId;
+};
+
 // A droid echoes the originating MSG_ANIM header sequence. The master maps
 // that wire-level correlation back to the console's requestId without
 // changing AnimPayload, so pre-report firmware remains able to execute it.
@@ -122,6 +127,8 @@ static_assert(sizeof(LeasedAnimPayload) == 9,
               "Leased animation wire format must remain exactly 9 bytes");
 static_assert(sizeof(AnimLeaseRenewPayload) == 6,
               "Animation lease renewal wire format must remain exactly 6 bytes");
+static_assert(sizeof(SafeStopPayload) == 2,
+              "Safe-stop wire format must remain exactly 2 bytes");
 
 struct ConfigPayload {
     uint16_t targetId;

@@ -210,6 +210,7 @@ public partial class MeshTopologyViewModel : ObservableObject
     {
         "anim" => "MSG_ANIM",
         "servo" => "MSG_SERVO",
+        "safeStop" => "MSG_SAFE_STOP",
         "autoAnim" => "MSG_AUTOANIM",
         "config" => "MSG_CONFIG",
         "calib" => "MSG_CALIB",

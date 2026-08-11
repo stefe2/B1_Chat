@@ -46,6 +46,7 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
 
     public bool HasCap(string c) => _caps.Contains(c);
     public bool SupportsAnimLease => HasCap("animLease");
+    public bool SupportsSafeStop => HasCap("safeStop");
 
     public event Action<string>? LogTx;
     public event Action<string>? LogRx;
@@ -224,6 +225,12 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
             ["cmd"] = "animLease", ["target"] = target,
             ["meshSeq"] = meshSeq, ["leaseMs"] = leaseMs,
         });
+    public AnimDispatchState SafeStop(ushort target)
+    {
+        var state = SendCmdRaw(new JsonObject { ["cmd"] = "safeStop", ["target"] = target });
+        if (state == AnimDispatchState.Written) PacketSent?.Invoke(target, "safeStop");
+        return state;
+    }
     public void Preview(ushort target, int pan, int tilt)
     {
         SendCmd(new JsonObject { ["cmd"] = "preview", ["target"] = target, ["pan"] = pan, ["tilt"] = tilt });

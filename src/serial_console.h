@@ -6,7 +6,7 @@
 //  Protocol: one line = one JSON message (see CLAUDE.md).
 //  - PC → master: {cmd:"list"|"anim"|"config"|"name"|
 //                   "getConfig"|"calib"|"preview"|"getCalib"|"getAnimDurations"|
-//                   "animLease"|"servo"|"autoAnim"|"locate"|"getMeshTopology"|"getAll"|
+//                   "animLease"|"safeStop"|"servo"|"autoAnim"|"locate"|"getMeshTopology"|"getAll"|
 //                   "setMulti"|"commit", ...}
 //  - master → PC: {evt:"droids"|"log"|"config"|"meshTopology"|"animAccepted"|
 //                   "animExec"|"err"|"allDone"|"setMultiDone"|"dirty", ...}
@@ -68,6 +68,7 @@ public:
                            uint32_t requestId, uint16_t leaseMs)) { _animCb = cb; }
     void onAnimLeaseRenew(void (*cb)(uint16_t target, uint16_t originSeq,
                                      uint16_t leaseMs)) { _animLeaseRenewCb = cb; }
+    void onSafeStop(void (*cb)(uint16_t target)) { _safeStopCb = cb; }
     void onConfig(void (*cb)(uint8_t freq, uint8_t amp, uint8_t speed)) { _cfgCb = cb; }
     void onServo(void (*cb)(uint16_t target, bool enabled)) { _servoCb = cb; }
     void onAutoAnim(void (*cb)(uint16_t target, bool enabled)) { _autoAnimCb = cb; }
@@ -100,6 +101,7 @@ private:
 
     void (*_animCb)(uint16_t, uint8_t, uint32_t, uint32_t, uint16_t) = nullptr;
     void (*_animLeaseRenewCb)(uint16_t, uint16_t, uint16_t) = nullptr;
+    void (*_safeStopCb)(uint16_t) = nullptr;
     void (*_cfgCb)(uint8_t, uint8_t, uint8_t) = nullptr;
     void (*_servoCb)(uint16_t, bool) = nullptr;
     void (*_autoAnimCb)(uint16_t, bool) = nullptr;

@@ -40,6 +40,7 @@ public interface ISequencerProtocol
     ObservableCollection<Droid> Droids { get; }
     IReadOnlyDictionary<int, int> AnimDurationMs { get; }
     bool SupportsAnimLease { get; }
+    bool SupportsSafeStop { get; }
     event Action? DroidsChanged;
     event Action? AnimDurationsReceived;
     event Action<bool>? LinkClosed;
@@ -47,6 +48,8 @@ public interface ISequencerProtocol
     event Action<AnimExecutionReport>? AnimExecutionReceived;
     AnimDispatchResult PlayAnim(ushort target, int animId, uint seed, ushort leaseMs = 0);
     AnimDispatchState RenewAnimLease(ushort target, int meshSeq, ushort leaseMs);
+    AnimDispatchState SafeStop(ushort target);
+    void SetServo(ushort target, bool enabled);
 }
 
 /// <summary>Audio side effects consumed by the Sequencer.</summary>

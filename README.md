@@ -53,8 +53,8 @@ A single repo, two halves:
 - **Sequencer**: a multi-track timeline to choreograph several droids (and
   console-side audio, multi-lane with waveform preview) together, with
   Play/Pause/Resume/Loop, targeted cleanup plus a fail-closed firmware lease for
-  Sequencer-started infinite gestures, a local library, and `.b1seq.json`
-  export/import.
+  Sequencer-started infinite gestures, distinct Stop/Safe Stop/Emergency Stop
+  levels, a local library, and `.b1seq.json` export/import.
 - **Execution feedback**: tracked Sequencer gestures report software lifecycle
   per droid (started, completed, interrupted, or rejected) without blocking the
   timeline; broadcast clips aggregate the fleet's replies directly in the UI,

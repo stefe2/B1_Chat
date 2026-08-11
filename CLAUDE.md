@@ -165,7 +165,8 @@ Session guarded by a handshake: `hello` → `{evt:"hello",ok,id}`, then keepaliv
   `locate {target,enabled}` ·
   `adopt {target}` · `forget {target}` ·
   `anim {target,animId,seed,requestId?,leaseMs?}` ·
-  `animLease {target,meshSeq,leaseMs}` · `preview {target,pan,tilt}` ·
+  `animLease {target,meshSeq,leaseMs}` · `safeStop {target}` ·
+  `preview {target,pan,tilt}` ·
   `calib {target,+6 limits}` · `getCalib {target}` · `getAnimDurations` ·
   `getMeshTopology` ·
   `setMulti {ops:[...]}` · `commit` ·
@@ -222,6 +223,18 @@ still infinite. A whole-pass Loop boundary and Pause deliberately do not clean
 up. Failed serial cleanup remains retryable. On firmware advertising
 `animLease`, the independent 5 s lease supplies the fail-closed fallback if
 cleanup cannot cross a lost serial or mesh path.
+
+**Three stop levels:** normal Sequencer Stop cancels the transport/audio and
+sends targeted IDLE only for its remaining infinite gestures; finite gestures
+finish naturally. Safe Stop cancels all console work and broadcasts `safeStop`:
+each current droid interrupts motion, moves to calibrated center over the normal
+IDLE transition, retains servo holding torque, and transiently suppresses its
+automatic animations until a later explicit animation command. Emergency Stop
+has no confirmation dialog and broadcasts persistent `servo enabled:false` to
+the whole fleet. It removes holding torque and may let unsupported mechanics
+fall; that behavior is explicitly accepted for this project. Older firmware
+without the additive `safeStop` cap receives broadcast IDLE as a best-effort
+fallback but cannot suppress subsequent automatic motion.
 
 **No audio in this protocol** (fw 1.6.0): `volume`/`playTrack` (console→master)
 and `config`'s `volume` field were removed when the DFPlayer was retired —

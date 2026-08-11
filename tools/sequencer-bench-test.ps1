@@ -175,6 +175,7 @@ try {
     Assert-Bench (@($hello.caps) -contains "animExec") "firmware does not advertise animExec"
     Assert-Bench (@($hello.caps) -contains "animAccepted") "firmware does not advertise animAccepted"
     Assert-Bench (@($hello.caps) -contains "animLease") "firmware does not advertise animLease"
+    Assert-Bench (@($hello.caps) -contains "safeStop") "firmware does not advertise safeStop"
     Assert-Bench ("$($hello.build)" -match '^[0-9A-Fa-f]{8}$') "master has no valid Build ID"
 
     $inventory = Read-Inventory

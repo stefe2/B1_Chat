@@ -209,7 +209,9 @@ Invoke-Test "Animation execution-report pipeline present" {
     Assert-Source "src/mesh_comm.h" "MSG_ANIM_LEASE_RENEW" "firmware animation lease protocol missing"
     Assert-Source "src/main.cpp" "ANIM_EXEC_REASON_LEASE_EXPIRED" "firmware lease expiry missing"
     Assert-Source "console/ViewModels/SequencerViewModel.cs" "ScheduleAnimLeaseRenewal" "Sequencer lease renewal missing"
-    "delivery stages, lifecycle reporting, timeouts, cleanup and fail-safe leases detected"
+    Assert-Source "src/main.cpp" "applySafeStop" "firmware Safe Stop missing"
+    Assert-Source "console/ViewModels/SequencerViewModel.cs" "EmergencyStop" "Sequencer Emergency Stop missing"
+    "delivery stages, lifecycle reporting, leases and three-level stop policy detected"
 }
 
 Invoke-Test "Boot sequence randomization present" {
@@ -262,7 +264,8 @@ if (-not $SkipSerial) {
                 Assert-True (@($hello.caps) -contains "animExec") "master does not advertise animExec"
                 Assert-True (@($hello.caps) -contains "animAccepted") "master does not advertise animAccepted"
                 Assert-True (@($hello.caps) -contains "animLease") "master does not advertise animLease"
-                "animExec + animAccepted + animLease advertised"
+                Assert-True (@($hello.caps) -contains "safeStop") "master does not advertise safeStop"
+                "animExec + animAccepted + animLease + safeStop advertised"
             }
 
             $droids = Send-And-Wait $port '{"cmd":"list"}' { param($e) $e.evt -eq "droids" }
@@ -345,6 +348,12 @@ if (-not $SkipSerial) {
                     "$($badLeaseRenewal.msg)"
                 }
 
+                $badSafeStop = Send-And-Wait $port '{"cmd":"safeStop","target":0}' { param($e) $e.evt -eq "err" }
+                Invoke-Test "Invalid Safe Stop rejected" {
+                    Assert-True ($null -ne $badSafeStop) "invalid Safe Stop produced no err event"
+                    "$($badSafeStop.msg)"
+                }
+
                 $badConfig = Send-And-Wait $port '{"cmd":"config","target":65535,"freq":101,"amp":60,"speed":50}' { param($e) $e.evt -eq "err" }
                 $configAfter = Send-And-Wait $port $configJson {
                     param($e) $e.evt -eq "config" -and [int]$e.target -eq $masterId
@@ -374,6 +383,7 @@ if (-not $SkipSerial) {
                 Add-Result "Invalid animation rejected" "SKIP" $reason
                 Add-Result "Invalid leased animation rejected" "SKIP" $reason
                 Add-Result "Invalid lease renewal rejected" "SKIP" $reason
+                Add-Result "Invalid Safe Stop rejected" "SKIP" $reason
                 Add-Result "Invalid config rejected without mutation" "SKIP" $reason
                 Add-Result "Invalid calibration rejected without mutation" "SKIP" $reason
             }

@@ -160,6 +160,7 @@ try {
     Assert-Bench (@($hello.caps) -contains "animExec") "firmware does not advertise animExec"
     Assert-Bench (@($hello.caps) -contains "animAccepted") "firmware does not advertise animAccepted"
     Assert-Bench (@($hello.caps) -contains "animLease") "firmware does not advertise animLease"
+    Assert-Bench (@($hello.caps) -contains "safeStop") "firmware does not advertise safeStop"
     Add-Result "Execution-report capabilities" "PASS" ("master {0}, build {1}" -f $hello.id, $hello.build)
 
     $inventory = Read-Inventory
@@ -257,6 +258,25 @@ try {
     Assert-Bench (@($staleExpiry | Where-Object { "$($_.reason)" -eq "leaseExpired" }).Count -eq 1) "new TALK did not expire after stale renewal"
     Assert-Bench ($staleTimer.ElapsedMilliseconds -lt 2100) "stale sequence renewed a newer infinite gesture"
     Add-Result "Stale lease rejection" "PASS" ("old meshSeq ignored; new lease expired after {0} ms" -f $staleTimer.ElapsedMilliseconds)
+
+    $safeStopped = Send-TrackedAnim $firstSlave 17 5000
+    $null = Wait-MasterAcceptance $safeStopped $firstSlave 17
+    $null = Wait-RequestReports $safeStopped @($firstSlave) @("started") 6
+    $script:Port.WriteLine((@{ cmd = "safeStop"; target = $firstSlave } | ConvertTo-Json -Compress))
+    $null = Wait-RequestReports $safeStopped @($firstSlave) @("interrupted") 6
+    $released = Send-TrackedAnim $firstSlave 2
+    $null = Wait-MasterAcceptance $released $firstSlave 2
+    $null = Wait-RequestReports $released @($firstSlave) @("started") 6
+    $null = Wait-RequestReports $released @($firstSlave) @("completed") 8
+    Add-Result "Safe Stop and explicit release" "PASS" "Safe Stop interrupted TALK; a later explicit finite gesture released the hold"
+
+    Set-Boolean "servo" 65535 $false
+    $emergencyState = Wait-Inventory {
+        param($list)
+        @($list | Where-Object { [bool]$_.servos }).Count -eq 0
+    } 12
+    Assert-Bench ($null -ne $emergencyState) "fleet servo-off state did not propagate after Emergency Stop command"
+    Add-Result "Emergency servo cutoff" "PASS" "broadcast Servo OFF reached master and both slaves"
 } catch {
     $failure = $_.Exception.Message
     Add-Result "Headless execution test" "FAIL" $failure

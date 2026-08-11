@@ -1281,12 +1281,40 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void Stop()
     {
+        StopTransportCore();
+        StopInfiniteGestures();
+    }
+
+    [RelayCommand]
+    private void SafeStop()
+    {
+        StopTransportCore();
+        CancelAllAnimLeases();
+        var state = _protocol.SupportsSafeStop
+            ? _protocol.SafeStop(ushort.MaxValue)
+            : _protocol.PlayAnim(ushort.MaxValue, 0,
+                (uint)Random.Shared.NextInt64(1, (long)uint.MaxValue + 1)).State;
+        if (state == AnimDispatchState.Written) _latestGestureByDroid.Clear();
+    }
+
+    [RelayCommand]
+    private void EmergencyStop()
+    {
+        StopTransportCore();
+        CancelAllAnimLeases();
+        _latestGestureByDroid.Clear();
+        // Deliberately no confirmation dialog: an emergency control must act on
+        // the first click. Servo OFF is persisted by each droid's firmware.
+        _protocol.SetServo(ushort.MaxValue, false);
+    }
+
+    private void StopTransportCore()
+    {
         _playbackGeneration.Cancel();
         IsPlaying = false;
         IsPaused = false;
         DisposePlaybackTimers();
         _audioPlayer.StopAll();
-        StopInfiniteGestures();
         _activePlaybackPlan = null;
         _dispatchedPlaybackEvents.Clear();
         StopPlayheadTimer();

@@ -28,6 +28,13 @@
                         ToolTipService.ShowOnDisabled="True" Margin="0,0,4,0">
                     <TextBlock Text="■" />
                 </Button>
+                <Button Content="SAFE" Style="{StaticResource MiniButtonStyle}" Command="{Binding SafeStopCommand}"
+                        ToolTip="Safe Stop: cancel the show, center every reachable droid, keep servo holding torque, and suppress automatic motion until an explicit gesture."
+                        ToolTipService.ShowOnDisabled="True" Margin="0,0,4,0" />
+                <Button Content="E-STOP" Style="{StaticResource MiniButtonStyle}" Command="{Binding EmergencyStopCommand}"
+                        Background="#A83232" BorderBrush="#FF6B60" Foreground="White" FontWeight="Bold"
+                        ToolTip="Emergency Stop: immediately cancel the show and persistently disable servo outputs on every reachable droid. No confirmation."
+                        ToolTipService.ShowOnDisabled="True" Margin="0,0,4,0" />
                 <Button Style="{StaticResource IconTransportButtonStyle}" Command="{Binding PauseCommand}" ToolTip="Pause"
                         ToolTipService.ShowOnDisabled="True" Margin="0,0,10,0">
                     <TextBlock Text="⏸" />

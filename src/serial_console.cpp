@@ -515,6 +515,7 @@ void SerialConsole::handleLine(const char* line) {
         caps.add("animExec");
         caps.add("animAccepted");
         caps.add("animLease");
+        caps.add("safeStop");
         ack["dirty"] = Config.dirty();
         _lastDirtySent = Config.dirty();
         serializeJson(ack, Serial);
@@ -618,6 +619,14 @@ void SerialConsole::handleLine(const char* line) {
         }
         if (_animLeaseRenewCb)
             _animLeaseRenewCb(target, (uint16_t)originSeqValue, (uint16_t)leaseMsValue);
+
+    } else if (!strcmp(cmd, "safeStop")) {
+        uint16_t target;
+        if (!readTargetField(command, true, target, validationWhy, sizeof(validationWhy))) {
+            pushErr("invalid safeStop: %s", validationWhy);
+            return;
+        }
+        if (_safeStopCb) _safeStopCb(target);
 
     } else if (!strcmp(cmd, "config")) {
         if (!validateOp(command, validationWhy, sizeof(validationWhy))) {

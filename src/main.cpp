@@ -33,6 +33,11 @@ static bool gServos = true;
 // Doesn't affect Play (anim) or the Sequencer: only the random idle draw.
 static bool gAutoAnim = true;
 
+// Transient safety latch. Unlike gAutoAnim it is never persisted: Safe Stop
+// and Emergency Stop suppress spontaneous motion until an explicit gesture is
+// accepted, without changing the operator's saved Auto animation preference.
+static bool gSafetyHold = false;
+
 // Live-tunable "frequency" param (0..100, see applyAnimParamsEffect) — scales
 // the idle-draw interval below. 50 = historical default = today's untouched
 // 2.5-5s (master)/3-7s (isolated slave) range.
@@ -259,6 +264,9 @@ static void startAnimationCommand(uint16_t targetId, uint8_t animId, uint32_t se
                                   uint16_t originSeq, bool tracked,
                                   uint16_t leaseMs = 0) {
     const bool broadcast = targetId == MESH_TARGET_ALL;
+    // Random master broadcasts are deliberately untracked. Ignore them while
+    // held so even a targeted Safe Stop cannot be undone by fleet idle traffic.
+    if (gSafetyHold && !tracked) return;
     interruptTrackedAnimation();
 
     if (!gServos) {
@@ -269,6 +277,8 @@ static void startAnimationCommand(uint16_t targetId, uint8_t animId, uint32_t se
         return;
     }
 
+    // A tracked operator/Sequencer gesture is the deliberate release action.
+    gSafetyHold = false;
     anim.play(animId, seed);
     if (!tracked) return;
 
@@ -346,6 +356,7 @@ static void applyServos(bool en) {
     gServos = en;
     head.setEnabled(en);
     if (!en) {
+        gSafetyHold = true;
         interruptTrackedAnimation();
         anim.stop();
     }
@@ -354,6 +365,14 @@ static void applyServos(bool en) {
     Console.setMasterServos(en);
 #endif
     LOGF("servos %s", en ? "ON" : "OFF");
+}
+
+static void applySafeStop() {
+    interruptTrackedAnimation();
+    anim.stop();
+    if (gServos) anim.play(ANIM_IDLE, esp_random());
+    gSafetyHold = true;
+    LOGF("safe stop: centered and holding");
 }
 
 // Pauses/resumes THIS droid's spontaneous idle animation. Persisted
@@ -435,6 +454,12 @@ static void onAnimLeaseRenewCmd(uint16_t target, uint16_t originSeq,
     renewAnimationLease(payload);
 }
 
+static void onSafeStopCmd(uint16_t target) {
+    const SafeStopPayload payload{target};
+    Mesh.send(MSG_SAFE_STOP, &payload, sizeof(payload));
+    if (target == MESH_TARGET_ALL || target == Mesh.myId()) applySafeStop();
+}
+
 // Console hook: enable/disable a target's servos (master).
 static void onServoCmd(uint16_t target, bool en) {
     ServoPayload p{target, (uint8_t)(en ? 1 : 0)};
@@ -510,6 +535,12 @@ static void processMeshMessage(uint8_t type, const uint8_t* payload, uint8_t len
         if (!validMeshTarget(p.targetId) || p.leaseMs < ANIM_LEASE_MIN_MS ||
             p.leaseMs > ANIM_LEASE_MAX_MS) return;
         renewAnimationLease(p);
+    } else if (type == MSG_SAFE_STOP && len == sizeof(SafeStopPayload)) {
+        SafeStopPayload p;
+        memcpy(&p, payload, sizeof(p));
+        if (!validMeshTarget(p.targetId)) return;
+        if (p.targetId == MESH_TARGET_ALL || p.targetId == Mesh.myId())
+            applySafeStop();
     } else if (type == MSG_ANIM_EXEC && len == sizeof(AnimExecPayload)) {
 #if IS_MASTER
         AnimExecPayload p;
@@ -768,6 +799,7 @@ void setup() {
     Console.begin();
     Console.onAnim(onAnimCmd);
     Console.onAnimLeaseRenew(onAnimLeaseRenewCmd);
+    Console.onSafeStop(onSafeStopCmd);
     Console.onServo(onServoCmd);
     Console.onAutoAnim(onAutoAnimCmd);
     Console.onConfig(applyAnimParamsEffect);
@@ -883,7 +915,7 @@ void loop() {
     }
 
     // The master picks a random anim, plays it, and broadcasts it to the group.
-    if (gServos && gAutoAnim && !anim.isPlaying() && now > nextMeshSend) {
+    if (gServos && gAutoAnim && !gSafetyHold && !anim.isPlaying() && now > nextMeshSend) {
         nextMeshSend = now + (uint32_t)(random(2500, 5000) * idleFreqScale());
         const uint32_t seed = (uint32_t)esp_random();
         const uint8_t animId = AnimationPlayer::randomAnimId(seed);
@@ -893,7 +925,7 @@ void loop() {
     }
 #else
     // An isolated slave (no master) also animates itself on its own.
-    if (gServos && gAutoAnim && !anim.isPlaying() && now > nextMove) {
+    if (gServos && gAutoAnim && !gSafetyHold && !anim.isPlaying() && now > nextMove) {
         nextMove = now + (uint32_t)(random(3000, 7000) * idleFreqScale());
         const uint32_t seed = (uint32_t)esp_random();
         anim.play(AnimationPlayer::randomAnimId(seed), seed);

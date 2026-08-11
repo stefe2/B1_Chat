@@ -11,6 +11,8 @@ internal sealed class FakeSequencerProtocol : ISequencerProtocol
     public IReadOnlyDictionary<int, int> AnimDurationMs => Durations;
     public List<SentGesture> Sent { get; } = new();
     public List<SentLeaseRenewal> LeaseRenewals { get; } = new();
+    public List<ushort> SafeStops { get; } = new();
+    public List<SentServoCommand> ServoCommands { get; } = new();
     private uint _nextRequestId;
 
     public event Action? DroidsChanged;
@@ -20,6 +22,7 @@ internal sealed class FakeSequencerProtocol : ISequencerProtocol
     public event Action<AnimExecutionReport>? AnimExecutionReceived;
     public AnimDispatchState NextDispatchState { get; set; } = AnimDispatchState.Written;
     public bool SupportsAnimLease { get; set; } = true;
+    public bool SupportsSafeStop { get; set; } = true;
 
     public AnimDispatchResult PlayAnim(ushort target, int animId, uint seed, ushort leaseMs = 0)
     {
@@ -33,6 +36,15 @@ internal sealed class FakeSequencerProtocol : ISequencerProtocol
         LeaseRenewals.Add(new SentLeaseRenewal(target, meshSeq, leaseMs));
         return NextDispatchState;
     }
+
+    public AnimDispatchState SafeStop(ushort target)
+    {
+        SafeStops.Add(target);
+        return NextDispatchState;
+    }
+
+    public void SetServo(ushort target, bool enabled) =>
+        ServoCommands.Add(new SentServoCommand(target, enabled));
 
     public void RaiseDroidsChanged() => DroidsChanged?.Invoke();
     public void RaiseAnimDurationsReceived() => AnimDurationsReceived?.Invoke();
@@ -50,6 +62,7 @@ internal sealed class FakeSequencerProtocol : ISequencerProtocol
 
 internal sealed record SentGesture(uint RequestId, ushort Target, int AnimId, uint Seed, ushort LeaseMs);
 internal sealed record SentLeaseRenewal(ushort Target, int MeshSeq, ushort LeaseMs);
+internal sealed record SentServoCommand(ushort Target, bool Enabled);
 
 internal sealed class FakeAudioPlayer : ISequencerAudioPlayer
 {
