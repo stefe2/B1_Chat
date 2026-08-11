@@ -45,6 +45,10 @@ public:
     // Emits the indicative duration (ms) of each gesture ({evt:"animDurations",...}).
     void pushAnimDurations();
 
+    // Emits one correlated animation lifecycle report from the master or a slave.
+    void pushAnimExec(uint32_t requestId, uint16_t droidId, uint16_t meshSeq,
+                      uint8_t animId, uint8_t phase, uint8_t reason, uint32_t atMs);
+
     // Emits the mesh's detected direct links ({evt:"meshTopology",...}).
     void pushMeshTopology();
 
@@ -57,7 +61,8 @@ public:
     void pushOtaError(uint16_t target, uint8_t sessionId, const char* reason);
 
     // Optional hooks triggered by incoming commands.
-    void onAnim(void (*cb)(uint8_t animId, uint32_t seed)) { _animCb = cb; }
+    void onAnim(void (*cb)(uint16_t target, uint8_t animId, uint32_t seed,
+                           uint32_t requestId)) { _animCb = cb; }
     void onConfig(void (*cb)(uint8_t freq, uint8_t amp, uint8_t speed)) { _cfgCb = cb; }
     void onServo(void (*cb)(uint16_t target, bool enabled)) { _servoCb = cb; }
     void onAutoAnim(void (*cb)(uint16_t target, bool enabled)) { _autoAnimCb = cb; }
@@ -88,7 +93,7 @@ private:
     uint32_t _lastHelloMs = 0;
     static const uint32_t CLIENT_TIMEOUT_MS = 5000;
 
-    void (*_animCb)(uint8_t, uint32_t) = nullptr;
+    void (*_animCb)(uint16_t, uint8_t, uint32_t, uint32_t) = nullptr;
     void (*_cfgCb)(uint8_t, uint8_t, uint8_t) = nullptr;
     void (*_servoCb)(uint16_t, bool) = nullptr;
     void (*_autoAnimCb)(uint16_t, bool) = nullptr;

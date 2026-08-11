@@ -20,5 +20,11 @@ public partial class SequenceStep : ObservableObject
     // horizontal snap). Drives a TranslateTransform in the view; never serialized.
     [ObservableProperty] private double _dragOffsetY;
 
+    // Transient execution telemetry. It is intentionally excluded from
+    // Clone()/serialization: every Play pass starts with fresh reports.
+    [ObservableProperty] private string _executionSummary = "";
+    [ObservableProperty] private string _executionDetail = "";
+    [ObservableProperty] private string _executionTone = "none";
+
     public SequenceStep Clone() => new() { AnimId = AnimId, Target = Target, StartMs = StartMs };
 }

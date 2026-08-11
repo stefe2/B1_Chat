@@ -537,6 +537,62 @@ public sealed class SequencerPlaybackIntegrationTests
         vm.Dispose(); // cleanup is idempotent
     }
 
+    [Fact]
+    public void TargetedExecutionReports_UpdateTheGestureTelemetryWithoutBlockingPlayback()
+    {
+        var protocol = new FakeSequencerProtocol();
+        protocol.Durations[2] = 500;
+        protocol.Droids.Add(new Droid { Id = 0x1234, Online = true });
+        var scheduler = new FakePlaybackTimerScheduler();
+        using var vm = CreateViewModel(protocol, scheduler);
+        var step = new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = 2 };
+        vm.Steps.Add(step);
+
+        vm.PlayCommand.Execute(null);
+        scheduler.Entries[0].Invoke();
+        var sent = Assert.Single(protocol.Sent);
+
+        Assert.Equal("SENT", step.ExecutionSummary);
+        Assert.True(vm.IsPlaying);
+
+        protocol.RaiseAnimExecution(sent.RequestId, 0x1234, 2, "started");
+        Assert.Equal("START", step.ExecutionSummary);
+        Assert.Equal("started", step.ExecutionTone);
+
+        protocol.RaiseAnimExecution(sent.RequestId, 0x1234, 2, "completed");
+        Assert.Equal("DONE", step.ExecutionSummary);
+        Assert.Equal("completed", step.ExecutionTone);
+        Assert.Contains("4660: completed", step.ExecutionDetail);
+    }
+
+    [Fact]
+    public void BroadcastExecutionReports_AggregateAllOnlineDroidsAndSurfaceRejection()
+    {
+        var protocol = new FakeSequencerProtocol();
+        protocol.Durations[3] = 500;
+        foreach (var id in new ushort[] { 100, 200, 300 })
+            protocol.Droids.Add(new Droid { Id = id, Online = true });
+        var scheduler = new FakePlaybackTimerScheduler();
+        using var vm = CreateViewModel(protocol, scheduler);
+        var step = new SequenceStep { StartMs = 20, Target = ushort.MaxValue, AnimId = 3 };
+        vm.Steps.Add(step);
+
+        vm.PlayCommand.Execute(null);
+        scheduler.Entries[0].Invoke();
+        var requestId = Assert.Single(protocol.Sent).RequestId;
+        Assert.Equal("SENT 0/3", step.ExecutionSummary);
+
+        protocol.RaiseAnimExecution(requestId, 100, 3, "started");
+        protocol.RaiseAnimExecution(requestId, 200, 3, "started");
+        Assert.Equal("ACK 2/3", step.ExecutionSummary);
+
+        protocol.RaiseAnimExecution(requestId, 300, 3, "rejected", "servosOff");
+        Assert.Equal("REJ 1/3", step.ExecutionSummary);
+        Assert.Equal("rejected", step.ExecutionTone);
+        Assert.Contains("300: rejected (servosOff)", step.ExecutionDetail);
+        Assert.True(vm.IsPlaying);
+    }
+
     private static SequencerViewModel CreateViewModel(
         FakeSequencerProtocol protocol,
         FakePlaybackTimerScheduler scheduler,

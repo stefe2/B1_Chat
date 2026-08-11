@@ -22,6 +22,7 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
     private readonly Dictionary<ushort, Droid> _droidsById = new();
     private readonly Dictionary<ushort, AnimConfig> _animConfigs = new();
     private ushort? _masterId;
+    private int _nextAnimRequestId;
 
     public readonly record struct AnimConfig(int Freq, int Amp, int Speed);
 
@@ -56,6 +57,7 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
     public event Action? MeshTopologyChanged;
     public event Action? DroidsChanged;
     public event Action<ushort, int>? AnimSent; // target, animId — used to drive the mesh topology's broadcast ripple
+    public event Action<AnimExecutionReport>? AnimExecutionReceived;
     public event Action<ushort, string>? PacketSent; // target, kind — every other command with a real mesh frame (see MeshTopologyViewModel's traveling-packet dots)
     public event Action<ushort, int, int, int>? OtaReadyReceived;      // target, sessionId, chunkSize, totalChunks
     public event Action<int, int, int>? OtaChunkAckReceived;           // seq, sent, total
@@ -190,10 +192,17 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
         SendCmd(new JsonObject { ["cmd"] = "otaStart", ["target"] = target, ["size"] = size, ["md5"] = md5Hex32 });
     public void OtaChunk(int seq, string base64Data) => SendCmd(new JsonObject { ["cmd"] = "otaChunk", ["seq"] = seq, ["data"] = base64Data });
     public void OtaAbort() => SendCmd(new JsonObject { ["cmd"] = "otaAbort" });
-    public void PlayAnim(ushort target, int animId, uint seed)
+    public uint PlayAnim(ushort target, int animId, uint seed)
     {
-        SendCmd(new JsonObject { ["cmd"] = "anim", ["target"] = target, ["animId"] = animId, ["seed"] = seed });
+        if (_nextAnimRequestId == int.MaxValue) _nextAnimRequestId = 0;
+        var requestId = (uint)++_nextAnimRequestId;
+        SendCmd(new JsonObject
+        {
+            ["cmd"] = "anim", ["target"] = target, ["animId"] = animId,
+            ["seed"] = seed, ["requestId"] = requestId,
+        });
         AnimSent?.Invoke(target, animId);
+        return requestId;
     }
     public void Preview(ushort target, int pan, int tilt)
     {
@@ -307,6 +316,16 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
             case "calibData": CalibDataReceived?.Invoke(root); break;
             case "meshTopology": HandleMeshTopology(root); break;
             case "animDurations": HandleAnimDurations(root); break;
+            case "animExec":
+                AnimExecutionReceived?.Invoke(new AnimExecutionReport(
+                    root.TryGetProperty("requestId", out var aer) && aer.TryGetUInt32(out var requestId) ? requestId : 0,
+                    (ushort)(root.TryGetProperty("droid", out var aed) ? aed.GetInt32() : 0),
+                    root.TryGetProperty("animId", out var aea) ? aea.GetInt32() : -1,
+                    root.TryGetProperty("phase", out var aep) ? aep.GetString() ?? "unknown" : "unknown",
+                    root.TryGetProperty("reason", out var aerr) ? aerr.GetString() : null,
+                    root.TryGetProperty("atMs", out var aet) && aet.TryGetUInt32(out var atMs) ? atMs : 0,
+                    root.TryGetProperty("meshSeq", out var aes) ? aes.GetInt32() : 0));
+                break;
             case "otaReady":
                 OtaReadyReceived?.Invoke(
                     (ushort)(root.TryGetProperty("target", out var ort) ? ort.GetInt32() : 0),

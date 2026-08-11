@@ -54,6 +54,23 @@ void putBuildId(JsonObject object, const char* key, uint32_t buildId) {
     snprintf(value, sizeof(value), "%08lX", (unsigned long)buildId);
     object[key] = value;
 }
+
+const char* animExecPhaseName(uint8_t phase) {
+    switch (phase) {
+    case ANIM_EXEC_STARTED: return "started";
+    case ANIM_EXEC_COMPLETED: return "completed";
+    case ANIM_EXEC_INTERRUPTED: return "interrupted";
+    case ANIM_EXEC_REJECTED: return "rejected";
+    default: return "unknown";
+    }
+}
+
+const char* animExecReasonName(uint8_t reason) {
+    switch (reason) {
+    case ANIM_EXEC_REASON_SERVOS_OFF: return "servosOff";
+    default: return "";
+    }
+}
 }
 
 void SerialConsole::begin() {
@@ -202,6 +219,24 @@ void SerialConsole::pushAnimDurations() {
         o["animId"] = i;
         o["ms"] = AnimationPlayer::totalDurationMs(i);
     }
+    serializeJson(doc, Serial);
+    Serial.print('\n');
+}
+
+void SerialConsole::pushAnimExec(uint32_t requestId, uint16_t droidId,
+                                 uint16_t meshSeq, uint8_t animId,
+                                 uint8_t phase, uint8_t reason, uint32_t atMs) {
+    if (!_clientReady) return;
+    JsonDocument doc;
+    doc["evt"] = "animExec";
+    doc["requestId"] = requestId;
+    doc["droid"] = droidId;
+    doc["meshSeq"] = meshSeq;
+    doc["animId"] = animId;
+    doc["phase"] = animExecPhaseName(phase);
+    const char* reasonName = animExecReasonName(reason);
+    if (reasonName[0]) doc["reason"] = reasonName;
+    doc["atMs"] = atMs;
     serializeJson(doc, Serial);
     Serial.print('\n');
 }
@@ -458,6 +493,7 @@ void SerialConsole::handleLine(const char* line) {
         caps.add("config");
         caps.add("setMulti");
         caps.add("commit");
+        caps.add("animExec");
         ack["dirty"] = Config.dirty();
         _lastDirtySent = Config.dirty();
         serializeJson(ack, Serial);
@@ -514,18 +550,22 @@ void SerialConsole::handleLine(const char* line) {
     } else if (!strcmp(cmd, "anim")) {
         uint16_t target;
         int animIdValue;
+        int requestIdValue = 0;
         if (!readTargetField(command, true, target, validationWhy, sizeof(validationWhy)) ||
             !readIntField(command, "animId", 0, ANIM_COUNT - 1, animIdValue,
                           validationWhy, sizeof(validationWhy))) {
             pushErr("invalid anim: %s", validationWhy);
             return;
         }
+        if (!command["requestId"].isNull() &&
+            !readIntField(command, "requestId", 1, 0x7FFFFFFF, requestIdValue,
+                          validationWhy, sizeof(validationWhy))) {
+            pushErr("invalid anim: %s", validationWhy);
+            return;
+        }
         const uint8_t animId = (uint8_t)animIdValue;
         const uint32_t seed   = doc["seed"] | (uint32_t)esp_random();
-        AnimPayload p{target, animId, 0, seed};
-        Mesh.send(MSG_ANIM, &p, sizeof(p));
-        if ((target == MESH_TARGET_ALL || target == Mesh.myId()) && _animCb)
-            _animCb(animId, seed);
+        if (_animCb) _animCb(target, animId, seed, (uint32_t)requestIdValue);
         log("anim %u -> %04X", animId, target);
 
     } else if (!strcmp(cmd, "config")) {

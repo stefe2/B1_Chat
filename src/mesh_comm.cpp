@@ -147,7 +147,9 @@ bool MeshComm::rawBroadcast(const uint8_t* frame, uint8_t frameLen) {
     return esp_now_send(BROADCAST_ADDR, frame, frameLen) == ESP_OK;
 }
 
-bool MeshComm::send(uint8_t type, const void* payload, uint8_t len, uint8_t ttl) {
+bool MeshComm::send(uint8_t type, const void* payload, uint8_t len, uint8_t ttl,
+                    uint16_t* outSeq) {
+    if (outSeq) *outSeq = 0;
     if (len > MESH_MAX_PAYLOAD) return false;
 
     uint8_t frame[HDR_LEN + MESH_MAX_PAYLOAD + HMAC_LEN];
@@ -163,6 +165,7 @@ bool MeshComm::send(uint8_t type, const void* payload, uint8_t len, uint8_t ttl)
         hdr.seq = ++_seq;
         remember(_myId, hdr.seq);
     }
+    if (outSeq) *outSeq = hdr.seq;
 
     memcpy(frame, &hdr, HDR_LEN);
     if (len && payload) memcpy(frame + HDR_LEN, payload, len);
@@ -223,7 +226,7 @@ void MeshComm::handleRaw(const uint8_t* mac, const uint8_t* data, int len, int r
     const uint8_t* payload = data + HDR_LEN;
 
     // 3) Passes it up to the application.
-    if (_handler) _handler(hdr.type, payload, payloadLen, hdr.srcId, rssi);
+    if (_handler) _handler(hdr.type, payload, payloadLen, hdr.srcId, hdr.seq, rssi);
 
     // 4) Multi-hop relay: decrements the TTL and re-broadcasts (the HMAC
     //    excludes the TTL, so the signature stays valid).

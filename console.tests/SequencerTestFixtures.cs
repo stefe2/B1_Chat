@@ -10,20 +10,30 @@ internal sealed class FakeSequencerProtocol : ISequencerProtocol
     public Dictionary<int, int> Durations { get; } = new();
     public IReadOnlyDictionary<int, int> AnimDurationMs => Durations;
     public List<SentGesture> Sent { get; } = new();
+    private uint _nextRequestId;
 
     public event Action? DroidsChanged;
     public event Action? AnimDurationsReceived;
     public event Action<bool>? LinkClosed;
+    public event Action<AnimExecutionReport>? AnimExecutionReceived;
 
-    public void PlayAnim(ushort target, int animId, uint seed) =>
-        Sent.Add(new SentGesture(target, animId, seed));
+    public uint PlayAnim(ushort target, int animId, uint seed)
+    {
+        var requestId = ++_nextRequestId;
+        Sent.Add(new SentGesture(requestId, target, animId, seed));
+        return requestId;
+    }
 
     public void RaiseDroidsChanged() => DroidsChanged?.Invoke();
     public void RaiseAnimDurationsReceived() => AnimDurationsReceived?.Invoke();
     public void RaiseLinkClosed(bool unexpected = true) => LinkClosed?.Invoke(unexpected);
+    public void RaiseAnimExecution(uint requestId, ushort droidId, int animId,
+        string phase, string? reason = null) =>
+        AnimExecutionReceived?.Invoke(new AnimExecutionReport(
+            requestId, droidId, animId, phase, reason, 1234, 77));
 }
 
-internal sealed record SentGesture(ushort Target, int AnimId, uint Seed);
+internal sealed record SentGesture(uint RequestId, ushort Target, int AnimId, uint Seed);
 
 internal sealed class FakeAudioPlayer : ISequencerAudioPlayer
 {

@@ -123,9 +123,9 @@ callback-safe lock/mailbox fast path.
 
 | Type | Payload |
 | --- | --- |
-| `MSG_ANIM` = 1 | targetId (0xFFFF = all), animId, syncDelayMs, seed |
+| `MSG_ANIM` = 1 | targetId (0xFFFF = all), animId, syncDelayMs, seed; high bit of syncDelayMs requests execution telemetry while preserving the legacy payload |
 | `MSG_CONFIG` = 2 | targetId, freq, amplitude, speed |
-| `MSG_HEARTBEAT` = 4 | uptime, state (bit0 = servos, bit1 = auto anims), firmware version (3 bytes major/minor/patch) |
+| `MSG_HEARTBEAT` = 4 | uptime, state (bit0 = servos, bit1 = auto anims), firmware version (3 bytes major/minor/patch), Build ID; the master also accepts the frozen legacy 8-byte form |
 | `MSG_SERVO` = 5 | targetId, enabled |
 | `MSG_CALIB` = 6 | targetId, 6 pan/tilt limits (persisted by the targeted droid) |
 | `MSG_PREVIEW` = 7 | targetId, pan, tilt (transient, not persisted) |
@@ -138,6 +138,7 @@ callback-safe lock/mailbox fast path.
 | `MSG_OTA_ABORT` = 14 | (master→targeted slave) targetId, sessionId, reason — cancels the ongoing session |
 | `MSG_LOCATE` = 15 | targetId, enabled — overrides the onboard LED's execution-indicator blink with solid on/off ("find me" physically), not persisted |
 | `MSG_NAME` = 16 | targetId, name[24] — persists the targeted droid's own name in its own NVS (mirrors `MSG_CALIB`), never `MESH_TARGET_ALL` |
+| `MSG_ANIM_EXEC` = 17 | originSeq, animId, phase, reason, atMs — authenticated non-blocking lifecycle report (`started`/`completed`/`interrupted`/`rejected`) |
 
 ## Animations (18, aligned firmware ↔ `ANIMS` table in index.html)
 
@@ -163,7 +164,7 @@ Session guarded by a handshake: `hello` → `{evt:"hello",ok,id}`, then keepaliv
   `servo {target,enabled}` · `autoAnim {target,enabled}` ·
   `locate {target,enabled}` ·
   `adopt {target}` · `forget {target}` ·
-  `anim {target,animId,seed}` · `preview {target,pan,tilt}` ·
+  `anim {target,animId,seed,requestId?}` · `preview {target,pan,tilt}` ·
   `calib {target,+6 limits}` · `getCalib {target}` · `getAnimDurations` ·
   `getMeshTopology` ·
   `setMulti {ops:[...]}` · `commit` ·
@@ -172,6 +173,7 @@ Session guarded by a handshake: `hello` → `{evt:"hello",ok,id}`, then keepaliv
   `droids {list:[{id,name,rssi,age,role,servos,autoAnim,adopted,fw,build?}]}` ·
   `log {msg}` · `err {msg}` · `config {target,freq,amp,speed}` · `calibData {target,+6}` ·
   `meshTopology {links:[{from,to,rssi}]}` · `animDurations {list:[{animId,ms}]}` ·
+  `animExec {requestId,droid,meshSeq,animId,phase,reason?,atMs}` ·
   `setMultiDone {ok,applied,failedAt?,error?}` · `dirty {dirty}` · `allDone` ·
   `otaReady {target,sessionId,chunkSize,totalChunks}` · `otaChunkAck {seq,sent,total}` ·
   `otaDone {target,sessionId}` · `otaResult {target,ok,fw?,build?,reason?}` ·
@@ -180,6 +182,17 @@ Session guarded by a handshake: `hello` → `{evt:"hello",ok,id}`, then keepaliv
 Unknown fields in a command: ignored (the console may be newer than the
 firmware). Responses routed exclusively on `evt`. Line buffer: 4 KB
 (`lineMax` announced at handshake; any longer line → `err`).
+
+**Animation execution telemetry** is observational and never gates the
+console-side timeline. The master maps the console's `requestId` to the
+existing mesh-header sequence, so `AnimPayload` remains byte-compatible with
+older slaves. New droids report when the software animation engine starts,
+finishes, is interrupted, or refuses the command because servos are disabled;
+broadcast replies are deterministically jittered to avoid a response burst.
+The timeline aggregates reports per online target (`ACK 2/3`, `DONE 3/3`,
+`REJ 1/3`). A missing report leaves the clip unconfirmed but cannot delay the
+show. This proves firmware execution, not physical servo movement or mechanical
+inter-droid skew.
 
 **No audio in this protocol** (fw 1.6.0): `volume`/`playTrack` (console→master)
 and `config`'s `volume` field were removed when the DFPlayer was retired —
@@ -352,6 +365,13 @@ Full detailed history: see [PROGRESS-ARCHIVE.md](PROGRESS-ARCHIVE.md).
       mapping in the plan file `regarde-dans-ce-répertoire-swift-dawn.md`).
 
 **Recent milestones** (2026-08-11):
+- Console-originated gestures now carry non-blocking execution correlation
+  without changing `MSG_ANIM`: the existing mesh sequence is echoed through
+  `MSG_ANIM_EXEC`, mapped back to a serial `requestId`, and rendered on each
+  timeline clip. Firmware reports started/completed/interrupted/rejected;
+  broadcast replies are jittered and legacy slaves still execute normally.
+  A no-hardware-slave bench passed targeted, broadcast and TALK→IDLE lifecycle
+  checks 5/5, followed by 24/24 strict serial checks.
 - Firmware identity now has two layers: human `FW_VERSION` and an automatic,
   deterministic 8-hex Build ID derived from normalized firmware source,
   PlatformIO configuration and role. It is generated before every build,

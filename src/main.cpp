@@ -78,6 +78,7 @@ struct PendingMeshMessage {
     uint8_t  type;
     uint8_t  len;
     uint16_t srcId;
+    uint16_t seq;
     int16_t  rssi;
     uint8_t  payload[MESH_MAX_PAYLOAD];
 };
@@ -95,7 +96,7 @@ struct MeshInboxGuard {
 };
 
 static void enqueueMeshMessage(uint8_t type, const uint8_t* payload, uint8_t len,
-                               uint16_t srcId, int rssi) {
+                               uint16_t srcId, uint16_t seq, int rssi) {
     if (len > MESH_MAX_PAYLOAD || (len > 0 && payload == nullptr)) return;
 
     MeshInboxGuard guard;
@@ -108,6 +109,7 @@ static void enqueueMeshMessage(uint8_t type, const uint8_t* payload, uint8_t len
     msg.type = type;
     msg.len = len;
     msg.srcId = srcId;
+    msg.seq = seq;
     msg.rssi = (int16_t)rssi;
     if (len > 0) memcpy(msg.payload, payload, len);
 
@@ -145,6 +147,147 @@ static bool validConfigPayload(const ConfigPayload& p) {
            p.speed >= 0.0f && p.speed <= 100.0f;
 }
 
+// One tracked console animation may produce several reports (one per target).
+// The request map is master-local and keyed by the unchanged mesh header seq;
+// old slaves still execute MSG_ANIM but simply never send MSG_ANIM_EXEC.
+#if IS_MASTER
+static const uint8_t ANIM_REQUEST_CAPACITY = 64;
+struct AnimRequestRecord {
+    bool used;
+    uint16_t meshSeq;
+    uint32_t requestId;
+    uint16_t target;
+    uint8_t animId;
+    uint32_t createdAtMs;
+};
+static AnimRequestRecord gAnimRequests[ANIM_REQUEST_CAPACITY] = {};
+static uint8_t gAnimRequestNext = 0;
+
+static void rememberAnimRequest(uint16_t meshSeq, uint32_t requestId,
+                                uint16_t target, uint8_t animId) {
+    AnimRequestRecord& record = gAnimRequests[gAnimRequestNext];
+    record = {true, meshSeq, requestId, target, animId, millis()};
+    gAnimRequestNext = (uint8_t)((gAnimRequestNext + 1) % ANIM_REQUEST_CAPACITY);
+}
+
+static const AnimRequestRecord* findAnimRequest(uint16_t meshSeq, uint8_t animId) {
+    const uint32_t now = millis();
+    for (uint8_t offset = 0; offset < ANIM_REQUEST_CAPACITY; offset++) {
+        const uint8_t index = (uint8_t)((gAnimRequestNext + ANIM_REQUEST_CAPACITY - 1 - offset) %
+                                        ANIM_REQUEST_CAPACITY);
+        const AnimRequestRecord& record = gAnimRequests[index];
+        if (record.used && record.meshSeq == meshSeq && record.animId == animId &&
+            now - record.createdAtMs < 120000UL) return &record;
+    }
+    return nullptr;
+}
+#endif
+
+struct ActiveAnimExecution {
+    bool active = false;
+    uint16_t originSeq = 0;
+    uint8_t animId = ANIM_IDLE;
+    bool broadcast = false;
+};
+static ActiveAnimExecution gActiveAnimExec;
+
+#if !IS_MASTER
+static const uint8_t ANIM_REPORT_QUEUE_CAPACITY = 8;
+struct PendingAnimExecReport {
+    bool used;
+    AnimExecPayload payload;
+    uint32_t dueAtMs;
+};
+static PendingAnimExecReport gAnimReportQueue[ANIM_REPORT_QUEUE_CAPACITY] = {};
+static uint8_t gAnimReportNext = 0;
+
+static void queueAnimExecReport(const AnimExecPayload& payload, bool broadcast) {
+    PendingAnimExecReport& pending = gAnimReportQueue[gAnimReportNext];
+    // Deterministic 10..99 ms spreading prevents every broadcast recipient
+    // from replying in the same radio slot. A full queue drops the oldest
+    // telemetry report, never the animation itself.
+    const uint32_t jitterMs = broadcast ? 10U + (Mesh.myId() % 90U) : 0U;
+    pending = {true, payload, millis() + jitterMs};
+    gAnimReportNext = (uint8_t)((gAnimReportNext + 1) % ANIM_REPORT_QUEUE_CAPACITY);
+}
+
+static void pumpAnimExecReports() {
+    const uint32_t now = millis();
+    uint8_t sent = 0;
+    for (uint8_t i = 0; i < ANIM_REPORT_QUEUE_CAPACITY && sent < 2; i++) {
+        PendingAnimExecReport& pending = gAnimReportQueue[i];
+        if (!pending.used || (int32_t)(now - pending.dueAtMs) < 0) continue;
+        Mesh.send(MSG_ANIM_EXEC, &pending.payload, sizeof(pending.payload));
+        pending.used = false;
+        sent++;
+    }
+}
+#endif
+
+static void publishAnimExec(uint16_t droidId, const AnimExecPayload& payload,
+                            bool broadcast) {
+#if IS_MASTER
+    (void)broadcast;
+    const AnimRequestRecord* request = findAnimRequest(payload.originSeq, payload.animId);
+    if (!request) return;
+    if (request->target != MESH_TARGET_ALL && request->target != droidId) return;
+    Console.pushAnimExec(request->requestId, droidId, payload.originSeq,
+                         payload.animId, payload.phase, payload.reason, payload.atMs);
+#else
+    (void)droidId;
+    queueAnimExecReport(payload, broadcast);
+#endif
+}
+
+static void reportAnimExec(uint16_t originSeq, uint8_t animId, uint8_t phase,
+                           uint8_t reason, bool broadcast) {
+    const AnimExecPayload report{originSeq, animId, phase, reason, millis()};
+    publishAnimExec(Mesh.myId(), report, broadcast);
+}
+
+static void interruptTrackedAnimation() {
+    if (!gActiveAnimExec.active) return;
+    reportAnimExec(gActiveAnimExec.originSeq, gActiveAnimExec.animId,
+                   ANIM_EXEC_INTERRUPTED, ANIM_EXEC_REASON_NONE,
+                   gActiveAnimExec.broadcast);
+    gActiveAnimExec.active = false;
+}
+
+static void startAnimationCommand(const AnimPayload& payload, uint16_t originSeq) {
+    const bool tracked = (payload.syncDelayMs & ANIM_EXEC_TRACKED_FLAG) != 0;
+    const bool broadcast = payload.targetId == MESH_TARGET_ALL;
+    interruptTrackedAnimation();
+
+    if (!gServos) {
+        if (tracked) {
+            reportAnimExec(originSeq, payload.animId, ANIM_EXEC_REJECTED,
+                           ANIM_EXEC_REASON_SERVOS_OFF, broadcast);
+        }
+        return;
+    }
+
+    anim.play(payload.animId, payload.seed);
+    if (!tracked) return;
+
+    reportAnimExec(originSeq, payload.animId, ANIM_EXEC_STARTED,
+                   ANIM_EXEC_REASON_NONE, broadcast);
+    if (anim.isPlaying()) {
+        gActiveAnimExec = {true, originSeq, payload.animId, broadcast};
+    } else {
+        // IDLE has no keyframes: it centers immediately and is complete.
+        reportAnimExec(originSeq, payload.animId, ANIM_EXEC_COMPLETED,
+                       ANIM_EXEC_REASON_NONE, broadcast);
+    }
+}
+
+static void finishTrackedAnimationIfNeeded() {
+    if (!gActiveAnimExec.active || anim.isPlaying()) return;
+    reportAnimExec(gActiveAnimExec.originSeq, gActiveAnimExec.animId,
+                   ANIM_EXEC_COMPLETED, ANIM_EXEC_REASON_NONE,
+                   gActiveAnimExec.broadcast);
+    gActiveAnimExec.active = false;
+}
+
 // (The master's stored-sequence player and its 8 NVS slots were retired in
 // fw 1.7.0 — sequences are entirely console-driven now, see CLAUDE.md.)
 
@@ -159,7 +302,10 @@ static bool wasOnline[Registry::MAX];
 static void applyServos(bool en) {
     gServos = en;
     head.setEnabled(en);
-    if (!en) anim.stop();
+    if (!en) {
+        interruptTrackedAnimation();
+        anim.stop();
+    }
     Config.setServosEnabledImmediate(en);
 #if IS_MASTER
     Console.setMasterServos(en);
@@ -211,12 +357,16 @@ static void applyCalib(const CalibPayload& p) {
          p.panMin, p.panCenter, p.panMax, p.tiltMin, p.tiltCenter, p.tiltMax);
 }
 
-// Console hook: play an animation locally (master).
+// Console hook: dispatch a tracked command and play it locally when targeted.
 #if IS_MASTER
-static void playLocalAnim(uint8_t animId, uint32_t seed) {
-    if (gServos) {
-        anim.play(animId, seed);
-    }
+static void onAnimCmd(uint16_t target, uint8_t animId, uint32_t seed,
+                      uint32_t requestId) {
+    AnimPayload payload{target, animId, ANIM_EXEC_TRACKED_FLAG, seed};
+    uint16_t meshSeq = 0;
+    Mesh.send(MSG_ANIM, &payload, sizeof(payload), MESH_TTL, &meshSeq);
+    rememberAnimRequest(meshSeq, requestId, target, animId);
+    if (target == MESH_TARGET_ALL || target == Mesh.myId())
+        startAnimationCommand(payload, meshSeq);
 }
 
 // Console hook: enable/disable a target's servos (master).
@@ -256,7 +406,7 @@ static void onPreviewCmd(uint16_t target, uint8_t pan, uint8_t tilt) {
 #endif
 
 static void processMeshMessage(uint8_t type, const uint8_t* payload, uint8_t len,
-                               uint16_t srcId, int rssi) {
+                               uint16_t srcId, uint16_t seq, int rssi) {
 #if IS_MASTER
     // Any received message proves this droid's presence.
     if (Droids.seen(srcId, rssi, millis())) {
@@ -277,8 +427,16 @@ static void processMeshMessage(uint8_t type, const uint8_t* payload, uint8_t len
         }
         LOGF("ANIM from %04X (rssi %d) target=%04X anim=%u", srcId, rssi, p.targetId, p.animId);
         if (p.targetId == MESH_TARGET_ALL || p.targetId == Mesh.myId()) {
-            if (gServos) anim.play(p.animId, p.seed);
+            startAnimationCommand(p, seq);
         }
+    } else if (type == MSG_ANIM_EXEC && len == sizeof(AnimExecPayload)) {
+#if IS_MASTER
+        AnimExecPayload p;
+        memcpy(&p, payload, sizeof(p));
+        if (p.animId >= ANIM_COUNT || p.phase < ANIM_EXEC_STARTED ||
+            p.phase > ANIM_EXEC_REJECTED || p.reason > ANIM_EXEC_REASON_SERVOS_OFF) return;
+        publishAnimExec(srcId, p, false);
+#endif
     } else if (type == MSG_SERVO && len == sizeof(ServoPayload)) {
         ServoPayload p;
         memcpy(&p, payload, sizeof(p));
@@ -369,7 +527,7 @@ static void processMeshMessage(uint8_t type, const uint8_t* payload, uint8_t len
 // lock and remains on this low-latency path; every other application message
 // is copied to the inbox and processed by loop().
 static void onMeshMessage(uint8_t type, const uint8_t* payload, uint8_t len,
-                          uint16_t srcId, int rssi) {
+                          uint16_t srcId, uint16_t seq, int rssi) {
 #if IS_MASTER
     if (type == MSG_OTA_ACK && len == sizeof(OtaAckPayload)) {
         OtaAckPayload p;
@@ -404,14 +562,14 @@ static void onMeshMessage(uint8_t type, const uint8_t* payload, uint8_t len,
     }
 #endif
 
-    enqueueMeshMessage(type, payload, len, srcId, rssi);
+    enqueueMeshMessage(type, payload, len, srcId, seq, rssi);
 }
 
 static void pumpMeshInbox() {
     PendingMeshMessage msg;
     uint8_t processed = 0;
     while (processed < MESH_INBOX_MAX_PER_LOOP && dequeueMeshMessage(msg)) {
-        processMeshMessage(msg.type, msg.payload, msg.len, msg.srcId, msg.rssi);
+        processMeshMessage(msg.type, msg.payload, msg.len, msg.srcId, msg.seq, msg.rssi);
         processed++;
     }
 
@@ -527,7 +685,7 @@ void setup() {
 
 #if IS_MASTER
     Console.begin();
-    Console.onAnim(playLocalAnim);
+    Console.onAnim(onAnimCmd);
     Console.onServo(onServoCmd);
     Console.onAutoAnim(onAutoAnimCmd);
     Console.onConfig(applyAnimParamsEffect);
@@ -571,6 +729,7 @@ void loop() {
 
     head.update();
     if (gServos) anim.update();
+    finishTrackedAnimationIfNeeded();
     pumpMeshInbox();
 #if IS_MASTER
     Console.update();
@@ -578,6 +737,7 @@ void loop() {
     pumpOtaEvents();
 #else
     OtaS.update(now);
+    pumpAnimExecReports();
 #endif
 
     // Life LED — "locate" override: solid on instead of the normal blink.

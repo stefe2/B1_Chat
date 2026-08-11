@@ -3,6 +3,15 @@ using b1_chat_console.Models;
 
 namespace b1_chat_console.Services;
 
+public readonly record struct AnimExecutionReport(
+    uint RequestId,
+    ushort DroidId,
+    int AnimId,
+    string Phase,
+    string? Reason,
+    uint AtMs,
+    int MeshSeq);
+
 /// <summary>Narrow protocol surface consumed by the Sequencer and its headless tests.</summary>
 public interface ISequencerProtocol
 {
@@ -11,7 +20,8 @@ public interface ISequencerProtocol
     event Action? DroidsChanged;
     event Action? AnimDurationsReceived;
     event Action<bool>? LinkClosed;
-    void PlayAnim(ushort target, int animId, uint seed);
+    event Action<AnimExecutionReport>? AnimExecutionReceived;
+    uint PlayAnim(ushort target, int animId, uint seed);
 }
 
 /// <summary>Audio side effects consumed by the Sequencer.</summary>

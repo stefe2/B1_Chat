@@ -893,8 +893,13 @@ The dashboard is updated whenever an item changes state.
   same-version images: rolling compatibility with both legacy heartbeat formats
   was verified, and repeat OTA updates of both slaves returned `ok=true` with
   master `4DAD66EF` and slaves `72349AFE`. The Build ID regression passed 22/22
-  and the read-only Sequencer preflight passed 6/6. Remaining H07 work:
-  operator-confirmed motion,
+  and the read-only Sequencer preflight passed 6/6. Non-blocking application
+  execution reports now correlate the console request with the existing mesh
+  sequence and expose started/completed/interrupted/rejected per droid without
+  changing `MSG_ANIM`. On firmware builds `00FD6D8C`/`65440D15`, the fully
+  automated no-slave-servo bench passed 5/5 targeted, broadcast and TALK→IDLE
+  lifecycle scenarios; the WPF suite passed 35/35 and strict hardware
+  regression passed 24/24. Remaining H07 work: operator-confirmed motion,
   measured inter-droid skew, actual WPF Pause/Resume and simultaneous PC audio,
   intentional disconnect/offline target and weak-link cases.
 
@@ -1261,3 +1266,4 @@ Append concise evidence when closing items; do not paste full build logs.
 | 2026-08-11 | SEQ-H07 (in progress) | COM3 preflight found master 43140 plus slaves 4216/34880 with stable inventory, but exposed a stale/mismatched 1.9.0 binary: targetless config responses and absent runtime validation. Active movement was refused. Bench state restored to configs `50/60/50`, master calibration `0/90/180`, servos/auto-animation off. Added guarded `sequencer-bench-test.ps1`; hardened default self-test so mutating rejection checks are suppressed unless a read-only validation probe passes. Reports `b1-self-test-20260811-085949.json`, `b1-sequencer-bench-20260811-090523.json`, `b1-self-test-20260811-090558.json`. |
 | 2026-08-11 | SEQ-H07 (in progress) | Master USB flash succeeded; two slave OTA payloads completed at 5128/5128 chunks and stayed healthy beyond 20 s. Same-version 1.9.0 falsely yields `rolledBack`, exposing a version-only verdict limitation. Active serial/mesh bench passed 15/15, then strict serial regression passed 20/20. Final state: master `59/60/50`, slaves `50/60/50`, original calibrations, servos/auto-animation off. Reports `b1-sequencer-bench-20260811-092352.json` and `b1-self-test-20260811-092501.json`. Physical movement/skew, WPF+audio and disconnect/weak-link observations remain. |
 | 2026-08-11 | Build ID / SEQ-H07 | Added deterministic 8-hex firmware identities throughout PlatformIO, heartbeat/registry, serial protocol, WPF inventory/status, OTA verdicts and release manifests. The new master accepted both legacy slaves during the rolling upgrade; same-version OTA then returned `ok=true` for 4216 and 34880 with master build `4DAD66EF` and slave build `72349AFE`. Read-only bench passed 6/6 and strict serial regression passed 22/22, including 15 s stable mesh observation. Reports `b1-sequencer-bench-20260811-101337.json` and `b1-self-test-20260811-101406.json`. |
+| 2026-08-11 | Execution telemetry / SEQ-H07 | Added backward-compatible, non-blocking `MSG_ANIM_EXEC` lifecycle reports correlated through the existing mesh sequence and console `requestId`; WPF clips aggregate started/completed/interrupted/rejected per droid. Master `00FD6D8C` plus slaves `65440D15` passed headless targeted/broadcast/TALK→IDLE lifecycle 5/5, WPF tests 35/35, offline regression 17/17 and strict hardware regression 24/24. Final servo/auto-animation state is off on all three. Reports `b1-anim-exec-20260811-133214.json`, `b1-self-test-20260811-131949.json`, `b1-sequencer-bench-20260811-133234.json`, `b1-self-test-20260811-133306.json`. Physical motion/skew, WPF+audio, disconnect and weak-link tests remain deferred until operator/hardware availability. |

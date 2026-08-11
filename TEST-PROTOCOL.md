@@ -19,13 +19,16 @@ enables/disables a servo, previews a position, or starts an animation.
 - restores and runs the headless Sequencer unit/integration tests without
   changing `console/build.number`; the suite covers immutable playback plans,
   restart/cancellation, Loop boundaries, Pause/Resume edges, mute, disconnect,
-  natural end, repeated Stop, cleanup and numeric duration limits;
+  natural end, repeated Stop, cleanup, numeric duration limits and aggregation
+  of per-droid animation execution reports;
 - runs `git diff --check`;
 - verifies that the callback-to-loop mesh inbox is present;
 - verifies the per-droid animation-parameter store and targeted protocol;
 - verifies the serial, mesh, and OTA validation guards;
 - verifies that the content-derived firmware Build ID is generated and
   propagated through heartbeats, serial inventory and OTA verdicts;
+- verifies the non-blocking animation execution-report path from mesh sequence
+  correlation through the serial protocol and WPF timeline;
 - verifies randomized mesh sequence initialization;
 - verifies fail-closed SHA-256 handling for downloaded firmware assets;
 - verifies that Help files are forced into the published payload, checked before
@@ -101,9 +104,27 @@ servo/automatic-animation state. It never changes configuration/calibration,
 commits, flashes, starts OTA, or intentionally disconnects USB.
 
 The automated verdict proves serial acceptance, inventory/state propagation and
-observed mesh health. The current protocol has no target-execution acknowledgement
-or position telemetry, so visible movement, deterministic trajectory and
-inter-droid skew still require an operator observation or future telemetry.
+observed mesh health. Execution reports now prove that each current droid's
+software animation engine started, completed, interrupted or rejected a tracked
+command. There is still no position telemetry, so visible movement,
+deterministic physical trajectory and inter-droid mechanical skew require an
+operator observation.
+
+## Headless animation execution test
+
+`tools/anim-exec-test.ps1` is the active test for slaves without physical
+servos. It forces the master's attached servos off, temporarily enables only
+the slave software engines, disables spontaneous motion, and restores every
+captured servo/auto-animation state in `finally`.
+
+```powershell
+.\tools\anim-exec-test.ps1 -ComPort COM3
+```
+
+It requires the `animExec` capability and validates targeted finite animation
+start/completion on every slave, a broadcast where the disabled master reports
+`rejected/servosOff`, and interruption of looping TALK by tracked IDLE. It does
+not flash, alter configuration/calibration, or claim physical movement.
 
 ### Bench run — 2026-08-11
 
@@ -145,6 +166,26 @@ inter-droid skew still require an operator observation or future telemetry.
 - Strict serial regression: 22 passed, 0 failed, including full fleet Build ID
   propagation and 15 seconds of stable mesh observation. Report:
   `b1-self-test-20260811-101406.json`.
+
+### Animation execution-report validation — 2026-08-11
+
+- Final identities: master `00FD6D8C`; both slaves `65440D15`. Master USB flash
+  and both 975,024-byte same-version OTA transfers completed successfully at
+  `5132/5132` chunks (MD5 `b002fc1867d64f6d11f744d14a3c49ee`).
+- Headless lifecycle test: 5 passed, 0 failed. Both slaves reported targeted
+  `started` then `completed`; broadcast returned `rejected/servosOff` from the
+  deliberately disabled master and completion from both slaves; TALK reported
+  `interrupted` when replaced by IDLE. Report:
+  `b1-anim-exec-20260811-133214.json`.
+- WPF/headless suite: 35 passed, 0 failed. Offline autonomous regression: 17
+  passed, 0 failed (`b1-self-test-20260811-131949.json`). Strict hardware
+  regression: 24 passed, 0 failed, including `animExec` capability and 15
+  seconds of stable mesh (`b1-self-test-20260811-133306.json`).
+- Read-only post-test preflight: 6 passed, 0 failed, 1 active-motion skip;
+  three Build IDs and six topology links present
+  (`b1-sequencer-bench-20260811-133234.json`). Final restoration confirmed
+  servos and automatic animations off on master `43140` and slaves
+  `34880`/`4216`.
 
 ## Deliberate exclusions
 

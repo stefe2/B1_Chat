@@ -135,10 +135,18 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     private readonly Stack<SequenceSnapshot> _future = new();
     private readonly List<IDisposable> _playbackTimers = new();
     private readonly HashSet<int> _dispatchedPlaybackEvents = new();
+    private readonly Dictionary<uint, ExecutionTracker> _executionTrackers = new();
     private readonly PlaybackGeneration _playbackGeneration = new();
     private SequencerPlaybackPlan? _activePlaybackPlan;
     private int _elapsedAtPauseMs;
     private bool _disposed;
+
+    private sealed class ExecutionTracker
+    {
+        public required SequenceStep Step { get; init; }
+        public required HashSet<ushort> ExpectedDroids { get; init; }
+        public Dictionary<ushort, AnimExecutionReport> Reports { get; } = new();
+    }
 
     // Persistent sequence edits are locked for the whole active pass, including Pause. The
     // playback plan is a snapshot, so allowing the editor to show one document while another
@@ -182,6 +190,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         _playbackClock = playbackClock ?? new StopwatchPlaybackClock();
         _protocol.DroidsChanged += RebuildTracks;
         _protocol.AnimDurationsReceived += OnAnimDurationsReceived;
+        _protocol.AnimExecutionReceived += OnAnimExecutionReceived;
         _protocol.LinkClosed += OnProtocolLinkClosed;
         Steps.CollectionChanged += (_, _) => RebuildRulerTicks();
         RebuildTracks();
@@ -197,6 +206,78 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         RebuildRulerTicks();
     }
 
+    private void ResetExecutionTracking()
+    {
+        _executionTrackers.Clear();
+        foreach (var step in Steps)
+        {
+            step.ExecutionSummary = "";
+            step.ExecutionDetail = "";
+            step.ExecutionTone = "none";
+        }
+    }
+
+    private void TrackExecution(uint requestId, GesturePlaybackEvent gesture)
+    {
+        if (gesture.SourceOrder < 0 || gesture.SourceOrder >= Steps.Count) return;
+        var step = Steps[gesture.SourceOrder];
+        var expected = gesture.Target == ushort.MaxValue
+            ? _protocol.Droids.Where(d => d.Online).Select(d => d.Id).ToHashSet()
+            : new HashSet<ushort> { gesture.Target };
+        _executionTrackers[requestId] = new ExecutionTracker
+        {
+            Step = step,
+            ExpectedDroids = expected,
+        };
+        step.ExecutionSummary = expected.Count > 1 ? $"SENT 0/{expected.Count}" : "SENT";
+        step.ExecutionDetail = $"Request {requestId}: awaiting execution report.";
+        step.ExecutionTone = "sent";
+    }
+
+    private void OnAnimExecutionReceived(AnimExecutionReport report) => RunOnUiThread(() =>
+    {
+        if (!_executionTrackers.TryGetValue(report.RequestId, out var tracker)) return;
+        // A broadcast can discover a droid that came online after dispatch.
+        tracker.ExpectedDroids.Add(report.DroidId);
+        tracker.Reports[report.DroidId] = report;
+        UpdateExecutionSummary(tracker);
+    });
+
+    private static void UpdateExecutionSummary(ExecutionTracker tracker)
+    {
+        var reports = tracker.Reports.Values.ToArray();
+        var expected = Math.Max(1, tracker.ExpectedDroids.Count);
+        var rejected = reports.Count(r => r.Phase == "rejected");
+        var interrupted = reports.Count(r => r.Phase == "interrupted");
+        var completed = reports.Count(r => r.Phase == "completed");
+        var confirmed = reports.Count(r => r.Phase is "started" or "completed" or "interrupted");
+
+        if (rejected > 0)
+        {
+            tracker.Step.ExecutionSummary = expected == 1 ? "REJECT" : $"REJ {rejected}/{expected}";
+            tracker.Step.ExecutionTone = "rejected";
+        }
+        else if (completed >= expected)
+        {
+            tracker.Step.ExecutionSummary = expected == 1 ? "DONE" : $"DONE {completed}/{expected}";
+            tracker.Step.ExecutionTone = "completed";
+        }
+        else if (interrupted > 0)
+        {
+            tracker.Step.ExecutionSummary = expected == 1 ? "STOP" : $"STOP {interrupted}/{expected}";
+            tracker.Step.ExecutionTone = "interrupted";
+        }
+        else
+        {
+            tracker.Step.ExecutionSummary = expected == 1 ? "START" : $"ACK {confirmed}/{expected}";
+            tracker.Step.ExecutionTone = "started";
+        }
+
+        tracker.Step.ExecutionDetail = string.Join("; ", reports
+            .OrderBy(r => r.DroidId)
+            .Select(r => $"{r.DroidId}: {r.Phase}{(string.IsNullOrWhiteSpace(r.Reason) ? "" : $" ({r.Reason})")}"));
+    }
+
     private void OnProtocolLinkClosed(bool unexpected) => RunOnUiThread(() =>
     {
         if (IsPlaying || IsPaused) Stop();
@@ -209,6 +290,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         Stop();
         _protocol.DroidsChanged -= RebuildTracks;
         _protocol.AnimDurationsReceived -= OnAnimDurationsReceived;
+        _protocol.AnimExecutionReceived -= OnAnimExecutionReceived;
         _protocol.LinkClosed -= OnProtocolLinkClosed;
     }
 
@@ -858,6 +940,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         _playbackGeneration.Cancel();
         DisposePlaybackTimers();
         _audioPlayer.StopAll(); // Play pressed mid-playback restarts clean, no overlapped audio
+        ResetExecutionTracking();
         _activePlaybackPlan = SequencerPlaybackPlan.Capture(
             Steps, AudioLanes, AnimDurationMsLookup, Loop);
         _dispatchedPlaybackEvents.Clear();
@@ -926,7 +1009,8 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
                 switch (playbackEvent)
                 {
                     case GesturePlaybackEvent gesture when !IsTrackMuted(gesture.Target):
-                        _protocol.PlayAnim(gesture.Target, gesture.AnimId, gesture.Seed);
+                        var requestId = _protocol.PlayAnim(gesture.Target, gesture.AnimId, gesture.Seed);
+                        TrackExecution(requestId, gesture);
                         break;
                     case AudioPlaybackEvent audio:
                         _audioPlayer.Play(audio.FilePath, audio.Loop);
@@ -948,6 +1032,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
                 _audioPlayer.StopAll();
                 _elapsedAtPauseMs = 0;
                 _dispatchedPlaybackEvents.Clear();
+                ResetExecutionTracking();
                 var nextGeneration = _playbackGeneration.Begin();
                 ScheduleTimers(plan, 0, nextGeneration);
                 StartPlayheadTicker(0);

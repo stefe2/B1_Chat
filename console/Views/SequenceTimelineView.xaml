@@ -575,11 +575,18 @@
                                              <Border Height="42" CornerRadius="5" Padding="8,2" BorderThickness="1"
                                                      Background="{Binding AnimId, Converter={StaticResource AnimFamilyToBrushConv}, ConverterParameter=Gradient}"
                                                      BorderBrush="#66000000" Cursor="SizeAll"
-                                                     ToolTip="Click to inspect this gesture. Drag to change its start time or target track; right-click to duplicate or delete it."
                                                      Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                     MouseLeftButtonDown="Clip_MouseLeftButtonDown"
                                                     MouseMove="Clip_MouseMove"
                                                     MouseLeftButtonUp="Clip_MouseLeftButtonUp">
+                                                <Border.ToolTip>
+                                                    <StackPanel MaxWidth="360">
+                                                        <TextBlock Text="Click to inspect this gesture. Drag to change its start time or target track; right-click to duplicate or delete it."
+                                                                   TextWrapping="Wrap" />
+                                                        <TextBlock Text="{Binding ExecutionDetail}" Margin="0,4,0,0"
+                                                                   FontFamily="{StaticResource MonoFont}" TextWrapping="Wrap" />
+                                                    </StackPanel>
+                                                </Border.ToolTip>
                                                 <!-- Vertical glide while dragged (transient DragOffsetY) — Target (the row)
                                                      only settles at mouse-up, like the horizontal snap (see code-behind). -->
                                                 <Border.RenderTransform>
@@ -707,6 +714,32 @@
                                                                     </DataTrigger>
                                                                     <DataTrigger Binding="{Binding AnimId}" Value="17">
                                                                         <Setter Property="Visibility" Value="Visible" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                                    <!-- Non-blocking firmware execution telemetry. Broadcast clips
+                                                         aggregate one report per online droid (for example ACK 2/3). -->
+                                                    <TextBlock HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                                               Margin="0,0,1,0" Text="{Binding ExecutionSummary}"
+                                                               FontFamily="{StaticResource MonoFont}"
+                                                               FontSize="7.5" FontWeight="Bold" IsHitTestVisible="False">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Foreground" Value="#B3140E04" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding ExecutionTone}" Value="started">
+                                                                        <Setter Property="Foreground" Value="#FF175F8C" />
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding ExecutionTone}" Value="completed">
+                                                                        <Setter Property="Foreground" Value="#FF176D3A" />
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding ExecutionTone}" Value="interrupted">
+                                                                        <Setter Property="Foreground" Value="#FF7A4B00" />
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding ExecutionTone}" Value="rejected">
+                                                                        <Setter Property="Foreground" Value="#FF8B1E1E" />
                                                                     </DataTrigger>
                                                                 </Style.Triggers>
                                                             </Style>

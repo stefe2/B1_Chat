@@ -192,6 +192,16 @@ Invoke-Test "Firmware Build ID pipeline present" {
     "content-derived build propagated through heartbeat and OTA verdict"
 }
 
+Invoke-Test "Animation execution-report pipeline present" {
+    Assert-Source "src/mesh_comm.h" "MSG_ANIM_EXEC" "mesh execution report type missing"
+    Assert-Source "src/mesh_comm.cpp" "hdr\.seq" "mesh sequence correlation missing"
+    Assert-Source "src/main.cpp" "ANIM_EXEC_INTERRUPTED" "firmware lifecycle reporting missing"
+    Assert-Source "src/serial_console.cpp" 'doc\["evt"\] = "animExec"' "serial execution event missing"
+    Assert-Source "console/Services/ProtocolClient.cs" "AnimExecutionReceived" "console execution parser missing"
+    Assert-Source "console/ViewModels/SequencerViewModel.cs" "TrackExecution" "Sequencer execution aggregation missing"
+    "non-blocking started/completed/interrupted/rejected reporting detected"
+}
+
 Invoke-Test "Boot sequence randomization present" {
     Assert-Source "src/mesh_comm.cpp" "_seq = \(uint16_t\)esp_random\(\)" "mesh sequence still deterministic"
     "random sequence seed detected"
@@ -237,6 +247,11 @@ if (-not $SkipSerial) {
             $hello = $device.Hello
             Add-Result "B1 master handshake" "PASS" ("{0}, fw {1}, build {2}, proto {3}" -f $device.Name, $hello.fw, $hello.build, $hello.proto)
             $masterId = [int]$hello.id
+
+            Invoke-Test "Animation execution-report capability" {
+                Assert-True (@($hello.caps) -contains "animExec") "master does not advertise animExec"
+                "animExec advertised"
+            }
 
             $droids = Send-And-Wait $port '{"cmd":"list"}' { param($e) $e.evt -eq "droids" }
             Invoke-Test "Droid inventory response" {

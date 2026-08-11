@@ -32,6 +32,20 @@ enum MeshMsgType : uint8_t {
     MSG_OTA_ABORT = 14,  // master -> targeted slave: cancels the ongoing session
     MSG_LOCATE    = 15,  // toggles the targeted droid's onboard LED solid (physical "find me")
     MSG_NAME      = 16,  // persists the targeted droid's own name in its own NVS
+    MSG_ANIM_EXEC = 17,  // droid -> master: tracked animation lifecycle report
+};
+
+// Lifecycle phases reported for console-originated animation commands.
+enum AnimExecPhase : uint8_t {
+    ANIM_EXEC_STARTED     = 1,
+    ANIM_EXEC_COMPLETED   = 2,
+    ANIM_EXEC_INTERRUPTED = 3,
+    ANIM_EXEC_REJECTED    = 4,
+};
+
+enum AnimExecReason : uint8_t {
+    ANIM_EXEC_REASON_NONE       = 0,
+    ANIM_EXEC_REASON_SERVOS_OFF = 1,
 };
 
 // Status/reason codes for OTA messages (OtaAckPayload.status, OtaAbortPayload.reason).
@@ -66,8 +80,22 @@ struct MeshHeader {
 struct AnimPayload {
     uint16_t targetId;     // MESH_TARGET_ALL or a specific srcId
     uint8_t  animId;
-    uint16_t syncDelayMs;  // delay before execution (sync/offset)
+    uint16_t syncDelayMs;  // lower 15 bits: delay; high bit: execution report requested
     uint32_t seed;         // random variation seed
+};
+
+static const uint16_t ANIM_EXEC_TRACKED_FLAG = 0x8000;
+static const uint16_t ANIM_SYNC_DELAY_MASK = 0x7FFF;
+
+// A droid echoes the originating MSG_ANIM header sequence. The master maps
+// that wire-level correlation back to the console's requestId without
+// changing AnimPayload, so pre-report firmware remains able to execute it.
+struct AnimExecPayload {
+    uint16_t originSeq;
+    uint8_t  animId;
+    uint8_t  phase;       // AnimExecPhase
+    uint8_t  reason;      // AnimExecReason
+    uint32_t atMs;        // reporting droid's local uptime
 };
 
 struct ConfigPayload {
@@ -210,7 +238,8 @@ struct OtaAbortPayload {
 // Callback invoked on the ESP-NOW Wi-Fi task for every valid, non-duplicate
 // message. It must return quickly and must not perform flash or actuator work.
 typedef void (*MeshReceiveHandler)(uint8_t type, const uint8_t* payload,
-                                   uint8_t len, uint16_t srcId, int rssi);
+                                   uint8_t len, uint16_t srcId, uint16_t seq,
+                                   int rssi);
 
 class MeshComm {
 public:
@@ -224,7 +253,8 @@ public:
     // Sends a (signed) message as broadcast. Default `ttl` = MESH_TTL;
     // OTA sends use a reduced TTL (OTA_MESH_TTL) so that a transfer's
     // ~5000 fragments aren't re-relayed by every node.
-    bool send(uint8_t type, const void* payload, uint8_t len, uint8_t ttl = MESH_TTL);
+    bool send(uint8_t type, const void* payload, uint8_t len,
+              uint8_t ttl = MESH_TTL, uint16_t* outSeq = nullptr);
 
     // Derives an HMAC key (SHA256) from a password.
     static void deriveKey(const char* password, uint8_t out32[32]);
