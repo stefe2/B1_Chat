@@ -79,6 +79,7 @@ public partial class SequenceTimelineView : UserControl
     {
         if (sender is not FrameworkElement fe || fe.DataContext is not SequenceStep step || Vm is not { } vm) return;
         vm.SelectedStep = step;
+        if (!vm.CanEditSequence) { e.Handled = true; return; }
         _dragStep = step;
         var pos = e.GetPosition(TracksCanvas);
         _dragStartMouseX = pos.X;
@@ -147,6 +148,7 @@ public partial class SequenceTimelineView : UserControl
     private void AudioClip_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (sender is not FrameworkElement fe || fe.DataContext is not AudioClip clip || Vm is not { } vm) return;
+        if (!vm.CanEditSequence) { e.Handled = true; return; }
         _dragAudioClip = clip;
         _dragAudioSourceLane = vm.AudioLanes.FirstOrDefault(l => l.Clips.Contains(clip));
         var posRoot = e.GetPosition(RootGrid);
@@ -223,6 +225,7 @@ public partial class SequenceTimelineView : UserControl
     private void GestureChip_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (sender is not FrameworkElement fe || fe.DataContext is not GestureLibraryEntry entry) return;
+        if (Vm is not { CanEditSequence: true }) { e.Handled = true; return; }
         _chipCandidate = true;
         _chipDragging = false;
         _chipAnimId = entry.Id;

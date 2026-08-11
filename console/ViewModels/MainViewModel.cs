@@ -72,7 +72,8 @@ public partial class MainViewModel : ObservableObject
 
         Protocol.HelloReceived += () =>
         {
-            ConnectionStatusText = Protocol.SessionReady ? $"Connected — fw {Protocol.FwVersion ?? "?"}" : "Handshake failed";
+            var build = string.IsNullOrWhiteSpace(Protocol.FwBuildId) ? "" : $" · build {Protocol.FwBuildId}";
+            ConnectionStatusText = Protocol.SessionReady ? $"Connected — fw {Protocol.FwVersion ?? "?"}{build}" : "Handshake failed";
             OnPropertyChanged(nameof(ShowSyncBadge));
         };
 

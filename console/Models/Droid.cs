@@ -17,6 +17,7 @@ public partial class Droid : ObservableObject
     [ObservableProperty] private bool _adopted = true;
     [ObservableProperty] private string? _portName;
     [ObservableProperty] private string _fwVersion = "";
+    [ObservableProperty] private string _buildId = "";
     [ObservableProperty] private string? _latestFwVersion;
     [ObservableProperty] private DateTime _lastSeen = DateTime.MinValue;
     [ObservableProperty] private bool _otaInProgress;
@@ -26,6 +27,9 @@ public partial class Droid : ObservableObject
     public string RssiLabel => IsMaster ? (PortName ?? "local") : (Online ? $"{Rssi} dBm" : "-");
     public string IdHex => Id.ToString("X4");
     public string DisplayLabel => $"{Name} ({IdHex})";
+    public string FirmwareIdentity => string.IsNullOrWhiteSpace(BuildId)
+        ? FwVersion
+        : $"{FwVersion} · {BuildId}";
 
     // DarkComboBoxStyle's ControlTemplate renders the selected item via SelectionBoxItem,
     // which falls back to ToString() rather than respecting DisplayMemberPath (same pitfall
@@ -59,11 +63,13 @@ public partial class Droid : ObservableObject
 
     partial void OnFwVersionChanged(string value)
     {
+        OnPropertyChanged(nameof(FirmwareIdentity));
         OnPropertyChanged(nameof(FwUpToDate));
         OnPropertyChanged(nameof(CanFlashUsb));
         OnPropertyChanged(nameof(CanFlashOta));
         OnPropertyChanged(nameof(ShowFwUpToDateBadge));
     }
+    partial void OnBuildIdChanged(string value) => OnPropertyChanged(nameof(FirmwareIdentity));
     partial void OnLatestFwVersionChanged(string? value)
     {
         OnPropertyChanged(nameof(FwUpToDate));

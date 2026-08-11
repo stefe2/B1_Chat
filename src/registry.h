@@ -28,6 +28,7 @@ public:
         bool     autoAnim;  // spontaneous idle anims active, reported by the droid
         bool     adopted;   // false = pending adoption (see config_store)
         uint8_t  fwMajor = 0, fwMinor = 0, fwPatch = 0;  // version reported via heartbeat
+        uint32_t buildId = 0;  // 0 = legacy/unknown; otherwise FW_BUILD_ID
     };
 
     // Registers/refreshes a droid. Returns true if newly added.
@@ -39,8 +40,9 @@ public:
     // Updates a droid's auto-anim state (via heartbeat).
     void setAutoAnim(uint16_t id, bool on);
 
-    // Updates the firmware version reported by a droid (via heartbeat).
-    void setFwVersion(uint16_t id, uint8_t major, uint8_t minor, uint8_t patch);
+    // Updates the firmware identity reported by a droid (via heartbeat).
+    void setFwIdentity(uint16_t id, uint8_t major, uint8_t minor, uint8_t patch,
+                       uint32_t buildId);
 
     // Marks a droid as adopted/not adopted (RAM status, see config_store for NVS).
     void setAdopted(uint16_t id, bool v);

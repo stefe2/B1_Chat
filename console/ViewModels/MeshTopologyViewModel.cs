@@ -111,7 +111,7 @@ public partial class MeshTopologyViewModel : ObservableObject
         _protocol.OtaReadyReceived += (target, _, _, _) => { _otaTarget = target; StartOtaTravel(target); };
         _protocol.OtaChunkAckReceived += (_, _, _) => OnOtaChunkAck();
         _protocol.OtaDoneReceived += (_, _) => { OtaTravelActive = false; _otaTarget = null; };
-        _protocol.OtaResultReceived += (_, _, _, _) => { OtaTravelActive = false; _otaTarget = null; };
+        _protocol.OtaResultReceived += (_, _, _, _, _) => { OtaTravelActive = false; _otaTarget = null; };
         _protocol.OtaErrorReceived += (_, _, _) => { OtaTravelActive = false; _otaTarget = null; };
 
         _packetTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(30) };

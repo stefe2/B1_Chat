@@ -70,18 +70,20 @@ jobs:
           SLAVE_SHA=$(sha256sum "dist/b1-slave-v$VERSION.bin" | cut -d' ' -f1)
           BOOT_SHA=$(sha256sum "dist/bootloader.bin" | cut -d' ' -f1)
           PART_SHA=$(sha256sum "dist/partitions.bin" | cut -d' ' -f1)
+          MASTER_BUILD=$(cat .pio/build/b1_master/firmware_build_id.txt)
+          SLAVE_BUILD=$(cat .pio/build/b1_slave/firmware_build_id.txt)
           MASTER_SIZE=$(stat -c%s "dist/b1-master-v$VERSION.bin")
           SLAVE_SIZE=$(stat -c%s "dist/b1-slave-v$VERSION.bin")
           BOOT_SIZE=$(stat -c%s "dist/bootloader.bin")
           PART_SIZE=$(stat -c%s "dist/partitions.bin")
           jq -n --arg version "$VERSION" --arg date "$(date -u +%Y-%m-%d)" \
-             --arg mfile "b1-master-v$VERSION.bin" --arg msha "$MASTER_SHA" --argjson msize "$MASTER_SIZE" \
-             --arg sfile "b1-slave-v$VERSION.bin" --arg ssha "$SLAVE_SHA" --argjson ssize "$SLAVE_SIZE" \
+             --arg mfile "b1-master-v$VERSION.bin" --arg msha "$MASTER_SHA" --arg mbuild "$MASTER_BUILD" --argjson msize "$MASTER_SIZE" \
+             --arg sfile "b1-slave-v$VERSION.bin" --arg ssha "$SLAVE_SHA" --arg sbuild "$SLAVE_BUILD" --argjson ssize "$SLAVE_SIZE" \
              --arg bfile "bootloader.bin" --arg bsha "$BOOT_SHA" --argjson bsize "$BOOT_SIZE" \
              --arg pfile "partitions.bin" --arg psha "$PART_SHA" --argjson psize "$PART_SIZE" \
              '{version:$version, date:$date, notes:"", files:[
-                {role:"master", file:$mfile, sha256:$msha, size:$msize},
-                {role:"slave", file:$sfile, sha256:$ssha, size:$ssize},
+                {role:"master", file:$mfile, sha256:$msha, build:$mbuild, size:$msize},
+                {role:"slave", file:$sfile, sha256:$ssha, build:$sbuild, size:$ssize},
                 {role:"bootloader", file:$bfile, sha256:$bsha, size:$bsize},
                 {role:"partitions", file:$pfile, sha256:$psha, size:$psize}
              ]}' > dist/firmware_manifest.json

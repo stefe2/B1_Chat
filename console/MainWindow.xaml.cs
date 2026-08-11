@@ -96,4 +96,13 @@ public partial class MainWindow : Window
         MainScroll.ScrollToVerticalOffset(MainScroll.VerticalOffset - e.Delta);
         e.Handled = true;
     }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        // Explicitly invalidate Sequencer callbacks and close its audio players. Relying on
+        // process teardown leaves a window where queued timer callbacks can still run while
+        // WPF is closing.
+        if (DataContext is MainViewModel vm) vm.Sequencer.Dispose();
+        base.OnClosed(e);
+    }
 }

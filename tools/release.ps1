@@ -58,7 +58,9 @@ function Build-Role([int]$isMaster, [string]$roleName) {
 
 try {
     $masterBin = Build-Role 1 "master"
+    $masterBuild = (Get-Content ".pio/build/b1/firmware_build_id.txt" -Raw).Trim()
     $slaveBin  = Build-Role 0 "slave"
+    $slaveBuild = (Get-Content ".pio/build/b1/firmware_build_id.txt" -Raw).Trim()
 } finally {
     # Restores the original role.
     $c = Get-Content $configH -Raw
@@ -75,14 +77,16 @@ Copy-Item ".pio/build/b1/bootloader.bin" $bootloaderBin -Force
 Copy-Item ".pio/build/b1/partitions.bin" $partitionsBin -Force
 
 # --- Manifest (KyberEditor-style: version, files, sha256, sizes) -----
-function FileEntry([string]$path, [string]$role) {
+function FileEntry([string]$path, [string]$role, [string]$build = "") {
     $f = Get-Item $path
-    [ordered]@{
+    $entry = [ordered]@{
         role   = $role
         file   = $f.Name
         sha256 = (Get-FileHash $f.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
         size   = $f.Length
     }
+    if ($build) { $entry.build = $build }
+    $entry
 }
 
 $manifest = [ordered]@{
@@ -90,8 +94,8 @@ $manifest = [ordered]@{
     date    = (Get-Date -Format "yyyy-MM-dd")
     notes   = $Notes
     files   = @(
-        (FileEntry $masterBin "master"),
-        (FileEntry $slaveBin "slave"),
+        (FileEntry $masterBin "master" $masterBuild),
+        (FileEntry $slaveBin "slave" $slaveBuild),
         (FileEntry $bootloaderBin "bootloader"),
         (FileEntry $partitionsBin "partitions")
     )

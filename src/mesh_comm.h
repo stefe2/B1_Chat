@@ -83,7 +83,23 @@ struct HeartbeatPayload {
     uint8_t  fwMajor;
     uint8_t  fwMinor;
     uint8_t  fwPatch;
+    uint32_t buildId;    // content-derived firmware identity (FW_BUILD_ID)
 };
+
+// Accepted by a new master while rolling out Build IDs to an older fleet.
+// Keep this exact layout: pre-Build-ID nodes send these 8-byte heartbeats.
+struct LegacyHeartbeatPayload {
+    uint32_t uptimeMs;
+    uint8_t  state;
+    uint8_t  fwMajor;
+    uint8_t  fwMinor;
+    uint8_t  fwPatch;
+};
+
+static_assert(sizeof(LegacyHeartbeatPayload) == 8,
+              "Legacy heartbeat wire format must remain exactly 8 bytes");
+static_assert(sizeof(HeartbeatPayload) == 12,
+              "Build-ID heartbeat wire format must remain exactly 12 bytes");
 
 struct ServoPayload {
     uint16_t targetId;   // MESH_TARGET_ALL or a specific srcId

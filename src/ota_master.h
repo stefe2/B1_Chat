@@ -33,6 +33,7 @@ public:
         uint16_t  total = 0;
         bool      ok = false;
         char      fw[16] = {0};
+        uint32_t  buildId = 0;
         char      reason[24] = {0};
     };
 
@@ -73,11 +74,11 @@ private:
     uint32_t _serialWaitSince = 0;
     uint32_t _rebootStartMs = 0;
     uint32_t _lastSeenAtRebootStart = 0;
-    // Version reported by the target BEFORE the OTA (captured in begin()):
-    // the console can't reliably know the version baked into an arbitrary
-    // .bin, so post-reboot confirmation compares "changed relative to
-    // before" rather than "matches what was announced".
+    // Firmware identity reported by the target BEFORE the OTA. A nonzero Build
+    // ID is the primary comparison; semantic version remains the fallback for
+    // legacy nodes that have not learned the new heartbeat field yet.
     uint8_t  _prevFwMajor = 0, _prevFwMinor = 0, _prevFwPatch = 0;
+    uint32_t _prevBuildId = 0;
 
     uint8_t  _lastSentType = 0;
     uint8_t  _lastSentBuf[sizeof(OtaChunkPayload)];

@@ -32,7 +32,7 @@
        increment in multiple MSBuild project instances while the executable kept the first value. -->
   <Target Name="IncrementBuildNumber"
           BeforeTargets="GetAssemblyVersion"
-          Condition="'$(DesignTimeBuild)' != 'true'">
+          Condition="'$(DesignTimeBuild)' != 'true' and '$(SkipBuildNumberIncrement)' != 'true'">
     <PropertyGroup>
       <NewBuildNumber>$([MSBuild]::Add($(BuildNumber), 1))</NewBuildNumber>
     </PropertyGroup>

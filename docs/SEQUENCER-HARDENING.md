@@ -1,0 +1,1263 @@
+# Animation Sequencer — Hardening backlog
+
+Status: implementation underway — first Safe Playback foundation batch
+Created: 2026-08-11
+Scope: WPF console Sequencer, console-side audio, serial/mesh animation dispatch,
+and the small firmware changes needed to give playback safe stop semantics.
+
+This document is the persistent source of truth for making the Animation
+Sequencer reliable. `PROGRESS-ARCHIVE.md` remains the historical record; this
+file tracks unfinished work and must stay current as items are implemented.
+
+## Tracking rules
+
+Status markers:
+
+- `[ ]` — not started;
+- `[~]` — in progress;
+- `[!]` — blocked, with the blocker written under the item;
+- `[x]` — implemented and all stated acceptance checks passed;
+- `[H]` — code complete but hardware validation still required;
+- `[D]` — deliberately deferred enhancement, not required for the reliability
+  baseline.
+
+Priorities:
+
+- **P0** — safety or playback-corruption risk; fix before show use;
+- **P1** — correctness or data-loss risk;
+- **P2** — robustness, maintainability, or significant usability issue;
+- **P3** — optional enhancement.
+
+An item is complete only when its code, automated checks, relevant manual check,
+and user/help documentation all agree. A clean compile alone is not completion.
+Do not mix unrelated items merely because they touch the same file.
+
+## Baseline and global definition of done
+
+Current baseline, established by the 2026-08-10 static review:
+
+- the console builds with 0 errors and 0 warnings;
+- playback is fully console-driven and uses absolute `StartMs` values;
+- no Sequencer-specific automated test project was found;
+- existing user changes in `README.md`, `platformio.ini`, `src/config.h`, and
+  `docs/` must be preserved;
+- runtime behavior has not yet been validated with a real multi-droid fleet.
+
+Every implementation batch must:
+
+1. keep the console build clean;
+2. run the relevant new tests plus the existing repository checks;
+3. leave the application in a usable state at the end of the batch;
+4. update this document's marker and evidence notes;
+5. update in-app Help/tooltips when externally visible behavior changes;
+6. identify checks that still require real hardware.
+
+## Milestones
+
+| Milestone | Outcome | Included epics | Exit gate |
+|---|---|---|---|
+| M1 — Safe Playback | No stale or hidden playback; Stop is safe | A, B | All P0 items in A/B passed |
+| M2 — Reliable Editing | Dirty, Undo/Redo and persistence are trustworthy | C, D | All P0/P1 items in C/D passed |
+| M3 — Deterministic Playback | One testable scheduler with stable ordering | E | Scheduler timing suite passed |
+| M4 — Show Ready | Durations, audio and preflight are robust | F, G | Preflight plus hardware protocol passed |
+| M5 — Enhancements | Optional creative/productivity features | Deferred P3 items | Chosen individually |
+
+## Dashboard
+
+The dashboard is updated whenever an item changes state.
+
+| Epic | Description | Required items complete | Deferred ideas complete |
+|---|---|---:|---:|
+| A | Playback isolation and cancellation | 5 / 8 | — |
+| B | Infinite gestures and Stop/Pause semantics | 0 / 6 | 0 / 1 |
+| C | Dirty, Undo/Redo and editing transactions | 0 / 8 | 0 / 1 |
+| D | Import, export and local library | 0 / 8 | 0 / 1 |
+| E | Deterministic scheduler and performance | 2 / 6 | 0 / 1 |
+| F | Duration and audio robustness | 0 / 8 | — |
+| G | Preflight and ergonomics | 0 / 9 | 0 / 4 |
+| H | Automated and hardware validation | 1 / 8 | — |
+| I | Scene & Show System (future) | — | 0 / 22 |
+
+## EPIC A — Playback isolation and cancellation
+
+### [x] SEQ-A01 — Build an immutable playback plan
+
+- **Priority:** P0
+- **Problem:** timer callbacks retain mutable `SequenceStep` and `AudioClip`
+  objects. An edit after scheduling can change what a previously armed callback
+  sends or plays.
+- **Depends on:** SEQ-H01.
+- **Acceptance:** Play copies all runnable events into immutable records containing
+  resolved start time, target, gesture/seed or audio path/loop state. Later editor
+  mutations cannot alter the active pass.
+- **Validation:** unit test edits, deletes, and replaces source objects after Play;
+  the captured plan remains unchanged.
+
+### [x] SEQ-A02 — Add playback generation cancellation
+
+- **Priority:** P0
+- **Problem:** disposing `System.Threading.Timer` does not guarantee that an
+  already queued callback cannot execute during a later pass.
+- **Depends on:** SEQ-A01.
+- **Acceptance:** every pass has a unique generation/cancellation token; all
+  callbacks verify it immediately before side effects; Stop, restart, disconnect
+  and shutdown invalidate the generation. Under resolved DEC-001, Import, Load
+  and Clear cannot execute during Play/Pause and therefore cannot replace an
+  active generation.
+- **Validation:** stress test rapid Play/Stop/Play and Loop transitions; no event
+  from an earlier generation reaches the protocol or audio fake.
+
+### [~] SEQ-A03 — Define and enforce the editing policy during playback
+
+- **Priority:** P0
+- **Problem:** Clear, Import, library Load, deletion, and inspector edits can
+  occur while a different timeline is still playing.
+- **Depends on:** SEQ-A01, SEQ-A02.
+- **Acceptance:** choose one consistent rule: lock sequence-changing controls
+  during Play/Pause, or stop the pass before an accepted edit. The UI indicates
+  why a control is unavailable. Zoom, horizontal scroll, and harmless inspection
+  may remain available.
+- **Validation:** manual UI matrix covers every editing command in stopped,
+  playing, and paused states.
+
+### [x] SEQ-A04 — Evaluate track mute at dispatch time
+
+- **Priority:** P1
+- **Problem:** mute is currently sampled only when timers are created. Toggling
+  it during a pass does not affect already scheduled events.
+- **Depends on:** SEQ-A01.
+- **Acceptance:** a track muted before an event's dispatch suppresses that event;
+  unmuting allows later events. The chosen behavior is documented and tested.
+- **Validation:** fake clock test toggles mute on both sides of a due time.
+
+### [x] SEQ-A05 — Stop cleanly on link loss and application shutdown
+
+- **Priority:** P1
+- **Problem:** serial disconnect clears the live droid list but does not end the
+  Sequencer pass; local audio and timers can continue. Shutdown has no explicit
+  Sequencer cleanup contract.
+- **Depends on:** SEQ-A02.
+- **Acceptance:** unexpected disconnect and orderly app shutdown invalidate the
+  pass, dispose scheduling resources, close active players, and update transport
+  state. The policy for optionally continuing audio-only rehearsal is explicit.
+- **Validation:** simulated `LinkClosed` and window shutdown leave no live timer
+  or player.
+
+### [ ] SEQ-A06 — Make transport state transitions single-source and consistent
+
+- **Priority:** P1
+- **Problem:** `IsPlaying`, `IsPaused`, `IsLiveTracking`, playhead position,
+  elapsed-at-pause, timers, and players are updated independently in several
+  branches.
+- **Depends on:** SEQ-A02.
+- **Acceptance:** a small state machine or equivalent centralized transition
+  methods define Stopped, Playing, and Paused. Commands and badges derive from
+  that state and impossible combinations cannot occur.
+- **Validation:** transition table test covers Play, restart, Pause, Resume,
+  Stop, natural end, Loop, disconnect, and failed start.
+
+### [x] SEQ-A07 — Use monotonic elapsed time for the playhead
+
+- **Priority:** P1
+- **Problem:** `DateTime.UtcNow` can jump when Windows adjusts its clock.
+- **Depends on:** SEQ-E01 or a minimal injectable monotonic clock.
+- **Acceptance:** elapsed playback and pause position come from `Stopwatch` or an
+  injected monotonic clock; wall-clock changes cannot move the playhead.
+- **Validation:** fake clock test simulates wall-clock jumps while monotonic time
+  advances normally.
+
+### [ ] SEQ-A08 — Add explicit Edit, Ready, Armed and Playing lifecycle states
+
+- **Priority:** P1
+- **Problem:** a user can validate one document state, modify it, and still have
+  transport controls that appear ready; there is no explicit arming boundary
+  between authoring and performance.
+- **Depends on:** SEQ-A03, SEQ-A06, SEQ-C05, SEQ-G01.
+- **Acceptance:** define `EDIT → READY → ARMED → PLAYING` transitions. Successful
+  Preflight can enter Ready; arming locks the exact document/casting/environment
+  snapshot; Play requires Armed in performance mode. Any persistent edit or
+  relevant connection/asset change invalidates Ready/Armed and returns to Edit.
+  Rehearsal may use a clearly distinct, documented shortcut.
+- **Validation:** state-table tests cover edit after validation, asset removal,
+  casting/roster change, disconnect, arm/disarm, Play, Stop and failed Preflight.
+
+## EPIC B — Infinite gestures and Stop/Pause semantics
+
+### [ ] SEQ-B01 — Track infinite gestures activated by the pass
+
+- **Priority:** P0
+- **Problem:** `POWER_DOWN` and `TALK` loop on a droid until another animation is
+  received, but the console does not track which targets need cleanup.
+- **Depends on:** SEQ-A01.
+- **Acceptance:** playback records every affected concrete/broadcast target and
+  whether its latest dispatched gesture is infinite. Later finite or IDLE
+  gestures update that state correctly.
+- **Validation:** tests cover broadcast plus per-droid overrides and repeated
+  infinite gestures.
+
+### [ ] SEQ-B02 — Stop infinite gestures on Stop and natural end
+
+- **Priority:** P0
+- **Problem:** Stop currently cancels console work only; TALK/POWER_DOWN can keep
+  moving hardware indefinitely after the UI returns to zero.
+- **Depends on:** SEQ-B01, SEQ-A02.
+- **Acceptance:** Stop and non-looping natural end send a safe termination
+  (`IDLE` or a dedicated firmware command) to every target still running an
+  infinite gesture, without disturbing unrelated targets. Behavior on link loss
+  is documented because delivery cannot be guaranteed.
+- **Validation:** protocol fake asserts exact target cleanup; real droid confirms
+  TALK and POWER_DOWN end safely.
+
+### [ ] SEQ-B03 — Make Pause semantics explicit and honest
+
+- **Priority:** P1
+- **Problem:** Pause freezes audio/timeline scheduling but cannot freeze a gesture
+  already running on a droid.
+- **Depends on:** SEQ-A06.
+- **Acceptance:** UI and Help call this out unambiguously. Decide whether Pause
+  leaves hardware gestures running, terminates only infinite gestures, or gains
+  a new firmware pause capability. Resume semantics match that decision.
+- **Validation:** manual test with a long finite gesture and TALK.
+
+### [ ] SEQ-B04 — Give infinite gesture clips explicit end semantics
+
+- **Priority:** P1
+- **Problem:** their displayed two-second width is only indicative and is not an
+  actual endpoint.
+- **Depends on:** SEQ-B02, SEQ-F01.
+- **Acceptance:** TALK/POWER_DOWN clips have a real user-visible duration or an
+  explicit "until next gesture/end" mode. Playback sends termination at the
+  represented endpoint, and timeline width matches behavior.
+- **Validation:** edit, export/import, Play, Pause/Resume, Stop, and Loop tests.
+
+### [D] SEQ-B05 — Link TALK duration to an audio clip
+
+- **Priority:** P3
+- **Problem:** synchronizing TALK to audio is presently manual.
+- **Depends on:** SEQ-B04, SEQ-F08.
+- **Acceptance:** a user can link TALK to a chosen audio clip so it starts and
+  terminates with that clip, with a visible relationship and deterministic
+  behavior when the audio loops or is missing.
+- **Validation:** UI and playback integration test.
+
+### [ ] SEQ-B06 — Add a firmware fail-safe lease for infinite gestures
+
+- **Priority:** P0
+- **Problem:** console cleanup cannot stop TALK/POWER_DOWN if the PC crashes, the
+  serial cable disconnects, or the master becomes unreachable before IDLE is
+  delivered.
+- **Depends on:** SEQ-B01, firmware protocol design.
+- **Acceptance:** infinite gestures started by Sequencer playback carry or create
+  a bounded lease/TTL. The console renews the lease while the owning pass remains
+  valid; missing renewal causes the droid to return automatically to a defined
+  safe state. Manual Animation-card behavior and autonomous animations have an
+  explicit, non-ambiguous policy. Stale generations cannot renew a new pass.
+- **Validation:** real and simulated tests cover normal renewal, console crash,
+  cable removal, master loss/restart, delayed packets, renewal from a stale pass,
+  and clean IDLE before expiry.
+
+### [ ] SEQ-B07 — Define Stop, Safe Stop and Emergency Stop levels
+
+- **Priority:** P0
+- **Problem:** one Stop action cannot express both orderly scene termination and
+  immediate physical intervention; blindly disabling servos may itself allow a
+  mechanism to fall.
+- **Depends on:** SEQ-B02, SEQ-B06, servo/mechanical safety review.
+- **Acceptance:** define at least normal Stop (cancel schedule/audio and orderly
+  IDLE), Safe Stop (immediate animation interruption and configured safe pose),
+  and Emergency Stop (hardware-specific servo policy). Destructive/high-risk
+  actions require unmistakable UI and cannot be confused with Pause. Default
+  behavior is justified for the actual head mechanics and remains operable from
+  Show mode.
+- **Validation:** protocol/state tests plus a documented real-hardware safety
+  procedure covering loaded/unloaded mechanisms, disconnect and repeated use.
+
+## EPIC C — Dirty, Undo/Redo and editing transactions
+
+### [ ] SEQ-C01 — Centralize sequence edit transactions
+
+- **Priority:** P1
+- **Problem:** commands manually call `PushHistory()` and `Dirty = true`, while
+  direct bindings and code-behind edits bypass one or both.
+- **Depends on:** SEQ-H01.
+- **Acceptance:** all persistent mutations use one begin/commit edit mechanism.
+  Commit compares before/after, creates exactly one history entry for a real
+  change, clears Redo, marks Dirty, and refreshes derived timeline state.
+- **Validation:** table-driven tests run every edit type through the same rules.
+
+### [ ] SEQ-C02 — Do not create history for selection or no-op drags
+
+- **Priority:** P1
+- **Problem:** mouse-down immediately pushes history even when the user only
+  selects a clip or releases without moving it.
+- **Depends on:** SEQ-C01.
+- **Acceptance:** selection is transient; drag history begins only after movement
+  exceeds a defined threshold, and a drag ending at its original state is a
+  no-op.
+- **Validation:** click, sub-threshold motion, moved-and-returned, and real-drag
+  interaction tests.
+
+### [ ] SEQ-C03 — Cover every persistent property edit
+
+- **Priority:** P1
+- **Problem:** gesture/target inspector changes, lane rename, audio Loop, and
+  whole-sequence Loop currently lack dependable history and Dirty behavior.
+- **Depends on:** SEQ-C01.
+- **Acceptance:** gesture, target, start, audio path/duration/start/lane/Loop,
+  lane label/order, sequence Loop/name, insert/delete/duplicate, and Clear all
+  participate in transactions. Mute, armed track, selection, zoom, scroll, Snap,
+  peaks, and drag visual state remain transient.
+- **Validation:** one Undo and one Redo test per property category.
+
+### [ ] SEQ-C04 — Enforce the history capacity
+
+- **Priority:** P2
+- **Problem:** `HistoryMax = 50` is declared but old snapshots are never removed.
+- **Depends on:** SEQ-C01.
+- **Acceptance:** history retains exactly the newest configured number of edits,
+  without unbounded memory growth, and Redo follows the same bounded policy.
+- **Validation:** perform more than 50 edits and verify boundaries/order.
+
+### [ ] SEQ-C05 — Base Dirty on a saved checkpoint
+
+- **Priority:** P1
+- **Problem:** Export does not clear Dirty reliably, and manual Boolean updates
+  can disagree with the actual document.
+- **Depends on:** SEQ-C01, SEQ-D04.
+- **Acceptance:** successful Load/Import/Export establishes a saved checkpoint;
+  Dirty reflects document equality with that checkpoint. Undoing back to it
+  clears Dirty, and redoing away sets it again.
+- **Validation:** save/edit/undo/redo/export matrix.
+
+### [ ] SEQ-C06 — Refresh duration and extent after property changes
+
+- **Priority:** P1
+- **Problem:** collection changes rebuild ruler extent, but nudging `StartMs` or
+  replacing `AnimId` can alter the total without notifying timeline width.
+- **Depends on:** SEQ-C01, SEQ-F01.
+- **Acceptance:** all changes affecting clip end or sequence total refresh cached
+  duration, ruler, timecode, and scroll extent exactly once at commit.
+- **Validation:** move the last clip, select longer/shorter gestures, replace
+  audio, and Undo/Redo each operation.
+
+### [ ] SEQ-C07 — Handle lost mouse capture and cancellation
+
+- **Priority:** P2
+- **Problem:** losing capture/window focus can leave drag flags, offsets, or the
+  library ghost active because completion relies on MouseUp.
+- **Depends on:** SEQ-C01, SEQ-C02.
+- **Acceptance:** lost capture, Escape, view unload, and window deactivation
+  either cancel and restore the original edit or commit by a documented rule;
+  all transient visual state is cleared.
+- **Validation:** manual and UI-level capture-loss scenarios for gesture, audio,
+  ruler scrub, and library-chip drag.
+
+### [ ] SEQ-C08 — Separate document state from transient UI state
+
+- **Priority:** P2
+- **Problem:** the large ViewModel mixes persistence, editor state, playback,
+  geometry, dialogs, and scheduling, making omissions likely.
+- **Depends on:** SEQ-C01, SEQ-E01.
+- **Acceptance:** establish explicit document/editor/playback responsibilities
+  without a risky all-at-once rewrite. Snapshots serialize document state only.
+- **Validation:** architecture tests or type-level boundaries plus unchanged UI
+  behavior.
+
+### [D] SEQ-C09 — Add recoverable draft autosave
+
+- **Priority:** P3
+- **Problem:** unexported edits are lost on crash or restart; the last exported
+  file is reloaded instead.
+- **Depends on:** SEQ-C05, SEQ-D04.
+- **Acceptance:** a separate atomic draft does not overwrite the user's export;
+  startup offers recovery only when the draft is newer and Dirty.
+- **Validation:** crash/restart and stale-draft tests.
+
+## EPIC D — Import, export and local library
+
+### [ ] SEQ-D01 — Parse and validate import before mutating the editor
+
+- **Priority:** P1
+- **Problem:** `ImportFrom` changes Name, Loop, tracks, audio, and steps
+  progressively; a later exception can leave a partially imported document.
+- **Depends on:** SEQ-H01.
+- **Acceptance:** parse into a temporary DTO, validate fully, then apply once.
+  Failure leaves the current document, history, selection, and saved checkpoint
+  untouched and reports an actionable error.
+- **Validation:** malformed input at every major section produces no partial
+  mutation.
+
+### [ ] SEQ-D02 — Validate schema identity, version and numeric bounds
+
+- **Priority:** P1
+- **Problem:** imports do not enforce `type`, supported version, gesture range,
+  nonnegative times/durations, safe integer arithmetic, or reasonable counts.
+- **Depends on:** SEQ-D01.
+- **Acceptance:** validate type/version; AnimId 0..17; legal target IDs;
+  nonnegative bounded start/duration; nonempty bounded lane labels; maximum
+  tracks/steps/lanes/clips; and checked end-time calculations. Errors identify
+  the offending field.
+- **Validation:** boundary, overflow, negative, wrong-type, huge-count, and
+  unknown-version fixtures.
+
+### [ ] SEQ-D03 — Implement explicit schema migrations
+
+- **Priority:** P1
+- **Problem:** legacy `delayMs` is relative but is currently treated as an
+  absolute start, changing choreography.
+- **Depends on:** SEQ-D01, SEQ-D02.
+- **Acceptance:** each supported version has a named migration. Relative delays
+  are cumulatively converted according to the historical format; unsupported
+  ambiguous files fail clearly instead of silently changing timing.
+- **Validation:** golden fixtures for every supported schema version.
+
+### [ ] SEQ-D04 — Make export atomic and establish the saved checkpoint
+
+- **Priority:** P1
+- **Problem:** direct `File.WriteAllText` can leave a truncated file, exceptions
+  are not surfaced consistently, and export does not mark the current snapshot
+  as saved.
+- **Depends on:** SEQ-C05, SEQ-D02.
+- **Acceptance:** write a temporary file in the destination directory, flush and
+  atomically replace/move it; report failure without changing save state; on
+  success update last path, document name policy, checkpoint, and Dirty.
+- **Validation:** successful export, denied path, interrupted/failed replacement,
+  and re-import round-trip tests.
+
+### [ ] SEQ-D05 — Protect unsaved work before replacement
+
+- **Priority:** P1
+- **Problem:** Import and library Load replace the current sequence without the
+  Clear command's unsaved-work confirmation.
+- **Depends on:** SEQ-C05, SEQ-D01.
+- **Acceptance:** replacement prompts when Dirty, supports Cancel, and follows
+  the playback policy from SEQ-A03. Startup recovery remains silent/safe.
+- **Validation:** clean/dirty plus stopped/playing/paused matrix.
+
+### [ ] SEQ-D06 — Resolve the local-library dead end
+
+- **Priority:** P2
+- **Problem:** the UI can Load/Delete historical library entries but cannot call
+  the existing Save method; Import's tooltip incorrectly says it adds an item.
+- **Depends on:** SEQ-D01, SEQ-D04.
+- **Acceptance:** choose and implement one coherent product decision: restore
+  Save/Save As with overwrite rules, or remove the panel/service and migrate
+  users to file import/export. README, Help, and tooltips match.
+- **Validation:** end-to-end save/load/delete or migration/removal test.
+
+### [ ] SEQ-D07 — Confirm destructive library deletion
+
+- **Priority:** P2
+- **Problem:** deleting a library entry is immediate and unrecoverable from the
+  UI.
+- **Depends on:** SEQ-D06 if the library is retained.
+- **Acceptance:** identify the exact item, request confirmation, report file
+  errors, and refresh only after success. Prefer a recoverable move if practical.
+- **Validation:** confirm, cancel, missing file, and access-error cases.
+
+### [ ] SEQ-D08 — Align naming, badges, tooltips and Help with reality
+
+- **Priority:** P2
+- **Problem:** new sequences cannot be named naturally; the badge ignores Dirty;
+  Export says portable despite absolute audio paths; Import claims a library
+  action it does not perform.
+- **Depends on:** SEQ-C05, SEQ-D04, SEQ-D06.
+- **Acceptance:** define editable/filename-derived naming; display clean/dirty
+  state; accurately describe linked audio and startup restore; remove every
+  contradictory tooltip/help passage.
+- **Validation:** content review plus UI smoke test for new/imported/exported and
+  edited sequences.
+
+### [D] SEQ-D09 — Export a portable show package
+
+- **Priority:** P3
+- **Problem:** `.b1seq.json` stores absolute paths and does not carry audio.
+- **Depends on:** SEQ-D04, SEQ-F05.
+- **Acceptance:** optional package export copies audio into a stable folder,
+  writes relative paths and hashes, handles filename collisions, and reopens on
+  another PC without manual repair.
+- **Validation:** round trip in a different base directory and missing/tampered
+  asset tests.
+
+## EPIC E — Deterministic scheduler and performance
+
+### [x] SEQ-E01 — Introduce testable clock, scheduler, protocol and audio seams
+
+- **Priority:** P1
+- **Problem:** concrete timers, `DateTime`, `ProtocolClient`, static dialogs, and
+  concrete audio service make temporal behavior difficult to test.
+- **Depends on:** SEQ-H01 may be developed in the same batch.
+- **Acceptance:** narrow interfaces permit fake monotonic time, captured protocol
+  sends, captured audio actions, and deterministic scheduler advancement without
+  launching WPF or touching hardware.
+- **Validation:** a headless test constructs and runs a simple playback plan.
+
+### [ ] SEQ-E02 — Replace one timer per event with one scheduler
+
+- **Priority:** P1
+- **Problem:** independent thread-pool timers scale poorly and create callback
+  races and nondeterministic ordering.
+- **Depends on:** SEQ-A01, SEQ-A02, SEQ-E01.
+- **Acceptance:** one scheduler owns a priority queue of the immutable pass and
+  dispatches due events from monotonic elapsed time. Stop/cancel releases it
+  completely; event count does not equal OS timer count.
+- **Validation:** large synthetic timeline, cancellation, drift, and resource
+  count tests.
+
+### [ ] SEQ-E03 — Define stable same-time ordering and batching
+
+- **Priority:** P1
+- **Problem:** broadcast and targeted gestures at the same timestamp, or multiple
+  gestures for one target, currently race through independent timers.
+- **Depends on:** SEQ-E02, SEQ-G03.
+- **Acceptance:** define an explicit stable order and conflict policy. All events
+  due in one scheduler tick are collected and dispatched predictably; warnings
+  cover combinations whose hardware outcome remains ambiguous.
+- **Validation:** repeated runs produce identical send order.
+
+### [x] SEQ-E04 — Make Pause/Resume boundary behavior exact
+
+- **Priority:** P1
+- **Problem:** integer truncation and `StartMs >= fromMs` can replay an event at
+  the pause boundary or skip one depending on timing.
+- **Depends on:** SEQ-E02, SEQ-A06.
+- **Acceptance:** each event has a dispatched/not-dispatched identity independent
+  of rounded elapsed milliseconds. Resume never duplicates a fired event and
+  never loses an unfired one.
+- **Validation:** pause immediately before, exactly at, and immediately after
+  several simultaneous events.
+- **Implemented:** immutable event `SourceOrder` is retained as the per-pass
+  dispatch identity. Consumed identities survive Pause/Resume, reset on fresh
+  Play/Stop/Loop, and overdue-but-unfired events resume immediately.
+
+### [ ] SEQ-E05 — Make sequence end and whole-pass Loop explicit
+
+- **Priority:** P1
+- **Problem:** the end is inferred from natural clip tails; a looping audio clip
+  alone ends after one natural duration, and infinite gestures use fake tails.
+- **Depends on:** SEQ-B04, SEQ-F01, SEQ-F08.
+- **Acceptance:** define an explicit calculated/user end marker and loop region
+  semantics. At a loop boundary, players and hardware state transition once,
+  without stacking or gaps caused by stale callbacks.
+- **Validation:** empty, audio-only loop, infinite-gesture, mixed, zero-duration,
+  and whole-pass Loop cases.
+
+### [ ] SEQ-E06 — Cache derived duration and control UI update cost
+
+- **Priority:** P2
+- **Problem:** timecode can rescan every clip on each 30 ms playhead tick; ruler
+  collections are wholesale rebuilt during zoom/layout changes.
+- **Depends on:** SEQ-C06, SEQ-F01.
+- **Acceptance:** document mutations update cached total once; playhead ticks do
+  not recompute it. Ruler generation is bounded/debounced or virtualized enough
+  for the documented maximum sequence size.
+- **Validation:** performance test with the supported maximum event count and
+  duration; no perceptible UI stall while playing or zooming.
+
+### [D] SEQ-E07 — Add master-side scheduled execution
+
+- **Priority:** P3
+- **Problem:** PC timers, serial writes and mesh relays cannot provide a shared
+  hardware clock edge for simultaneous choreography.
+- **Depends on:** M1–M4, firmware protocol design.
+- **Acceptance:** optional future protocol sends look-ahead events with execution
+  timestamps, clock synchronization and acknowledgements while preserving a
+  safe console fallback.
+- **Validation:** measured multi-droid skew and packet-loss recovery tests.
+
+## EPIC F — Duration and audio robustness
+
+### [ ] SEQ-F01 — Model finite, immediate and infinite gesture duration correctly
+
+- **Priority:** P1
+- **Problem:** firmware reports a nominal static sum; target speed scaling and
+  jitter alter reality, while IDLE/TALK/POWER_DOWN receive an arbitrary 2000 ms.
+- **Depends on:** SEQ-D02 for persisted model changes.
+- **Acceptance:** duration metadata distinguishes immediate/finite/infinite,
+  nominal duration, and estimated target-specific range. Broadcast behavior with
+  mixed speed settings is explicitly represented or conservatively warned.
+- **Validation:** compare calculated estimates with firmware rules and measured
+  samples at representative speed settings.
+
+### [ ] SEQ-F02 — Use one coherent fallback duration policy
+
+- **Priority:** P2
+- **Problem:** gesture geometry/active highlighting default to 800 ms while total
+  duration defaults to 1500 ms before firmware metadata arrives.
+- **Depends on:** SEQ-F01.
+- **Acceptance:** one shared metadata provider supplies geometry, active state,
+  total duration and inspector text; the pre-handshake fallback is consistent and
+  visibly provisional.
+- **Validation:** disconnected, handshaking, metadata-received, and invalid-ID
+  snapshots agree.
+
+### [ ] SEQ-F03 — Notify the UI when an audio filename changes
+
+- **Priority:** P1
+- **Problem:** `FileName` is derived from `FilePath` but receives no property
+  notification after Replace file.
+- **Depends on:** none.
+- **Acceptance:** replacing a path immediately updates the displayed basename and
+  related missing/error state.
+- **Validation:** model binding test plus manual replace check.
+
+### [ ] SEQ-F04 — Keep zero/unknown-duration audio clips visible and editable
+
+- **Priority:** P1
+- **Problem:** probe failure returns duration 0, producing a zero-width clip with
+  no useful error affordance.
+- **Depends on:** SEQ-F05.
+- **Acceptance:** unknown-duration clips have a minimum selectable width, a clear
+  warning badge/tooltip, and do not silently define an invalid sequence end.
+- **Validation:** missing, corrupt, unsupported, and valid zero-length files.
+
+### [ ] SEQ-F05 — Add bounded audio probing and actionable errors
+
+- **Priority:** P1
+- **Problem:** duration probing has no timeout/cancellation and collapses every
+  failure to 0; media decoding depends on installed Windows codecs.
+- **Depends on:** SEQ-E01 for a testable service boundary.
+- **Acceptance:** probe returns a typed success/failure result, closes resources
+  on every path, supports timeout/cancellation, and surfaces codec/file errors
+  without blocking the UI.
+- **Validation:** success, failure event, thrown URI/open error, timeout, cancel,
+  and file removed during probe.
+
+### [ ] SEQ-F06 — Prevent stale waveform assignment and cache invalidation bugs
+
+- **Priority:** P1
+- **Problem:** an old decode can finish after Replace and overwrite the new
+  waveform; the permanent path-only cache survives file replacement and caches
+  failures indefinitely.
+- **Depends on:** SEQ-E01.
+- **Acceptance:** assignments verify clip generation/path; cache keys include
+  stable file metadata or support invalidation; failed/cancelled tasks can retry;
+  cache growth is bounded.
+- **Validation:** rapid replace, same-path content change, missing-then-created
+  file, cancellation, and repeated-file cases.
+
+### [ ] SEQ-F07 — Manage MediaPlayer lifecycle and playback failures
+
+- **Priority:** P1
+- **Problem:** completed non-looping players remain open until global Stop and
+  playback failures are silent.
+- **Depends on:** SEQ-E01.
+- **Acceptance:** ended/failed players detach handlers, close, and leave the
+  active set; failures identify the clip; Pause/Resume touches only genuinely
+  active players; StopAll remains idempotent.
+- **Validation:** concurrent clips, natural end, loop, failure, pause after one
+  clip ended, and repeated Stop tests.
+
+### [ ] SEQ-F08 — Define audio-loop duration against the sequence endpoint
+
+- **Priority:** P1
+- **Problem:** a looping clip does not extend the pass beyond its natural end, so
+  it needs unrelated later content to repeat.
+- **Depends on:** SEQ-E05.
+- **Acceptance:** looping audio runs until an explicit sequence/clip endpoint;
+  timeline representation and export schema make that endpoint clear.
+- **Validation:** loop-only, loop-with-end-marker, whole-pass Loop, Pause/Resume,
+  and Stop cases.
+
+## EPIC G — Preflight and ergonomics
+
+### [ ] SEQ-G01 — Add a preflight result model and Play gate
+
+- **Priority:** P1
+- **Problem:** Play silently starts audio even if no ready master can receive
+  gestures, and there is no consolidated readiness check.
+- **Depends on:** SEQ-A06, SEQ-D02, SEQ-F05.
+- **Acceptance:** preflight produces errors, warnings and information; blocking
+  errors disable or intercept Play; the user can inspect exact affected clips,
+  tracks and files.
+- **Validation:** headless rule tests and manual UI presentation.
+
+### [ ] SEQ-G02 — Detect connection, offline-target and missing-audio issues
+
+- **Priority:** P1
+- **Problem:** offline rows are preserved correctly but missed commands are not
+  queued, while missing audio is silently skipped.
+- **Depends on:** SEQ-G01.
+- **Acceptance:** preflight reports no port/session, no master, offline targeted
+  droids, broadcast with no recipients, missing/unreadable audio, and unknown
+  duration. The user sees which findings block Play.
+- **Validation:** rule matrix with mixed live/offline roster and file states.
+
+### [ ] SEQ-G03 — Detect overlapping and ambiguous gesture commands
+
+- **Priority:** P1
+- **Problem:** a later gesture interrupts the previous one, and simultaneous
+  broadcast plus per-target events have order-dependent outcomes.
+- **Depends on:** SEQ-F01, SEQ-G01.
+- **Acceptance:** analyze effective target intersections and duration spans;
+  flag same-target overlaps, same-time duplicates, and broadcast/target conflicts;
+  link warnings to clips.
+- **Validation:** finite, infinite, broadcast, muted, and offline combinations.
+
+### [ ] SEQ-G04 — Detect unterminated infinite gestures
+
+- **Priority:** P0
+- **Problem:** TALK/POWER_DOWN without a represented terminator can outlive the
+  intended scene.
+- **Depends on:** SEQ-B04, SEQ-G01.
+- **Acceptance:** Play is blocked or requires an explicit safety confirmation
+  until every effective infinite gesture has a defined end/cleanup path.
+- **Validation:** per-target and broadcast termination graph tests.
+
+### [ ] SEQ-G05 — Remove implicit broadcast insertion risk
+
+- **Priority:** P1
+- **Problem:** clicking a gesture with no armed track falls back to the first
+  `All droids` row.
+- **Depends on:** none.
+- **Acceptance:** insertion requires an explicitly armed track, or presents an
+  unmistakable confirmation for broadcast. The armed target is always prominent
+  and keyboard insertion follows the same rule.
+- **Validation:** fresh startup, lost/rebuilt armed track, offline track, and
+  explicit broadcast cases.
+
+### [ ] SEQ-G06 — Keep UI text and control availability synchronized
+
+- **Priority:** P2
+- **Problem:** current tooltips and Help contain known caveats that can drift from
+  the fixes, and some controls remain available when their result is unsafe or a
+  no-op.
+- **Depends on:** all behavior-changing P0/P1 items.
+- **Acceptance:** final content audit covers transport, mute, Pause, Stop, loops,
+  Import/Export, library, audio portability, preflight, and offline behavior.
+- **Validation:** checklist review of XAML tooltips and all Sequencer Help pages.
+
+### [D] SEQ-G07 — Add markers, explicit end marker and loop region editing
+
+- **Priority:** P3
+- **Depends on:** SEQ-E05.
+- **Acceptance:** named markers and loop/end handles are editable, snap-aware,
+  serialized, and keyboard accessible.
+- **Validation:** editor and persistence round trip.
+
+### [D] SEQ-G08 — Add deterministic per-clip animation seeds
+
+- **Priority:** P3
+- **Problem:** `Random.Shared` makes each performance render differently.
+- **Depends on:** SEQ-A01, SEQ-D03.
+- **Acceptance:** choose random-each-pass or stored deterministic seed per clip;
+  exports preserve deterministic mode and broadcast recipients share intended
+  variation.
+- **Validation:** repeated-pass protocol captures.
+
+### [D] SEQ-G09 — Add multi-select, copy/paste and grouped movement
+
+- **Priority:** P3
+- **Depends on:** SEQ-C01.
+- **Acceptance:** selections and clipboard operations create one coherent Undo,
+  preserve relative timing/targets, and remain safe around broadcast tracks.
+- **Validation:** interaction and history tests.
+
+### [D] SEQ-G10 — Add per-track latency compensation
+
+- **Priority:** P3
+- **Depends on:** SEQ-E02; measured hardware need.
+- **Acceptance:** optional offsets affect dispatch but not destructively rewrite
+  authored times; UI shows compensated timing and export preserves settings.
+- **Validation:** measured fleet synchronization comparison.
+
+### [ ] SEQ-G11 — Monitor command delivery and runtime execution health
+
+- **Priority:** P1
+- **Problem:** writing an `anim` command to serial is not proof that the target
+  received or started it; current UI feedback can imply success even when the
+  link rejected or lost the command.
+- **Depends on:** SEQ-A01, SEQ-E03, firmware acknowledgement/telemetry design.
+- **Acceptance:** distinguish queued, written to master, acknowledged/relayed,
+  confirmed by target, failed and timed-out states to the degree supported by the
+  selected protocol. Runtime health identifies target/event correlation and
+  never fabricates successful delivery when disconnected. Define whether late or
+  missing acknowledgements warn, pause or stop a performance.
+- **Validation:** protocol fake plus hardware tests for success, target offline,
+  mesh loss, duplicate/delayed acknowledgement, disconnect and timeout.
+
+### [ ] SEQ-G12 — Analyze mechanical workload before playback
+
+- **Priority:** P1
+- **Problem:** a syntactically valid timeline can still demand rapid reversals,
+  continuous high-amplitude motion, excessive command density or too little rest
+  for the servos and mechanism.
+- **Depends on:** SEQ-F01, SEQ-G01, calibration/servo safety limits.
+- **Acceptance:** Preflight estimates per-target duty, reversal density, command
+  interruption rate, time near configured limits and infinite-motion exposure.
+  Thresholds are conservative, documented and configurable only within safe
+  bounds; warnings never claim to replace physical validation.
+- **Validation:** benign and intentionally aggressive synthetic scenes plus
+  measured hardware review at representative calibration/amplitude/speed values.
+
+### [ ] SEQ-G13 — Preflight the host PC and audio environment
+
+- **Priority:** P1
+- **Problem:** a valid Show can fail because Windows sleeps, the audio device or
+  codec is unavailable, volume is muted, assets changed, power is low or logging
+  storage is exhausted.
+- **Depends on:** SEQ-F05, SEQ-G01, SEQ-G02.
+- **Acceptance:** Preflight checks the selected/default audio output, test tone,
+  mute/usable volume where observable, required codecs/files, power/sleep policy,
+  available log/package storage and relevant environment changes since arming.
+  Checks clearly separate detectable facts from operator confirmations and avoid
+  silently changing system-wide settings.
+- **Validation:** device removal/change, mute, unsupported media, battery/power,
+  sleep-policy warning, low-space and successful show-PC checklist.
+
+## EPIC H — Automated and hardware validation
+
+### [x] SEQ-H01 — Create a Sequencer-focused test project and fixtures
+
+- **Priority:** P1
+- **Problem:** no automated Sequencer coverage was found, and concrete WPF/service
+  dependencies impede headless tests.
+- **Depends on:** none.
+- **Acceptance:** a test project runs from the command line without hardware;
+  includes document builders, fake protocol/audio/clock, JSON fixture helpers,
+  and does not increment the release build number unexpectedly.
+- **Validation:** clean test run from a fresh build environment.
+
+### [ ] SEQ-H02 — Cover edit transactions, Dirty and history
+
+- **Priority:** P1
+- **Depends on:** SEQ-C01 through SEQ-C06, SEQ-H01.
+- **Acceptance:** automated matrix covers every persistent/transient property,
+  no-op edits, capacity, saved checkpoints, Undo/Redo, and derived extent.
+- **Validation:** all matrix rows pass and fail if their corresponding behavior is
+  intentionally broken.
+
+### [~] SEQ-H03 — Cover scheduler, transport and safety timing
+
+- **Priority:** P0
+- **Depends on:** SEQ-A01 through SEQ-A08, SEQ-B01 through SEQ-B04, SEQ-B06,
+  SEQ-B07, SEQ-E01 through SEQ-E05, SEQ-H01.
+- **Acceptance:** deterministic tests cover cancellation generation, rapid
+  restart, simultaneous events, dynamic mute, Pause boundaries, natural end,
+  whole-pass Loop, disconnect, infinite-gesture lease renewal/expiry, Stop level
+  transitions, arming invalidation, and cleanup.
+- **Validation:** repeated stress run produces no intermittent result.
+- **Current coverage:** immutable empty/audio/gesture/mixed plans, same-time
+  source order, duration fallback/zero/clamping/overflow, TALK/POWER_DOWN tails,
+  generation cancellation, rapid restart, stale Loop end, dynamic broadcast and
+  per-droid mute, edit-lock release, Pause boundaries and repeated Resume,
+  natural end, repeated Stop, disconnect in Play/Pause, disposal and cleanup.
+  Lease, Stop levels, arming invalidation and the future single-scheduler stress
+  matrix remain open with their prerequisite items.
+
+### [ ] SEQ-H04 — Cover persistence validation and migrations
+
+- **Priority:** P1
+- **Depends on:** SEQ-D01 through SEQ-D05, SEQ-H01.
+- **Acceptance:** golden round trips for every schema plus malformed, partial,
+  overflow, unsupported and failed-write cases; current document is preserved on
+  every failure.
+- **Validation:** fixture suite passes on a clean machine path.
+
+### [ ] SEQ-H05 — Cover audio and waveform services
+
+- **Priority:** P1
+- **Depends on:** SEQ-F03 through SEQ-F08, SEQ-H01.
+- **Acceptance:** tests cover probe result types, timeout, lifecycle, concurrent
+  players, stale waveform prevention, cache invalidation, missing files, and
+  audio loop endpoint behavior.
+- **Validation:** service suite plus a Windows Media Foundation smoke test.
+
+### [ ] SEQ-H06 — Add UI interaction smoke tests/checklists
+
+- **Priority:** P2
+- **Depends on:** SEQ-C07, SEQ-G01 through SEQ-G06.
+- **Acceptance:** repeatable checks cover drag/capture loss, Snap, Fit, arming,
+  broadcast confirmation, disabled controls, preflight navigation, inspector,
+  context menus, and accessibility via keyboard where supported.
+- **Validation:** automated UI tests where stable; otherwise versioned manual
+  checklist with evidence.
+
+### [~] SEQ-H07 — Execute real-hardware timing and safety protocol
+
+- **Priority:** P0
+- **Depends on:** M1–M4 code complete.
+- **Acceptance:** test at least master-only, master plus one slave, and multiple
+  slaves; cover finite/infinite gestures, broadcast/target conflict, weak/offline
+  link, disconnect, Pause/Resume, Stop, Loop, and simultaneous audio. Record
+  observed skew and every firmware/console version.
+- **Validation:** signed results appended to `TEST-PROTOCOL.md` or a linked report.
+- **Current status:** COM3 bench confirmed master 43140 plus slaves 4216/34880.
+  The stale master binary was replaced over USB; both complete same-version
+  slave OTA transfers rebooted and remained stable beyond the anti-brick window.
+  Strict serial regression passed 20/20 and the dedicated active script passed
+  15/15: calibrated preview, each target, broadcast, deterministic seed, rapid
+  restart/IDLE, TALK/POWER_DOWN interruption and five Loop cycles without
+  observed inbox overflow. Cleanup restored configs/calibrations and left all
+  servo/auto-animation states off. A content-derived Build ID now distinguishes
+  same-version images: rolling compatibility with both legacy heartbeat formats
+  was verified, and repeat OTA updates of both slaves returned `ok=true` with
+  master `4DAD66EF` and slaves `72349AFE`. The Build ID regression passed 22/22
+  and the read-only Sequencer preflight passed 6/6. Remaining H07 work:
+  operator-confirmed motion,
+  measured inter-droid skew, actual WPF Pause/Resume and simultaneous PC audio,
+  intentional disconnect/offline target and weak-link cases.
+
+### [ ] SEQ-H08 — Final regression, documentation and release gate
+
+- **Priority:** P1
+- **Depends on:** all required P0/P1 items.
+- **Acceptance:** console build and all tests clean; existing firmware self-test
+  unaffected; Help/README/contract agree; no stale TODO or dead library path;
+  known limitations are explicit; dashboard is accurate.
+- **Validation:** recorded commands/results and final review of the git diff.
+
+## EPIC I — Scene & Show System (entirely deferred)
+
+This epic records the possible evolution of the current Sequencer into a scene
+editor, with a higher-level Show/Movie builder arranging several scenes. Every
+item below is deliberately deferred: it must not expand or reorder the current
+hardening work. The reliability baseline should, however, avoid architectural
+choices that would make these items unnecessarily difficult later.
+
+### [D] SEQ-I01 — Define the Scene and Show domain model
+
+- **Priority:** P3
+- **Problem:** the current sequence document represents one flat timeline and has
+  no higher-level composition concept.
+- **Depends on:** M1–M4 complete, SEQ-C08.
+- **Acceptance:** define a Scene as one independently editable/playable timeline
+  and a Show as an ordered collection of scene instances. Specify stable IDs,
+  names, duration/end behavior, metadata, and the boundary between authored
+  scene data and live performance state.
+- **Validation:** architecture review demonstrates that one-scene playback still
+  uses the same document and scheduler primitives rather than a parallel engine.
+
+### [D] SEQ-I02 — Add scene entry and exit contracts
+
+- **Priority:** P3
+- **Problem:** reliable scene transitions require a known hardware state before
+  and after each scene, especially for TALK and POWER_DOWN.
+- **Depends on:** SEQ-B02, SEQ-B04, SEQ-E05.
+- **Acceptance:** each scene supports explicit entry requirements and one of at
+  least three exit policies: Safe (terminate active gestures/IDLE), Preserve
+  (carry the last state into the next scene), or Custom (authored exit actions).
+  Safe is the default unless a deliberate product decision says otherwise.
+- **Validation:** transition tests cover finite/infinite gestures, broadcast and
+  individual targets, Stop, Skip, restart, and failed scene start.
+
+### [D] SEQ-I03 — Design versioned `.b1scene` and `.b1show` schemas
+
+- **Priority:** P3
+- **Problem:** scene composition, transitions and reusable identities should not
+  be forced into the current flat `.b1seq.json` schema ad hoc.
+- **Depends on:** SEQ-D01 through SEQ-D04, SEQ-I01, SEQ-I02.
+- **Acceptance:** define versioned, validated schemas and migrations; decide how
+  existing `.b1seq.json` files become/import as scenes; preserve forward-safe
+  unknown-version behavior and atomic persistence.
+- **Validation:** golden fixtures cover current sequence import, scene round trip,
+  show round trip, schema migration and rejected future versions.
+
+### [D] SEQ-I04 — Build the linear Show editor
+
+- **Priority:** P3
+- **Problem:** authors need to arrange manageable scenes instead of maintaining
+  one very long timeline.
+- **Depends on:** SEQ-I01 through SEQ-I03.
+- **Acceptance:** create, add, remove, duplicate, rename, enable/disable and
+  reorder scene instances. Each instance can define Auto, delayed, Manual GO,
+  Hold or repeat-count transition behavior without modifying the source scene.
+  Editing operations participate in Show-level Undo/Redo and Dirty state.
+- **Validation:** UI interaction, persistence and transition-order tests.
+
+### [D] SEQ-I05 — Add semantic roles and show-level casting
+
+- **Priority:** P3
+- **Problem:** scenes tied only to physical `ushort` droid IDs are difficult to
+  reuse with another fleet or casting.
+- **Depends on:** SEQ-I01, SEQ-I03, SEQ-G02, SEQ-G03.
+- **Acceptance:** a scene can target roles such as HERO, SIDEKICK or CROWD; the
+  Show maps roles to physical droids/broadcast groups. Preflight detects missing,
+  duplicate or conflicting assignments. Existing ID-bound scenes remain usable.
+- **Validation:** replay one scene with two different castings, including group
+  intersection and offline-role cases.
+
+### [D] SEQ-I06 — Compile scenes into the existing playback scheduler
+
+- **Priority:** P3
+- **Problem:** starting an unrelated timer engine per scene would reintroduce
+  gaps, stale callbacks and inconsistent transport behavior.
+- **Depends on:** SEQ-E02 through SEQ-E05, SEQ-I01, SEQ-I02, SEQ-I04.
+- **Acceptance:** Show playback resolves casting and compiles scene instances into
+  immutable plans handled by the same scheduler/state machine. Manual transitions
+  pause at a defined boundary; automatic transitions and Skip invalidate stale
+  work; the next scene may be prepared ahead without dispatching early.
+- **Validation:** fake-clock tests cover Auto, Delay, Manual GO, Hold, Skip,
+  repeat count, Pause/Resume, Stop and restart from a selected scene.
+
+### [D] SEQ-I07 — Create an operator-focused Show mode
+
+- **Priority:** P3
+- **Problem:** the detailed timeline editor is not the safest interface for an
+  operator during a performance.
+- **Depends on:** SEQ-G01 through SEQ-G06, SEQ-I04, SEQ-I06.
+- **Acceptance:** provide a simplified performance view with current/next scene,
+  large GO/Stop/Previous/Next controls, elapsed/remaining time, fleet/audio
+  readiness and prominent faults. Editing is unavailable while Show mode is
+  armed or playing according to an explicit policy.
+- **Validation:** keyboard/mouse accessibility and operator rehearsal checklist,
+  including accidental double-GO and emergency Stop.
+
+### [D] SEQ-I08 — Build a portable Show package
+
+- **Priority:** P3
+- **Problem:** a show depends on several scene files and audio assets that can be
+  moved, renamed or changed independently.
+- **Depends on:** SEQ-D09, SEQ-I03, SEQ-I04.
+- **Acceptance:** a publish/build action creates a self-contained package with
+  the Show, immutable scene snapshots, relative audio assets, hashes and a
+  manifest. It reports collisions/missing assets and reopens on another PC.
+- **Validation:** build, copy to a different base directory, preflight and play;
+  detect tampered or missing assets.
+
+### [D] SEQ-I09 — Define scene reuse and linked-versus-embedded behavior
+
+- **Priority:** P3
+- **Problem:** linked scenes are reusable but may change unexpectedly; embedded
+  snapshots are reliable but can drift from their source templates.
+- **Depends on:** SEQ-I03, SEQ-I04, SEQ-I08.
+- **Acceptance:** define an explicit authoring model, recommended initially as
+  linked templates while editing and embedded/versioned snapshots when
+  publishing. The UI shows source, revision, local overrides and stale-link
+  status without silently updating a production Show.
+- **Validation:** source update, missing source, override, republish and rollback
+  scenarios.
+
+### [D] SEQ-I10 — Reserve a path for triggers and branching
+
+- **Priority:** P3
+- **Problem:** future interactive shows may need to wait for an operator, sensor
+  or external event, or choose a different next scene.
+- **Depends on:** SEQ-I04, SEQ-I06, SEQ-I07; separate safety/protocol design.
+- **Acceptance:** the Show model can later add named triggers and conditional
+  transitions without changing basic linear-scene identity or scheduler safety.
+  The first implementation may remain strictly linear; no speculative runtime
+  trigger system is required now.
+- **Validation:** schema/architecture review plus future-version compatibility
+  fixture; runtime tests are deferred until triggers are selected for delivery.
+
+### [D] SEQ-I11 — Add scene rehearsal and navigation controls
+
+- **Priority:** P3
+- **Problem:** a long Show must not require replaying every earlier scene to
+  rehearse or diagnose one section.
+- **Depends on:** SEQ-I04, SEQ-I06, SEQ-I07.
+- **Acceptance:** an author/operator can play only the selected scene, start the
+  Show from that scene, repeat a selected scene range, move Previous/Next, and
+  create a temporary rehearsal loop without changing the published Show. Entry
+  contracts are applied when starting in the middle.
+- **Validation:** navigation tests from first/middle/last scenes plus range-loop,
+  manual transition, Dirty-state and safe-entry checks.
+
+### [D] SEQ-I12 — Add safe incident recovery and checkpoints
+
+- **Priority:** P3 now; safety-critical if Show mode is implemented.
+- **Problem:** after disconnect, emergency Stop, audio failure or an operator
+  error, blindly resuming elapsed events can leave hardware in an unknown state.
+- **Depends on:** SEQ-A05, SEQ-B02, SEQ-I02, SEQ-I06, SEQ-I07.
+- **Acceptance:** define safe checkpoints and offer explicit Restart scene, Skip
+  to next, Restore safe state, Resume from checkpoint, or Abort Show actions.
+  Missed events are never replayed implicitly. Recovery explains which hardware
+  cleanup commands were delivered or could not be delivered.
+- **Validation:** simulated disconnect/failure at entry, middle, transition and
+  exit; real-hardware emergency recovery protocol.
+
+### [D] SEQ-I13 — Declare role capability requirements
+
+- **Priority:** P3
+- **Problem:** semantic casting is unsafe if a chosen droid lacks the firmware,
+  actuators, gestures or configuration expected by its role.
+- **Depends on:** SEQ-I05, SEQ-G01, SEQ-G02.
+- **Acceptance:** roles can declare required capabilities, minimum firmware,
+  actuator/gesture needs and optional recommended settings. Casting Preflight
+  reports incompatible, degraded, duplicate or unavailable assignments before
+  the Show is armed.
+- **Validation:** compatible, incompatible, partially capable, outdated firmware
+  and offline casting fixtures.
+
+### [D] SEQ-I14 — Support Show-level audio and scene transitions
+
+- **Priority:** P3
+- **Problem:** ambience, narration or music may need to span scene boundaries;
+  treating every audio clip as scene-local can cause abrupt cuts or accidental
+  overlap.
+- **Depends on:** SEQ-F07, SEQ-F08, SEQ-I02, SEQ-I04, SEQ-I06.
+- **Acceptance:** distinguish scene-local from Show-level audio and define Stop,
+  Continue, Fade out, Fade in and Crossfade transition policies. Pause, Skip,
+  incident recovery and whole-Show Stop manage both scopes predictably.
+- **Validation:** automatic/manual transitions, crossfade timing, Skip, Pause,
+  restart, loop and audio-failure tests.
+
+### [D] SEQ-I15 — Add a simulation / Dry Run mode
+
+- **Priority:** P3
+- **Problem:** authors need to validate casting, events and transitions without
+  moving physical hardware.
+- **Depends on:** SEQ-E01, SEQ-G01 through SEQ-G04, SEQ-I05, SEQ-I06.
+- **Acceptance:** Dry Run uses the real compiled plan and scheduler but replaces
+  protocol output with a visible simulated event stream. Audio can be real,
+  muted or simulated by choice. The UI shows resolved targets, scene transitions,
+  warnings and cleanup actions without emitting a droid command.
+- **Validation:** compare simulated and captured real-plan event order from the
+  same Show; assert the physical protocol receives nothing.
+
+### [D] SEQ-I16 — Record a performance journal
+
+- **Priority:** P3
+- **Problem:** after a Show, there is no concise record of what ran, what failed
+  or how the operator intervened.
+- **Depends on:** SEQ-I06, SEQ-I07, SEQ-I12; logging/privacy design.
+- **Acceptance:** record Show/package/version, console/firmware versions, casting,
+  scene start/end/skip/restart, dispatched commands, offline/failure events,
+  measured lateness and operator actions. Logs are bounded, timestamped,
+  exportable and avoid unnecessary sensitive local paths.
+- **Validation:** normal, warning, failure and recovery sessions produce a
+  readable report with deterministic event correlation.
+
+### [D] SEQ-I17 — Add scene notes and operator cues
+
+- **Priority:** P3
+- **Problem:** scene timing alone does not carry dialogue, staging instructions,
+  prop requirements or rehearsal notes.
+- **Depends on:** SEQ-I03, SEQ-I04, SEQ-I07.
+- **Acceptance:** scenes can contain a summary, formatted operator notes, dialogue
+  references, prop/setup checklist and optional pre-GO countdown/cue. Notes do
+  not affect playback timing unless represented by an explicit transition.
+- **Validation:** edit, persistence, package, operator-display and long-text
+  layout checks.
+
+### [D] SEQ-I18 — Add an optional musical time grid
+
+- **Priority:** P3
+- **Problem:** millisecond-only editing is awkward for dance and music-driven
+  choreography.
+- **Depends on:** SEQ-C01, SEQ-E05, SEQ-G07, SEQ-I03.
+- **Acceptance:** a scene may define BPM, time signature, beat/bar origin and
+  musical Snap while preserving canonical millisecond times. Tempo changes are
+  either explicitly unsupported at first or represented by a documented tempo
+  map. Markers can label musical sections.
+- **Validation:** beat-to-time conversion, rounding boundaries, zoom, export
+  round trip and playback-equivalence tests.
+
+### [D] SEQ-I19 — Add reusable scene variants and parameters
+
+- **Priority:** P3
+- **Problem:** language, energy, duration or cast-size variants would otherwise
+  require duplicated scenes that drift independently.
+- **Depends on:** SEQ-I03, SEQ-I05, SEQ-I09.
+- **Acceptance:** define typed, bounded scene parameters and explicit variant
+  overrides without permitting arbitrary runtime code. The compiled scene is a
+  deterministic snapshot, Preflight validates each selected variant, and package
+  publishing records resolved values.
+- **Validation:** language/energy/cast-size examples, invalid override, source
+  update, package and deterministic compilation tests.
+
+### [D] SEQ-I20 — Integrate external cues, control and timecode
+
+- **Priority:** P3
+- **Problem:** a future Show may need to exchange cues with lighting, sound,
+  physical controls or another playback system.
+- **Depends on:** SEQ-I10, SEQ-I12, SEQ-I16; separate threat/safety model for
+  every selected protocol.
+- **Acceptance:** design an adapter boundary for selected inputs/outputs such as
+  MIDI, OSC, DMX, physical buttons/remotes or external timecode. External input
+  cannot bypass transport safety, Preflight, generation cancellation or operator
+  arming; unsupported protocols are not speculatively implemented.
+- **Validation:** deterministic adapter contract tests, duplicate/lost cue,
+  disconnect, unauthorized/unarmed input and emergency Stop scenarios for each
+  integration actually delivered.
+
+### [D] SEQ-I21 — Publish immutable Show revisions and support rollback
+
+- **Priority:** P3
+- **Problem:** an operator should not perform from a mutable working document or
+  discover that linked scenes/assets changed after the final rehearsal.
+- **Depends on:** SEQ-A08, SEQ-I08, SEQ-I09, SEQ-I13, SEQ-I14.
+- **Acceptance:** distinguish Draft from Published revisions. Publishing freezes
+  resolved scenes, casting, parameters, audio hashes, expected console/firmware
+  capabilities, Preflight-relevant metadata, author/date and revision identity.
+  Show mode arms only an explicit published revision; previous valid revisions
+  remain available for deliberate rollback without overwriting the draft.
+- **Validation:** publish, modify draft, asset/source change, arm, rollback,
+  package transfer and tamper-detection tests.
+
+### [D] SEQ-I22 — Add instrumented rehearsal and latency reporting
+
+- **Priority:** P3
+- **Problem:** per-droid/audio timing compensation should be based on observed
+  measurements rather than subjective guessing.
+- **Depends on:** SEQ-G10, SEQ-G11, SEQ-I11, SEQ-I16.
+- **Acceptance:** rehearsal correlates requested due time, scheduler dispatch,
+  serial write, available acknowledgements/target start telemetry and audio start
+  observations. Reports distributions and confidence, not false precision, and
+  may propose—but never silently apply—per-track compensation.
+- **Validation:** repeatable master-only and multi-droid measurements, missing
+  telemetry, outliers, audio-device change and before/after compensation review.
+
+## Recommended execution order
+
+The backlog is intentionally exhaustive; implementation should remain small and
+sequential. Unless a test seam must be introduced first, follow this order:
+
+1. **Foundation:** SEQ-H01 and the minimum of SEQ-E01 needed for fakes.
+2. **First safe-playback batch:** SEQ-A01, SEQ-A02, SEQ-A03.
+3. **Hardware safety:** SEQ-B01, SEQ-B02, SEQ-B06, SEQ-B07, then SEQ-G04.
+4. **Transport consistency:** SEQ-A04 through SEQ-A08 and SEQ-B03.
+5. **Editing correctness:** SEQ-C01 through SEQ-C08.
+6. **Persistence correctness:** SEQ-D01 through SEQ-D08.
+7. **Scheduler replacement:** SEQ-E02 through SEQ-E06.
+8. **Duration/audio:** SEQ-F01 through SEQ-F08 and SEQ-B04.
+9. **Preflight/ergonomics:** required SEQ-G01 through SEQ-G06 and SEQ-G11
+   through SEQ-G13.
+10. **Validation gate:** SEQ-H02 through SEQ-H08.
+11. **Optional enhancements:** only selected `[D]` items. EPIC I remains deferred
+    until the M1–M4 reliability baseline is complete and a separate Scene/Show
+    design is approved.
+
+## Decision log
+
+Record decisions here before implementing behavior with multiple reasonable
+options.
+
+| ID | Status | Decision |
+|---|---|---|
+| DEC-001 | Resolved 2026-08-11 | Lock persistent editing during Play/Pause; allow transient inspection, zoom/scroll and dynamic track mute. |
+| DEC-002 | Open | Stop infinite gestures by sending IDLE, or add a dedicated firmware stop command? |
+| DEC-003 | Open | Keep and restore Local Library Save, or remove the legacy library? |
+| DEC-004 | Open | Unknown/offline targets: warning or blocking preflight error? |
+| DEC-005 | Open | Same-time broadcast and targeted command precedence? |
+| DEC-006 | Open | Audio-only rehearsal when no master is connected? |
+| DEC-007 | Deferred | Scene identity and migration from `.b1seq.json` to `.b1scene.json`? |
+| DEC-008 | Deferred | Show authoring uses linked scenes, embedded snapshots, or a publish-time hybrid? |
+| DEC-009 | Deferred | Scene targets remain physical IDs, become semantic roles, or support both? |
+| DEC-010 | Deferred | Default scene exit policy: Safe, Preserve, or author-selected per scene? |
+| DEC-011 | Deferred | Incident recovery checkpoints are automatic, author-defined, or both? |
+| DEC-012 | Deferred | Show-level audio transition support begins with hard cuts/fades or full crossfade? |
+| DEC-013 | Deferred | Performance journals default on or require explicit operator opt-in? |
+| DEC-014 | Deferred | First external integration target: MIDI, OSC, DMX, physical remote, or timecode? |
+| DEC-015 | Open | Infinite-gesture lease duration, renewal interval and safe expiry state? |
+| DEC-016 | Open | Mechanical policy for Safe Stop versus Emergency Stop and servo power? |
+| DEC-017 | Open | Required acknowledgement depth: master receipt, mesh relay, or target execution? |
+| DEC-018 | Deferred | Published Show revision naming, retention and rollback policy? |
+
+## Completion evidence log
+
+Append concise evidence when closing items; do not paste full build logs.
+
+| Date | Items | Evidence |
+|---|---|---|
+| 2026-08-11 | Planning baseline | Static review complete; console build previously clean; implementation not started. |
+| 2026-08-11 | SEQ-A01, SEQ-A02, SEQ-A04, SEQ-A05, SEQ-A07, SEQ-E01 | Immutable pass records, generation cancellation, dispatch-time mute, disconnect/shutdown cleanup, monotonic clock and injected protocol/audio/timer/clock seams; 12 tests passed. |
+| 2026-08-11 | SEQ-H01 | Headless xUnit project, reusable document/JSON fixtures and fake protocol/audio/timer/clock added; default self-test runs the suite without changing the product build number. |
+| 2026-08-11 | SEQ-A03 (in progress) | Play/Pause edit lock, direct mutation guards, visible EDIT LOCKED badge and automated command matrix implemented; final rendered UI interaction pass remains. |
+| 2026-08-11 | Offline regression | `tools/self-test.ps1 -SkipSerial`: 15 passed, 0 failed; master/slave firmware and WPF console clean; build number remained 343. |
+| 2026-08-11 | SEQ-E04, SEQ-H03 (in progress) | Transport suite expanded from 12 to 33 tests; reproduced and fixed duplicate/lost events at Pause boundaries; 20/20 stress runs passed. Coverage now includes empty/audio/gesture plans, same-time ordering, restart/Loop cancellation, mute, repeated Pause/Resume/Stop, disconnect, cleanup and numeric limits. |
+| 2026-08-11 | Offline regression | `tools/self-test.ps1 -SkipSerial`: 15 passed, 0 failed; 33 Sequencer tests, master/slave firmware and WPF console clean; build number remained 343; report `b1-self-test-20260811-085028.json`. |
+| 2026-08-11 | SEQ-H07 (in progress) | COM3 preflight found master 43140 plus slaves 4216/34880 with stable inventory, but exposed a stale/mismatched 1.9.0 binary: targetless config responses and absent runtime validation. Active movement was refused. Bench state restored to configs `50/60/50`, master calibration `0/90/180`, servos/auto-animation off. Added guarded `sequencer-bench-test.ps1`; hardened default self-test so mutating rejection checks are suppressed unless a read-only validation probe passes. Reports `b1-self-test-20260811-085949.json`, `b1-sequencer-bench-20260811-090523.json`, `b1-self-test-20260811-090558.json`. |
+| 2026-08-11 | SEQ-H07 (in progress) | Master USB flash succeeded; two slave OTA payloads completed at 5128/5128 chunks and stayed healthy beyond 20 s. Same-version 1.9.0 falsely yields `rolledBack`, exposing a version-only verdict limitation. Active serial/mesh bench passed 15/15, then strict serial regression passed 20/20. Final state: master `59/60/50`, slaves `50/60/50`, original calibrations, servos/auto-animation off. Reports `b1-sequencer-bench-20260811-092352.json` and `b1-self-test-20260811-092501.json`. Physical movement/skew, WPF+audio and disconnect/weak-link observations remain. |
+| 2026-08-11 | Build ID / SEQ-H07 | Added deterministic 8-hex firmware identities throughout PlatformIO, heartbeat/registry, serial protocol, WPF inventory/status, OTA verdicts and release manifests. The new master accepted both legacy slaves during the rolling upgrade; same-version OTA then returned `ok=true` for 4216 and 34880 with master build `4DAD66EF` and slave build `72349AFE`. Read-only bench passed 6/6 and strict serial regression passed 22/22, including 15 s stable mesh observation. Reports `b1-sequencer-bench-20260811-101337.json` and `b1-self-test-20260811-101406.json`. |

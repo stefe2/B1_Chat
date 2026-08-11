@@ -134,12 +134,13 @@ public class OtaService
         }
     }
 
-    private void OnResult(ushort target, bool ok, string? fw, string? reason)
+    private void OnResult(ushort target, bool ok, string? fw, string? buildId, string? reason)
     {
         if (!_active || target != _target) return;
         _watchdog.Stop();
         _active = false;
-        Completed?.Invoke(ok, ok ? $"Update succeeded (fw {fw})." : $"Failed after reboot: {reason}.");
+        var identity = string.IsNullOrWhiteSpace(buildId) ? $"fw {fw}" : $"fw {fw}, build {buildId}";
+        Completed?.Invoke(ok, ok ? $"Update succeeded ({identity})." : $"Failed after reboot: {reason} ({identity}).");
     }
 
     private void OnError(ushort? target, int sessionId, string reason)

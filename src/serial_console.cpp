@@ -47,6 +47,13 @@ bool isMd5Hex(const char* value) {
     }
     return true;
 }
+
+void putBuildId(JsonObject object, const char* key, uint32_t buildId) {
+    if (buildId == 0) return;
+    char value[9];
+    snprintf(value, sizeof(value), "%08lX", (unsigned long)buildId);
+    object[key] = value;
+}
 }
 
 void SerialConsole::begin() {
@@ -119,6 +126,7 @@ void SerialConsole::pushDroids() {
     me["autoAnim"] = _masterAutoAnim;
     me["adopted"] = true;
     me["fw"] = FW_VERSION;
+    putBuildId(me, "build", (uint32_t)FW_BUILD_ID);
 
     // The other droids (slaves).
     for (uint8_t i = 0; i < Droids.count(); i++) {
@@ -141,6 +149,7 @@ void SerialConsole::pushDroids() {
         o["autoAnim"] = e.autoAnim;
         o["adopted"] = e.adopted;
         o["fw"] = String(e.fwMajor) + "." + String(e.fwMinor) + "." + String(e.fwPatch);
+        putBuildId(o, "build", e.buildId);
     }
     serializeJson(doc, Serial);
     Serial.print('\n');
@@ -249,13 +258,15 @@ void SerialConsole::pushOtaDone(uint16_t target, uint8_t sessionId) {
     Serial.print('\n');
 }
 
-void SerialConsole::pushOtaResult(uint16_t target, bool ok, const char* fw, const char* reason) {
+void SerialConsole::pushOtaResult(uint16_t target, bool ok, const char* fw,
+                                  uint32_t buildId, const char* reason) {
     if (!_clientReady) return;
     JsonDocument doc;
     doc["evt"] = "otaResult";
     doc["target"] = target;
     doc["ok"] = ok;
     if (fw && fw[0]) doc["fw"] = fw;
+    putBuildId(doc.as<JsonObject>(), "build", buildId);
     if (reason && reason[0]) doc["reason"] = reason;
     serializeJson(doc, Serial);
     Serial.print('\n');
@@ -437,6 +448,7 @@ void SerialConsole::handleLine(const char* line) {
         ack["ok"] = true;
         ack["id"] = Mesh.myId();
         ack["fw"] = FW_VERSION;
+        putBuildId(ack.as<JsonObject>(), "build", (uint32_t)FW_BUILD_ID);
         ack["proto"] = FW_PROTO;
         ack["lineMax"] = SERIAL_LINE_MAX;
         ack["anims"] = ANIM_COUNT;

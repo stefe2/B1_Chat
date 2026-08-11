@@ -16,10 +16,16 @@ enables/disables a servo, previews a position, or starts an animation.
 
 - builds `b1_master` and `b1_slave`;
 - builds the WPF console without changing `console/build.number`;
+- restores and runs the headless Sequencer unit/integration tests without
+  changing `console/build.number`; the suite covers immutable playback plans,
+  restart/cancellation, Loop boundaries, Pause/Resume edges, mute, disconnect,
+  natural end, repeated Stop, cleanup and numeric duration limits;
 - runs `git diff --check`;
 - verifies that the callback-to-loop mesh inbox is present;
 - verifies the per-droid animation-parameter store and targeted protocol;
 - verifies the serial, mesh, and OTA validation guards;
+- verifies that the content-derived firmware Build ID is generated and
+  propagated through heartbeats, serial inventory and OTA verdicts;
 - verifies randomized mesh sequence initialization;
 - verifies fail-closed SHA-256 handling for downloaded firmware assets;
 - verifies that Help files are forced into the published payload, checked before
@@ -33,10 +39,12 @@ enables/disables a servo, previews a position, or starts an animation.
 
 If an available B1 master is detected, the script opens it automatically and:
 
-- validates the JSON handshake and firmware/protocol metadata;
-- reads the droid inventory and confirms the master is present;
+- validates the JSON handshake, firmware/protocol metadata and master Build ID;
+- reads the droid inventory and confirms every node publishes a Build ID;
 - reads targeted animation parameters and calibration;
 - checks the 18-entry animation-duration catalog;
+- proves strict runtime validation with a read-only invalid-target probe before
+  sending any invalid setter or animation command;
 - sends invalid animation, configuration, and calibration commands and requires
   an `evt:"err"` response;
 - rereads configuration/calibration to prove rejected commands changed nothing;
@@ -45,6 +53,9 @@ If an available B1 master is detected, the script opens it automatically and:
 
 Opening serial can reset some ESP32 USB boards. The console must not already own
 the COM port; an unavailable/busy port is reported as `SKIP`, not as a failure.
+If the read-only validation probe fails, all invalid commands capable of changing
+state are suppressed. This protects benches running a stale binary whose version
+or advertised capabilities do not match its actual validation behavior.
 
 ## Options
 
@@ -65,6 +76,75 @@ the COM port; an unavailable/busy port is reported as `SKIP`, not as a failure.
 Each run writes a JSON report under the current user's temporary directory and
 prints its exact path. The process exits with code `1` if any required test
 fails, making it usable from CI or another automation.
+
+## Active Sequencer bench test
+
+`tools/sequencer-bench-test.ps1` is deliberately separate from the default
+self-test. Without a flag it performs only a strict read-only preflight:
+firmware/protocol consistency, expected fleet, targeted configuration and
+calibration responses, durations, runtime validation and mesh topology.
+
+```powershell
+# Read-only preflight for one master plus two slaves
+.\tools\sequencer-bench-test.ps1 -ComPort COM3
+
+# Explicitly permit calibrated preview and animation movement
+.\tools\sequencer-bench-test.ps1 -ComPort COM3 -AllowMotion -LoopCycles 5
+```
+
+The active run snapshots servo/automatic-animation states, pauses automatic
+motion, enables the three targets, exercises calibrated master preview, targeted
+and broadcast finite gestures, deterministic seeds, rapid restart, explicit
+IDLE interruption of TALK/POWER_DOWN, and a short broadcast-loop stress. A
+`finally` cleanup always attempts broadcast IDLE and restores every captured
+servo/automatic-animation state. It never changes configuration/calibration,
+commits, flashes, starts OTA, or intentionally disconnects USB.
+
+The automated verdict proves serial acceptance, inventory/state propagation and
+observed mesh health. The current protocol has no target-execution acknowledgement
+or position telemetry, so visible movement, deterministic trajectory and
+inter-droid skew still require an operator observation or future telemetry.
+
+### Bench run — 2026-08-11
+
+- Topology: master `43140`, slaves `4216` and `34880`; firmware label 1.9.0,
+  protocol 5; six directed topology links reported.
+- Master reflashed successfully over USB on COM3. Both 974,320-byte slave images
+  transferred completely by OTA (`5128/5128` chunks, MD5
+  `86efff011ab00297454b8c93291024b3`) and remained stable beyond the 20-second
+  anti-brick confirmation window.
+- The first same-version transfers exposed the old version-only verdict:
+  `ok=false, reason=rolledBack` even though the images booted and remained
+  healthy. This historical limitation is now resolved by a content-derived
+  Build ID; semantic version remains the human release/compatibility label.
+- Active script: 15 passed, 0 failed. Covered strict preflight, calibrated master
+  preview, each target, broadcast, repeated seed, rapid restart plus IDLE,
+  TALK/POWER_DOWN interruption and five Loop cycles without observed inbox
+  overflow. Report: `b1-sequencer-bench-20260811-092352.json`.
+- Strict serial regression after flashing: 20 passed, 0 failed, including all
+  invalid-command rejection/no-mutation checks and 15 seconds of stable fleet
+  observation. Report: `b1-self-test-20260811-092501.json`.
+- Final restored state: master config `59/60/50`; both slave configs `50/60/50`;
+  calibrations unchanged; servos and automatic animations off on all three.
+
+### Build ID validation — 2026-08-11
+
+- Final deterministic identities: master `4DAD66EF`; slave image `72349AFE`.
+  `hello`, `droids` and `otaResult` expose the identity as eight uppercase hex
+  characters; the WPF fleet and OTA status surfaces parse and display it.
+- Rolling-upgrade compatibility was exercised before updating the slaves: the
+  new master accepted both legacy 8-byte heartbeats without a Build ID. After
+  updating slave `4216`, the same inventory simultaneously decoded one current
+  and one legacy slave heartbeat.
+- Both 974,400-byte same-version 1.9.0 OTA transfers completed at `5129/5129`
+  chunks (MD5 `56e9ae06a24828debc148ac9d461e075`). Each post-reboot verdict was
+  `ok=true, fw=1.9.0, build=72349AFE`; the false `rolledBack` result is gone.
+- Read-only Sequencer bench preflight: 6 passed, 0 failed, 1 intentionally
+  skipped (active motion). Report:
+  `b1-sequencer-bench-20260811-101337.json`.
+- Strict serial regression: 22 passed, 0 failed, including full fleet Build ID
+  propagation and 15 seconds of stable mesh observation. Report:
+  `b1-self-test-20260811-101406.json`.
 
 ## Deliberate exclusions
 

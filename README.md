@@ -78,6 +78,9 @@ A single repo, two halves:
 | Tilt servo | GPIO26 |
 | Life LED | GPIO2 (onboard) |
 
+The active pin assignments are grouped in `platformio.ini` as
+`B1_PIN_SERVO_PAN`, `B1_PIN_SERVO_TILT`, and `B1_PIN_LED_ONBOARD`.
+
 Pins to avoid: strapping GPIO0/2/5/12/15, input-only GPIO34-39. Full
 details in [`CLAUDE.md`](CLAUDE.md).
 
@@ -142,6 +145,12 @@ console/               WPF supervision console
   Help/                  in-app help content (Markdown + manifest)
   installer/             NSIS installer + release script
 ```
+
+Every PlatformIO firmware build also receives an 8-hex, content-derived Build
+ID. `FW_VERSION` remains the human release/compatibility version; the Build ID
+identifies changed source and role within that version. The master exposes both
+through serial inventory and slave heartbeats and uses Build ID first when
+confirming a post-reboot OTA update.
 
 ## Releases
 

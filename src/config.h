@@ -15,6 +15,14 @@
 // ---------------------------------------------------------------------------
 #define FW_VERSION "1.9.0"
 
+// Content-derived identity of the firmware source + PlatformIO role, announced
+// separately as the 8-hex "build" field. tools/pio_build_id.py defines it for
+// normal builds. The fallback keeps
+// non-PlatformIO tooling compilable and explicitly means "identity unknown".
+#ifndef FW_BUILD_ID
+#define FW_BUILD_ID 0UL
+#endif
+
 // Console<->master serial protocol version (bumped when a change isn't
 // backward-compatible; adding fields/commands doesn't require it).
 // 4: seq* commands/events removed (the 8 NVS sequence slots + onboard player
@@ -53,14 +61,23 @@
 // ---------------------------------------------------------------------------
 //  Life LED (onboard) — program-running indicator
 // ---------------------------------------------------------------------------
-static const uint8_t PIN_LED_ONBOARD = 2;   // onboard blue LED on DOIT DevKit V1
+#ifndef B1_PIN_LED_ONBOARD
+#define B1_PIN_LED_ONBOARD 2
+#endif
+static const uint8_t PIN_LED_ONBOARD = B1_PIN_LED_ONBOARD; // onboard blue LED on DOIT DevKit V1
 static const uint16_t LED_BLINK_MS   = 500; // blink period
 
 // ---------------------------------------------------------------------------
 //  Servos (all droids) — PWM signal
 // ---------------------------------------------------------------------------
-static const uint8_t PIN_SERVO_PAN  = 25;   // GPIO25 -> pan servo
-static const uint8_t PIN_SERVO_TILT = 26;   // GPIO26 -> tilt servo
+#ifndef B1_PIN_SERVO_PAN
+#define B1_PIN_SERVO_PAN 25
+#endif
+#ifndef B1_PIN_SERVO_TILT
+#define B1_PIN_SERVO_TILT 26
+#endif
+static const uint8_t PIN_SERVO_PAN  = B1_PIN_SERVO_PAN;
+static const uint8_t PIN_SERVO_TILT = B1_PIN_SERVO_TILT;
 
 // Mechanical limits (degrees). Adjust to fit the head assembly.
 static const uint8_t SERVO_PAN_MIN   = 20;

@@ -69,7 +69,7 @@ while ((Get-Date) -lt $deadline -and -not $done -and -not $stopped) {
         'hello' {
             if (-not $helloOk) {
                 $helloOk = $true
-                Say "hello ok (master fw $($j.fw))"
+            Say "hello ok (master fw $($j.fw), build $($j.build))"
                 Send ('{"cmd":"otaStart","target":' + $Target + ',"size":' + $image.Length + ',"md5":"' + $md5 + '"}')
             }
         }
@@ -96,7 +96,7 @@ while ((Get-Date) -lt $deadline -and -not $done -and -not $stopped) {
         }
         'otaDone' { Say "otaDone -- slave rebooting, awaiting verdict..." }
         'otaResult' {
-            Say ("otaResult ok=$($j.ok) fw=$($j.fw) reason=$($j.reason)")
+            Say ("otaResult ok=$($j.ok) fw=$($j.fw) build=$($j.build) reason=$($j.reason)")
             $done = $true
         }
         'otaError' {

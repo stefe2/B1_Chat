@@ -55,6 +55,7 @@ bool OtaMaster::begin(uint16_t target, uint32_t size, const char* md5Hex32) {
             if (e.id == target) {
                 known = true;
                 _prevFwMajor = e.fwMajor; _prevFwMinor = e.fwMinor; _prevFwPatch = e.fwPatch;
+                _prevBuildId = e.buildId;
                 break;
             }
         }
@@ -262,13 +263,18 @@ void OtaMaster::update(uint32_t nowMs) {
                 if (e.id != _target) continue;
                 found = true;
                 if (e.lastSeen != _lastSeenAtRebootStart) {
-                    // Success = the version changed relative to before the OTA (we
-                    // can't compare to a reliable "announced" version, see ota_master.h).
-                    const bool changed = (e.fwMajor != _prevFwMajor || e.fwMinor != _prevFwMinor || e.fwPatch != _prevFwPatch);
-                    // Unchanged version WITHIN the grace window: sign of life emitted
+                    // Build ID distinguishes changed source even when the semantic release
+                    // version stays the same. Version remains the compatibility fallback for
+                    // a legacy target whose pre-OTA heartbeat had no Build ID.
+                    const bool buildChanged = e.buildId != 0 && e.buildId != _prevBuildId;
+                    const bool versionChanged = e.fwMajor != _prevFwMajor ||
+                                                e.fwMinor != _prevFwMinor ||
+                                                e.fwPatch != _prevFwPatch;
+                    const bool changed = buildChanged || versionChanged;
+                    // Unchanged identity WITHIN the grace window: sign of life emitted
                     // BEFORE the actual reboot (the slave only restarts ~250 ms after
                     // its END ack, a heartbeat from the old image can still be in
-                    // flight) — wait, absolutely do not conclude "rolledBack". A real
+                    // flight) — wait, absolutely do not conclude "unchanged". A real
                     // rollback (failed boots + partition switch) takes >= 10-30 s.
                     if (changed || (int32_t)(nowMs - _rebootStartMs) > (int32_t)OTA_REBOOT_GRACE_MS) {
                         _pending = Event{};
@@ -276,7 +282,8 @@ void OtaMaster::update(uint32_t nowMs) {
                         _pending.target = _target;
                         _pending.ok = changed;
                         snprintf(_pending.fw, sizeof(_pending.fw), "%u.%u.%u", e.fwMajor, e.fwMinor, e.fwPatch);
-                        if (!changed) snprintf(_pending.reason, sizeof(_pending.reason), "rolledBack");
+                        _pending.buildId = e.buildId;
+                        if (!changed) snprintf(_pending.reason, sizeof(_pending.reason), "unchanged");
                         _state = OM_IDLE;
                     }
                 }

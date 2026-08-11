@@ -52,7 +52,8 @@ public:
     void pushOtaReady(uint16_t target, uint8_t sessionId, uint8_t chunkSize, uint16_t totalChunks);
     void pushOtaChunkAck(uint16_t seq, uint16_t sent, uint16_t total);
     void pushOtaDone(uint16_t target, uint8_t sessionId);
-    void pushOtaResult(uint16_t target, bool ok, const char* fw, const char* reason);
+    void pushOtaResult(uint16_t target, bool ok, const char* fw, uint32_t buildId,
+                       const char* reason);
     void pushOtaError(uint16_t target, uint8_t sessionId, const char* reason);
 
     // Optional hooks triggered by incoming commands.

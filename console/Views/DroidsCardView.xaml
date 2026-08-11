@@ -5,7 +5,7 @@
              d:DataContext="{d:DesignInstance vm:DroidsViewModel}"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008/design"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" mc:Ignorable="d">
-    <Border Style="{StaticResource CardBorderStyle}" Width="820" HorizontalAlignment="Left">
+    <Border Style="{StaticResource CardBorderStyle}" Width="850" HorizontalAlignment="Left">
         <DockPanel>
             <DockPanel DockPanel.Dock="Top" LastChildFill="False" Margin="0,0,0,12">
                 <Border Style="{StaticResource CardIconBoxStyle}" DockPanel.Dock="Left" Margin="0,0,10,0">
@@ -34,7 +34,7 @@
                     <Grid Margin="12,10,12,8">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="130" />
-                            <ColumnDefinition Width="55" />
+                            <ColumnDefinition Width="85" />
                             <ColumnDefinition Width="70" />
                             <ColumnDefinition Width="80" />
                             <ColumnDefinition Width="70" />
@@ -46,7 +46,7 @@
                             <ColumnDefinition Width="40" />
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0" Text="NAME" Style="{StaticResource TableHeaderTextStyle}" />
-                        <TextBlock Grid.Column="1" Text="VERSION" Style="{StaticResource TableHeaderTextStyle}" />
+                        <TextBlock Grid.Column="1" Text="FW / BUILD" Style="{StaticResource TableHeaderTextStyle}" />
                         <TextBlock Grid.Column="2" Text="RSSI" Style="{StaticResource TableHeaderTextStyle}" TextAlignment="Center"
                                    ToolTip="Received Signal Strength Indicator. Values closer to 0 dBm indicate a stronger wireless link." />
                         <TextBlock Grid.Column="3" Text="STATE" Style="{StaticResource TableHeaderTextStyle}" TextAlignment="Center" />
@@ -65,7 +65,7 @@
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="130" />
-                                            <ColumnDefinition Width="55" />
+                                            <ColumnDefinition Width="85" />
                                             <ColumnDefinition Width="70" />
                                             <ColumnDefinition Width="80" />
                                             <ColumnDefinition Width="70" />
@@ -86,10 +86,15 @@
                                             </TextBox.InputBindings>
                                         </TextBox>
 
-                                                        <TextBlock Grid.Column="1" Text="{Binding FwVersion}"
-                                                   Foreground="{Binding FwUpToDate, Converter={StaticResource FwStatusToBrushConv}}"
-                                                   ToolTip="{Binding FwUpToDate, Converter={StaticResource FwStatusToTextConv}}"
-                                                   FontFamily="{StaticResource MonoFont}" FontSize="10.5" VerticalAlignment="Center" />
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding FwVersion}"
+                                                       Foreground="{Binding FwUpToDate, Converter={StaticResource FwStatusToBrushConv}}"
+                                                       ToolTip="{Binding FwUpToDate, Converter={StaticResource FwStatusToTextConv}}"
+                                                       FontFamily="{StaticResource MonoFont}" FontSize="10.5" />
+                                            <TextBlock Text="{Binding BuildId}" Foreground="{StaticResource Muted2Brush}"
+                                                       ToolTip="{Binding FirmwareIdentity}"
+                                                       FontFamily="{StaticResource MonoFont}" FontSize="9" />
+                                        </StackPanel>
 
                                         <TextBlock Grid.Column="2" Text="{Binding RssiLabel}" Foreground="{StaticResource MutedBrush}"
                                                    FontFamily="{StaticResource MonoFont}" FontSize="11" VerticalAlignment="Center" TextAlignment="Center"

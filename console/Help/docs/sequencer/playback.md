@@ -33,6 +33,16 @@ Muted or offline rows do not create a queue for missed commands.*
 - **Stop** cancels future sends, stops local audio, and resets the playhead to 0.
 - **Loop** starts a new pass when the calculated sequence duration ends.
 
+Persistent timeline editing is locked during both Play and Pause. You can still
+inspect the timeline and change track mute switches, but press **Stop** before
+inserting, moving, deleting, importing, or otherwise changing sequence content.
+This keeps the visible document identical to the immutable pass being performed.
+
+An unexpected serial disconnect stops the active pass and its local audio rather
+than silently continuing a partial audio-only performance. Closing the console
+does the same cleanup. A deliberate audio-only Dry Run mode is a future feature,
+not an automatic fallback for a lost master.
+
 > **Important:** gestures are fire-and-forget commands. Pause and Stop cannot
 > freeze or retract a gesture already sent to a droid. A one-shot gesture finishes
 > naturally. A looping `POWER_DOWN` or `TALK` gesture continues until another

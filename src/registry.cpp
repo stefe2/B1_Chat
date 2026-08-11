@@ -50,6 +50,7 @@ bool Registry::seen(uint16_t id, int rssi, uint32_t now) {
         _e[_count].fwMajor = 0;
         _e[_count].fwMinor = 0;
         _e[_count].fwPatch = 0;
+        _e[_count].buildId = 0;
         _count++;
         return true;
     }
@@ -70,10 +71,17 @@ void Registry::setAutoAnim(uint16_t id, bool on) {
     }
 }
 
-void Registry::setFwVersion(uint16_t id, uint8_t major, uint8_t minor, uint8_t patch) {
+void Registry::setFwIdentity(uint16_t id, uint8_t major, uint8_t minor, uint8_t patch,
+                             uint32_t buildId) {
     CriticalGuard guard(_mux);
     for (uint8_t i = 0; i < _count; i++) {
-        if (_e[i].id == id) { _e[i].fwMajor = major; _e[i].fwMinor = minor; _e[i].fwPatch = patch; return; }
+        if (_e[i].id == id) {
+            _e[i].fwMajor = major;
+            _e[i].fwMinor = minor;
+            _e[i].fwPatch = patch;
+            _e[i].buildId = buildId;
+            return;
+        }
     }
 }
 

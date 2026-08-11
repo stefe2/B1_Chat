@@ -54,7 +54,8 @@ the history.
 **Automatic firmware release** (`.github/workflows/firmware-release.yml`): triggers
 on push to `main` touching `src/config.h`, or manually (`workflow_dispatch`). Reads
 `FW_VERSION`, skips if the `fw-vX.Y.Z` tag already exists (idempotent), otherwise builds
-`b1_master`/`b1_slave` (PlatformIO on a GitHub runner), computes the SHA-256 manifest, tags
+`b1_master`/`b1_slave` (PlatformIO on a GitHub runner), computes the SHA-256 manifest
+with each role's content-derived Build ID, tags
 and publishes the release — no local `gh auth login` needed (`GITHUB_TOKEN`
 provided by Actions). Normal flow: bump `FW_VERSION`, commit, push to `main`, wait for
 CI. `tools/release.ps1 -Publish` remains a manual fallback (avoid using it in addition to
@@ -167,13 +168,13 @@ Session guarded by a handshake: `hello` → `{evt:"hello",ok,id}`, then keepaliv
   `getMeshTopology` ·
   `setMulti {ops:[...]}` · `commit` ·
   `otaStart {target,size,md5}` · `otaChunk {seq,data}` (data = base64) · `otaAbort {}`
-- **Master → console** (`evt`): `hello {ok,id,fw,proto,lineMax,anims,caps[],dirty}` ·
-  `droids {list:[{id,name,rssi,age,role,servos,autoAnim,adopted,fw}]}` ·
+- **Master → console** (`evt`): `hello {ok,id,fw,build,proto,lineMax,anims,caps[],dirty}` ·
+  `droids {list:[{id,name,rssi,age,role,servos,autoAnim,adopted,fw,build?}]}` ·
   `log {msg}` · `err {msg}` · `config {target,freq,amp,speed}` · `calibData {target,+6}` ·
   `meshTopology {links:[{from,to,rssi}]}` · `animDurations {list:[{animId,ms}]}` ·
   `setMultiDone {ok,applied,failedAt?,error?}` · `dirty {dirty}` · `allDone` ·
   `otaReady {target,sessionId,chunkSize,totalChunks}` · `otaChunkAck {seq,sent,total}` ·
-  `otaDone {target,sessionId}` · `otaResult {target,ok,fw?,reason?}` ·
+  `otaDone {target,sessionId}` · `otaResult {target,ok,fw?,build?,reason?}` ·
   `otaError {target?,sessionId?,reason}`
 
 Unknown fields in a command: ignored (the console may be newer than the
@@ -232,10 +233,11 @@ next one from the console) → last chunk acked → `MSG_OTA_END` → `evt:otaDo
 target's heartbeats until `OTA_REBOOT_WAIT_MS` (~90s) and pushes
 `evt:otaResult`. Since the console can't reliably know the
 version baked into an arbitrary `.bin`, success is determined by comparing
-the version reported **after** reboot to the one from **before** the OTA (captured
-at `otaStart` time) rather than to an announced version — `ok:true` if it
-changed, `reason:"rolledBack"` if it's identical, `reason:"unreachable"` if
-no heartbeat arrives within the delay. Grace window (`OTA_REBOOT_GRACE_MS`,
+the content-derived Build ID reported **after** reboot to the one from **before**
+the OTA (captured at `otaStart` time). Semantic version remains a fallback for a
+legacy slave without a Build ID — `ok:true` if either identity changed,
+`reason:"unchanged"` if both are identical, `reason:"unreachable"` if no
+heartbeat arrives within the delay. Grace window (`OTA_REBOOT_GRACE_MS`,
 5s): a sign of life at an unchanged version in the first few seconds is
 ignored — the slave only reboots ~250 ms after its END ack, one last
 heartbeat from the old image can still arrive (false "rolledBack" rendered
@@ -349,7 +351,15 @@ Full detailed history: see [PROGRESS-ARCHIVE.md](PROGRESS-ARCHIVE.md).
       opening Help directly on that card's page (`HelpViewModel.OpenAtPage`,
       mapping in the plan file `regarde-dans-ce-répertoire-swift-dawn.md`).
 
-**Recent milestones** (2026-08-10):
+**Recent milestones** (2026-08-11):
+- Firmware identity now has two layers: human `FW_VERSION` and an automatic,
+  deterministic 8-hex Build ID derived from normalized firmware source,
+  PlatformIO configuration and role. It is generated before every build,
+  included in release manifests, heartbeats, `hello`/`droids`/`otaResult`, and
+  displayed by the WPF console. The master accepts both current and legacy
+  heartbeat sizes during rolling upgrades. A three-node bench upgrade confirmed
+  same-version OTA success via Build ID (`4DAD66EF` master, `72349AFE` slaves),
+  followed by 22/22 strict serial checks.
 - In-app Help was rewritten as a task-oriented 16-page US-English guide and
   cross-checked against the current WPF/firmware behavior. It now includes
   first-install/first-fleet setup, mechanical and flash/OTA safety, exact
@@ -556,13 +566,11 @@ change).
 - `handleRaw()`: neighbor recording must stay **before** the
   `srcId==_myId` early-return and the dedup (even a relayed echo of our own
   message proves a direct radio link with the relay).
-- `HeartbeatPayload` (`mesh_comm.h`): reception requires an exact `len ==
-  sizeof(HeartbeatPayload)` ([main.cpp](src/main.cpp)) — any change to this
-  struct's size (e.g. adding the FW version) silently breaks
-  compatibility with a droid still on the old firmware: its heartbeats
-  are just ignored (no error), so servos/auto-anims/FW freeze for it
-  on the registry/console side. Reflash the whole fleet together on every change to
-  this struct.
+- `HeartbeatPayload` (`mesh_comm.h`): Build ID enlarged this payload. The master
+  explicitly accepts both the current struct and the frozen 8-byte
+  `LegacyHeartbeatPayload`, recording Build ID 0 for legacy nodes. Preserve that
+  dual decoder during rolling upgrades; any future payload-size change needs an
+  equally explicit compatibility form instead of silently freezing telemetry.
 - Everything is now in English (GUI, code comments, docs) — see the
   2026-07-14 milestone above. `console/wwwroot/index.html` is the sole,
   deliberate exception: it stays French and untouched, as a frozen

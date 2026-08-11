@@ -14,7 +14,7 @@ namespace b1_chat_console.Services;
 /// refuses everything except hello/ping before the handshake completes), and holds the central
 /// state (droids, topology, caps, sequence catalog) the ViewModels depend on.
 /// </summary>
-public partial class ProtocolClient : ObservableObject
+public partial class ProtocolClient : ObservableObject, ISequencerProtocol
 {
     private readonly SerialLinkService _link;
     private System.Threading.Timer? _keepalive;
@@ -28,11 +28,13 @@ public partial class ProtocolClient : ObservableObject
     public ObservableCollection<Droid> Droids { get; } = new();
     public ObservableCollection<MeshLink> MeshLinks { get; } = new();
     public Dictionary<int, int> AnimDurationMs { get; } = new();
+    IReadOnlyDictionary<int, int> ISequencerProtocol.AnimDurationMs => AnimDurationMs;
     public IReadOnlyDictionary<ushort, AnimConfig> AnimConfigs => _animConfigs;
 
     [ObservableProperty] private bool _portOpen;
     [ObservableProperty] private bool _sessionReady;
     [ObservableProperty] private string? _fwVersion;
+    [ObservableProperty] private string? _fwBuildId;
     [ObservableProperty] private int _fwProto;
     [ObservableProperty] private int _lineMax;
     [ObservableProperty] private bool _dirty;
@@ -58,7 +60,7 @@ public partial class ProtocolClient : ObservableObject
     public event Action<ushort, int, int, int>? OtaReadyReceived;      // target, sessionId, chunkSize, totalChunks
     public event Action<int, int, int>? OtaChunkAckReceived;           // seq, sent, total
     public event Action<ushort, int>? OtaDoneReceived;                 // target, sessionId
-    public event Action<ushort, bool, string?, string?>? OtaResultReceived; // target, ok, fw, reason
+    public event Action<ushort, bool, string?, string?, string?>? OtaResultReceived; // target, ok, fw, build, reason
     public event Action<ushort?, int, string>? OtaErrorReceived;       // target, sessionId, reason
 
     // A serial write that fails (e.g. port blocked/disconnected mid-send) — until now
@@ -110,6 +112,8 @@ public partial class ProtocolClient : ObservableObject
         _droidsById.Clear();
         _animConfigs.Clear();
         _masterId = null;
+        FwVersion = null;
+        FwBuildId = null;
         MeshLinks.Clear();
         DroidsChanged?.Invoke();
         MeshTopologyChanged?.Invoke();
@@ -326,6 +330,7 @@ public partial class ProtocolClient : ObservableObject
                     (ushort)(root.TryGetProperty("target", out var ort2) ? ort2.GetInt32() : 0),
                     root.TryGetProperty("ok", out var ook) && ook.GetBoolean(),
                     root.TryGetProperty("fw", out var ofw) ? ofw.GetString() : null,
+                    root.TryGetProperty("build", out var obuild) ? obuild.GetString() : null,
                     root.TryGetProperty("reason", out var orsn) ? orsn.GetString() : null);
                 break;
             case "otaError":
@@ -341,6 +346,7 @@ public partial class ProtocolClient : ObservableObject
     {
         SessionReady = root.TryGetProperty("ok", out var ok) && ok.GetBoolean();
         FwVersion = root.TryGetProperty("fw", out var fw) ? fw.GetString() : null;
+        FwBuildId = root.TryGetProperty("build", out var build) ? build.GetString() : null;
         FwProto = root.TryGetProperty("proto", out var proto) ? proto.GetInt32() : 0;
         LineMax = root.TryGetProperty("lineMax", out var lm) ? lm.GetInt32() : 0;
         Dirty = root.TryGetProperty("dirty", out var d) && d.GetBoolean();
@@ -388,6 +394,7 @@ public partial class ProtocolClient : ObservableObject
             if (item.TryGetProperty("autoAnim", out var aa)) droid.AutoAnimOn = aa.GetBoolean();
             if (item.TryGetProperty("adopted", out var ad)) droid.Adopted = ad.GetBoolean();
             if (item.TryGetProperty("fw", out var fw)) droid.FwVersion = fw.GetString() ?? "";
+            droid.BuildId = item.TryGetProperty("build", out var build) ? build.GetString() ?? "" : "";
             // TryGetInt32 (not GetInt32): a pre-1.3.10 firmware could emit an overflowed
             // age (~4e9, see serial_console.cpp) — GetInt32 threw a FormatException that
             // killed the read loop (fw <= 1.3.8) and then the whole app.

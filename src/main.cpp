@@ -338,7 +338,15 @@ static void processMeshMessage(uint8_t type, const uint8_t* payload, uint8_t len
         memcpy(&hb, payload, sizeof(hb));
         Droids.setServos(srcId, hb.state & 0x01);
         Droids.setAutoAnim(srcId, hb.state & 0x02);
-        Droids.setFwVersion(srcId, hb.fwMajor, hb.fwMinor, hb.fwPatch);
+        Droids.setFwIdentity(srcId, hb.fwMajor, hb.fwMinor, hb.fwPatch, hb.buildId);
+#endif
+    } else if (type == MSG_HEARTBEAT && len == sizeof(LegacyHeartbeatPayload)) {
+#if IS_MASTER
+        LegacyHeartbeatPayload hb;
+        memcpy(&hb, payload, sizeof(hb));
+        Droids.setServos(srcId, hb.state & 0x01);
+        Droids.setAutoAnim(srcId, hb.state & 0x02);
+        Droids.setFwIdentity(srcId, hb.fwMajor, hb.fwMinor, hb.fwPatch, 0);
 #endif
     } else if (type == MSG_HEARTBEAT) {
         // old form / presence: already noted.
@@ -451,7 +459,7 @@ static void pumpOtaEvents() {
         Console.pushOtaDone(ev.target, ev.sessionId);
         break;
     case OtaMaster::EV_RESULT:
-        Console.pushOtaResult(ev.target, ev.ok, ev.fw, ev.reason);
+        Console.pushOtaResult(ev.target, ev.ok, ev.fw, ev.buildId, ev.reason);
         break;
     case OtaMaster::EV_ERROR:
         Console.pushOtaError(ev.target, ev.sessionId, ev.reason);
@@ -584,7 +592,10 @@ void loop() {
     // Heartbeat: each droid reports its presence (and its servo state).
     if (now > nextHeartbeat) {
         nextHeartbeat = now + HEARTBEAT_MS;
-        HeartbeatPayload hb{now, (uint8_t)((gServos ? 1 : 0) | (gAutoAnim ? 2 : 0)), gFwMajor, gFwMinor, gFwPatch};
+        HeartbeatPayload hb{now,
+                            (uint8_t)((gServos ? 1 : 0) | (gAutoAnim ? 2 : 0)),
+                            gFwMajor, gFwMinor, gFwPatch,
+                            (uint32_t)FW_BUILD_ID};
         Mesh.send(MSG_HEARTBEAT, &hb, sizeof(hb));
     }
 

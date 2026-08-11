@@ -10,7 +10,7 @@ namespace b1_chat_console.Services;
 /// Foundation, no extra NuGet dependency) — supports several clips playing concurrently
 /// (one MediaPlayer each), since a sequence can now have multiple audio lanes/clips.
 /// </summary>
-public class AudioPlaybackService
+public class AudioPlaybackService : ISequencerAudioPlayer
 {
     private readonly List<MediaPlayer> _players = new();
 

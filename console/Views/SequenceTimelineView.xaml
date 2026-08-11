@@ -33,6 +33,7 @@
                     <TextBlock Text="⏸" />
                 </Button>
                 <ToggleButton Style="{StaticResource HaloToggleButtonStyle}" IsChecked="{Binding Loop}"
+                              IsEnabled="{Binding CanEditSequence}"
                               ToolTip="Loop the whole sequence" Margin="0,0,10,0" VerticalAlignment="Center">
                     <TextBlock Text="⟲ Loop" FontSize="10.5" />
                 </ToggleButton>
@@ -82,6 +83,13 @@
                         Visibility="{Binding IsLiveTracking, Converter={StaticResource BoolToVisConv}}"
                         ToolTip="Playback is active and the playhead is following the running sequence in real time.">
                     <TextBlock Text="● LIVE" Foreground="{StaticResource OkBrush}" FontFamily="{StaticResource MonoFont}"
+                               FontWeight="Bold" FontSize="11" />
+                </Border>
+                <Border Style="{StaticResource ValuePillStyle}" BorderBrush="{StaticResource WarnBrush}"
+                        Visibility="{Binding CanEditSequence, Converter={StaticResource BoolToVisConv}, ConverterParameter=Invert}"
+                        ToolTip="Persistent timeline editing is locked during Play and Pause. Press Stop before changing the sequence."
+                        Margin="6,0,0,0">
+                    <TextBlock Text="● EDIT LOCKED" Foreground="{StaticResource WarnBrush}" FontFamily="{StaticResource MonoFont}"
                                FontWeight="Bold" FontSize="11" />
                 </Border>
             </StackPanel>
@@ -139,6 +147,7 @@
                                                     <!-- Renamable in place (direct user request): borderless TextBox over the
                                                          rail background, committed on every keystroke. -->
                                                     <TextBox Text="{Binding Label, UpdateSourceTrigger=PropertyChanged}"
+                                                             IsEnabled="{Binding DataContext.CanEditSequence, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                              Background="Transparent" BorderThickness="0" Padding="0" MinWidth="60"
                                                              MaxLength="16" Foreground="{StaticResource AccentBrush}" FontSize="11.5"
                                                              FontWeight="SemiBold" CaretBrush="{StaticResource AccentBrush}"
@@ -448,6 +457,7 @@
                                                                               Command="{Binding PlacementTarget.Tag.ReplaceAudioClipCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                                                               CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                                                                     <MenuItem Header="Loop" IsCheckable="True" Style="{StaticResource DarkMenuItemStyle}"
+                                                                              IsEnabled="{Binding PlacementTarget.Tag.CanEditSequence, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                                                               IsChecked="{Binding PlacementTarget.DataContext.Loop, RelativeSource={RelativeSource AncestorType=ContextMenu}, Mode=TwoWay}" />
                                                                     <Separator />
                                                                     <MenuItem Header="Delete" Style="{StaticResource DarkMenuItemStyle}"
@@ -728,6 +738,7 @@
                 <!-- Inspector: shown when a clip is selected (mockup .inspector — flush panel
                      on the body's right edge, not a floating box). -->
                 <Border Grid.Column="2" Width="220" Padding="12" Background="{StaticResource BgBrush}"
+                        IsEnabled="{Binding CanEditSequence}"
                         BorderBrush="{StaticResource BorderLoBrush}" BorderThickness="1,0,0,0"
                         CornerRadius="0,6,6,0">
                     <Border.Style>
@@ -796,7 +807,7 @@
                                    FontSize="10" Foreground="{StaticResource Muted2Brush}" VerticalAlignment="Center" />
                     </DockPanel>
                 </Border>
-                <ItemsControl ItemsSource="{Binding GestureFamilies}">
+                <ItemsControl ItemsSource="{Binding GestureFamilies}" IsEnabled="{Binding CanEditSequence}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <Border BorderThickness="0,0,0,1" BorderBrush="#4D000000" Padding="12,7">

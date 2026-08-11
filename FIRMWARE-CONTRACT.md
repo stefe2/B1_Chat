@@ -26,7 +26,7 @@ for how each item actually evolved over time, see its Progress log.
 **Beyond the original contract** (also resolved, inspired by the KyberEditor
 protocol, not part of the initial proposal): line buffer raised to 4 KB
 (`lineMax` announced); `{evt:"err", msg}` for any invalid command; enriched
-`hello` handshake (`fw`, `proto`, `lineMax`, `anims`, `caps[]`, `dirty` —
+`hello` handshake (`fw`, `build`, `proto`, `lineMax`, `anims`, `caps[]`, `dirty` —
 `seqSlots` dropped in fw 1.7.0 with the slot machinery);
 `{cmd:"getAll"}` = full dump (burst of existing events ending with `{evt:"allDone"}`);
 a commit model for anim params/names (`{cmd:"commit"}` / `{evt:"dirty"}` —

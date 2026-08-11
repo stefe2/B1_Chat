@@ -142,6 +142,13 @@ if (-not $SkipBuild) {
             & dotnet build "console/b1-chat-console.csproj" --no-restore `
                 "-p:BuildNumberFile=$tempBuildNumber" "-p:BuildNumber=$originalBuildNumber"
         }
+        Invoke-Build "Sequencer unit tests" {
+            # Restore is intentionally allowed here: unlike the main console project, the
+            # test-only xUnit packages may not exist yet on a fresh developer machine. The
+            # ProjectReference opts out of the product build-number increment.
+            & dotnet test "console.tests/b1-chat-console.Tests.csproj" `
+                "-p:SkipBuildNumberIncrement=true"
+        }
     } finally {
         if (Test-Path $tempBuildNumber) { Remove-Item -LiteralPath $tempBuildNumber -Force }
     }
@@ -176,6 +183,13 @@ Invoke-Test "Strict serial and mesh validation present" {
     Assert-Source "src/main.cpp" "validConfigPayload" "mesh config validation missing"
     Assert-Source "src/ota_slave.cpp" "p\.dataLen > OTA_CHUNK_DATA_MAX" "OTA chunk bound missing"
     "serial, mesh and OTA guards detected"
+}
+
+Invoke-Test "Firmware Build ID pipeline present" {
+    Assert-Source "platformio.ini" "pio_build_id\.py" "PlatformIO Build ID generator missing"
+    Assert-Source "src/mesh_comm.h" "uint32_t buildId" "heartbeat Build ID missing"
+    Assert-Source "src/ota_master.cpp" "buildChanged" "OTA Build ID comparison missing"
+    "content-derived build propagated through heartbeat and OTA verdict"
 }
 
 Invoke-Test "Boot sequence randomization present" {
@@ -221,7 +235,7 @@ if (-not $SkipSerial) {
         $port = $device.Port
         try {
             $hello = $device.Hello
-            Add-Result "B1 master handshake" "PASS" ("{0}, fw {1}, proto {2}" -f $device.Name, $hello.fw, $hello.proto)
+            Add-Result "B1 master handshake" "PASS" ("{0}, fw {1}, build {2}, proto {3}" -f $device.Name, $hello.fw, $hello.build, $hello.proto)
             $masterId = [int]$hello.id
 
             $droids = Send-And-Wait $port '{"cmd":"list"}' { param($e) $e.evt -eq "droids" }
@@ -232,6 +246,16 @@ if (-not $SkipSerial) {
                 $droidCount = @($droids.list).Count
                 $slaveCount = @($droids.list | Where-Object role -eq "slave").Count
                 "{0} droid(s), {1} slave(s)" -f $droidCount, $slaveCount
+            }
+
+            Invoke-Test "Firmware Build ID propagation" {
+                Assert-True ("$($hello.build)" -match '^[0-9A-Fa-f]{8}$') "hello has no valid 8-hex Build ID"
+                foreach ($droid in @($droids.list)) {
+                    Assert-True ("$($droid.build)" -match '^[0-9A-Fa-f]{8}$') "droid $($droid.id) has no valid Build ID"
+                }
+                $master = @($droids.list | Where-Object { [int]$_.id -eq $masterId })[0]
+                Assert-True ("$($master.build)" -eq "$($hello.build)") "master hello/inventory Build IDs disagree"
+                "master $($hello.build); fleet identities present"
             }
 
             $configJson = '{"cmd":"getConfig","target":' + $masterId + '}'
@@ -265,35 +289,52 @@ if (-not $SkipSerial) {
                 "18 positive durations"
             }
 
-            $badAnim = Send-And-Wait $port '{"cmd":"anim","target":65535,"animId":99}' { param($e) $e.evt -eq "err" }
-            Invoke-Test "Invalid animation rejected" {
-                Assert-True ($null -ne $badAnim) "invalid anim produced no err event"
-                "$($badAnim.msg)"
+            # Capability strings and version labels are not sufficient proof that the binary
+            # actually contains strict validation. Probe a read-only command first: old/stale
+            # firmware may accept invalid setters and mutate the bench instead of returning err.
+            $validationProbe = Send-And-Wait $port '{"cmd":"getConfig","target":70000}' { param($e) $e.evt -eq "err" }
+            $strictValidation = $null -ne $validationProbe
+            Invoke-Test "Runtime validation preflight" {
+                Assert-True $strictValidation "read-only invalid target was not rejected; mutating rejection tests suppressed"
+                "$($validationProbe.msg)"
             }
 
-            $badConfig = Send-And-Wait $port '{"cmd":"config","target":65535,"freq":101,"amp":60,"speed":50}' { param($e) $e.evt -eq "err" }
-            $configAfter = Send-And-Wait $port $configJson {
-                param($e) $e.evt -eq "config" -and [int]$e.target -eq $masterId
-            }
-            Invoke-Test "Invalid config rejected without mutation" {
-                Assert-True ($null -ne $badConfig) "invalid config produced no err event"
-                Assert-True ($null -ne $configAfter) "config could not be reread"
-                Assert-True ([int]$configBefore.freq -eq [int]$configAfter.freq -and [int]$configBefore.amp -eq [int]$configAfter.amp -and [int]$configBefore.speed -eq [int]$configAfter.speed) "invalid config changed stored values"
-                "$($badConfig.msg)"
-            }
-
-            $badCalibJson = '{"cmd":"calib","target":' + $masterId + ',"panMin":120,"panCenter":90,"panMax":60,"tiltMin":60,"tiltCenter":90,"tiltMax":120}'
-            $badCalib = Send-And-Wait $port $badCalibJson { param($e) $e.evt -eq "err" }
-            $calibAfter = Send-And-Wait $port $calibJson {
-                param($e) $e.evt -eq "calibData" -and [int]$e.target -eq $masterId
-            }
-            Invoke-Test "Invalid calibration rejected without mutation" {
-                Assert-True ($null -ne $badCalib) "invalid calibration produced no err event"
-                Assert-True ($null -ne $calibAfter) "calibration could not be reread"
-                foreach ($field in @("panMin","panCenter","panMax","tiltMin","tiltCenter","tiltMax")) {
-                    Assert-True ([int]$calibBefore.$field -eq [int]$calibAfter.$field) "invalid calibration changed $field"
+            if ($strictValidation) {
+                $badAnim = Send-And-Wait $port '{"cmd":"anim","target":65535,"animId":99}' { param($e) $e.evt -eq "err" }
+                Invoke-Test "Invalid animation rejected" {
+                    Assert-True ($null -ne $badAnim) "invalid anim produced no err event"
+                    "$($badAnim.msg)"
                 }
-                "$($badCalib.msg)"
+
+                $badConfig = Send-And-Wait $port '{"cmd":"config","target":65535,"freq":101,"amp":60,"speed":50}' { param($e) $e.evt -eq "err" }
+                $configAfter = Send-And-Wait $port $configJson {
+                    param($e) $e.evt -eq "config" -and [int]$e.target -eq $masterId
+                }
+                Invoke-Test "Invalid config rejected without mutation" {
+                    Assert-True ($null -ne $badConfig) "invalid config produced no err event"
+                    Assert-True ($null -ne $configAfter) "config could not be reread"
+                    Assert-True ([int]$configBefore.freq -eq [int]$configAfter.freq -and [int]$configBefore.amp -eq [int]$configAfter.amp -and [int]$configBefore.speed -eq [int]$configAfter.speed) "invalid config changed stored values"
+                    "$($badConfig.msg)"
+                }
+
+                $badCalibJson = '{"cmd":"calib","target":' + $masterId + ',"panMin":120,"panCenter":90,"panMax":60,"tiltMin":60,"tiltCenter":90,"tiltMax":120}'
+                $badCalib = Send-And-Wait $port $badCalibJson { param($e) $e.evt -eq "err" }
+                $calibAfter = Send-And-Wait $port $calibJson {
+                    param($e) $e.evt -eq "calibData" -and [int]$e.target -eq $masterId
+                }
+                Invoke-Test "Invalid calibration rejected without mutation" {
+                    Assert-True ($null -ne $badCalib) "invalid calibration produced no err event"
+                    Assert-True ($null -ne $calibAfter) "calibration could not be reread"
+                    foreach ($field in @("panMin","panCenter","panMax","tiltMin","tiltCenter","tiltMax")) {
+                        Assert-True ([int]$calibBefore.$field -eq [int]$calibAfter.$field) "invalid calibration changed $field"
+                    }
+                    "$($badCalib.msg)"
+                }
+            } else {
+                $reason = "runtime validation preflight failed; command intentionally not sent"
+                Add-Result "Invalid animation rejected" "SKIP" $reason
+                Add-Result "Invalid config rejected without mutation" "SKIP" $reason
+                Add-Result "Invalid calibration rejected without mutation" "SKIP" $reason
             }
 
             Start-Sleep -Seconds $ObserveSeconds
