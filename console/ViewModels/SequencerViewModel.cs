@@ -215,6 +215,8 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     private bool _suppressTimelineRefresh;
     private int _elapsedAtPauseMs;
     private bool _disposed;
+    private string _trackRosterSignature = "";
+    private string _durationTargetSignature = "";
     private IReadOnlyList<SequencerScheduleWarning> _scheduleWarnings = Array.Empty<SequencerScheduleWarning>();
     public bool HasScheduleWarnings => _scheduleWarnings.Count > 0;
     public string ScheduleWarningText => string.Join(
@@ -347,8 +349,16 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
 
     private void OnDroidsChanged()
     {
-        RebuildTracks();
-        RefreshDurationDerivedState();
+        // Firmware publishes the complete inventory every ~1.5 s even when nothing relevant
+        // changed. Rebuilding Tracks and thousands of ruler bindings on every heartbeat stalls
+        // every UI animation (radar sweep and playhead) at that cadence. Track layout only
+        // depends on identity/name/role; broadcast timing only depends on online membership.
+        // Compare those two projections independently and leave the visual tree untouched when
+        // a heartbeat merely refreshes age/RSSI/state already represented elsewhere.
+        if (!string.Equals(_trackRosterSignature, TrackRosterSignature(), StringComparison.Ordinal))
+            RebuildTracks();
+        if (!string.Equals(_durationTargetSignature, DurationTargetSignature(), StringComparison.Ordinal))
+            RefreshDurationDerivedState();
     }
 
     private void OnAnimDurationsReceived()
@@ -778,6 +788,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
 
     private void RebuildTracks()
     {
+        _trackRosterSignature = TrackRosterSignature();
         var armedId = ArmedTrack?.Id;
         // Muted is a live per-track toggle, not sequence data (see CLAUDE.md) — it must
         // survive a heartbeat-driven rebuild instead of silently resetting, same reasoning
@@ -816,6 +827,17 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         // the new one, or it silently shows nothing selected even though Target itself is fine.
         OnPropertyChanged(nameof(SelectedStepTrack));
     }
+
+    private string TrackRosterSignature() => string.Join(
+        '|',
+        Targets.OrderBy(droid => droid.Id).Select(droid =>
+            $"{droid.Id:X4}:{droid.Name}:{(droid.IsMaster ? 'M' : 'S')}"));
+
+    private string DurationTargetSignature() => string.Join(
+        '|',
+        Targets.Where(droid => droid.Online || droid.IsMaster)
+            .OrderBy(droid => droid.Id)
+            .Select(droid => droid.Id.ToString("X4")));
 
     [RelayCommand]
     private void ArmTrack(TimelineTrack? track) => ArmedTrack = track;
@@ -877,6 +899,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
 
     private void ResolveGestureDurationsAndExtent()
     {
+        _durationTargetSignature = DurationTargetSignature();
         var provider = new AnimationDurationProvider(
             _protocol.AnimDurationMetadata,
             _protocol.AnimDurationMs,

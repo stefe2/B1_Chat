@@ -640,6 +640,39 @@ public sealed class SequencerPlaybackIntegrationTests
     }
 
     [Fact]
+    public void RepeatedUnchangedDroidTelemetry_DoesNotRebuildTimelineOrInterruptAnimations()
+    {
+        var protocol = new FakeSequencerProtocol();
+        var droid = new Droid { Id = 0x1234, Name = "B1", Online = true };
+        protocol.Droids.Add(droid);
+        using var vm = CreateViewModel(protocol, new FakePlaybackTimerScheduler());
+        vm.Steps.Add(new SequenceStep { AnimId = 2, Target = ushort.MaxValue, StartMs = 100 });
+        var extentRefreshes = 0;
+        var trackRefreshes = 0;
+        vm.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(vm.TimelineWidthPx)) extentRefreshes++;
+            if (args.PropertyName == nameof(vm.TracksHeightPx)) trackRefreshes++;
+        };
+
+        protocol.RaiseDroidsChanged();
+        protocol.RaiseDroidsChanged();
+
+        Assert.Equal(0, extentRefreshes);
+        Assert.Equal(0, trackRefreshes);
+
+        droid.Online = false;
+        protocol.RaiseDroidsChanged();
+        Assert.Equal(1, extentRefreshes); // broadcast duration target set changed
+        Assert.Equal(0, trackRefreshes);
+
+        droid.Name = "B1 renamed";
+        protocol.RaiseDroidsChanged();
+        Assert.Equal(1, extentRefreshes);
+        Assert.Equal(1, trackRefreshes); // only the roster projection changed
+    }
+
+    [Fact]
     public void EditTransactions_IgnoreNoOpsAndClearRedoOnlyAfterARealChange()
     {
         var protocol = new FakeSequencerProtocol();

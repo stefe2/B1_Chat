@@ -779,6 +779,14 @@ The dashboard is updated whenever an item changes state.
   for the documented maximum sequence size.
 - **Validation:** performance test with the supported maximum event count and
   duration; no perceptible UI stall while playing or zooming.
+- **Implemented so far:** cached total duration no longer rescans clips on
+  playhead ticks. Unchanged 1.5 s droid telemetry is now projected into separate
+  roster and online-target signatures, so it does not rebuild timeline tracks,
+  duration metadata or ruler bindings. A regression test proves repeated
+  identical heartbeats emit no extent/track refresh; real name/role and online
+  membership changes still update only their affected projection. The operator
+  confirmed that radar and scene-playhead animation are fluid again in build
+  347. Maximum-duration ruler generation remains before this item can close.
 
 ### [D] SEQ-E07 — Add master-side scheduled execution
 
@@ -1607,3 +1615,4 @@ Append concise evidence when closing items; do not paste full build logs.
 | 2026-08-11 | SEQ-D06, SEQ-D07, SEQ-D08 | Completed the Scene-first Local Library: editable names, Save/Save As with stable GUIDs and conflict refusal, validated versioned envelopes, atomic writes, deterministic legacy migration, visible corrupt-file issues, recoverable confirmed Trash, discriminated startup restore, truthful origin/Dirty badges and aligned Help/tooltips. Export remains an external copy and cannot falsely clear modified library content. Sixteen focused cases expanded the WPF suite to 153/153; Release build completed with zero warnings/errors and offline regression passed 19/19 (`b1-self-test-20260811-231018.json`). No firmware deployment or hardware run was required. |
 | 2026-08-11 | SEQ-E02, SEQ-E03, SEQ-H03 (in progress) | Replaced per-event timers with one rearmable pass timer and a monotonic forward-only batch cursor. Late wakes drain all overdue timestamps in immutable source order and compensate the next delay; Pause/Stop/restart/Loop dispose or replace the whole session. Same-target and broadcast/target overlaps now produce timestamped SCHEDULE warnings with explicit last-received/ambiguous-mesh policy. Added 10,000-event resource, drift catch-up, batch shape/conflict, atomic gesture+audio and 20-pass repeatability coverage; WPF suite passed 157/157, Release build had zero warnings/errors and offline regression passed 19/19 (`b1-self-test-20260811-233354.json`). No firmware change, deployment or hardware run was required. |
 | 2026-08-12 | SEQ-F01, SEQ-F02, SEQ-C06, SEQ-B04 | Added structured immediate/finite/infinite firmware timing metadata and one target-speed-aware console provider with conservative mixed-speed broadcast ranges and visible provisional fallback. Cached duration/extent now refreshes exactly once per edit commit. Schema v5 persists real POWER_DOWN/TALK endpoints; playback issues ownership-safe targeted IDLE at that width across Pause/Loop without stopping a replacement gesture. WPF suite passed 165/165; Release build and all three PlatformIO environments passed; offline regression passed 19/19 (`b1-self-test-20260812-000226.json`). Firmware deployment and measured physical-duration comparison remain hardware checks. |
+| 2026-08-12 | SEQ-E06 (in progress) | Removed the visible 1.5 s UI hitch introduced by duration refreshes on every unchanged `droids` heartbeat. Sequencer roster and broadcast-duration target signatures now invalidate independently, avoiding track/ruler reconstruction for age/RSSI-only telemetry while preserving real fleet/name/online changes. A focused invalidation test expanded the WPF suite to 166/166; Debug suite and Release build 347 passed with zero errors/warnings, and the operator confirmed smooth radar and playhead animation. Maximum-duration ruler generation remains. |
