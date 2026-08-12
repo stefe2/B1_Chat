@@ -148,6 +148,8 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     private readonly Dictionary<uint, ActiveAnimLease> _activeAnimLeases = new();
     private readonly PlaybackGeneration _playbackGeneration = new();
     private SequencerPlaybackPlan? _activePlaybackPlan;
+    private SequenceSnapshot? _activeEditBefore;
+    private bool _suppressTimelineRefresh;
     private int _elapsedAtPauseMs;
     private bool _disposed;
 
@@ -251,7 +253,11 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         _protocol.AnimMasterAccepted += OnAnimMasterAccepted;
         _protocol.AnimExecutionReceived += OnAnimExecutionReceived;
         _protocol.LinkClosed += OnProtocolLinkClosed;
-        Steps.CollectionChanged += (_, _) => RebuildRulerTicks();
+        Steps.CollectionChanged += (_, _) =>
+        {
+            if (_activeEditBefore == null && !_suppressTimelineRefresh)
+                RebuildRulerTicks();
+        };
         RebuildTracks();
         ApplyAudioLanesFromDto(null);
         RebuildRulerTicks();
@@ -762,9 +768,11 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         if (!CanEditSequence) return;
         var currentLane = AudioLanes.FirstOrDefault(l => l.Clips.Contains(clip));
         if (currentLane == null || ReferenceEquals(currentLane, targetLane)) return;
-        currentLane.Clips.Remove(clip);
-        targetLane.Clips.Add(clip);
-        Dirty = true;
+        ExecuteSequenceEdit(() =>
+        {
+            currentLane.Clips.Remove(clip);
+            targetLane.Clips.Add(clip);
+        });
     }
 
     // Public: also read by the view's "Fit" zoom handler (SequenceTimelineView.xaml.cs).
@@ -807,16 +815,14 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(TimecodeTotalText));
     }
 
-    // Called by the view once at drag-end (not per MouseMove — recomputing ticks under the
-    // cursor mid-drag would just make the ruler jitter).
-    public void RefreshTimelineExtent() => RebuildRulerTicks();
-
     public int RoundToGrid(double ms) => SnapToGrid ? (int)(Math.Round(ms / 100.0) * 100) : (int)ms;
 
-    // Public wrappers: the view's drag handlers call these once per drag gesture (mouse-down),
-    // not per pixel, so Undo restores the pre-drag position in a single step.
-    public void BeginStepDrag() { if (CanEditSequence) PushHistory(); }
-    public void BeginAudioClipDrag() { if (CanEditSequence) PushHistory(); }
+    // A drag spans multiple mouse events, so it owns a long-lived edit transaction. Transient
+    // Dragging/DragOffsetY fields are absent from snapshots; a click or a move that returns to
+    // its origin therefore commits as a true no-op instead of polluting Undo.
+    public bool BeginStepDrag() => BeginSequenceEdit();
+    public bool BeginAudioClipDrag() => BeginSequenceEdit();
+    public bool CompleteDragEdit() => CommitSequenceEdit();
 
     [RelayCommand(CanExecute = nameof(CanEditSequence))]
     private void InsertGesture(int animId) =>
@@ -827,29 +833,26 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     public void InsertGestureAt(int animId, TimelineTrack? track, int startMs)
     {
         if (!CanEditSequence) return;
-        PushHistory();
-        var step = new SequenceStep { AnimId = animId, Target = track?.Id ?? 0xFFFF, StartMs = Math.Max(0, startMs) };
-        Steps.Add(step);
-        SelectedStep = step;
-        Dirty = true;
+        ExecuteSequenceEdit(() =>
+        {
+            var step = new SequenceStep { AnimId = animId, Target = track?.Id ?? 0xFFFF, StartMs = Math.Max(0, startMs) };
+            Steps.Add(step);
+            SelectedStep = step;
+        });
     }
 
     [RelayCommand(CanExecute = nameof(CanEditSequence))]
     private void NudgeStartForward()
     {
         if (!CanEditSequence || SelectedStep == null) return;
-        PushHistory();
-        SelectedStep.StartMs += 100;
-        Dirty = true;
+        ExecuteSequenceEdit(() => SelectedStep.StartMs += 100);
     }
 
     [RelayCommand(CanExecute = nameof(CanEditSequence))]
     private void NudgeStartBackward()
     {
         if (!CanEditSequence || SelectedStep == null) return;
-        PushHistory();
-        SelectedStep.StartMs = Math.Max(0, SelectedStep.StartMs - 100);
-        Dirty = true;
+        ExecuteSequenceEdit(() => SelectedStep.StartMs = Math.Max(0, SelectedStep.StartMs - 100));
     }
 
     // --- Audio lanes/clips -------------------------------------------------------
@@ -858,9 +861,8 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     private void AddAudioLane()
     {
         if (!CanEditSequence) return;
-        PushHistory();
-        AudioLanes.Add(new AudioLane { Label = $"AUDIO {AudioLanes.Count + 1}", RowIndex = AudioLanes.Count });
-        Dirty = true;
+        ExecuteSequenceEdit(() =>
+            AudioLanes.Add(new AudioLane { Label = $"AUDIO {AudioLanes.Count + 1}", RowIndex = AudioLanes.Count }));
     }
 
     // Any lane can be deleted, the two seeded ones (AMBIENT/AUDIO) included — but a lane
@@ -876,10 +878,11 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
                 "Delete audio lane", MessageBoxButton.YesNo, MessageBoxImage.Warning);
             if (res != MessageBoxResult.Yes) return;
         }
-        PushHistory();
-        AudioLanes.Remove(lane);
-        for (var i = 0; i < AudioLanes.Count; i++) AudioLanes[i].RowIndex = i;
-        Dirty = true;
+        ExecuteSequenceEdit(() =>
+        {
+            AudioLanes.Remove(lane);
+            for (var i = 0; i < AudioLanes.Count; i++) AudioLanes[i].RowIndex = i;
+        });
     }
 
     // Empties the timeline (all gestures + all audio clips; the lanes themselves stay).
@@ -896,12 +899,12 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
                 "Clear timeline", MessageBoxButton.YesNo, MessageBoxImage.Warning);
             if (res != MessageBoxResult.Yes) return;
         }
-        PushHistory();
-        Steps.Clear();
-        foreach (var lane in AudioLanes) lane.Clips.Clear();
-        SelectedStep = null;
-        Dirty = true;
-        RefreshTimelineExtent();
+        ExecuteSequenceEdit(() =>
+        {
+            Steps.Clear();
+            foreach (var lane in AudioLanes) lane.Clips.Clear();
+            SelectedStep = null;
+        });
     }
 
     [RelayCommand(CanExecute = nameof(CanEditSequence))]
@@ -916,12 +919,13 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         // The duration probe yields to WPF. Playback may have started while it was open; in that
         // case the edit lock wins and the picked file is simply not inserted into the active pass.
         if (!CanEditSequence || !AudioLanes.Contains(lane)) return;
-        PushHistory();
-        var start = Math.Max(0, RoundToGrid(PlayheadMs));
-        var clip = new AudioClip { FilePath = dlg.FileName, DurationMs = durationMs, StartMs = start };
-        lane.Clips.Add(clip);
-        Dirty = true;
-        RebuildRulerTicks();
+        var clip = new AudioClip
+        {
+            FilePath = dlg.FileName,
+            DurationMs = durationMs,
+            StartMs = Math.Max(0, RoundToGrid(PlayheadMs)),
+        };
+        InsertAudioClip(lane, clip);
         _ = LoadWaveformAsync(clip);
     }
 
@@ -934,13 +938,26 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         var replacementPath = dlg.FileName;
         var replacementDurationMs = await AudioPlaybackService.ProbeDurationMsAsync(replacementPath);
         if (!CanEditSequence || !AudioLanes.Any(l => l.Clips.Contains(clip))) return;
-        PushHistory();
-        clip.FilePath = replacementPath;
-        clip.Peaks = null; // stale for the new file until the fresh decode below completes
-        clip.DurationMs = replacementDurationMs;
-        Dirty = true;
-        RebuildRulerTicks();
+        ReplaceAudioClipSource(clip, replacementPath, replacementDurationMs);
         _ = LoadWaveformAsync(clip);
+    }
+
+    internal bool InsertAudioClip(AudioLane lane, AudioClip clip)
+    {
+        if (!CanEditSequence || !AudioLanes.Contains(lane) ||
+            AudioLanes.Any(existing => existing.Clips.Contains(clip))) return false;
+        return ExecuteSequenceEdit(() => lane.Clips.Add(clip));
+    }
+
+    internal bool ReplaceAudioClipSource(AudioClip clip, string path, int durationMs)
+    {
+        if (!CanEditSequence || !AudioLanes.Any(lane => lane.Clips.Contains(clip))) return false;
+        return ExecuteSequenceEdit(() =>
+        {
+            clip.FilePath = path;
+            clip.Peaks = null; // stale for the new file until the fresh decode below completes
+            clip.DurationMs = durationMs;
+        });
     }
 
     // Fire-and-forget from every clip-creation path (Add/Replace/load) — decoding happens off
@@ -957,10 +974,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         if (!CanEditSequence || clip == null) return;
         var lane = AudioLanes.FirstOrDefault(l => l.Clips.Contains(clip));
         if (lane == null) return;
-        PushHistory();
-        lane.Clips.Remove(clip);
-        Dirty = true;
-        RebuildRulerTicks();
+        ExecuteSequenceEdit(() => lane.Clips.Remove(clip));
     }
 
     private List<AudioLaneDto> AudioLanesToDto() => AudioLanes.Select(l => new AudioLaneDto
@@ -1034,22 +1048,109 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     private SequenceSnapshot Snapshot() => new(Name, Loop, AudioLanesToDto(),
         Steps.Select(s => new SequenceStepDto { AnimId = s.AnimId, Target = s.Target, StartMs = s.StartMs }).ToList());
 
-    private void Apply(SequenceSnapshot snap)
+    private static bool SnapshotsEqual(SequenceSnapshot left, SequenceSnapshot right)
     {
-        Name = snap.Name;
-        Loop = snap.Loop;
-        ApplyAudioLanesFromDto(snap.AudioLanes);
-        Steps.Clear();
-        foreach (var s in snap.Steps) Steps.Add(new SequenceStep { AnimId = s.AnimId, Target = s.Target, StartMs = s.StartMs });
-        RebuildTracks(); // step targets may have changed — offline rows must follow
-        SelectedStep = null;
-        Dirty = true;
-        UpdateUndoButtons();
+        if (!string.Equals(left.Name, right.Name, StringComparison.Ordinal) ||
+            left.Loop != right.Loop ||
+            left.Steps.Count != right.Steps.Count ||
+            left.AudioLanes.Count != right.AudioLanes.Count)
+            return false;
+
+        for (var i = 0; i < left.Steps.Count; i++)
+        {
+            var a = left.Steps[i];
+            var b = right.Steps[i];
+            if (a.AnimId != b.AnimId || a.Target != b.Target || a.StartMs != b.StartMs)
+                return false;
+        }
+
+        for (var laneIndex = 0; laneIndex < left.AudioLanes.Count; laneIndex++)
+        {
+            var aLane = left.AudioLanes[laneIndex];
+            var bLane = right.AudioLanes[laneIndex];
+            if (!string.Equals(aLane.Label, bLane.Label, StringComparison.Ordinal) ||
+                aLane.Clips.Count != bLane.Clips.Count)
+                return false;
+            for (var clipIndex = 0; clipIndex < aLane.Clips.Count; clipIndex++)
+            {
+                var a = aLane.Clips[clipIndex];
+                var b = bLane.Clips[clipIndex];
+                if (!string.Equals(a.FilePath, b.FilePath, StringComparison.Ordinal) ||
+                    a.DurationMs != b.DurationMs || a.StartMs != b.StartMs || a.Loop != b.Loop)
+                    return false;
+            }
+        }
+        return true;
     }
 
-    private void PushHistory()
+    private bool BeginSequenceEdit()
     {
-        _history.Push(Snapshot());
+        if (!CanEditSequence || _activeEditBefore != null) return false;
+        _activeEditBefore = Snapshot();
+        return true;
+    }
+
+    private bool CommitSequenceEdit()
+    {
+        if (_activeEditBefore == null) return false;
+        var before = _activeEditBefore;
+        _activeEditBefore = null;
+        var after = Snapshot();
+        if (SnapshotsEqual(before, after)) return false;
+
+        PushHistory(before);
+        Dirty = true;
+        RefreshDerivedTimelineState();
+        return true;
+    }
+
+    private bool ExecuteSequenceEdit(Action mutation)
+    {
+        if (!CanEditSequence) return false;
+        var ownsTransaction = _activeEditBefore == null;
+        if (ownsTransaction && !BeginSequenceEdit()) return false;
+        var committed = false;
+        try
+        {
+            mutation();
+        }
+        finally
+        {
+            if (ownsTransaction) committed = CommitSequenceEdit();
+        }
+        return !ownsTransaction || committed;
+    }
+
+    private void RefreshDerivedTimelineState()
+    {
+        RebuildTracks();
+        RebuildRulerTicks();
+    }
+
+    private void Apply(SequenceSnapshot snap)
+    {
+        _suppressTimelineRefresh = true;
+        try
+        {
+            Name = snap.Name;
+            Loop = snap.Loop;
+            ApplyAudioLanesFromDto(snap.AudioLanes);
+            Steps.Clear();
+            foreach (var s in snap.Steps)
+                Steps.Add(new SequenceStep { AnimId = s.AnimId, Target = s.Target, StartMs = s.StartMs });
+            SelectedStep = null;
+        }
+        finally
+        {
+            _suppressTimelineRefresh = false;
+        }
+        Dirty = true;
+        RefreshDerivedTimelineState();
+    }
+
+    private void PushHistory(SequenceSnapshot before)
+    {
+        _history.Push(before);
         while (_history.Count > HistoryMax) { /* Stack has no RemoveAt: > 50 is tolerated on this minimal port */ break; }
         _future.Clear();
         UpdateUndoButtons();
@@ -1069,6 +1170,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         if (!CanEditSequence || _history.Count == 0) return;
         _future.Push(Snapshot());
         Apply(_history.Pop());
+        UpdateUndoButtons();
     }
 
     private bool CanRedoEdit() => CanEditSequence && CanRedo;
@@ -1079,6 +1181,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         if (!CanEditSequence || _future.Count == 0) return;
         _history.Push(Snapshot());
         Apply(_future.Pop());
+        UpdateUndoButtons();
     }
 
     private void ClearHistory()
@@ -1093,26 +1196,28 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     [RelayCommand(CanExecute = nameof(CanEditSequence))]
     private void DeleteStep(SequenceStep? step)
     {
-        if (!CanEditSequence || step == null) return;
-        PushHistory();
-        Steps.Remove(step);
-        if (SelectedStep == step) SelectedStep = null;
-        Dirty = true;
+        if (!CanEditSequence || step == null || !Steps.Contains(step)) return;
+        ExecuteSequenceEdit(() =>
+        {
+            Steps.Remove(step);
+            if (SelectedStep == step) SelectedStep = null;
+        });
     }
 
     [RelayCommand(CanExecute = nameof(CanEditSequence))]
     private void DuplicateStep(SequenceStep? step)
     {
-        if (!CanEditSequence || step == null) return;
-        PushHistory();
-        var clone = step.Clone();
-        // Nudged right and selected so the new clip is visibly a new arrival instead of
-        // landing invisibly right on top of the original (direct user request).
-        clone.StartMs += 200;
-        var idx = Steps.IndexOf(step);
-        Steps.Insert(idx + 1, clone);
-        SelectedStep = clone;
-        Dirty = true;
+        if (!CanEditSequence || step == null || !Steps.Contains(step)) return;
+        ExecuteSequenceEdit(() =>
+        {
+            var clone = step.Clone();
+            // Nudged right and selected so the new clip is visibly a new arrival instead of
+            // landing invisibly right on top of the original (direct user request).
+            clone.StartMs += 200;
+            var idx = Steps.IndexOf(step);
+            Steps.Insert(idx + 1, clone);
+            SelectedStep = clone;
+        });
     }
 
     // (The whole "Firmware: 8 NVS slots" region — LoadSlot/SaveToSlot/DeleteSlot/PushToMaster/

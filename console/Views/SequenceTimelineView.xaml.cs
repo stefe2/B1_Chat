@@ -80,6 +80,7 @@ public partial class SequenceTimelineView : UserControl
         if (sender is not FrameworkElement fe || fe.DataContext is not SequenceStep step || Vm is not { } vm) return;
         vm.SelectedStep = step;
         if (!vm.CanEditSequence) { e.Handled = true; return; }
+        if (!vm.BeginStepDrag()) { e.Handled = true; return; }
         _dragStep = step;
         var pos = e.GetPosition(TracksCanvas);
         _dragStartMouseX = pos.X;
@@ -88,7 +89,6 @@ public partial class SequenceTimelineView : UserControl
         _draggingClip = true;
         step.Dragging = true; // dimmed while "in hand" (cleared on mouse-up)
         fe.CaptureMouse();
-        vm.BeginStepDrag(); // once per gesture, not per pixel — Undo restores in one step
         e.Handled = true;
     }
 
@@ -126,9 +126,9 @@ public partial class SequenceTimelineView : UserControl
         }
         _dragStep = null;
         if (sender is FrameworkElement fe) fe.ReleaseMouseCapture();
-        // Settle the ruler/extent once at drag-end, not on every MouseMove (would jitter
-        // under the cursor mid-drag).
-        Vm?.RefreshTimelineExtent();
+        // The transaction compares the final persistent state with mouse-down, then refreshes
+        // the timeline once only if something really moved.
+        Vm?.CompleteDragEdit();
     }
 
     // Clicking empty timeline space clears the selection — clip mouse-downs mark their event
@@ -154,6 +154,7 @@ public partial class SequenceTimelineView : UserControl
     {
         if (sender is not FrameworkElement fe || fe.DataContext is not AudioClip clip || Vm is not { } vm) return;
         if (!vm.CanEditSequence) { e.Handled = true; return; }
+        if (!vm.BeginAudioClipDrag()) { e.Handled = true; return; }
         _dragAudioClip = clip;
         _dragAudioSourceLane = vm.AudioLanes.FirstOrDefault(l => l.Clips.Contains(clip));
         var posRoot = e.GetPosition(RootGrid);
@@ -163,7 +164,6 @@ public partial class SequenceTimelineView : UserControl
         _draggingAudioClip = true;
         clip.Dragging = true; // dimmed while "in hand" (cleared on mouse-up)
         fe.CaptureMouse();
-        vm.BeginAudioClipDrag();
         e.Handled = true;
     }
 
@@ -203,7 +203,7 @@ public partial class SequenceTimelineView : UserControl
         }
         _dragAudioClip = null;
         _dragAudioSourceLane = null;
-        Vm?.RefreshTimelineExtent();
+        Vm?.CompleteDragEdit();
     }
 
     // --- Ruler: local scrub (ignored while a real hardware playback is driving the

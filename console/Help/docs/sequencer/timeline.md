@@ -81,6 +81,9 @@ only an indicative timeline duration.
 
 Insert, delete, duplicate, drag, nudge, add/delete/move/replace audio, Clear, and
 lane creation/deletion create history entries. One drag produces one undo step.
+A click without movement, a drag returned to its original placement, or another
+edit that leaves the persistent document unchanged creates no Undo entry and
+does not mark the sequence dirty.
 
 Some direct property edits in the current release — notably changing a gesture
 or target in the inspector, renaming an audio lane, and toggling an audio clip's

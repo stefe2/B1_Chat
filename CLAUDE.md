@@ -257,6 +257,13 @@ Library Load/Delete all lock during Play and Pause. Selection/inspection, track
 arming, runtime track mute, zoom/Snap/Fit/scroll, and Export remain available
 because they do not change the immutable pass being performed.
 
+Sequencer command and pointer-drag mutations use one structural snapshot edit
+transaction. A real commit records one pre-edit Undo snapshot, clears Redo,
+marks Dirty and refreshes tracks/ruler/timecode once; a no-op commit records
+nothing. Persistent DTO fields participate in comparison, while selection,
+execution telemetry, waveform peaks and drag visuals remain transient. Direct
+property bindings join this transaction boundary under SEQ-C03.
+
 **No audio in this protocol** (fw 1.6.0): `volume`/`playTrack` (console→master)
 and `config`'s `volume` field were removed when the DFPlayer was retired —
 see the Progress log.

@@ -70,7 +70,7 @@ The dashboard is updated whenever an item changes state.
 |---|---|---:|---:|
 | A | Playback isolation and cancellation | 7 / 8 | — |
 | B | Infinite gestures and Stop/Pause semantics | 5 / 6 | 0 / 1 |
-| C | Dirty, Undo/Redo and editing transactions | 0 / 8 | 0 / 1 |
+| C | Dirty, Undo/Redo and editing transactions | 1 / 8 | 0 / 1 |
 | D | Import, export and local library | 0 / 8 | 0 / 1 |
 | E | Deterministic scheduler and performance | 2 / 6 | 0 / 1 |
 | F | Duration and audio robustness | 0 / 8 | — |
@@ -339,7 +339,7 @@ The dashboard is updated whenever an item changes state.
 
 ## EPIC C — Dirty, Undo/Redo and editing transactions
 
-### [ ] SEQ-C01 — Centralize sequence edit transactions
+### [x] SEQ-C01 — Centralize sequence edit transactions
 
 - **Priority:** P1
 - **Problem:** commands manually call `PushHistory()` and `Dirty = true`, while
@@ -349,6 +349,19 @@ The dashboard is updated whenever an item changes state.
   Commit compares before/after, creates exactly one history entry for a real
   change, clears Redo, marks Dirty, and refreshes derived timeline state.
 - **Validation:** table-driven tests run every edit type through the same rules.
+- **Implemented:** command and pointer-drag mutations now enter one structural
+  snapshot transaction. Commit compares persistent fields, records exactly one
+  pre-edit snapshot only for a real change, clears Redo, marks Dirty and performs
+  one derived tracks/ruler/timecode refresh. Long-lived gesture/audio drags use
+  the same begin/commit boundary; transient selection, execution, waveform and
+  drag-visual fields are excluded. Load/Import remain intentional document
+  replacement boundaries, while direct property bindings are the scoped work of
+  SEQ-C03.
+- **Evidence:** a 13-family edit matrix verifies Dirty, one Undo entry, cleared
+  Redo, exactly one derived refresh, and exact Undo/Redo round trips. Dedicated
+  checks prove click/no-move, zero-clamped nudge and absent-clip move are no-ops,
+  and that only a subsequent real edit invalidates Redo. Full WPF suite passes
+  78/78.
 
 ### [ ] SEQ-C02 — Do not create history for selection or no-op drags
 
@@ -1352,3 +1365,4 @@ Append concise evidence when closing items; do not paste full build logs.
 | 2026-08-11 | SEQ-B03 | Formalized Pause as PC-transport-only: future dispatch/audio/playhead pause, dispatched finite motion continues, infinite leases remain renewed, reports keep updating, and Resume does not replay consumed events. Added the persistent `PAUSED · DROID MOTION CONTINUES` transport warning and aligned Help/tooltips. WPF suite passed 65/65, including finite completion during Pause plus existing boundary, repeated Resume and infinite-lease cases; offline regression passed 17/17 (`b1-self-test-20260811-154128.json`). No firmware change or reflash was required. |
 | 2026-08-11 | SEQ-A06 | Replaced independently writable transport booleans with the guarded `Stopped`/`Playing`/`Paused` state machine and one shared pass-start path. All command/badge/edit-lock flags derive from that state; partial scheduler startup failure now rolls back cleanly. The nine-path transition table and UI notification check passed within the full WPF suite at 75/75; offline regression passed 17/17 (`b1-self-test-20260811-174442.json`). No firmware change or hardware run was required. |
 | 2026-08-11 | SEQ-A03 | Closed the Play/Pause editing policy across the complete UI surface: document and Local Library mutations lock, while inspection, arm, runtime mute, viewport tools and Export remain available. Added late-drag transition guards, disabled-control guidance and a three-state command/direct-guard matrix including Undo/Redo; WPF suite passed 76/76 and offline regression passed 17/17 (`b1-self-test-20260811-175250.json`). No firmware change or hardware run was required. |
+| 2026-08-11 | SEQ-C01 | Centralized command and drag mutations behind structural begin/commit transactions. Real edits now create one pre-edit snapshot, clear Redo, set Dirty and refresh derived timeline state once; no-op edits create nothing. Thirteen edit families plus no-op/Redo invalidation passed within the 78/78 WPF suite; offline regression passed 17/17 (`b1-self-test-20260811-201830.json`). No firmware change or hardware run was required. |

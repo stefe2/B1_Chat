@@ -374,7 +374,9 @@ public sealed class SequencerPlaybackIntegrationTests
         var scheduler = new FakePlaybackTimerScheduler();
         using var vm = CreateViewModel(protocol, scheduler);
         vm.Steps.Add(new SequenceStep { StartMs = 100, Target = 0xFFFF, AnimId = 2 });
-        vm.BeginStepDrag(); // creates a valid Undo snapshot without opening any UI
+        Assert.True(vm.BeginStepDrag());
+        vm.Steps[0].StartMs += 100;
+        Assert.True(vm.CompleteDragEdit()); // creates a valid Undo snapshot without opening UI
 
         Assert.True(vm.UndoCommand.CanExecute(null));
         vm.PlayCommand.Execute(null);
@@ -392,6 +394,147 @@ public sealed class SequencerPlaybackIntegrationTests
         Assert.False(vm.RedoCommand.CanExecute(null));
         vm.StopCommand.Execute(null);
         Assert.True(vm.RedoCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void EditTransactionMatrix_CommitsOneUndoableChangeAndOneDerivedRefresh()
+    {
+        static string Fingerprint(SequencerViewModel vm)
+        {
+            var steps = string.Join(";", vm.Steps.Select(s => $"{s.AnimId},{s.Target},{s.StartMs}"));
+            var lanes = string.Join(";", vm.AudioLanes.Select(l =>
+                $"{l.Label}[{string.Join("/", l.Clips.Select(c => $"{c.FilePath},{c.DurationMs},{c.StartMs},{c.Loop}"))}]"));
+            return $"{vm.Name}|{vm.Loop}|{steps}|{lanes}";
+        }
+
+        var cases = new (string Name, Action<SequencerViewModel> Arrange, Action<SequencerViewModel> Edit)[]
+        {
+            ("insert gesture", _ => { }, vm => vm.InsertGestureAt(2, vm.Tracks[0], 100)),
+            ("nudge gesture", vm =>
+            {
+                vm.Steps.Add(new SequenceStep { AnimId = 2, Target = 0xFFFF, StartMs = 100 });
+                vm.SelectedStep = vm.Steps[0];
+            }, vm => vm.NudgeStartForwardCommand.Execute(null)),
+            ("duplicate gesture", vm =>
+            {
+                vm.Steps.Add(new SequenceStep { AnimId = 2, Target = 0xFFFF, StartMs = 100 });
+            }, vm => vm.DuplicateStepCommand.Execute(vm.Steps[0])),
+            ("delete gesture", vm =>
+            {
+                vm.Steps.Add(new SequenceStep { AnimId = 2, Target = 0xFFFF, StartMs = 100 });
+            }, vm => vm.DeleteStepCommand.Execute(vm.Steps[0])),
+            ("gesture drag", vm =>
+            {
+                vm.Steps.Add(new SequenceStep { AnimId = 2, Target = 0xFFFF, StartMs = 100 });
+            }, vm =>
+            {
+                Assert.True(vm.BeginStepDrag());
+                vm.Steps[0].StartMs = 350;
+                Assert.True(vm.CompleteDragEdit());
+            }),
+            ("add audio lane", _ => { }, vm => vm.AddAudioLaneCommand.Execute(null)),
+            ("delete audio lane", _ => { }, vm => vm.DeleteAudioLaneCommand.Execute(vm.AudioLanes[1])),
+            ("insert audio clip", _ => { }, vm =>
+                Assert.True(vm.InsertAudioClip(vm.AudioLanes[0],
+                    new AudioClip { FilePath = "insert.wav", DurationMs = 100, StartMs = 10 }))),
+            ("replace audio source", vm =>
+            {
+                vm.AudioLanes[0].Clips.Add(new AudioClip { FilePath = "old.wav", DurationMs = 100, StartMs = 10 });
+            }, vm => Assert.True(vm.ReplaceAudioClipSource(
+                vm.AudioLanes[0].Clips[0], "new.wav", 250))),
+            ("move audio clip lane", vm =>
+            {
+                vm.AudioLanes[0].Clips.Add(new AudioClip { FilePath = "move.wav", DurationMs = 100, StartMs = 10 });
+            }, vm => vm.MoveAudioClipToLane(vm.AudioLanes[0].Clips[0], vm.AudioLanes[1])),
+            ("delete audio clip", vm =>
+            {
+                vm.AudioLanes[0].Clips.Add(new AudioClip { FilePath = "delete.wav", DurationMs = 100, StartMs = 10 });
+            }, vm => vm.DeleteAudioClipCommand.Execute(vm.AudioLanes[0].Clips[0])),
+            ("audio drag", vm =>
+            {
+                vm.AudioLanes[0].Clips.Add(new AudioClip { FilePath = "drag.wav", DurationMs = 100, StartMs = 10 });
+            }, vm =>
+            {
+                Assert.True(vm.BeginAudioClipDrag());
+                vm.AudioLanes[0].Clips[0].StartMs = 250;
+                Assert.True(vm.CompleteDragEdit());
+            }),
+            ("clear timeline", vm =>
+            {
+                vm.Steps.Add(new SequenceStep { AnimId = 2, Target = 0xFFFF, StartMs = 100 });
+            }, vm => vm.ClearTimelineCommand.Execute(null)),
+        };
+
+        foreach (var editCase in cases)
+        {
+            var protocol = new FakeSequencerProtocol();
+            protocol.Durations[2] = 100;
+            var scheduler = new FakePlaybackTimerScheduler();
+            using var vm = CreateViewModel(protocol, scheduler);
+            editCase.Arrange(vm);
+            var before = Fingerprint(vm);
+            var derivedRefreshes = 0;
+            vm.PropertyChanged += (_, args) =>
+            {
+                if (args.PropertyName == nameof(vm.TimelineWidthPx)) derivedRefreshes++;
+            };
+
+            editCase.Edit(vm);
+            var after = Fingerprint(vm);
+
+            Assert.True(vm.Dirty, editCase.Name);
+            Assert.True(vm.UndoCommand.CanExecute(null), editCase.Name);
+            Assert.False(vm.RedoCommand.CanExecute(null), editCase.Name);
+            Assert.NotEqual(before, after);
+            Assert.Equal(1, derivedRefreshes);
+
+            vm.UndoCommand.Execute(null);
+            Assert.Equal(before, Fingerprint(vm));
+            Assert.False(vm.UndoCommand.CanExecute(null));
+            Assert.True(vm.RedoCommand.CanExecute(null));
+            vm.RedoCommand.Execute(null);
+            Assert.Equal(after, Fingerprint(vm));
+            Assert.True(vm.UndoCommand.CanExecute(null));
+            Assert.False(vm.RedoCommand.CanExecute(null));
+        }
+    }
+
+    [Fact]
+    public void EditTransactions_IgnoreNoOpsAndClearRedoOnlyAfterARealChange()
+    {
+        var protocol = new FakeSequencerProtocol();
+        protocol.Durations[2] = 100;
+        var scheduler = new FakePlaybackTimerScheduler();
+        using var vm = CreateViewModel(protocol, scheduler);
+        var step = new SequenceStep { AnimId = 2, Target = 0xFFFF, StartMs = 0 };
+        vm.Steps.Add(step);
+        vm.SelectedStep = step;
+        var refreshes = 0;
+        vm.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(vm.TimelineWidthPx)) refreshes++;
+        };
+
+        Assert.True(vm.BeginStepDrag());
+        Assert.False(vm.CompleteDragEdit()); // selection/click with no persistent movement
+        vm.NudgeStartBackwardCommand.Execute(null); // already at zero
+        vm.MoveAudioClipToLane(new AudioClip(), vm.AudioLanes[0]); // not in the document
+        var unchangedAudio = new AudioClip { FilePath = "same.wav", DurationMs = 100, StartMs = 10 };
+        vm.AudioLanes[0].Clips.Add(unchangedAudio);
+        Assert.False(vm.ReplaceAudioClipSource(unchangedAudio, "same.wav", 100));
+
+        Assert.False(vm.Dirty);
+        Assert.False(vm.UndoCommand.CanExecute(null));
+        Assert.Equal(0, refreshes);
+
+        vm.NudgeStartForwardCommand.Execute(null);
+        vm.UndoCommand.Execute(null);
+        Assert.True(vm.RedoCommand.CanExecute(null));
+
+        vm.SelectedStep = vm.Steps[0];
+        vm.NudgeStartForwardCommand.Execute(null);
+        Assert.False(vm.RedoCommand.CanExecute(null));
+        Assert.True(vm.UndoCommand.CanExecute(null));
     }
 
     [Fact]
