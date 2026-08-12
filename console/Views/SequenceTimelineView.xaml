@@ -114,6 +114,12 @@
                     <TextBlock Text="● EDIT LOCKED" Foreground="{StaticResource WarnBrush}" FontFamily="{StaticResource MonoFont}"
                                FontWeight="Bold" FontSize="11" />
                 </Border>
+                <Border Style="{StaticResource ValuePillStyle}" BorderBrush="{StaticResource WarnBrush}"
+                        Visibility="{Binding HasScheduleWarnings, Converter={StaticResource BoolToVisConv}}"
+                        ToolTip="{Binding ScheduleWarningText}" Margin="6,0,0,0">
+                    <TextBlock Text="⚠ SCHEDULE" Foreground="{StaticResource WarnBrush}"
+                               FontFamily="{StaticResource MonoFont}" FontWeight="Bold" FontSize="10.5" />
+                </Border>
             </StackPanel>
         </Border>
 

@@ -24,7 +24,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     private readonly ISequencerSettings _settings;
     private readonly ISequenceLibraryService _library;
     private readonly ISequencerAudioPlayer _audioPlayer;
-    private readonly IPlaybackTimerScheduler _timerScheduler;
+    private readonly IPlaybackWakeScheduler _timerScheduler;
     private readonly IPlaybackTimerScheduler _executionTimerScheduler;
     private readonly IPlaybackClock _playbackClock;
     private readonly ISequencerPersistenceDialogs _persistenceDialogs;
@@ -196,7 +196,9 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     }
 
     private readonly SequencerEditHistory _editHistory = new();
-    private readonly List<IDisposable> _playbackTimers = new();
+    private IPlaybackWakeTimer? _playbackWakeTimer;
+    private int _scheduledWakeAbsoluteMs;
+    private int _nextPlaybackBatchIndex;
     private readonly HashSet<int> _dispatchedPlaybackEvents = new();
     private readonly Dictionary<uint, ExecutionTracker> _executionTrackers = new();
     private readonly Dictionary<ushort, GestureTargetState> _latestGestureByDroid = new();
@@ -207,6 +209,11 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     private bool _suppressTimelineRefresh;
     private int _elapsedAtPauseMs;
     private bool _disposed;
+    private IReadOnlyList<SequencerScheduleWarning> _scheduleWarnings = Array.Empty<SequencerScheduleWarning>();
+    public bool HasScheduleWarnings => _scheduleWarnings.Count > 0;
+    public string ScheduleWarningText => string.Join(
+        Environment.NewLine,
+        _scheduleWarnings.Select(warning => $"{FormatTimecode(warning.StartMs)} — {warning.Message}"));
 
     private readonly record struct GestureTargetState(uint RequestId, int AnimId)
     {
@@ -296,7 +303,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         ISequencerProtocol protocol,
         ISequencerSettings settings,
         ISequencerAudioPlayer? audioPlayer = null,
-        IPlaybackTimerScheduler? timerScheduler = null,
+        IPlaybackWakeScheduler? timerScheduler = null,
         IPlaybackClock? playbackClock = null,
         IPlaybackTimerScheduler? executionTimerScheduler = null,
         ISequencerPersistenceDialogs? persistenceDialogs = null,
@@ -1175,8 +1182,16 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
 
     private void RefreshDerivedTimelineState()
     {
+        SetScheduleWarnings(Array.Empty<SequencerScheduleWarning>());
         RebuildTracks();
         RebuildRulerTicks();
+    }
+
+    private void SetScheduleWarnings(IReadOnlyList<SequencerScheduleWarning> warnings)
+    {
+        _scheduleWarnings = warnings;
+        OnPropertyChanged(nameof(HasScheduleWarnings));
+        OnPropertyChanged(nameof(ScheduleWarningText));
     }
 
     private void Apply(SequenceSnapshot snap)
@@ -1624,12 +1639,13 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         }
         if (Steps.Count == 0 && AudioLanes.All(l => l.Clips.Count == 0)) return;
         _playbackGeneration.Cancel();
-        DisposePlaybackTimers();
+        DisposePlaybackScheduler();
         _audioPlayer.StopAll(); // Play pressed mid-playback restarts clean, no overlapped audio
         StopInfiniteGestures(); // a restart must not inherit TALK/POWER_DOWN from the old pass
         ResetExecutionTracking();
         _activePlaybackPlan = SequencerPlaybackPlan.Capture(
             Steps, AudioLanes, AnimDurationMsLookup, Loop);
+        SetScheduleWarnings(_activePlaybackPlan.Warnings);
         _dispatchedPlaybackEvents.Clear();
         _elapsedAtPauseMs = 0;
         StartPlaybackPass(0, resumeAudio: false);
@@ -1669,7 +1685,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     {
         _playbackGeneration.Cancel();
         TransitionTransportTo(SequencerTransportState.Stopped);
-        DisposePlaybackTimers();
+        DisposePlaybackScheduler();
         _audioPlayer.StopAll();
         _activePlaybackPlan = null;
         _dispatchedPlaybackEvents.Clear();
@@ -1684,7 +1700,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         var elapsed = _liveAnchorElapsedMs + _playbackClock.Elapsed.TotalMilliseconds;
         _playbackGeneration.Cancel();
         TransitionTransportTo(SequencerTransportState.Paused);
-        DisposePlaybackTimers();
+        DisposePlaybackScheduler();
         _audioPlayer.PauseAll(); // clips already mid-playback keep their position natively
         _elapsedAtPauseMs = (int)elapsed;
         StopPlayheadTimer();
@@ -1703,8 +1719,8 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
             TransitionTransportTo(SequencerTransportState.Playing);
             if (resumeAudio)
                 _audioPlayer.ResumeAll(); // continues from each clip's retained position, no seek math
-            ScheduleTimers(plan, fromMs, generation);
             StartPlayheadTicker(fromMs);
+            StartPlaybackScheduler(plan, fromMs, generation);
         }
         catch
         {
@@ -1714,67 +1730,96 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         }
     }
 
-    // Absolute-time model (FIRMWARE-CONTRACT.md §6): the immutable pass plan schedules each
-    // event at StartMs relative to fromMs. Every callback checks its generation after reaching
-    // the UI thread, because disposing a timer cannot retract a callback already queued there.
-    // Track mute is deliberately evaluated at dispatch time so it remains useful mid-pass.
-    private void ScheduleTimers(SequencerPlaybackPlan plan, int fromMs, long generation)
+    // The immutable plan is owned by one rearmable wake timer. A wake drains every batch whose
+    // absolute timestamp is due according to monotonic elapsed time, preserving plan/source
+    // order inside each batch. This eliminates per-event timers and catches up deterministically
+    // after host scheduling drift. Muted events still count as consumed at their due instant.
+    private void StartPlaybackScheduler(SequencerPlaybackPlan plan, int fromMs, long generation)
     {
-        DisposePlaybackTimers();
-        foreach (var playbackEvent in plan.Events)
+        DisposePlaybackScheduler();
+        _nextPlaybackBatchIndex = 0;
+        while (_nextPlaybackBatchIndex < plan.Batches.Count &&
+               plan.Batches[_nextPlaybackBatchIndex].Events.All(playbackEvent =>
+                   _dispatchedPlaybackEvents.Contains(playbackEvent.SourceOrder)))
+            _nextPlaybackBatchIndex++;
+        _playbackWakeTimer = _timerScheduler.Create(() => RunOnUiThread(() =>
+            ProcessPlaybackWake(plan, fromMs, generation)));
+        ArmNextPlaybackWake(plan, logicalNowMs: fromMs);
+    }
+
+    private void ProcessPlaybackWake(SequencerPlaybackPlan plan, int fromMs, long generation)
+    {
+        if (!_playbackGeneration.IsCurrent(generation) ||
+            TransportState != SequencerTransportState.Playing) return;
+
+        var monotonicNow = fromMs + (int)Math.Min(
+            int.MaxValue - (long)fromMs,
+            Math.Max(0, _playbackClock.Elapsed.TotalMilliseconds));
+        var logicalNow = Math.Max(_scheduledWakeAbsoluteMs, monotonicNow);
+
+        while (_nextPlaybackBatchIndex < plan.Batches.Count)
         {
-            // At an exact Pause boundary, the timer may already have dispatched while its
-            // StartMs still equals fromMs. Keep consumed source IDs across Resume so that event
-            // is not sent twice; muted events count as consumed as well because their moment has
-            // elapsed. A fresh Play or whole-pass Loop clears the set.
-            if (_dispatchedPlaybackEvents.Contains(playbackEvent.SourceOrder)) continue;
-            // A callback can still be waiting for the UI dispatcher even after its nominal
-            // StartMs. If Pause cancels it first, it remains undispatched and must run
-            // immediately on Resume instead of being lost merely because time moved past it.
-            var dueTimeMs = Math.Max(0, playbackEvent.StartMs - fromMs);
-            var timer = _timerScheduler.Schedule(dueTimeMs, () => RunOnUiThread(() =>
+            var batch = plan.Batches[_nextPlaybackBatchIndex];
+            if (batch.StartMs > logicalNow) break;
+            foreach (var playbackEvent in batch.Events)
             {
-                if (!_playbackGeneration.IsCurrent(generation) ||
-                    TransportState != SequencerTransportState.Playing) return;
-                _dispatchedPlaybackEvents.Add(playbackEvent.SourceOrder);
-                switch (playbackEvent)
-                {
-                    case GesturePlaybackEvent gesture when !IsTrackMuted(gesture.Target):
-                        var leaseMs = _protocol.SupportsAnimLease && gesture.AnimId is 16 or 17
-                            ? InfiniteAnimLeaseMs
-                            : (ushort)0;
-                        var dispatch = _protocol.PlayAnim(
-                            gesture.Target, gesture.AnimId, gesture.Seed, leaseMs);
-                        TrackExecution(dispatch, gesture);
-                        TrackAnimLease(dispatch, gesture, leaseMs);
-                        break;
-                    case AudioPlaybackEvent audio:
-                        _audioPlayer.Play(audio.FilePath, audio.Loop);
-                        break;
-                }
-            }));
-            _playbackTimers.Add(timer);
-        }
-        var totalMs = plan.TotalDurationMs;
-        var endDelay = Math.Max(0, totalMs - fromMs);
-        var endTimer = _timerScheduler.Schedule(endDelay, () => RunOnUiThread(() =>
-        {
-            if (!_playbackGeneration.IsCurrent(generation) ||
-                TransportState != SequencerTransportState.Playing) return;
-            if (plan.Loop)
-            {
-                // Stop every player (including a looping ambient clip) before rearming the next
-                // pass, or it would keep stacking a fresh MediaPlayer on top of the still-running
-                // one every time the sequence loops.
-                _audioPlayer.StopAll();
-                _elapsedAtPauseMs = 0;
-                _dispatchedPlaybackEvents.Clear();
-                ResetExecutionTracking();
-                StartPlaybackPass(0, resumeAudio: false);
+                if (!_dispatchedPlaybackEvents.Add(playbackEvent.SourceOrder)) continue;
+                DispatchPlaybackEvent(playbackEvent);
             }
-            else Stop();
-        }));
-        _playbackTimers.Add(endTimer);
+            _nextPlaybackBatchIndex++;
+        }
+
+        if (logicalNow >= plan.TotalDurationMs)
+        {
+            CompletePlaybackPass(plan);
+            return;
+        }
+
+        ArmNextPlaybackWake(plan, logicalNow);
+    }
+
+    private void DispatchPlaybackEvent(SequencerPlaybackEvent playbackEvent)
+    {
+        switch (playbackEvent)
+        {
+            case GesturePlaybackEvent gesture when !IsTrackMuted(gesture.Target):
+                var leaseMs = _protocol.SupportsAnimLease && gesture.AnimId is 16 or 17
+                    ? InfiniteAnimLeaseMs
+                    : (ushort)0;
+                var dispatch = _protocol.PlayAnim(
+                    gesture.Target, gesture.AnimId, gesture.Seed, leaseMs);
+                TrackExecution(dispatch, gesture);
+                TrackAnimLease(dispatch, gesture, leaseMs);
+                break;
+            case AudioPlaybackEvent audio:
+                _audioPlayer.Play(audio.FilePath, audio.Loop);
+                break;
+        }
+    }
+
+    private void ArmNextPlaybackWake(SequencerPlaybackPlan plan, int logicalNowMs)
+    {
+        _scheduledWakeAbsoluteMs = _nextPlaybackBatchIndex < plan.Batches.Count
+            ? Math.Min(plan.Batches[_nextPlaybackBatchIndex].StartMs, plan.TotalDurationMs)
+            : plan.TotalDurationMs;
+        var dueTimeMs = Math.Max(0, _scheduledWakeAbsoluteMs - logicalNowMs);
+        _playbackWakeTimer?.Rearm(dueTimeMs);
+    }
+
+    private void CompletePlaybackPass(SequencerPlaybackPlan plan)
+    {
+        if (plan.Loop)
+        {
+            // Stop every player (including a looping ambient clip) before rearming the next
+            // pass, or it would keep stacking a fresh MediaPlayer on top of the still-running
+            // one every time the sequence loops.
+            _audioPlayer.StopAll();
+            _elapsedAtPauseMs = 0;
+            _dispatchedPlaybackEvents.Clear();
+            ResetExecutionTracking();
+            StartPlaybackPass(0, resumeAudio: false);
+        }
+        else Stop();
     }
 
     private static void RunOnUiThread(Action action)
@@ -1783,9 +1828,9 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         if (dispatcher == null || dispatcher.CheckAccess()) action(); else dispatcher.Invoke(action);
     }
 
-    private void DisposePlaybackTimers()
+    private void DisposePlaybackScheduler()
     {
-        foreach (var t in _playbackTimers) t.Dispose();
-        _playbackTimers.Clear();
+        _playbackWakeTimer?.Dispose();
+        _playbackWakeTimer = null;
     }
 }

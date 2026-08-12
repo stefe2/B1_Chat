@@ -7,15 +7,27 @@ Export/Import, Clear, and audio-lane creation follow in the same toolbar.*
 
 ## What Play actually does
 
-Play schedules one console timer per gesture and audio clip. At each start time,
-the console sends the real gesture command through the master and starts local
-audio on the PC. Keep the console running, the master connected, and the PC awake
-for the entire performance.
+Play captures an immutable plan and gives its ordered batches to one rearmable
+console scheduler. The number of clips does not increase the number of Windows
+timers. At each monotonic deadline, the scheduler drains every due batch, sends
+the real gesture commands through the master, and starts local audio on the PC.
+If Windows wakes it late, all overdue batches are caught up in their original
+order before the next deadline is armed. Keep the console running, the master
+connected, and the PC awake for the entire performance.
 
 This is practical choreography, not sample-accurate show control. Windows timer
 scheduling, serial delivery, ESP-NOW relays, weak links, and commands sharing the
-same start time can introduce small offsets. Commands at the same timestamp are
-sent in sequence, not latched by every droid on one hardware clock edge.
+same start time can introduce small offsets. Events at the same timestamp form
+one batch: gesture clips are sent in editor order, followed by audio clips in
+lane/clip order. They are serialized, not latched by every droid on one hardware
+clock edge.
+
+Two gestures for the same target at one timestamp are both sent in editor order;
+the last command received by that droid wins. Mixing broadcast and targeted
+gestures at one timestamp is also ambiguous because mesh arrival can differ from
+console send order. The **SCHEDULE** warning appears after Play; hover it for the
+exact timestamp and conflict description. Separate those clips in time when the
+final physical pose matters.
 
 ![Audio and per-droid gesture tracks](../images/sequencer-tracks.png)
 

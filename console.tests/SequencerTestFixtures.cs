@@ -180,10 +180,13 @@ internal sealed class ThrowingAtomicTextFileWriter(Exception exception) : IAtomi
     }
 }
 
-internal sealed class FakePlaybackTimerScheduler : IPlaybackTimerScheduler
+internal sealed class FakePlaybackTimerScheduler : IPlaybackTimerScheduler, IPlaybackWakeScheduler
 {
     public List<Entry> Entries { get; } = new();
     public bool FailNextSchedule { get; set; }
+    public int CreatedWakeTimers { get; private set; }
+    public int ActiveWakeTimers { get; private set; }
+    public int WakeRearms { get; private set; }
 
     public IDisposable Schedule(int dueTimeMs, Action callback)
     {
@@ -195,6 +198,46 @@ internal sealed class FakePlaybackTimerScheduler : IPlaybackTimerScheduler
         var entry = new Entry(dueTimeMs, callback);
         Entries.Add(entry);
         return entry;
+    }
+
+    public IPlaybackWakeTimer Create(Action callback)
+    {
+        if (FailNextSchedule)
+        {
+            FailNextSchedule = false;
+            throw new InvalidOperationException("Simulated playback scheduler failure.");
+        }
+        CreatedWakeTimers++;
+        ActiveWakeTimers++;
+        return new WakeTimer(this, callback);
+    }
+
+    private sealed class WakeTimer(FakePlaybackTimerScheduler owner, Action callback) : IPlaybackWakeTimer
+    {
+        private readonly List<Entry> _entries = new();
+        private bool _disposed;
+
+        public void Rearm(int dueTimeMs)
+        {
+            if (_disposed) throw new ObjectDisposedException(nameof(WakeTimer));
+            if (owner.FailNextSchedule)
+            {
+                owner.FailNextSchedule = false;
+                throw new InvalidOperationException("Simulated playback scheduler failure.");
+            }
+            owner.WakeRearms++;
+            var entry = new Entry(dueTimeMs, callback);
+            _entries.Add(entry);
+            owner.Entries.Add(entry);
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            owner.ActiveWakeTimers--;
+            foreach (var entry in _entries) entry.Dispose();
+        }
     }
 
     internal sealed class Entry(int dueTimeMs, Action callback) : IDisposable

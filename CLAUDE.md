@@ -242,7 +242,7 @@ fall; that behavior is explicitly accepted for this project. Older firmware
 without the additive `safeStop` cap receives broadcast IDLE as a best-effort
 fallback but cannot suppress subsequent automatic motion.
 
-**Pause is not a hardware stop:** it freezes the PC playhead, future timer
+**Pause is not a hardware stop:** it freezes the PC playhead, future scheduler
 dispatches and local audio only. Already received finite gestures continue to
 completion, TALK/POWER_DOWN keep running under their renewed lease, and their
 execution reports may update while paused. Play resumes undispatched events and
@@ -255,7 +255,17 @@ guarded `Stopped`/`Playing`/`Paused` value. Play/Pause badges, LIVE tracking,
 editing locks and command availability are derived from it, so contradictory UI
 states cannot be constructed. Play, Resume and Loop also share one pass-start
 path; a scheduler startup failure invalidates the generation and returns to
-Stopped after disposing partial timers/audio.
+Stopped after disposing the partial scheduler/audio state.
+
+Sequencer playback uses one rearmable OS timer per active pass, not one timer per
+event. `SequencerPlaybackPlan` groups its immutable ordered events into timestamp
+batches. A monotonic cursor drains every due batch in source order, catches up
+late host wakes without drift accumulation, then rearms the same timer for the
+next batch/end boundary. Pause/Stop/generation replacement disposes the timer
+completely. Same-target gestures retain editor order with last-received-wins
+semantics; broadcast plus targeted overlap is serialized but flagged because
+mesh arrival remains ambiguous. The transport displays a hoverable SCHEDULE
+warning for those conflicts.
 
 Persistent Sequencer editing is permitted only in `Stopped`: timeline content,
 Loop, inspector fields, audio lanes/clips, Undo/Redo, Import/Clear, and Local
@@ -324,7 +334,7 @@ family — `seqList`/`seqLoad`/`seqSave`/`seqDelete`/`seqRun`/`seqStop`/
 `seqTimeline`/`seqPause` caps — was removed along with the master's 8 NVS
 sequence slots and its onboard player (see the Progress log). Sequences are
 entirely console-driven: the console fires per-step `anim` commands from its
-own timers and stores sequences locally (Local Library + `.b1seq.json`
+one scheduler and stores sequences locally (Local Library + `.b1seq.json`
 export, both carrying the droid roster for offline layout).
 
 **Commit** (per-droid anim params, names — not calibration or sequences): setters are

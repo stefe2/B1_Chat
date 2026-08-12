@@ -123,6 +123,31 @@ public sealed class SequencerPlaybackPlanTests
             e => Assert.Equal(@"C:\fixtures\first.wav", Assert.IsType<AudioPlaybackEvent>(e).FilePath),
             e => Assert.Equal(@"C:\fixtures\second.wav", Assert.IsType<AudioPlaybackEvent>(e).FilePath));
         Assert.Equal(new[] { 0, 1, 2, 3 }, plan.Events.Select(e => e.SourceOrder));
+        var batch = Assert.Single(plan.Batches);
+        Assert.Equal(500, batch.StartMs);
+        Assert.Equal(plan.Events, batch.Events);
+    }
+
+    [Fact]
+    public void Capture_WarnsAboutSameTargetAndBroadcastTargetAmbiguity()
+    {
+        var steps = new[]
+        {
+            new SequenceStep { StartMs = 500, Target = ushort.MaxValue, AnimId = 1 },
+            new SequenceStep { StartMs = 500, Target = ushort.MaxValue, AnimId = 2 },
+            new SequenceStep { StartMs = 500, Target = 0x1234, AnimId = 3 },
+            new SequenceStep { StartMs = 500, Target = 0x1234, AnimId = 4 },
+        };
+
+        var plan = SequencerPlaybackPlan.Capture(
+            steps, Array.Empty<AudioLane>(), new Dictionary<int, int>(), false, () => 1);
+
+        Assert.Equal(3, plan.Warnings.Count);
+        Assert.Equal(2, plan.Warnings.Count(warning =>
+            warning.Code == SequencerScheduleWarningCode.MultipleGesturesForTarget));
+        Assert.Single(plan.Warnings, warning =>
+            warning.Code == SequencerScheduleWarningCode.BroadcastTargetOverlap);
+        Assert.All(plan.Warnings, warning => Assert.Equal(500, warning.StartMs));
     }
 
     [Fact]

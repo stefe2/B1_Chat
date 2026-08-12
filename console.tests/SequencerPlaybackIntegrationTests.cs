@@ -50,11 +50,13 @@ public sealed class SequencerPlaybackIntegrationTests
                 break;
             case "NaturalEnd":
                 vm.PlayCommand.Execute(null);
+                scheduler.Entries[0].Invoke();
                 scheduler.Entries[1].Invoke();
                 break;
             case "Loop":
                 vm.Loop = true;
                 vm.PlayCommand.Execute(null);
+                scheduler.Entries[0].Invoke();
                 scheduler.Entries[1].Invoke();
                 break;
             case "Disconnect":
@@ -148,6 +150,82 @@ public sealed class SequencerPlaybackIntegrationTests
     }
 
     [Fact]
+    public void LargeTimeline_UsesOneRearmableWakeTimerRegardlessOfEventCount()
+    {
+        var protocol = new FakeSequencerProtocol();
+        var scheduler = new FakePlaybackTimerScheduler();
+        using var vm = CreateViewModel(protocol, scheduler);
+        for (var i = 0; i < 10_000; i++)
+            vm.Steps.Add(new SequenceStep
+            {
+                StartMs = 100 + i,
+                Target = ushort.MaxValue,
+                AnimId = i % 16,
+            });
+
+        vm.PlayCommand.Execute(null);
+
+        Assert.Equal(1, scheduler.CreatedWakeTimers);
+        Assert.Equal(1, scheduler.ActiveWakeTimers);
+        Assert.Single(scheduler.Entries);
+        Assert.Equal(100, scheduler.Entries[0].DueTimeMs);
+        vm.StopCommand.Execute(null);
+        Assert.Equal(0, scheduler.ActiveWakeTimers);
+        Assert.True(scheduler.Entries[0].Disposed);
+    }
+
+    [Fact]
+    public void LateWake_DrainsAllDueBatchesInStableOrderAndRearmsFromMonotonicNow()
+    {
+        var protocol = new FakeSequencerProtocol();
+        protocol.Durations[1] = 100;
+        protocol.Durations[2] = 100;
+        protocol.Durations[3] = 100;
+        var scheduler = new FakePlaybackTimerScheduler();
+        var clock = new FakePlaybackClock();
+        using var vm = CreateViewModel(protocol, scheduler, clock);
+        vm.Steps.Add(new SequenceStep { StartMs = 100, Target = 0x1001, AnimId = 1 });
+        vm.Steps.Add(new SequenceStep { StartMs = 200, Target = 0x1002, AnimId = 2 });
+        vm.Steps.Add(new SequenceStep { StartMs = 300, Target = 0x1003, AnimId = 3 });
+
+        vm.PlayCommand.Execute(null);
+        clock.SetElapsed(TimeSpan.FromMilliseconds(250));
+        scheduler.Entries[0].Invoke();
+
+        Assert.Equal(new[] { 1, 2 }, protocol.Sent.Select(sent => sent.AnimId));
+        Assert.Equal(50, scheduler.Entries[1].DueTimeMs);
+        clock.SetElapsed(TimeSpan.FromMilliseconds(300));
+        scheduler.Entries[1].Invoke();
+        Assert.Equal(new[] { 1, 2, 3 }, protocol.Sent.Select(sent => sent.AnimId));
+        Assert.Equal(1, scheduler.CreatedWakeTimers);
+        vm.StopCommand.Execute(null);
+    }
+
+    [Fact]
+    public void RepeatedPasses_SendSameTimeGesturesInIdenticalEditorOrder()
+    {
+        var protocol = new FakeSequencerProtocol();
+        var scheduler = new FakePlaybackTimerScheduler();
+        using var vm = CreateViewModel(protocol, scheduler);
+        vm.Steps.Add(new SequenceStep { StartMs = 100, Target = ushort.MaxValue, AnimId = 5 });
+        vm.Steps.Add(new SequenceStep { StartMs = 100, Target = 0x1001, AnimId = 3 });
+        vm.Steps.Add(new SequenceStep { StartMs = 100, Target = 0x1001, AnimId = 7 });
+
+        for (var pass = 0; pass < 20; pass++)
+        {
+            vm.PlayCommand.Execute(null);
+            scheduler.Entries[^1].Invoke();
+        }
+
+        var expected = Enumerable.Repeat(new[] { 5, 3, 7 }, 20).SelectMany(ids => ids);
+        Assert.Equal(expected, protocol.Sent.Select(sent => sent.AnimId));
+        Assert.True(vm.HasScheduleWarnings);
+        Assert.Contains("last received command wins", vm.ScheduleWarningText);
+        Assert.Contains("mesh arrival order is not guaranteed", vm.ScheduleWarningText);
+        vm.StopCommand.Execute(null);
+    }
+
+    [Fact]
     public void Restart_RejectsQueuedCallbackFromThePreviousGeneration()
     {
         var protocol = new FakeSequencerProtocol();
@@ -160,7 +238,7 @@ public sealed class SequencerPlaybackIntegrationTests
         var staleEvent = scheduler.Entries[0];
 
         vm.PlayCommand.Execute(null);
-        var currentEvent = scheduler.Entries[2]; // event + end timer were captured by pass one
+        var currentEvent = scheduler.Entries[1]; // one wake timer was created for each pass
 
         Assert.True(staleEvent.Disposed);
         staleEvent.InvokeEvenIfDisposed();
@@ -186,15 +264,15 @@ public sealed class SequencerPlaybackIntegrationTests
         vm.PlayCommand.Execute(null);
         var first = scheduler.Entries[0];
         vm.PlayCommand.Execute(null);
-        var second = scheduler.Entries[2];
+        var second = scheduler.Entries[1];
         vm.PlayCommand.Execute(null);
-        var third = scheduler.Entries[4];
+        var third = scheduler.Entries[2];
 
         first.InvokeEvenIfDisposed();
         second.InvokeEvenIfDisposed();
         third.Invoke();
 
-        Assert.Equal(6, scheduler.Entries.Count); // event + natural-end timer per pass
+        Assert.Equal(4, scheduler.Entries.Count); // three pass wakes + current pass end rearm
         Assert.Equal(2, Assert.Single(protocol.Sent).AnimId);
         vm.StopCommand.Execute(null);
     }
@@ -210,8 +288,10 @@ public sealed class SequencerPlaybackIntegrationTests
         vm.Steps.Add(new SequenceStep { StartMs = 50, Target = 0xFFFF, AnimId = 2 });
 
         vm.PlayCommand.Execute(null);
+        scheduler.Entries[0].Invoke();
         var staleEnd = scheduler.Entries[1];
         vm.PlayCommand.Execute(null);
+        scheduler.Entries[2].Invoke();
         var currentEnd = scheduler.Entries[3];
 
         staleEnd.InvokeEvenIfDisposed();
@@ -219,7 +299,7 @@ public sealed class SequencerPlaybackIntegrationTests
         Assert.True(vm.IsPlaying);
 
         currentEnd.Invoke();
-        Assert.Equal(6, scheduler.Entries.Count); // the current pass alone rearms the loop
+        Assert.Equal(5, scheduler.Entries.Count); // the current pass alone rearms the loop
         Assert.True(vm.IsPlaying);
         vm.StopCommand.Execute(null);
     }
@@ -734,8 +814,8 @@ public sealed class SequencerPlaybackIntegrationTests
         Assert.Empty(protocol.Sent);
 
         vm.PlayCommand.Execute(null); // starts a new pass; it cannot resume the disconnected one
-        Assert.Equal(4, scheduler.Entries.Count);
-        Assert.Equal(500, scheduler.Entries[2].DueTimeMs);
+        Assert.Equal(2, scheduler.Entries.Count);
+        Assert.Equal(500, scheduler.Entries[1].DueTimeMs);
     }
 
     [Fact]
@@ -753,7 +833,7 @@ public sealed class SequencerPlaybackIntegrationTests
 
         Assert.Equal(250, vm.PlayheadMs);
         vm.PlayCommand.Execute(null); // Resume
-        Assert.Equal(250, scheduler.Entries[2].DueTimeMs);
+        Assert.Equal(250, scheduler.Entries[1].DueTimeMs);
         Assert.Equal(TimeSpan.Zero, clock.Elapsed);
         vm.StopCommand.Execute(null);
     }
@@ -821,8 +901,8 @@ public sealed class SequencerPlaybackIntegrationTests
         vm.PauseCommand.Execute(null);
         vm.PlayCommand.Execute(null);
 
-        Assert.Equal(1, scheduler.Entries[2].DueTimeMs);
-        scheduler.Entries[2].Invoke();
+        Assert.Equal(1, scheduler.Entries[1].DueTimeMs);
+        scheduler.Entries[1].Invoke();
         Assert.Single(protocol.Sent);
         vm.StopCommand.Execute(null);
     }
@@ -864,15 +944,15 @@ public sealed class SequencerPlaybackIntegrationTests
         vm.PauseCommand.Execute(null); // the event timer had not reached the UI dispatcher
         vm.PlayCommand.Execute(null);
 
-        Assert.Equal(0, scheduler.Entries[2].DueTimeMs);
-        Assert.Equal(99, scheduler.Entries[3].DueTimeMs);
-        scheduler.Entries[2].Invoke();
+        Assert.Equal(0, scheduler.Entries[1].DueTimeMs);
+        scheduler.Entries[1].Invoke();
+        Assert.Equal(99, scheduler.Entries[2].DueTimeMs);
         Assert.Single(protocol.Sent);
         vm.StopCommand.Execute(null);
     }
 
     [Fact]
-    public void PauseAmongSimultaneousEvents_ResumesOnlyThoseNotYetDispatched()
+    public void SimultaneousEvents_DispatchAsOneAtomicOrderedBatchAcrossPause()
     {
         var protocol = new FakeSequencerProtocol();
         protocol.Durations[2] = 100;
@@ -890,15 +970,16 @@ public sealed class SequencerPlaybackIntegrationTests
 
         vm.PlayCommand.Execute(null);
         Assert.Equal(500, scheduler.Entries[0].DueTimeMs);
-        Assert.Equal(500, scheduler.Entries[1].DueTimeMs);
-        scheduler.Entries[0].Invoke(); // gesture dispatched; audio timer has not run yet
+        Assert.Single(scheduler.Entries);
+        scheduler.Entries[0].Invoke(); // gesture then audio are drained by the same wake
+        Assert.Single(protocol.Sent);
+        Assert.Single(audio.Actions, action => action.Kind == "Play");
         clock.SetElapsed(TimeSpan.FromMilliseconds(500));
         vm.PauseCommand.Execute(null);
         vm.PlayCommand.Execute(null);
 
-        Assert.Equal(0, scheduler.Entries[3].DueTimeMs);
-        Assert.Equal(100, scheduler.Entries[4].DueTimeMs);
-        scheduler.Entries[3].Invoke();
+        Assert.Equal(100, scheduler.Entries[2].DueTimeMs);
+        scheduler.Entries[2].Invoke();
         Assert.Single(protocol.Sent);
         Assert.Single(audio.Actions, action => action.Kind == "Play");
         vm.StopCommand.Execute(null);
@@ -918,15 +999,14 @@ public sealed class SequencerPlaybackIntegrationTests
         clock.SetElapsed(TimeSpan.FromMilliseconds(100));
         vm.PauseCommand.Execute(null);
         vm.PlayCommand.Execute(null);
-        Assert.Equal(650, scheduler.Entries[2].DueTimeMs);
+        Assert.Equal(650, scheduler.Entries[1].DueTimeMs);
 
         clock.SetElapsed(TimeSpan.FromMilliseconds(150));
         vm.PauseCommand.Execute(null);
         Assert.Equal(250, vm.PlayheadMs);
         vm.PlayCommand.Execute(null);
 
-        Assert.Equal(500, scheduler.Entries[4].DueTimeMs);
-        Assert.Equal(600, scheduler.Entries[5].DueTimeMs);
+        Assert.Equal(500, scheduler.Entries[2].DueTimeMs);
         vm.StopCommand.Execute(null);
     }
 
@@ -965,8 +1045,8 @@ public sealed class SequencerPlaybackIntegrationTests
 
         vm.PlayCommand.Execute(null);
         var eventTimer = scheduler.Entries[0];
-        var endTimer = scheduler.Entries[1];
         eventTimer.Invoke();
+        var endTimer = scheduler.Entries[1];
         endTimer.Invoke();
 
         Assert.False(vm.IsPlaying);

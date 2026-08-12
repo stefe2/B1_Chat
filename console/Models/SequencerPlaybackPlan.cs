@@ -13,15 +13,21 @@ public sealed class SequencerPlaybackPlan
 
     private SequencerPlaybackPlan(
         IReadOnlyList<SequencerPlaybackEvent> events,
+        IReadOnlyList<SequencerPlaybackBatch> batches,
+        IReadOnlyList<SequencerScheduleWarning> warnings,
         int totalDurationMs,
         bool loop)
     {
         Events = events;
+        Batches = batches;
+        Warnings = warnings;
         TotalDurationMs = totalDurationMs;
         Loop = loop;
     }
 
     public IReadOnlyList<SequencerPlaybackEvent> Events { get; }
+    public IReadOnlyList<SequencerPlaybackBatch> Batches { get; }
+    public IReadOnlyList<SequencerScheduleWarning> Warnings { get; }
     public int TotalDurationMs { get; }
     public bool Loop { get; }
 
@@ -67,9 +73,51 @@ public sealed class SequencerPlaybackPlan
             .ThenBy(e => e.SourceOrder)
             .ToArray();
         var total = ordered.Length == 0 ? 0 : ordered.Max(EventEndMs);
+        var batches = ordered
+            .GroupBy(playbackEvent => playbackEvent.StartMs)
+            .Select(group => new SequencerPlaybackBatch(
+                group.Key,
+                new ReadOnlyCollection<SequencerPlaybackEvent>(group.ToArray())))
+            .ToArray();
+        var warnings = FindScheduleWarnings(batches);
 
         return new SequencerPlaybackPlan(
-            new ReadOnlyCollection<SequencerPlaybackEvent>(ordered), total, loop);
+            new ReadOnlyCollection<SequencerPlaybackEvent>(ordered),
+            new ReadOnlyCollection<SequencerPlaybackBatch>(batches),
+            new ReadOnlyCollection<SequencerScheduleWarning>(warnings),
+            total,
+            loop);
+    }
+
+    private static SequencerScheduleWarning[] FindScheduleWarnings(
+        IReadOnlyList<SequencerPlaybackBatch> batches)
+    {
+        var warnings = new List<SequencerScheduleWarning>();
+        foreach (var batch in batches)
+        {
+            var gestures = batch.Events.OfType<GesturePlaybackEvent>().ToArray();
+            foreach (var targetGroup in gestures.GroupBy(gesture => gesture.Target))
+            {
+                if (targetGroup.Count() < 2) continue;
+                var target = targetGroup.Key == ushort.MaxValue
+                    ? "broadcast"
+                    : $"droid {targetGroup.Key}";
+                warnings.Add(new SequencerScheduleWarning(
+                    SequencerScheduleWarningCode.MultipleGesturesForTarget,
+                    batch.StartMs,
+                    $"{targetGroup.Count()} gestures target {target} simultaneously; they are sent in editor order and the last received command wins."));
+            }
+
+            if (gestures.Any(gesture => gesture.Target == ushort.MaxValue) &&
+                gestures.Any(gesture => gesture.Target != ushort.MaxValue))
+            {
+                warnings.Add(new SequencerScheduleWarning(
+                    SequencerScheduleWarningCode.BroadcastTargetOverlap,
+                    batch.StartMs,
+                    "Broadcast and targeted gestures share this timestamp. The console sends them in editor order, but mesh arrival order is not guaranteed."));
+            }
+        }
+        return warnings.ToArray();
     }
 
     private static int EventEndMs(SequencerPlaybackEvent playbackEvent)
@@ -83,6 +131,21 @@ public sealed class SequencerPlaybackPlan
         return (int)Math.Min(int.MaxValue, (long)playbackEvent.StartMs + duration);
     }
 }
+
+public sealed record SequencerPlaybackBatch(
+    int StartMs,
+    IReadOnlyList<SequencerPlaybackEvent> Events);
+
+public enum SequencerScheduleWarningCode
+{
+    MultipleGesturesForTarget,
+    BroadcastTargetOverlap,
+}
+
+public sealed record SequencerScheduleWarning(
+    SequencerScheduleWarningCode Code,
+    int StartMs,
+    string Message);
 
 public abstract record SequencerPlaybackEvent(int StartMs, int SourceOrder);
 

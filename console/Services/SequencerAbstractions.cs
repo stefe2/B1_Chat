@@ -70,6 +70,20 @@ public interface IPlaybackTimerScheduler
     IDisposable Schedule(int dueTimeMs, Action callback);
 }
 
+/// <summary>
+/// Creates one rearmable wake timer for an entire playback pass. Rearming changes the
+/// next wake deadline without allocating another OS timer, regardless of event count.
+/// </summary>
+public interface IPlaybackWakeScheduler
+{
+    IPlaybackWakeTimer Create(Action callback);
+}
+
+public interface IPlaybackWakeTimer : IDisposable
+{
+    void Rearm(int dueTimeMs);
+}
+
 /// <summary>Monotonic elapsed-time source for playhead and Pause calculations.</summary>
 public interface IPlaybackClock
 {
@@ -84,12 +98,42 @@ public sealed class StopwatchPlaybackClock : IPlaybackClock
     public void Restart() => _stopwatch.Restart();
 }
 
-public sealed class ThreadPoolPlaybackTimerScheduler : IPlaybackTimerScheduler
+public sealed class ThreadPoolPlaybackTimerScheduler : IPlaybackTimerScheduler, IPlaybackWakeScheduler
 {
     public IDisposable Schedule(int dueTimeMs, Action callback)
     {
         ArgumentNullException.ThrowIfNull(callback);
         return new System.Threading.Timer(
             _ => callback(), null, Math.Max(0, dueTimeMs), System.Threading.Timeout.Infinite);
+    }
+
+    public IPlaybackWakeTimer Create(Action callback)
+    {
+        ArgumentNullException.ThrowIfNull(callback);
+        return new ThreadPoolPlaybackWakeTimer(callback);
+    }
+
+    private sealed class ThreadPoolPlaybackWakeTimer : IPlaybackWakeTimer
+    {
+        private readonly System.Threading.Timer _timer;
+        private bool _disposed;
+
+        public ThreadPoolPlaybackWakeTimer(Action callback) =>
+            _timer = new System.Threading.Timer(
+                _ => callback(), null, System.Threading.Timeout.Infinite,
+                System.Threading.Timeout.Infinite);
+
+        public void Rearm(int dueTimeMs)
+        {
+            if (_disposed) throw new ObjectDisposedException(nameof(ThreadPoolPlaybackWakeTimer));
+            _timer.Change(Math.Max(0, dueTimeMs), System.Threading.Timeout.Infinite);
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _timer.Dispose();
+        }
     }
 }

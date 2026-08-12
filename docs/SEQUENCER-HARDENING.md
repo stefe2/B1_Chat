@@ -72,7 +72,7 @@ The dashboard is updated whenever an item changes state.
 | B | Infinite gestures and Stop/Pause semantics | 5 / 6 | 0 / 1 |
 | C | Dirty, Undo/Redo and editing transactions | 7 / 8 | 0 / 1 |
 | D | Import, export and local library | 8 / 8 | 0 / 1 |
-| E | Deterministic scheduler and performance | 2 / 6 | 0 / 1 |
+| E | Deterministic scheduler and performance | 4 / 6 | 0 / 1 |
 | F | Duration and audio robustness | 0 / 8 | — |
 | G | Preflight and ergonomics | 0 / 9 | 0 / 4 |
 | H | Automated and hardware validation | 1 / 8 | — |
@@ -688,7 +688,7 @@ The dashboard is updated whenever an item changes state.
   launching WPF or touching hardware.
 - **Validation:** a headless test constructs and runs a simple playback plan.
 
-### [ ] SEQ-E02 — Replace one timer per event with one scheduler
+### [x] SEQ-E02 — Replace one timer per event with one scheduler
 
 - **Priority:** P1
 - **Problem:** independent thread-pool timers scale poorly and create callback
@@ -699,8 +699,16 @@ The dashboard is updated whenever an item changes state.
   completely; event count does not equal OS timer count.
 - **Validation:** large synthetic timeline, cancellation, drift, and resource
   count tests.
+- **Implemented:** one rearmable wake timer owns the immutable pass batches and
+  a monotonic forward-only cursor. Each wake drains every batch now due, catches
+  up late host scheduling without accumulating drift, then rearms the same OS
+  timer for the next batch or end boundary. Pause, Stop, restart, Loop and stale
+  generations dispose or replace the complete scheduler session.
+- **Validated:** a 10,000-event plan creates one active wake timer; late-wake
+  catch-up, next-deadline compensation, Stop disposal and all existing
+  Pause/Resume/restart/Loop cancellation cases are automated.
 
-### [ ] SEQ-E03 — Define stable same-time ordering and batching
+### [x] SEQ-E03 — Define stable same-time ordering and batching
 
 - **Priority:** P1
 - **Problem:** broadcast and targeted gestures at the same timestamp, or multiple
@@ -710,6 +718,16 @@ The dashboard is updated whenever an item changes state.
   due in one scheduler tick are collected and dispatched predictably; warnings
   cover combinations whose hardware outcome remains ambiguous.
 - **Validation:** repeated runs produce identical send order.
+- **Decision:** same-time events keep immutable source order: gesture clips in
+  editor order, then audio clips in lane/clip order. Multiple gestures for one
+  target are sent in that order and the last command received wins. Broadcast
+  plus targeted gestures are sent in source order but remain physically
+  ambiguous because mesh arrival order is not guaranteed.
+- **Implemented:** explicit timestamp batches are drained atomically by one
+  scheduler wake. Same-target and broadcast/target overlaps produce timestamped
+  plan warnings exposed by the hoverable `SCHEDULE` badge.
+- **Validated:** batch shape/order, conflict classification, atomic gesture plus
+  audio dispatch and 20 repeated same-time passes are automated.
 
 ### [x] SEQ-E04 — Make Pause/Resume boundary behavior exact
 
@@ -1049,9 +1067,11 @@ The dashboard is updated whenever an item changes state.
   source order, duration fallback/zero/clamping/overflow, TALK/POWER_DOWN tails,
   generation cancellation, rapid restart, stale Loop end, dynamic broadcast and
   per-droid mute, edit-lock release, Pause boundaries and repeated Resume,
-  natural end, repeated Stop, disconnect in Play/Pause, disposal and cleanup.
-  Lease, Stop levels, arming invalidation and the future single-scheduler stress
-  matrix remain open with their prerequisite items.
+  natural end, repeated Stop, disconnect in Play/Pause, disposal and cleanup;
+  one-timer 10,000-event resource bounds, monotonic late-wake catch-up,
+  timestamp batching, repeated stable ordering, infinite leases, three Stop
+  levels and arming invalidation are also covered. Exact lifecycle/duration end
+  semantics remain open with SEQ-A08, SEQ-B04 and SEQ-E05.
 
 ### [ ] SEQ-H04 — Cover persistence validation and migrations
 
@@ -1482,9 +1502,9 @@ sequential. Unless a test seam must be introduced first, follow this order:
 
 ### Immediate implementation batches
 
-The next persistence work is grouped by shared responsibility and dependency.
-Each batch should remain independently testable and receive one detailed commit
-after its full regression passes.
+Completed persistence and scheduler work is grouped by shared responsibility
+and dependency. Each batch remains independently testable and receives one
+detailed commit after its full regression passes.
 
 | Batch | Items | Scope and commit boundary |
 |---|---|---|
@@ -1492,10 +1512,10 @@ after its full regression passes.
 | P2 — Saved-state integrity | SEQ-C05, SEQ-D04, SEQ-D05 | Implement the saved checkpoint and atomic export together, then use that authoritative Dirty state to guard Import and library Load. C05 and D04 are intentionally one batch because their stated dependencies are circular. |
 | Decision gate | DEC-003 | Resolved: retain the Local Library as the normal Scene store; keep Export only as an explicit external-copy escape hatch. |
 | P3 — Scene Library and wording | SEQ-D06, SEQ-D07, SEQ-D08 | **Complete.** Scene Save/Save As uses stable IDs and atomic/versioned storage; legacy entries migrate, deletion is recoverable, and naming/source/Dirty badges plus Help agree. External Export remains clearly secondary. |
+| S1 — Single deterministic scheduler | SEQ-E02, SEQ-E03 | **Complete.** One rearmable timer drains monotonic timestamp batches in immutable source order, compensates late wakes, warns about same-target/broadcast overlap and releases completely on cancellation. |
 
-SEQ-D09 remains deferred. After P3, scheduler and duration work should be
-regrouped from the then-current dependency state rather than prematurely folded
-into these persistence commits.
+SEQ-D09 remains deferred. The next batch should establish the duration model
+needed by SEQ-F01/SEQ-F02, SEQ-C06 and SEQ-B04 before attempting SEQ-E05/E06.
 
 ## Decision log
 
@@ -1508,7 +1528,7 @@ options.
 | DEC-002 | Resolved 2026-08-11 | Normal Stop uses targeted tracked IDLE only for Sequencer-owned infinite gestures. Safe Stop broadcasts a transient centered/servo-powered hold. Emergency Stop immediately broadcasts persistent Servo OFF without confirmation; the owner accepts loss of holding torque. |
 | DEC-003 | Resolved 2026-08-11 | Treat the current Sequencer document as a Scene and retain Local Library as the normal local working catalog. Save updates the current stable scene ID; Save As creates a new one. Import never auto-adds. Export is not required for normal work, but remains an explicit external snapshot for backup, transfer, support and version control. Future Show authoring combines scenes and published Shows embed immutable scene snapshots. |
 | DEC-004 | Open | Unknown/offline targets: warning or blocking preflight error? |
-| DEC-005 | Open | Same-time broadcast and targeted command precedence? |
+| DEC-005 | Resolved 2026-08-11 | Same-time events form one batch in immutable source order: gesture clips in editor order, then audio clips by lane/clip order. Multiple gestures for one target are last-received-wins. Broadcast plus targeted overlap is serialized but warned because mesh arrival can differ from console order. |
 | DEC-006 | Open | Audio-only rehearsal when no master is connected? |
 | DEC-007 | Deferred | Scene identity and migration from `.b1seq.json` to `.b1scene.json`? |
 | DEC-008 | Deferred | Show authoring uses linked scenes, embedded snapshots, or a publish-time hybrid? |
@@ -1555,3 +1575,4 @@ Append concise evidence when closing items; do not paste full build logs.
 | 2026-08-11 | SEQ-C05, SEQ-D04, SEQ-D05 | Replaced manual Dirty toggles with structural saved-checkpoint equality; added schema-self-validating sibling-temp/flush/atomic-rename export and injected unsaved-work confirmation for Import/Library Load. Twenty new checkpoint, Undo/Redo, create/replace/failure, round-trip, naming, clean/dirty/cancel, Play/Pause and startup cases pass within the 137/137 WPF suite; offline regression passed 17/17 (`b1-self-test-20260811-220731.json`). No firmware change or hardware run was required. |
 | 2026-08-11 | DEC-003, SEQ-J01, SEQ-J02 (hardware pending) | Resolved the product model as Scene Library first and future Show composition, with Export retained only as an explicit external copy. Implemented inert virgin-board Servos/Auto anims/Locate defaults with boot PWM detached, live Locate reconciliation, and independent center-preserving PAN/TILT Reverse through WPF, strict serial validation, rollback-compatible NVS, additive mesh V2 and per-droid capability gating. Master/slave/WPF builds and 137/137 WPF tests passed; offline regression passed 19/19 (`b1-self-test-20260811-224902.json`). Full-erase boot and physical Reverse observations remain. |
 | 2026-08-11 | SEQ-D06, SEQ-D07, SEQ-D08 | Completed the Scene-first Local Library: editable names, Save/Save As with stable GUIDs and conflict refusal, validated versioned envelopes, atomic writes, deterministic legacy migration, visible corrupt-file issues, recoverable confirmed Trash, discriminated startup restore, truthful origin/Dirty badges and aligned Help/tooltips. Export remains an external copy and cannot falsely clear modified library content. Sixteen focused cases expanded the WPF suite to 153/153; Release build completed with zero warnings/errors and offline regression passed 19/19 (`b1-self-test-20260811-231018.json`). No firmware deployment or hardware run was required. |
+| 2026-08-11 | SEQ-E02, SEQ-E03, SEQ-H03 (in progress) | Replaced per-event timers with one rearmable pass timer and a monotonic forward-only batch cursor. Late wakes drain all overdue timestamps in immutable source order and compensate the next delay; Pause/Stop/restart/Loop dispose or replace the whole session. Same-target and broadcast/target overlaps now produce timestamped SCHEDULE warnings with explicit last-received/ambiguous-mesh policy. Added 10,000-event resource, drift catch-up, batch shape/conflict, atomic gesture+audio and 20-pass repeatability coverage; WPF suite passed 157/157, Release build had zero warnings/errors and offline regression passed 19/19 (`b1-self-test-20260811-233354.json`). No firmware change, deployment or hardware run was required. |
