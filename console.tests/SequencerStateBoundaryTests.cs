@@ -68,8 +68,8 @@ public sealed class SequencerStateBoundaryTests
         var original = CreateSnapshot("Original");
         var edited = CreateSnapshot("Edited");
 
-        Assert.True(history.Begin(original, dirty: false));
-        Assert.False(history.Begin(original, dirty: false));
+        Assert.True(history.Begin(original));
+        Assert.False(history.Begin(original));
         Assert.True(history.Commit(edited));
         Assert.True(history.CanUndo);
         Assert.False(history.CanRedo);
@@ -77,15 +77,14 @@ public sealed class SequencerStateBoundaryTests
         Assert.Equal(original, history.Undo(edited));
         Assert.True(history.CanRedo);
 
-        Assert.True(history.Begin(original, dirty: true));
+        Assert.True(history.Begin(original));
         var cancelled = history.Cancel(edited);
         Assert.NotNull(cancelled);
         Assert.True(cancelled.Value.DocumentChanged);
-        Assert.True(cancelled.Value.WasDirty);
         Assert.Equal(original, cancelled.Value.Snapshot);
         Assert.True(history.CanRedo); // cancellation never changes history
 
-        Assert.True(history.Begin(original, dirty: true));
+        Assert.True(history.Begin(original));
         Assert.True(history.Commit(edited));
         Assert.False(history.CanRedo); // a real branch invalidates the old future
     }
@@ -99,7 +98,7 @@ public sealed class SequencerStateBoundaryTests
         var two = CreateSnapshot("2");
         var three = CreateSnapshot("3");
 
-        Assert.True(history.Begin(zero, dirty: false));
+        Assert.True(history.Begin(zero));
         Assert.False(history.Commit(CreateSnapshot("0")));
         Assert.Equal(0, history.UndoCount);
 
@@ -134,7 +133,7 @@ public sealed class SequencerStateBoundaryTests
         SequenceSnapshot before,
         SequenceSnapshot after)
     {
-        Assert.True(history.Begin(before, dirty: true));
+        Assert.True(history.Begin(before));
         Assert.True(history.Commit(after));
     }
 

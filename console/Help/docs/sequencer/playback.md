@@ -140,7 +140,7 @@ always needs the console and active serial connection.
 
 ## Export and Import
 
-**Export** writes a `.b1seq.json` snapshot containing:
+**Export** atomically writes a `.b1seq.json` snapshot containing:
 
 - sequence name and whole-sequence Loop setting;
 - gesture clips and target IDs;
@@ -149,6 +149,15 @@ always needs the console and active serial connection.
 
 The sound bytes are not embedded. Copy the audio files separately and expect to
 repair paths when moving a sequence to another PC.
+
+The console first writes and flushes a temporary file beside the destination,
+then replaces the destination in one rename. A denied path, full disk, or failed
+replacement leaves the previous file and the editor's saved state unchanged.
+After a successful export, the current document becomes the saved checkpoint:
+its Dirty indication clears, but Undo history remains available. Undoing away
+from that checkpoint marks the document Dirty; Redoing exactly back clears it.
+Choosing a different filename does not silently rename the sequence inside the
+document.
 
 **Import** loads the snapshot and records that file as the last sequence path.
 The console tries to reload that same file on its next launch. Later edits are
@@ -162,13 +171,13 @@ with the wrong type, a future version, invalid targets/animations/timing, unsafe
 counts, or malformed sections is rejected without changing the open sequence,
 selection, or Undo history. The error identifies the offending JSON field.
 
+If the open sequence is Dirty, Import asks before discarding it. Choosing No
+cancels the replacement without changing the last sequence path. A successful
+Import becomes the new saved checkpoint and starts with empty Undo/Redo history.
+
 Legacy numeric DFPlayer `audioTrack` values cannot identify a sound file on the
 PC and are not imported as audio clips. Add or replace the corresponding audio
 file manually after importing an old version 1 or 2 document.
-
-Export currently does not clear every internal dirty/edit warning, so Clear may
-still ask for confirmation after an export. Treat the exported file as the
-authoritative snapshot, not the warning state.
 
 ## Current Local Library behavior
 
@@ -177,6 +186,10 @@ the console's local library directory. The current interface no longer includes
 a command to save a new or edited sequence into that library. For all new work,
 use Export/Import. See [Data & Backups](../reference/data-and-backups.md) for the
 library and settings locations.
+
+Loading a Local Library entry also replaces the editor. A Dirty document asks
+for confirmation first; a successful Load establishes the library content as
+the clean checkpoint. Cancel leaves the current content and history intact.
 
 ## Clear and recovery
 

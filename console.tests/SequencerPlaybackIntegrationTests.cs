@@ -495,6 +495,7 @@ public sealed class SequencerPlaybackIntegrationTests
             var scheduler = new FakePlaybackTimerScheduler();
             using var vm = CreateViewModel(protocol, scheduler);
             editCase.Arrange(vm);
+            vm.EstablishSavedCheckpoint();
             var before = Fingerprint(vm);
             var derivedRefreshes = 0;
             vm.PropertyChanged += (_, args) =>
@@ -596,6 +597,7 @@ public sealed class SequencerPlaybackIntegrationTests
         {
             FilePath = "original.wav", DurationMs = 100, StartMs = 20,
         });
+        vm.EstablishSavedCheckpoint();
 
         Assert.True(vm.BeginStepDrag());
         vm.Steps[0].StartMs = 900;

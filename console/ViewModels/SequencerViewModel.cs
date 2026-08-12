@@ -1,7 +1,5 @@
 using System.Collections.ObjectModel;
 using System.IO;
-using System.Text.Json;
-using System.Text.Json.Nodes;
 using System.Windows;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -23,12 +21,14 @@ public enum SequencerTransportState
 public partial class SequencerViewModel : ObservableObject, IDisposable
 {
     private readonly ISequencerProtocol _protocol;
-    private readonly SettingsService _settings;
+    private readonly ISequencerSettings _settings;
     private readonly LibraryService _library = new();
     private readonly ISequencerAudioPlayer _audioPlayer;
     private readonly IPlaybackTimerScheduler _timerScheduler;
     private readonly IPlaybackTimerScheduler _executionTimerScheduler;
     private readonly IPlaybackClock _playbackClock;
+    private readonly ISequencerPersistenceDialogs _persistenceDialogs;
+    private readonly IAtomicTextFileWriter _atomicFileWriter;
     private const int ExecutionStartTimeoutMs = 1500;
     private const int ExecutionCompletionGraceMs = 1500;
     private const ushort InfiniteAnimLeaseMs = 5000;
@@ -110,7 +110,12 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
 
     [ObservableProperty] private string _name = "";
     [ObservableProperty] private bool _loop;
-    [ObservableProperty] private bool _dirty;
+    private bool _dirty;
+    public bool Dirty
+    {
+        get => _dirty;
+        private set => SetProperty(ref _dirty, value);
+    }
 
     // Card header badge — name only, now that the ESP32 slot concept is gone from the console.
     public string SequenceBadgeText => string.IsNullOrWhiteSpace(Name)
@@ -162,6 +167,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     private readonly Dictionary<uint, ActiveAnimLease> _activeAnimLeases = new();
     private readonly PlaybackGeneration _playbackGeneration = new();
     private SequencerPlaybackPlan? _activePlaybackPlan;
+    private SequenceSnapshot? _savedCheckpoint;
     private bool _suppressTimelineRefresh;
     private int _elapsedAtPauseMs;
     private bool _disposed;
@@ -250,11 +256,13 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
 
     public SequencerViewModel(
         ISequencerProtocol protocol,
-        SettingsService settings,
+        ISequencerSettings settings,
         ISequencerAudioPlayer? audioPlayer = null,
         IPlaybackTimerScheduler? timerScheduler = null,
         IPlaybackClock? playbackClock = null,
-        IPlaybackTimerScheduler? executionTimerScheduler = null)
+        IPlaybackTimerScheduler? executionTimerScheduler = null,
+        ISequencerPersistenceDialogs? persistenceDialogs = null,
+        IAtomicTextFileWriter? atomicFileWriter = null)
     {
         _protocol = protocol;
         _settings = settings;
@@ -262,6 +270,8 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         _timerScheduler = timerScheduler ?? new ThreadPoolPlaybackTimerScheduler();
         _executionTimerScheduler = executionTimerScheduler ?? new ThreadPoolPlaybackTimerScheduler();
         _playbackClock = playbackClock ?? new StopwatchPlaybackClock();
+        _persistenceDialogs = persistenceDialogs ?? new WpfSequencerPersistenceDialogs();
+        _atomicFileWriter = atomicFileWriter ?? new AtomicTextFileWriter();
         _protocol.DroidsChanged += RebuildTracks;
         _protocol.AnimDurationsReceived += OnAnimDurationsReceived;
         _protocol.AnimMasterAccepted += OnAnimMasterAccepted;
@@ -276,6 +286,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         ApplyAudioLanesFromDto(null);
         RebuildRulerTicks();
         RefreshLibrary();
+        EstablishSavedCheckpoint();
     }
 
     private void OnAnimDurationsReceived()
@@ -1069,14 +1080,14 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
 
     private bool BeginSequenceEdit()
     {
-        return CanEditSequence && _editHistory.Begin(Snapshot(), Dirty);
+        return CanEditSequence && _editHistory.Begin(Snapshot());
     }
 
     private bool CommitSequenceEdit()
     {
         if (!_editHistory.Commit(Snapshot())) return false;
 
-        Dirty = true;
+        RefreshDirtyFromCheckpoint();
         RefreshDerivedTimelineState();
         UpdateUndoButtons();
         return true;
@@ -1086,7 +1097,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     {
         var cancellation = _editHistory.Cancel(Snapshot());
         if (cancellation is not { DocumentChanged: true }) return false;
-        Apply(cancellation.Value.Snapshot, cancellation.Value.WasDirty);
+        Apply(cancellation.Value.Snapshot);
         return true;
     }
 
@@ -1113,7 +1124,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         RebuildRulerTicks();
     }
 
-    private void Apply(SequenceSnapshot snap, bool dirty = true)
+    private void Apply(SequenceSnapshot snap)
     {
         _suppressTimelineRefresh = true;
         try
@@ -1130,8 +1141,19 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         {
             _suppressTimelineRefresh = false;
         }
-        Dirty = dirty;
+        RefreshDirtyFromCheckpoint();
         RefreshDerivedTimelineState();
+    }
+
+    internal void EstablishSavedCheckpoint(SequenceSnapshot? checkpoint = null)
+    {
+        _savedCheckpoint = checkpoint ?? Snapshot();
+        RefreshDirtyFromCheckpoint();
+    }
+
+    private void RefreshDirtyFromCheckpoint()
+    {
+        Dirty = _savedCheckpoint == null || !_savedCheckpoint.DocumentEquals(Snapshot());
     }
 
     private void UpdateUndoButtons()
@@ -1263,6 +1285,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     private void LoadFromLibrary(SequenceLibraryItem? item)
     {
         if (!CanEditSequence || item == null) return;
+        if (!ConfirmDocumentReplacement($"load the Local Library sequence \"{item.Name}\"")) return;
         Name = item.Name;
         Loop = item.Loop;
         _fileTracks.Clear();
@@ -1273,7 +1296,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         RebuildTracks();
         SelectedStep = null;
         ClearHistory();
-        Dirty = false;
+        EstablishSavedCheckpoint();
     }
 
     [RelayCommand(CanExecute = nameof(CanEditSequence))]
@@ -1289,49 +1312,57 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void Export()
     {
-        var dlg = new SaveFileDialog { FileName = $"{(string.IsNullOrEmpty(Name) ? "sequence" : Name)}.b1seq.json", Filter = "B1 Sequence (*.b1seq.json)|*.b1seq.json" };
-        if (dlg.ShowDialog() != true) return;
-        var obj = new JsonObject
+        var path = _persistenceDialogs.ChooseExportPath(
+            $"{(string.IsNullOrEmpty(Name) ? "sequence" : Name)}.b1seq.json");
+        if (path == null) return;
+        try
         {
-            ["type"] = SequenceImportService.SchemaType, ["version"] = SequenceImportService.CurrentVersion,
-            ["name"] = Name, ["loop"] = Loop,
-            // Droid roster (id + name, row order): re-imported on a console with the fleet
-            // unplugged, every step still gets its own named row instead of one flat line.
-            ["tracks"] = new JsonArray(Tracks.Where(t => !t.IsBroadcast)
-                .Select(t => (JsonNode)new JsonObject { ["id"] = t.Id, ["name"] = t.Label }).ToArray()),
-            // Local-machine paths only (no audio bytes travel with the export) — a reasonable
-            // best-effort round-trip on the same console install, per CLAUDE.md's console-side
-            // audio decision; harmless dangling reference if imported elsewhere.
-            ["audioLanes"] = new JsonArray(AudioLanes.Select(l => (JsonNode)new JsonObject
-            {
-                ["label"] = l.Label,
-                ["clips"] = new JsonArray(l.Clips.Select(c => (JsonNode)new JsonObject
-                {
-                    ["filePath"] = c.FilePath, ["durationMs"] = c.DurationMs, ["startMs"] = c.StartMs, ["loop"] = c.Loop,
-                }).ToArray()),
-            }).ToArray()),
-            ["steps"] = new JsonArray(Steps.Select(s => (JsonNode)new JsonObject { ["animId"] = s.AnimId, ["target"] = s.Target, ["startMs"] = s.StartMs }).ToArray()),
-        };
-        File.WriteAllText(dlg.FileName, obj.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
-        _settings.SetLastSequencePath(dlg.FileName);
+            ExportTo(path);
+        }
+        catch (Exception ex)
+        {
+            _persistenceDialogs.ShowError("Sequencer export failed", ex.Message);
+        }
+    }
+
+    internal void ExportTo(string path)
+    {
+        var document = Snapshot();
+        var fileTracks = Tracks.Where(track => !track.IsBroadcast)
+            .Select(track => new SequenceTrackDto { Id = track.Id, Name = track.Label })
+            .ToList();
+        var contents = SequenceExportSerializer.Serialize(document, fileTracks);
+        // Never write a file our own strict importer would reject. This also catches editor
+        // values created by direct bindings (for example a blank lane label) before touching
+        // the previous destination or saved checkpoint.
+        _ = SequenceImportService.Parse(contents);
+
+        _atomicFileWriter.WriteAllText(path, contents);
+        _settings.SetLastSequencePath(path);
+        // Export preserves the explicit document Name; choosing a filename is not an edit.
+        EstablishSavedCheckpoint(document);
     }
 
     [RelayCommand(CanExecute = nameof(CanEditSequence))]
     private void Import()
     {
         if (!CanEditSequence) return;
-        var dlg = new OpenFileDialog { Filter = "B1 Sequence (*.b1seq.json)|*.b1seq.json|JSON (*.json)|*.json" };
-        if (dlg.ShowDialog() != true) return;
+        var path = _persistenceDialogs.ChooseImportPath();
+        if (path == null) return;
+        if (!ConfirmDocumentReplacement($"import \"{Path.GetFileName(path)}\"")) return;
         try
         {
-            ImportFrom(dlg.FileName);
-            _settings.SetLastSequencePath(dlg.FileName);
+            ImportFrom(path);
+            _settings.SetLastSequencePath(path);
         }
         catch (Exception ex)
         {
-            MessageBox.Show("Import failed: " + ex.Message, "Sequencer", MessageBoxButton.OK, MessageBoxImage.Error);
+            _persistenceDialogs.ShowError("Sequencer import failed", ex.Message);
         }
     }
+
+    private bool ConfirmDocumentReplacement(string replacementDescription) =>
+        !Dirty || _persistenceDialogs.ConfirmDiscardUnsavedChanges(replacementDescription);
 
     // Restores whatever sequence was last exported/imported, so the console resumes exactly
     // where the previous session left off instead of starting blank. Silent on failure (a
@@ -1372,7 +1403,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         RebuildTracks();
         SelectedStep = null;
         ClearHistory();
-        Dirty = false;
+        EstablishSavedCheckpoint();
     }
 
     // --- Playback (client-side: real anim/audio commands, nothing stored) --------

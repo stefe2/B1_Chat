@@ -70,8 +70,8 @@ The dashboard is updated whenever an item changes state.
 |---|---|---:|---:|
 | A | Playback isolation and cancellation | 7 / 8 | — |
 | B | Infinite gestures and Stop/Pause semantics | 5 / 6 | 0 / 1 |
-| C | Dirty, Undo/Redo and editing transactions | 6 / 8 | 0 / 1 |
-| D | Import, export and local library | 3 / 8 | 0 / 1 |
+| C | Dirty, Undo/Redo and editing transactions | 7 / 8 | 0 / 1 |
+| D | Import, export and local library | 5 / 8 | 0 / 1 |
 | E | Deterministic scheduler and performance | 2 / 6 | 0 / 1 |
 | F | Duration and audio robustness | 0 / 8 | — |
 | G | Preflight and ergonomics | 0 / 9 | 0 / 4 |
@@ -410,11 +410,12 @@ The dashboard is updated whenever an item changes state.
   without unbounded memory growth, and Redo follows the same bounded policy.
 - **Validation:** perform more than 50 edits and verify boundaries/order.
 - **Implemented:** Undo and Redo use bounded newest-first lists. Each push evicts
-  the oldest snapshot beyond `HistoryMax`, for both history directions.
+  the oldest snapshot beyond the configured 50-entry capacity, for both history
+  directions.
 - **Evidence:** 55 ordered edits permit exactly 50 Undo operations down to edit
   5, then exactly 50 Redo operations back to edit 55.
 
-### [ ] SEQ-C05 — Base Dirty on a saved checkpoint
+### [x] SEQ-C05 — Base Dirty on a saved checkpoint
 
 - **Priority:** P1
 - **Problem:** Export does not clear Dirty reliably, and manual Boolean updates
@@ -424,6 +425,15 @@ The dashboard is updated whenever an item changes state.
   Dirty reflects document equality with that checkpoint. Undoing back to it
   clears Dirty, and redoing away sets it again.
 - **Validation:** save/edit/undo/redo/export matrix.
+- **Implemented:** the editor owns one saved `SequenceSnapshot`; `Dirty` has no
+  public/manual setter and is recomputed exclusively by structural equality.
+  Successful Export, Import and Local Library Load establish the checkpoint.
+  Edits, cancellation, Undo and Redo compare their resulting document to it
+  without clearing history.
+- **Evidence:** the save/edit/Undo/Redo/re-export matrix proves equality in both
+  directions across two checkpoints. Load and Import establish clean baselines;
+  cancellation restores equality without retaining the former Dirty Boolean in
+  transaction history.
 
 ### [ ] SEQ-C06 — Refresh duration and extent after property changes
 
@@ -550,7 +560,7 @@ The dashboard is updated whenever an item changes state.
 - **Evidence:** four copied golden JSON fixtures verify versions 1–4, including
   v1 starts `0/100/350`; dedicated ambiguity and cumulative-overflow checks pass.
 
-### [ ] SEQ-D04 — Make export atomic and establish the saved checkpoint
+### [x] SEQ-D04 — Make export atomic and establish the saved checkpoint
 
 - **Priority:** P1
 - **Problem:** direct `File.WriteAllText` can leave a truncated file, exceptions
@@ -562,8 +572,17 @@ The dashboard is updated whenever an item changes state.
   success update last path, document name policy, checkpoint, and Dirty.
 - **Validation:** successful export, denied path, interrupted/failed replacement,
   and re-import round-trip tests.
+- **Implemented:** Export captures one document snapshot, serializes schema v4,
+  writes and flushes a uniquely named sibling temporary file, then renames it
+  over the destination. The old file, last path and checkpoint remain untouched
+  on any write/replace failure; temporary files are cleaned best-effort. Success
+  updates the last path and checkpoint while preserving Undo history. Filename
+  choice never silently changes the explicit sequence Name.
+- **Evidence:** real create/replace and second-ViewModel round trips pass. Injected
+  access denial and replacement interruption preserve the prior file/checkpoint,
+  clean the temp and surface an actionable UI error.
 
-### [ ] SEQ-D05 — Protect unsaved work before replacement
+### [x] SEQ-D05 — Protect unsaved work before replacement
 
 - **Priority:** P1
 - **Problem:** Import and library Load replace the current sequence without the
@@ -572,6 +591,15 @@ The dashboard is updated whenever an item changes state.
 - **Acceptance:** replacement prompts when Dirty, supports Cancel, and follows
   the playback policy from SEQ-A03. Startup recovery remains silent/safe.
 - **Validation:** clean/dirty plus stopped/playing/paused matrix.
+- **Implemented:** interactive Import and Local Library Load share an injected
+  replacement confirmation. Clean documents proceed directly; Dirty documents
+  identify the selected file/item and cancel without changing content, history
+  or last path. Both remain inert during Play/Pause under the existing edit lock.
+  Startup last-file restore bypasses UI and remains silent.
+- **Evidence:** clean/dirty/confirm/cancel matrices cover Import and Load; four
+  Play/Pause cases cover clean and Dirty documents. Invalid confirmed Import
+  preserves unsaved work and reports the parse error; startup recovery invokes
+  no dialog.
 
 ### [ ] SEQ-D06 — Resolve the local-library dead end
 
@@ -1447,3 +1475,4 @@ Append concise evidence when closing items; do not paste full build logs.
 | 2026-08-11 | SEQ-C02, SEQ-C03, SEQ-C04, SEQ-C07 | Added the shared 5 px drag threshold, complete persistent-property transaction coverage, exact 50-entry Undo/Redo bounds, and fail-safe interaction cancellation/restoration for Escape/capture/focus/unload. Twenty edit families, transient-state isolation, threshold/no-op/return, cancellation and 55-edit history ordering pass within the 82/82 WPF suite; offline regression passed 17/17 (`b1-self-test-20260811-203025.json`). No firmware change or hardware run was required. |
 | 2026-08-11 | SEQ-C08 | Established explicit persistent-document (`SequenceSnapshot`), editor-history (`SequencerEditHistory`) and immutable runtime (`SequencerPlaybackPlan`) boundaries without changing UI behavior. Six architecture tests cover the exact document surface, structural comparison, transactions/cancellation, bounded Undo/Redo and read-only playback state; full WPF suite passed 88/88 and offline regression passed 17/17 (`b1-self-test-20260811-203938.json`). No firmware change or hardware run was required. |
 | 2026-08-11 | SEQ-D01, SEQ-D02, SEQ-D03 | Added validate-then-apply sequence import, strict field/count/timing limits and explicit v1–v4 migrations. Twenty-nine new golden, invalid, boundary, ambiguity and no-partial-mutation cases pass within the 117/117 WPF suite; offline regression passed 17/17 (`b1-self-test-20260811-215453.json`). No firmware change or hardware run was required. |
+| 2026-08-11 | SEQ-C05, SEQ-D04, SEQ-D05 | Replaced manual Dirty toggles with structural saved-checkpoint equality; added schema-self-validating sibling-temp/flush/atomic-rename export and injected unsaved-work confirmation for Import/Library Load. Twenty new checkpoint, Undo/Redo, create/replace/failure, round-trip, naming, clean/dirty/cancel, Play/Pause and startup cases pass within the 137/137 WPF suite; offline regression passed 17/17 (`b1-self-test-20260811-220731.json`). No firmware change or hardware run was required. |

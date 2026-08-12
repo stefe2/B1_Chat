@@ -42,6 +42,12 @@ offline track layout, audio-lane layout, and **paths** to audio files. It does
 not embed or copy audio. Timeline edits after the export remain only in memory
 until the next export.
 
+Export writes and flushes a sibling temporary file before atomically replacing
+the destination. A failed write or replacement preserves the previous file and
+does not move the editor's saved checkpoint. A successful Export, Import, or
+Local Library Load establishes the clean checkpoint used by the Dirty indicator;
+Undo/Redo compares the actual document with that checkpoint.
+
 For another PC, copy both the sequence JSON and every audio file. Import the JSON,
 then use Replace file on any clip whose old absolute path is invalid.
 

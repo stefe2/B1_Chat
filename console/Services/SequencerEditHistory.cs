@@ -14,7 +14,6 @@ internal sealed class SequencerEditHistory
     private readonly List<SequenceSnapshot> _undo = new();
     private readonly List<SequenceSnapshot> _redo = new();
     private SequenceSnapshot? _activeBefore;
-    private bool _activeWasDirty;
 
     internal SequencerEditHistory(int capacity = DefaultCapacity)
     {
@@ -29,12 +28,11 @@ internal sealed class SequencerEditHistory
     internal int UndoCount => _undo.Count;
     internal int RedoCount => _redo.Count;
 
-    internal bool Begin(SequenceSnapshot current, bool dirty)
+    internal bool Begin(SequenceSnapshot current)
     {
         ArgumentNullException.ThrowIfNull(current);
         if (HasActiveEdit) return false;
         _activeBefore = current;
-        _activeWasDirty = dirty;
         return true;
     }
 
@@ -59,7 +57,6 @@ internal sealed class SequencerEditHistory
 
         var result = new SequenceEditCancellation(
             _activeBefore,
-            _activeWasDirty,
             !_activeBefore.DocumentEquals(current));
         _activeBefore = null;
         return result;
@@ -107,5 +104,4 @@ internal sealed class SequencerEditHistory
 
 internal readonly record struct SequenceEditCancellation(
     SequenceSnapshot Snapshot,
-    bool WasDirty,
     bool DocumentChanged);

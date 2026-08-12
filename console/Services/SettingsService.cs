@@ -3,8 +3,14 @@ using System.Text.Json;
 
 namespace b1_chat_console.Services;
 
+public interface ISequencerSettings
+{
+    string? LastSequencePath { get; }
+    void SetLastSequencePath(string? path);
+}
+
 /// <summary>Port of LoadSettings/SaveSettings (formerly MainWindow.xaml.cs): same file, same shape.</summary>
-public class SettingsService
+public class SettingsService : ISequencerSettings
 {
     private static readonly string SettingsDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "B1ChatConsole");

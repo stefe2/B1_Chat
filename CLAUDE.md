@@ -287,6 +287,15 @@ cumulative waits after the current gesture, producing absolute starts from the
 sum of prior delays. Retired numeric DFPlayer `audioTrack` metadata is validated
 but intentionally discarded; it cannot identify a console-side audio file.
 
+Sequencer `Dirty` is structural equality against one saved `SequenceSnapshot`,
+never a manually toggled edit flag. Successful Export, Import and Local Library
+Load establish that checkpoint; normal edits and Undo/Redo recompute equality,
+so returning exactly to the checkpoint clears Dirty without deleting history.
+Export serializes one captured snapshot, flushes a sibling temporary file, then
+atomically renames it over the destination; failure preserves the old file,
+checkpoint and last path. Interactive Import/Load ask before replacing a Dirty
+document and remain locked throughout Play/Pause; startup restore stays silent.
+
 **No audio in this protocol** (fw 1.6.0): `volume`/`playTrack` (console→master)
 and `config`'s `volume` field were removed when the DFPlayer was retired —
 see the Progress log.

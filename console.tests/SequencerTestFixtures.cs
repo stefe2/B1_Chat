@@ -75,6 +75,60 @@ internal sealed class FakeAudioPlayer : ISequencerAudioPlayer
 
 internal sealed record AudioAction(string Kind, string? Path, bool Loop);
 
+internal sealed class FakeSequencerSettings : ISequencerSettings
+{
+    public string? LastSequencePath { get; set; }
+    public int SequencePathWrites { get; private set; }
+
+    public void SetLastSequencePath(string? path)
+    {
+        LastSequencePath = path;
+        SequencePathWrites++;
+    }
+}
+
+internal sealed class FakeSequencerPersistenceDialogs : ISequencerPersistenceDialogs
+{
+    public string? ExportPath { get; set; }
+    public string? ImportPath { get; set; }
+    public bool ConfirmResult { get; set; }
+    public List<string> ConfirmationRequests { get; } = new();
+    public List<(string Title, string Message)> Errors { get; } = new();
+    public int ExportSelections { get; private set; }
+    public int ImportSelections { get; private set; }
+
+    public string? ChooseExportPath(string suggestedFileName)
+    {
+        ExportSelections++;
+        return ExportPath;
+    }
+
+    public string? ChooseImportPath()
+    {
+        ImportSelections++;
+        return ImportPath;
+    }
+
+    public bool ConfirmDiscardUnsavedChanges(string replacementDescription)
+    {
+        ConfirmationRequests.Add(replacementDescription);
+        return ConfirmResult;
+    }
+
+    public void ShowError(string title, string message) => Errors.Add((title, message));
+}
+
+internal sealed class ThrowingAtomicTextFileWriter(Exception exception) : IAtomicTextFileWriter
+{
+    public int Attempts { get; private set; }
+
+    public void WriteAllText(string destinationPath, string contents)
+    {
+        Attempts++;
+        throw exception;
+    }
+}
+
 internal sealed class FakePlaybackTimerScheduler : IPlaybackTimerScheduler
 {
     public List<Entry> Entries { get; } = new();
