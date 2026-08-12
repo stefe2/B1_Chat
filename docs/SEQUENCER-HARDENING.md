@@ -74,7 +74,7 @@ The dashboard is updated whenever an item changes state.
 | D | Import, export and local library | 8 / 8 | 0 / 1 |
 | E | Deterministic scheduler and performance | 4 / 6 | 0 / 1 |
 | F | Duration and audio robustness | 1 / 8 | — |
-| G | Preflight and ergonomics | 0 / 12 | 0 / 4 |
+| G | Preflight and ergonomics | 0 / 13 | 0 / 4 |
 | H | Automated and hardware validation | 1 / 8 | — |
 | I | Scene & Show System (future) | — | 0 / 22 |
 | J | Commissioning and servo configuration safety | 0 / 2 | — |
@@ -1126,6 +1126,30 @@ The dashboard is updated whenever an item changes state.
 - **Validation:** long-timeline UI tests and manual checks cover every zoom,
   manual-scroll, Pause/Resume, Loop/restart and end-boundary combination.
 
+### [ ] SEQ-G17 — Add pointer-centered timeline wheel zoom
+
+- **Priority:** P2
+- **Problem:** changing the zoom currently requires reaching for the toolbar
+  control. Repeated zoom-and-pan work is slow when editing precise choreography,
+  and a naïve wheel zoom can make the point of interest jump out of view.
+- **Depends on:** SEQ-E06, SEQ-G16.
+- **Acceptance:** `Ctrl + mouse wheel` zooms in/out within the existing supported
+  limits while preserving the timeline time beneath the pointer at the same
+  viewport position. Plain wheel retains normal scrolling behavior;
+  `Shift + wheel` provides horizontal navigation where WPF/trackpad behavior is
+  otherwise ambiguous. Zoom works while stopped, playing or paused without
+  modifying the Scene, playhead or selection. Trackpad/high-resolution wheel
+  deltas are accumulated smoothly, and Fit remains an explicit deterministic
+  action.
+- **Recommendation:** use multiplicative zoom steps rather than fixed pixel
+  increments, anchor the scroll offset around the pointer's time coordinate,
+  and temporarily suspend Follow on deliberate manual zoom/pan. A visible
+  Follow action can then catch up without fighting the editor.
+- **Validation:** tests cover pointer anchoring near the start/middle/end,
+  min/max clamping, rapid/high-resolution wheel input, horizontal scroll,
+  Play/Pause, Follow suspension/re-enable, Fit and timelines shorter than the
+  viewport.
+
 ## EPIC H — Automated and hardware validation
 
 ### [x] SEQ-H01 — Create a Sequencer-focused test project and fixtures
@@ -1589,7 +1613,7 @@ sequential. Unless a test seam must be introduced first, follow this order:
 7. **Scheduler replacement:** SEQ-E02 through SEQ-E06.
 8. **Duration/audio:** SEQ-F01 through SEQ-F08 and SEQ-B04.
 9. **Preflight/ergonomics:** required SEQ-G01 through SEQ-G06 and SEQ-G11
-   through SEQ-G16.
+   through SEQ-G17.
 10. **Validation gate:** SEQ-H02 through SEQ-H08.
 11. **Optional enhancements:** only selected `[D]` items. EPIC I remains deferred
     until the M1–M4 reliability baseline is complete and a separate Scene/Show
@@ -1641,6 +1665,7 @@ options.
 | DEC-018 | Deferred | Published Show revision naming, retention and rollback policy? |
 | DEC-019 | Open | Transport UX: Play/Pause toggle versus separate controls; explicit Restart; normal Stop cursor retention; and Play-from-zero versus Play-from-cursor policy? |
 | DEC-020 | Open | Timeline following: comfort-corridor behavior, default Follow state, and how manual scroll suspends/re-enables it? |
+| DEC-021 | Open | Timeline pointer navigation: exact Ctrl/Shift-wheel bindings, trackpad behavior and whether manual zoom/pan suspends Follow until explicitly re-enabled? |
 
 ## Completion evidence log
 
