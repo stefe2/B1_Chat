@@ -8,6 +8,8 @@ and the small firmware changes needed to give playback safe stop semantics.
 This document is the persistent source of truth for making the Animation
 Sequencer reliable. `PROGRESS-ARCHIVE.md` remains the historical record; this
 file tracks unfinished work and must stay current as items are implemented.
+[SEQUENCER-BEHAVIOR.md](SEQUENCER-BEHAVIOR.md) is the complementary document:
+it describes what currently *ships*, while this one records what is still open.
 
 ## Tracking rules
 

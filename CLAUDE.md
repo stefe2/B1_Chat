@@ -4,6 +4,21 @@ Single project tracking file (merger of the old `project.md` and the console's
 CLAUDE.md — **keep it up to date after every completed step**, explicit
 request from the user).
 
+This file is reloaded as context on every turn, so it holds what must be known
+*before* touching anything: architecture, protocol, storage, pitfalls, and what
+is currently open. Detail that is only needed once you are working on a given
+area lives in the documents below — and must be updated in the same commit as
+the behavior it describes.
+
+| Document | Holds | Read it when |
+| --- | --- | --- |
+| [docs/SEQUENCER-BEHAVIOR.md](docs/SEQUENCER-BEHAVIOR.md) | shipped Sequencer runtime behavior: telemetry, stop levels, transport/navigation, scheduler, editing, persistence, Scene workflow | touching the console Sequencer |
+| [docs/SEQUENCER-HARDENING.md](docs/SEQUENCER-HARDENING.md) | tracked backlog: `SEQ-*` items, status markers, decision log, dated evidence log | picking up the next Sequencer work item |
+| [FIRMWARE-CONTRACT.md](FIRMWARE-CONTRACT.md) | console ↔ firmware protocol contract and its implementation status | changing the serial protocol |
+| [TEST-PROTOCOL.md](TEST-PROTOCOL.md) | what `self-test.ps1` and the bench scripts cover, and what is deliberately excluded | before/after a validation run |
+| [PROGRESS-ARCHIVE.md](PROGRESS-ARCHIVE.md) | full chronological history, older milestone blocks, and the full incident narratives | investigating why something is the way it is |
+| [docs/hardware/](docs/hardware/) | servo-hub PCB concept and reduced V1 test-board scope | working on the carrier board |
+
 ## Overview
 
 A single git repo (`stefe2/B1_Chat`), two halves:
@@ -50,6 +65,16 @@ the history.
   replays the JSON protocol (`hello`/`otaStart`/`otaChunk`/...) and lets you inject
   faults (corrupted chunk, mid-transfer abort, double `otaStart`) without depending
   on the UI. See the OTA section and Verification pt 7.
+- `.\tools\self-test.ps1 [-SkipSerial] [-SkipBuild] [-ComPort COMx]` — safe
+  autonomous preflight: builds both firmware roles + the console, runs the
+  headless Sequencer suite, checks the hardening invariants, and (unless
+  `-SkipSerial`) does read-only serial checks against a discovered master. Never
+  flashes, never moves servos, never bumps `console/build.number`.
+- `dotnet test console.tests\b1-chat-console.Tests.csproj` — the Sequencer suite
+  alone (also run by `self-test.ps1`). 139 test methods, ~181 cases with theories.
+- `.\tools\sequencer-bench-test.ps1` / `.\tools\anim-exec-test.ps1` — active bench
+  scripts (real fleet): Sequencer preflight/movement and headless animation
+  execution-report lifecycle. Movement requires an explicit opt-in switch.
 
 **Automatic firmware release** (`.github/workflows/firmware-release.yml`): triggers
 on push to `main` touching `src/config.h`, or manually (`workflow_dispatch`). Reads
@@ -196,136 +221,39 @@ Unknown fields in a command: ignored (the console may be newer than the
 firmware). Responses routed exclusively on `evt`. Line buffer: 4 KB
 (`lineMax` announced at handshake; any longer line → `err`).
 
-**Animation execution telemetry** is observational and never gates the
-console-side timeline. `WRITE` means the OS serial write completed, not that the
-master received it. New masters then emit `animAccepted` after parsing and
-validating the command (`MASTER` in the timeline), including whether ESP-NOW
-accepted the broadcast frame and whether the master itself is a local target.
-The master maps the console's `requestId` to the existing mesh-header sequence,
-so `AnimPayload` remains byte-compatible with older slaves. New droids report
-when the software animation engine starts, finishes, is interrupted, or refuses
-the command because servos are disabled; broadcast replies are deterministically
-jittered to avoid a response burst. The timeline aggregates reports per online
-target (`ACK 2/3`, `DONE 3/3`, `REJ 1/3`). Local refusal is immediate (`NO LINK`,
-`NOT READY`, `WRITE FAIL`); a failed required ESP-NOW queue is `MESH FAIL`. A
-missing start report expires after 1.5 s
-(`UNCONF`/`MISS n/N`);
-finite gestures that start but do not send a terminal report expire after their
-reported duration plus 1.5 s (`TIMEOUT`). Late reports recover the display, and
-delayed duplicate `started` reports cannot regress a terminal state. These
-warnings never delay or stop the show. Looping POWER_DOWN/TALK require only a
-start report because completion requires a later interruption. Sequencer
-playback starts those two gestures with a 5 s firmware lease and renews it every
-2 s while the owning pass remains valid. Missing renewal returns the droid to
-IDLE and reports `interrupted/leaseExpired`; renewals are correlated to the
-originating mesh sequence so stale packets cannot extend a replacement gesture.
-Pause and whole-pass Loop continue renewal, while Stop/end/restart/disconnect/
-shutdown cancel it before targeted IDLE cleanup. Manual Animation-card commands
-and autonomous animations remain unleased. This proves firmware execution, not
-physical servo movement or mechanical inter-droid skew.
+**Sequencer and animation runtime behavior now lives in
+[docs/SEQUENCER-BEHAVIOR.md](docs/SEQUENCER-BEHAVIOR.md)** (moved there
+2026-08-12): telemetry states, infinite-gesture cleanup/lease, stop levels,
+transport and navigation, scheduler, editing policy, edit transactions, type
+boundaries, import/schema, Dirty/persistence and the Scene document workflow.
+Keep that file updated in the same commit as any behavior change.
 
-**Sequencer infinite-gesture cleanup:** the WPF playback controller records the
-latest successfully written gesture per concrete droid. Broadcast TALK or
-POWER_DOWN expands to the online roster; later targeted finite/IDLE commands
-replace only their target. Stop, a non-looping natural end, application disposal,
-and Play restart send tracked IDLE commands only to droids whose latest state is
-still infinite. A whole-pass Loop boundary and Pause deliberately do not clean
-up. Failed serial cleanup remains retryable. On firmware advertising
-`animLease`, the independent 5 s lease supplies the fail-closed fallback if
-cleanup cannot cross a lost serial or mesh path.
+The invariants below stay here because they are safety- or
+compatibility-critical, and must not be broken silently:
 
-**Three stop levels:** normal Sequencer Stop cancels the transport/audio and
-sends targeted IDLE only for its remaining infinite gestures; finite gestures
-finish naturally. Safe Stop cancels all console work and broadcasts `safeStop`:
-each current droid interrupts motion, moves to calibrated center over the normal
-IDLE transition, retains servo holding torque, and transiently suppresses its
-automatic animations until a later explicit animation command. Emergency Stop
-has no confirmation dialog and broadcasts persistent `servo enabled:false` to
-the whole fleet. It removes holding torque and may let unsupported mechanics
-fall; that behavior is explicitly accepted for this project. Older firmware
-without the additive `safeStop` cap receives broadcast IDLE as a best-effort
-fallback but cannot suppress subsequent automatic motion.
-
-**Pause is not a hardware stop:** it freezes the PC playhead, future scheduler
-dispatches and local audio only. Already received finite gestures continue to
-completion, TALK/POWER_DOWN keep running under their renewed lease, and their
-execution reports may update while paused. Play resumes undispatched events and
-audio without resending gestures that continued. The transport shows
-`PAUSED · DROID MOTION CONTINUES` so this behavior is never implied to be a
-physical freeze; use Stop, SAFE or E-STOP for their distinct policies above.
-
-**Sequencer transport state is single-source:** the WPF controller owns one
-guarded `Stopped`/`Playing`/`Paused` value. Play/Pause badges, LIVE tracking,
-editing locks and command availability are derived from it, so contradictory UI
-states cannot be constructed. Play, Resume and Loop also share one pass-start
-path; a scheduler startup failure invalidates the generation and returns to
-Stopped after disposing the partial scheduler/audio state.
-
-Sequencer playback uses one rearmable OS timer per active pass, not one timer per
-event. `SequencerPlaybackPlan` groups its immutable ordered events into timestamp
-batches. A monotonic cursor drains every due batch in source order, catches up
-late host wakes without drift accumulation, then rearms the same timer for the
-next batch/end boundary. Pause/Stop/generation replacement disposes the timer
-completely. Same-target gestures retain editor order with last-received-wins
-semantics; broadcast plus targeted overlap is serialized but flagged because
-mesh arrival remains ambiguous. The transport displays a hoverable SCHEDULE
-warning for those conflicts.
-
-Persistent Sequencer editing is permitted only in `Stopped`: timeline content,
-Loop, inspector fields, audio lanes/clips, Undo/Redo, Import/Clear, and Local
-Library Save/Save As/Load/Trash all lock during Play and Pause. Selection/inspection, track
-arming, runtime track mute, zoom/Snap/Fit/scroll, and Export remain available
-because they do not change the immutable pass being performed.
-
-Sequencer command and pointer-drag mutations use one structural snapshot edit
-transaction. A real commit records one pre-edit Undo snapshot, clears Redo,
-marks Dirty and refreshes tracks/ruler/timecode once; a no-op commit records
-nothing. Persistent DTO fields participate in comparison, while selection,
-execution telemetry, waveform peaks and drag visuals remain transient. Direct
-property bindings join this transaction boundary under SEQ-C03.
-
-Sequencer clip drags use a 5 px threshold before opening a transaction. Escape,
-lost mouse capture, view unload and window deactivation restore the pre-edit
-snapshot and clear gesture/audio drag state, library ghosts and ruler capture;
-cancelled ruler scrubbing restores its starting playhead. Inspector properties,
-sequence/audio Loop, lane labels/order and sequence name now share the same
-transaction path. Undo and Redo are newest-first bounded lists retaining exactly
-50 snapshots; document snapshots exclude every transient editor/telemetry field.
-
-Sequencer state responsibilities have explicit type boundaries. `SequenceSnapshot`
-contains and structurally compares only persistent document DTOs;
-`SequencerEditHistory` owns begin/commit/cancel and bounded Undo/Redo without any
-WPF or playback dependency; `SequencerPlaybackPlan` captures immutable runtime
-events. `SequencerViewModel` coordinates them while retaining transient selection,
-viewport, drag visuals, waveform and execution telemetry.
-
-Sequencer file import is validate-then-apply. `SequenceImportService` strictly
-parses `b1-sequence` schemas 1–4 into a temporary `ImportedSequenceDocument`,
-checks identities, bounded counts/strings/timing and target/gesture ranges, and
-runs named migrations before the ViewModel mutates. V1 `delayMs` values are
-cumulative waits after the current gesture, producing absolute starts from the
-sum of prior delays. Retired numeric DFPlayer `audioTrack` metadata is validated
-but intentionally discarded; it cannot identify a console-side audio file.
-
-Sequencer `Dirty` is structural equality against one saved `SequenceSnapshot`,
-never a manually toggled edit flag. Local Library Save/Load and Import establish
-that checkpoint; Export also establishes it for new/external documents but stays
-an external copy for a library-backed Scene, where it cannot falsely clear
-unsaved library edits. Normal edits and Undo/Redo recompute equality, so returning
-exactly to the checkpoint clears Dirty without deleting history. Export and
-Local Library writes flush sibling temporary files and atomically rename them;
-failure preserves the old file and checkpoint. Interactive Import/Load ask
-before replacing a Dirty document and all library mutations remain locked
-throughout Play/Pause; startup restore stays silent.
-
-The current Sequencer document is a Scene. `LibraryService` stores versioned
-`b1-scene-library-item` envelopes under stable GUID filenames, with the validated
-`b1-sequence` document nested inside. Save updates the active identity; Save As
-creates another and case-insensitive name conflicts never overwrite. Valid flat
-legacy entries migrate atomically and their originals move to `library\trash`;
-confirmed removal uses the same recoverable trash directory. Corrupt entries
-remain untouched and are counted in the UI. `settings.json` discriminates the
-last library Scene identity from the last external file path.
+- **Execution telemetry is observational**: it never gates, delays or stops the
+  timeline, and it proves firmware execution only — not physical movement or
+  mechanical inter-droid skew.
+- **`requestId` is mapped onto the existing mesh sequence**, so `AnimPayload`
+  stays byte-compatible with older slaves. Don't widen the mesh payload to
+  correlate console commands.
+- **Pause is not a hardware stop**: already dispatched gestures keep running,
+  and the UI must keep saying so (`PAUSED · DROID MOTION CONTINUES`).
+- **Three distinct stop levels, never collapsed into one control**: Stop
+  (targeted IDLE for its own infinite gestures only), Safe Stop (`safeStop`
+  broadcast — centered, holding torque kept, automatic motion suppressed),
+  Emergency Stop (persistent `servo enabled:false` — torque removed, an
+  unsupported head may fall; explicitly accepted for this project).
+- **Sequencer-started TALK/POWER_DOWN carry a 5 s firmware lease** renewed every
+  2 s and correlated to the originating mesh sequence; the manual Animation card
+  and autonomous idle gestures stay deliberately unleased.
+- **Persistent editing happens only in `Stopped`**: the pass being performed is
+  immutable.
+- **Export writes `b1-sequence` v5**; import accepts v1–v5 through named
+  migrations. A field whose *meaning* changes gets a new name instead of a
+  lenient reader — see Known pitfalls.
+- **Older firmware degrades, never breaks**: `safeStop`, `animLease`,
+  `animAccepted` and `animExec` are additive and capability-gated.
 
 **No audio in this protocol** (fw 1.6.0): `volume`/`playTrack` (console→master)
 and `config`'s `volume` field were removed when the DFPlayer was retired —
@@ -362,80 +290,61 @@ re-triggers this question on its own.
 
 ## Firmware OTA (slaves, relayed by the mesh)
 
-An adopted slave can be reflashed **without USB**, triggered by a
-"Flash (OTA)" button on its row in the Droids card. The `.bin` travels over the
-existing serial link (console → master, base64-encoded) then over the ESP-NOW mesh
-(master → targeted slave), `stop-and-wait`: one 190-byte fragment in flight at a
-time, acknowledgment required before the next (`Update.write()` on the slave side is
-sequential/append-only, no out-of-order handling). **Only one session at a
-time** across the whole fleet.
+An adopted slave is reflashed **without USB** from the "Flash (OTA)" button on
+its Droids-card row. The `.bin` crosses the serial link (console → master,
+base64-encoded) then the ESP-NOW mesh (master → targeted slave) in
+`stop-and-wait`: one 190-byte fragment in flight at a time, ack required before
+the next, because the slave's `Update.write()` is sequential/append-only with no
+out-of-order handling. **Only one session at a time across the whole fleet.**
 
-Flow: `otaStart` (console, with size + MD5) → the master validates the target
-(known to the registry) and sends `MSG_OTA_START` → once acked, `evt:otaReady`
-→ the console pushes the chunks one by one via `otaChunk`, each relayed as
-`MSG_OTA_CHUNK` → `evt:otaChunkAck` after each ack (triggers sending the
-next one from the console) → last chunk acked → `MSG_OTA_END` → `evt:otaDone`
-(the master is done, the slave reboots) → the master then monitors the
-target's heartbeats until `OTA_REBOOT_WAIT_MS` (~90s) and pushes
-`evt:otaResult`. Since the console can't reliably know the
-version baked into an arbitrary `.bin`, success is determined by comparing
-the content-derived Build ID reported **after** reboot to the one from **before**
-the OTA (captured at `otaStart` time). Semantic version remains a fallback for a
-legacy slave without a Build ID — `ok:true` if either identity changed,
-`reason:"unchanged"` if both are identical, `reason:"unreachable"` if no
-heartbeat arrives within the delay. Grace window (`OTA_REBOOT_GRACE_MS`,
-5s): a sign of life at an unchanged version in the first few seconds is
-ignored — the slave only reboots ~250 ms after its END ack, one last
-heartbeat from the old image can still arrive (false "rolledBack" rendered
-940 ms after `otaDone`, observed at the bench); a real rollback takes ≥ 10-30s.
+Flow: `otaStart` (size + MD5) → master validates the target against the registry
+→ `MSG_OTA_START` → `evt:otaReady` → one `otaChunk` pushed per received
+`evt:otaChunkAck` → last chunk acked → `MSG_OTA_END` → `evt:otaDone` (master
+done, slave reboots) → master watches the target's heartbeats until
+`OTA_REBOOT_WAIT_MS` (~90 s) → `evt:otaResult`.
 
-Anti-brick safety net (`ota_guard.{h,cpp}`): before finalizing (`Update.end(true)`,
-which already checks size/MD5 and refuses to reboot into an invalid image),
-the slave arms an NVS flag then reboots. On the next boot, if this flag is
-present, an attempt counter increments; past
-`OTA_MAX_BOOT_ATTEMPTS` (3), the firmware itself switches
-(`esp_ota_set_boot_partition`) to the other partition (`esp_ota_get_next_update_partition`
-necessarily alternates app0/app1) and reboots — a manual rollback via the standard
-`esp_ota_ops` API, without relying on ESP-IDF's bootloader rollback
-(not simply exposed under `framework=arduino`). If the firmware runs for
-`OTA_VERIFY_UPTIME_MS` (~20s) without a reset, the flag is cleared: the image is
-confirmed good.
+Rules that must not be relaxed:
 
-**Residual risk accepted**: a crash occurring *before* `OtaGuard::earlyCheck()`
-(1st line of `setup()`) would never be counted or caught. Reduced in
-practice by the MD5/format check already done before any reboot, which
-filters out most corrupted-transfer cases — the only remaining case is "the image
-is valid but crashes almost instantly". An `esp_task_wdt` (10s) is
-also armed to catch a new firmware that loops/hangs without yielding.
+- **The success verdict is identity-based, not version-based.** The console
+  cannot know the version baked into an arbitrary `.bin`, so success means the
+  content-derived Build ID changed between `otaStart` and the post-reboot
+  heartbeat. Semantic version is only the fallback for a legacy slave without a
+  Build ID; otherwise `reason:"unchanged"` or `reason:"unreachable"`.
+- **`OTA_REBOOT_GRACE_MS` (5 s) exists because of a real observed failure**: the
+  slave reboots ~250 ms after its END ack, so one last heartbeat from the *old*
+  image can still arrive and used to render a false "rolledBack" 940 ms after
+  `otaDone`. A genuine rollback takes ≥ 10-30 s.
+- **Anti-brick** (`ota_guard.{h,cpp}`): an NVS flag is armed before
+  `Update.end(true)` (which already checks size/MD5 and refuses to reboot into an
+  invalid image). Past `OTA_MAX_BOOT_ATTEMPTS` (3) failed boots the firmware
+  itself switches partition via `esp_ota_set_boot_partition` — a manual rollback
+  through `esp_ota_ops`, because ESP-IDF's bootloader rollback isn't simply
+  exposed under `framework=arduino`. Running `OTA_VERIFY_UPTIME_MS` (~20 s)
+  without a reset clears the flag; an `esp_task_wdt` (10 s) catches a new image
+  that hangs without yielding.
+- **Residual risk accepted**: a crash occurring *before* `OtaGuard::earlyCheck()`
+  (first line of `setup()`) is never counted or caught. Mitigated in practice by
+  the MD5/format check performed before any reboot — the remaining case is "valid
+  image that crashes almost instantly".
+- **Realistic duration**: ~5,240 fragments for a ~1 MB image → **8 to 15 minutes**
+  per slave, up to 20-30 min over a weak or multi-hop link. Shown as fragments
+  sent out of total, never as a promised fixed duration.
 
-**Realistic duration**: ~5,240 fragments for a ~1 MB image → **8 to 15 minutes**
-per slave under normal conditions, up to 20-30 min over a weak or
-multi-hop link. Displayed in the console as a progress indicator (fragments sent
-out of total), not a promised fixed duration.
+Full design notes and bench observations:
+[PROGRESS-ARCHIVE.md](PROGRESS-ARCHIVE.md).
 
 ## Old reference web page (`console/wwwroot/index.html`)
 
-Inline HTML+CSS+JS page kept **intact** (unmodified since the WPF
-rewrite) — serves only as a behavioral/visual spec (exact French text,
-palette, card-by-card behavior) for the native implementation below.
-No longer **rendered** by the application (the old WebView2 shell, which
-loaded it via `window.chrome.webview.postMessage`, has been removed).
+Frozen French HTML+CSS+JS page, **kept intact and no longer rendered** (the
+WebView2 shell is gone). It survives only as the original design/behavior spec
+the WPF rewrite was checked against — and is the sole deliberate exception to
+the English-everywhere rule. Its WebView2 transport vocabulary
+(`listPorts`/`open`/`write`/`flash`/`libList`/…) does **not** apply to the WPF
+side, which calls `Services/SerialLinkService.cs` + `Services/ProtocolClient.cs`
+directly; only the firmware `cmd`/`evt` protocol is shared. Card-by-card
+description in [PROGRESS-ARCHIVE.md](PROGRESS-ARCHIVE.md).
 
-Cards it documents: Droids (names, servos, auto anims, backup/
-restore) · Servo calibration (live preview + auto-save) · Animation ·
-Audio · Firmware (espflash flashing) · Mesh topology (SVG graph of direct
-links, bidirectional merge at the weakest RSSI) · Sequencer (catalog of
-8 slots + unlimited local library + editor + multi-track timeline + audio
-track + console-side Rehearse mode + undo/redo + export/import `.b1seq.json`) ·
-Activity (card removed on the WPF side, see Progress).
-
-The firmware protocol (`cmd`/`evt`, above) is carried there through `write`
-(outgoing) and `line` (incoming, parsed → `handleEvent()`); the WebView2
-transport vocabulary (`listPorts`/`open`/`write`/`flash`/`libList`/...) no longer
-applies on the WPF side, replaced by a direct call to `Services/SerialLinkService.cs` +
-`Services/ProtocolClient.cs` (no postMessage bridge).
-
-### Console architecture (`console/`) — native WPF (XAML/MVVM)
+## Console architecture (`console/`) — native WPF (XAML/MVVM)
 
 Complete rewrite (2026-07-13): the old WebView2 shell is replaced by a
 **100% XAML** UI, card by card, driven by `CommunityToolkit.Mvvm`
@@ -449,22 +358,28 @@ loaded by the application.
 | `FirmwareWindow.xaml(.cs)` | separate window hosting `Views/FirmwareCardView` (espflash flashing + GitHub update), opened from the header button |
 | `HelpWindow.xaml(.cs)` | separate window: table-of-contents sidebar + one continuous `FlowDocumentScrollViewer` assembled from `Help/docs/*.md` (native, via `Markdig.Wpf` — deliberately not WebView2); menu clicks jump to sections and scrolling synchronizes the active menu page |
 | `CalibrationWindow.xaml(.cs)` | separate window hosting `Views/CalibrationCardView`, opened from each Droids-card row's ⛭ "Configure" button — pre-targeted at that row's droid before the window shows, same singleton-reopen pattern as `FirmwareWindow`/`HelpWindow` |
+| `SceneBrowserWindow` / `SceneDecisionWindow` / `SceneNameWindow` `.xaml(.cs)` | modal Scene dialogs (2026-08-12): searchable library browser, save/discard/cancel replacement decision, and themed Scene-name prompt. All three are app-owned and themed; only Import/Export uses a native file picker |
 | `App.xaml(.cs)` | composition root: converters + merged resource dictionaries |
 | `Themes/Theme.xaml` | palette (brushes), button/LED/mesh-node gradients — ported from index.html's CSS custom properties |
 | `Themes/Effects.xaml` | shared styles: `CardBorderStyle`, `BeveledButtonStyle`, `HaloBadge*Style`, `MetalSliderStyle`, `DarkComboBoxStyle`, `CardIconBoxStyle`, `MeshNodeEllipseStyle`, dark `ScrollBar` (implicit, app-wide), etc. |
-| `Models/` | `Droid`, `MeshNodeVisual`/`MeshEdgeVisual`, sequences, calibration, `HelpManifest`/`HelpSection`/`HelpPage` — view-bound objects |
-| `ViewModels/` | `MainViewModel` + one per card (`DroidsViewModel`, `CalibrationViewModel`, `AnimationViewModel`, `AudioViewModel`, `FirmwareViewModel`, `MeshTopologyViewModel`, `SequencerViewModel`) + `HelpViewModel` (standalone, no `ProtocolClient` dependency — Help content is local-only) |
+| `Models/` | `Droid`, `MeshNodeVisual`/`MeshEdgeVisual`, sequences, calibration, `HelpManifest`/`HelpSection`/`HelpPage` — view-bound objects — plus the Sequencer's explicit boundaries: `SequenceSnapshot` (persistent document only), `SequencerPlaybackPlan` (immutable runtime pass), `AnimationDurationMetadata`, `SequenceLibraryModels` |
+| `ViewModels/` | `MainViewModel` + one per card (`DroidsViewModel`, `CalibrationViewModel`, `AnimationViewModel`, `FirmwareViewModel`, `MeshTopologyViewModel`, `SequencerViewModel`) + `HelpViewModel` (standalone, no `ProtocolClient` dependency — Help content is local-only). There is no `AudioViewModel`: the Audio card left with the DFPlayer (fw 1.6.0) and Sequencer audio is edited in the timeline |
 | `Views/` | one XAML `UserControl` per card (no more Activity card) |
 | `Services/SerialLinkService.cs` | native serial port (`System.IO.Ports`), auto-reconnect (3s) |
 | `Services/ProtocolClient.cs` | central state: parses incoming JSON `evt`, builds outgoing `cmd` (C# equivalent of JS's `sendCmd()`/`handleEvent()`) |
 | `Services/UpdateService.cs` / `FlashService.cs` / `LibraryService.cs` / `SettingsService.cs` | GitHub updates, espflash flashing, local sequence library, `settings.json` |
 | `Services/OtaService.cs` | drives an OTA session (one slave at a time): reads the `.bin`, computes the MD5, sends one fragment per `evt:otaChunkAck` received |
 | `Services/AudioPlaybackService.cs` | console-side Sequencer audio (the master's DFPlayer was retired fw 1.6.0 — this is the only audio source now): tracks several concurrent `MediaPlayer`s (one per active clip, optionally looping), `PauseAll`/`ResumeAll` for real Play pause/resume, plus a one-off probe for a picked file's duration |
-| `Services/SequenceAudioStore.cs` | client-only slot→audio-lanes (each a label + clip list) association for the 8 NVS slots (`slot-audio.json`) — the master's NVS has no room for a filesystem path |
-| `Services/DarkTitleBar.cs` | recolors the native Win32 title bar dark (`DwmSetWindowAttribute`, Windows 11 22H2+) to match the app's own header — applied to all 4 windows |
+| `Services/SequencerAbstractions.cs` | the test seams (SEQ-E01): injectable monotonic clock, timer, protocol sender, audio player and dialog boundaries — what lets `console.tests` run playback headlessly |
+| `Services/SequencerEditHistory.cs` | begin/commit/cancel edit transactions + bounded newest-first Undo/Redo (50 each), with no WPF or playback dependency |
+| `Services/SequenceImportService.cs` / `SequencerPersistenceServices.cs` | side-effect-free strict parser/migrator for `b1-sequence` v1–v5, and atomic sibling-temp + rename Export/save writing |
+| `Services/AnimationDurationProvider.cs` | single source for each gesture's kind (immediate/finite/infinite), effective tail, target-speed-aware range, provisional state and inspector text — consumed by geometry, active highlighting, cached total and the playback plan |
+| `Services/PlaybackGeneration.cs` / `WaveformService.cs` | per-pass generation/cancellation identity; audio waveform peak decoding for the timeline |
+| `Services/DarkTitleBar.cs` | recolors the native Win32 title bar dark (`DwmSetWindowAttribute`, Windows 11 22H2+) to match the app's own header — applied to all 7 app-owned windows |
 | `Converters/` | `BoolToStyleConverter`, `BoolToTextConverter`, `BoolToVisibilityConverter`, `BoolToBrushConverter`, `StrengthToBrushConverter` (mesh link color by RSSI), `TimelineGeometryConverter`/`TimelineActiveConverter`/`AnimFamilyToBrushConverter` (Sequencer timeline), `MarkdownToFlowDocumentConverter` (Help window) |
 | `Help/manifest.json` + `Help/docs/**/*.md` | in-app Help content: sections → pages (same shape as KyberEditor's own Help viewer), rendered by `HelpWindow`/`HelpViewModel` — copied to the output dir as Content, not embedded |
 | `b1-chat-console.csproj` | auto-incremented build number, version from `VersionPrefix`, `IncludeNativeLibrariesForSelfExtract`, `tools/` (espflash + app-local VC143 x64 runtime) excluded from the single-file but copied on publish |
+| `console.tests/` (repo root, `b1-chat-console.Tests.csproj`) | headless xUnit suite for the Sequencer (SEQ-H01): playback plan/integration, transport state boundaries, edit history, import/persistence, Scene library, duration provider, plus `Fixtures/Sequences/sequence-v1..v4.json` golden files. Runs without WPF UI or hardware and must not bump `console/build.number` |
 | `installer/b1-chat-console.nsi` + `release.ps1` | NSIS installer + GitHub release script (tag `vX.Y.Z`) |
 
 Main grid layout (`MainWindow.xaml`, reorganized 2026-07-19): Droids (left
@@ -496,214 +411,111 @@ Full detailed history: see [PROGRESS-ARCHIVE.md](PROGRESS-ARCHIVE.md).
 - [ ] Help window, phase 2 remainder (not started): a per-card "?" button
       opening Help directly on that card's page (`HelpViewModel.OpenAtPage`,
       mapping in the plan file `regarde-dans-ce-répertoire-swift-dawn.md`).
+- [ ] Sequencer hardening backlog — **the tracked source of truth is
+      [docs/SEQUENCER-HARDENING.md](docs/SEQUENCER-HARDENING.md)** (epics A–K,
+      status markers, decision log DEC-001…023, dated evidence log). Keep that
+      file current instead of duplicating item status here. Still open as of
+      2026-08-12: EPIC F audio robustness (1/8 — probe timeout/typed errors,
+      zero-duration clips, `MediaPlayer` lifecycle, stale waveform, audio-loop
+      endpoint), EPIC G preflight (0/14 required, incl. P0 SEQ-G04 unterminated
+      infinite gestures and SEQ-G05 implicit-broadcast insertion), SEQ-E05
+      explicit end/Loop semantics, SEQ-A08 arming lifecycle, and validation
+      items SEQ-H02/H04/H05/H06/H08.
+- [ ] Hardware gates still open: SEQ-F01 measured gesture durations, SEQ-J01
+      full-erase inert boot, SEQ-J02 visible PAN/TILT Reverse, and SEQ-H07
+      (operator-confirmed motion, inter-droid skew, WPF Pause/Resume with
+      simultaneous PC audio, disconnect/offline/weak-link). Rendered-UI checks
+      for SEQ-G14…G18 in the Release console are also pending.
+- [ ] Servo hub PCB: concept and reduced V1 test-board scope are specified in
+      [docs/hardware/PCB-V1-TEST.md](docs/hardware/PCB-V1-TEST.md) (deferred
+      ideas in [PCB-CONCEPT.md](docs/hardware/PCB-CONCEPT.md)); no schematic or
+      routed board yet.
 
-**Recent milestones** (2026-08-11):
-- Console-originated gestures now carry non-blocking execution correlation
-  without changing `MSG_ANIM`: the existing mesh sequence is echoed through
-  `MSG_ANIM_EXEC`, mapped back to a serial `requestId`, and rendered on each
-  timeline clip. Firmware reports started/completed/interrupted/rejected;
-  broadcast replies are jittered and legacy slaves still execute normally.
-  A no-hardware-slave bench passed targeted, broadcast and TALK→IDLE lifecycle
-  checks 5/5, followed by 24/24 strict serial checks.
-- Sequencer execution correlation now expires missing start and finite-gesture
-  completion reports without blocking transport. Timeline clips distinguish
-  `UNCONF`/`MISS` from `TIMEOUT`, accept late recovery, and ignore delayed START
-  regressions after a terminal report; the headless suite passes 55/55.
-- Animation delivery now exposes the stages the current transport can prove:
-  local serial write (`WRITE`), parsed/validated master acceptance (`MASTER`),
-  and per-target execution. Disconnected, pre-handshake and failed writes are
-  rejected immediately instead of receiving a misleading sent state.
-- Sequencer Stop/end now tracks and terminates only its own active TALK and
-  POWER_DOWN targets with per-droid IDLE. Broadcast plus targeted overrides,
-  repeat/restart, failed cleanup retry, natural end and Loop boundaries are
-  covered by the headless transport suite.
-- Firmware identity now has two layers: human `FW_VERSION` and an automatic,
-  deterministic 8-hex Build ID derived from normalized firmware source,
-  PlatformIO configuration and role. It is generated before every build,
-  included in release manifests, heartbeats, `hello`/`droids`/`otaResult`, and
-  displayed by the WPF console. The master accepts both current and legacy
-  heartbeat sizes during rolling upgrades. A three-node bench upgrade confirmed
-  same-version OTA success via Build ID (`4DAD66EF` master, `72349AFE` slaves),
-  followed by 22/22 strict serial checks.
-- In-app Help was rewritten as a task-oriented 16-page US-English guide and
-  cross-checked against the current WPF/firmware behavior. It now includes
-  first-install/first-fleet setup, mechanical and flash/OTA safety, exact
-  persistence/backup boundaries, console updating, data locations, a glossary,
-  expanded troubleshooting, and honest Sequencer limitations (console-driven
-  fire-and-forget playback, non-autosaved edits, and the Local Library/external
-  export boundaries). Fourteen focused screenshots captured from the real WPF app
-  now illustrate all 16 pages, including a connected three-droid fleet,
-  calibration, mesh radar, animation controls, audio and gesture tracks,
-  complete gesture library, backups, Firmware, and update status. Crops retain
-  full controls and card boundaries; Help image styling allows readable
-  640px-wide screenshots. Manifest, Markdown targets, and local image links
-  validate with 16/16 pages present. The Help reader now assembles those pages
-  into one continuous document: scrolling crosses page boundaries naturally,
-  menu clicks jump to anchored sections, and the active menu item follows the
-  current reading position.
-- Autonomous preflight: `tools/self-test.ps1` now builds both firmware roles
-  and the WPF console without changing `console/build.number`, checks the
-  critical hardening invariants, and auto-detects an available master for
-  non-destructive serial reads plus invalid-command rejection tests. It never
-  flashes, starts OTA, moves servos, or applies valid settings. JSON reports
-  are written to the user's temporary directory; full usage and exclusions
-  are in `TEST-PROTOCOL.md`.
-- Pre-test hardening: animation tuning is now genuinely keyed and persisted
-  per droid (with migration from the old global NVS keys); `getConfig` and its
-  response carry a target, and v2 backups preserve per-ID values. Animation
-  and calibration debounces snapshot their target/values and cancel on target
-  changes; loading calibration no longer emits preview/save traffic.
-- Strict input boundaries: serial commands and `setMulti` validate targets,
-  types, ranges, name length, calibration ordering, OTA size/MD5, and payload
-  shape before applying anything. Authenticated mesh commands receive the
-  equivalent validation, including finite 0..100 config floats and OTA chunk
-  bounds. OTA START failures now acknowledge the requested session correctly.
-- Mesh sequences start at a random 16-bit value after boot, avoiding false
-  duplicate rejection when a droid reboots while its previous low sequence
-  numbers remain cached by neighbors.
-- GitHub firmware/support-image downloads now fail closed if their manifest
-  SHA-256 is absent or malformed; the UI can no longer label an unverified
-  release as verified. Master, slave, and WPF console builds pass.
-- ESP-NOW callback isolation: ordinary mesh messages are now copied into a
-  bounded 32-frame inbox and drained from `loop()` (maximum 16 per pass).
-  NVS, logging, registry/topology, servo, and animation work therefore no
-  longer runs on the internal Wi-Fi task. Queue overflows are counted and
-  reported from `loop()`. `MeshComm` now also protects its sequence,
-  deduplication, and direct-neighbor caches across tasks. OTA retains its
-  already-safe low-latency callback mailbox/lock path. Master and slave builds
-  pass; the inbox raises static RAM use to 17.8%.
-- Firmware animation safety: randomized movement durations now remain signed
-  until they are clamped to at least 1 ms. A negative duration jitter on the
-  shortest keyframes used to wrap through `uint16_t` and occasionally turn a
-  ~50 ms movement into a ~65-second apparent freeze. Compile-time assertions
-  cover the negative and normal-duration cases.
-- Calibrated animation centers: keyframe offsets now go through
-  `ServoEngine::setTargetOffset()`, which resolves them against each droid's
-  persisted pan/tilt centers. Gestures no longer drift back toward the
-  compile-time 90-degree defaults after calibration. Both `b1_master` and
-  `b1_slave` builds pass with these changes.
+**Recent milestones** (2026-08-12):
+- Sequencer transport is now conventional and non-destructive: one
+  Play/Pause/Resume toggle (`Space`), an explicit `Restart` (`Ctrl+Enter`), and
+  Stop/Safe/E-STOP that retain the playhead with a separate `Return to start`
+  (`Ctrl+Home`). A second Play press can no longer resend choreography from
+  zero. Added an operator-controlled `Follow` mode (15–72 % comfort corridor)
+  and pointer-anchored `Ctrl+wheel` zoom (1.15/notch, 20–300 px/s) plus
+  `Shift+wheel` pan.
+- The Scene is edited like a document: the raw Local Library list under the
+  timeline was replaced by a New/Open/Save bar, a secondary menu and a
+  searchable modal Scene browser, with explicit save/discard/cancel replacement
+  and an explicit stop decision when a pass is running. All app-owned windows
+  now share the dark native title bar; status pills lost their color-bleeding
+  glow.
+- Gesture durations are explicit and target-aware: firmware reports structured
+  immediate/finite/infinite metadata, one console provider reproduces the
+  10–100 % speed clamp and ±60 ms jitter, and broadcast clips aggregate every
+  online target with a visible mixed-speed warning. Schema v5 persists a real
+  POWER_DOWN/TALK endpoint (`endAfterMs`) with ownership-safe IDLE termination.
+- Playback cost is bounded: unchanged 1.5 s droid telemetry no longer rebuilds
+  tracks/ruler/duration (the visible UI hitch is gone), and ruler generation
+  spans milliseconds→hours under a strict 600-tick ceiling shared by all three
+  ruler consumers.
+- Validation state at build 357: `tools\self-test.ps1 -SkipSerial` passes 19/19
+  (both firmware roles + console build clean, headless Sequencer suite green,
+  build number preserved).
 
-**Previous milestones** (2026-07-19 — full detail in the archive):
-- Droids card: ⛭ "Configure" button opens Servo Calibration in its own
-  window, pre-targeted per droid; Calibration removed from the main grid,
-  Mesh Topology promoted to its spot (Droids | Mesh Topology · Animation ·
-  Sequencer, 3 rows instead of 4). Bug fixed along the way: `Droid` had no
-  `ToString()`, so the Calibration window's own droid picker showed the
-  CLR type name once opened standalone.
-- Console startup: auto-connects to the last known port (retries every 3s
-  until found) and silently reloads the last exported/imported sequence.
-- Bug fix: an unplugged master now clears the Droids/Mesh Topology state
-  immediately, like a manual Disconnect — it used to freeze on stale data
-  while auto-reconnecting in the background.
-- Bug fix: main-window mouse-wheel scroll made authoritative everywhere
-  (tunneling `PreviewMouseWheel` on the outer `ScrollViewer`) — was
-  occasionally sticking/going jerky over the densely packed Animation card.
-- Native window chrome recolored dark (DWM title bar + an implicit
-  `ScrollBar` style), replacing the default light Windows chrome across
-  all 4 windows.
+Earlier milestone blocks (2026-08-11 and 2026-07-19) were moved verbatim to
+[PROGRESS-ARCHIVE.md](PROGRESS-ARCHIVE.md) on 2026-08-12. Add new milestones
+at the top of this section and push the previous block down into the archive
+when it stops being the current one.
 
-## Full flash (virgin board support)
+## Full flash vs app-only (virgin boards, NVS safety)
 
 A PlatformIO build emits three images: `bootloader.bin` (0x1000),
 `partitions.bin` (0x8000), `firmware.bin` (0x10000, the app). The console's
-Firmware card and the espflash one-liner historically wrote **only the app**
-at 0x10000 — which boots only if the board already carries our bootloader +
-partition table. A **virgin ESP32** (or one erased / with a different
-partition scheme) flashed app-only appears to flash fine but never runs.
+Firmware card and the espflash one-liner write **only the app** by default,
+which boots only if the board already carries our bootloader + partition table.
 
-First fix (2026-07-15) auto-armed a full flash whenever the two support
-images happened to be available (next to the picked `firmware.bin`, or
-downloaded from GitHub), on the theory that "rewriting an identical
-bootloader/partition table on a board that already has them is harmless".
-**That assumption was wrong and cost a droid's saved names**: `.pio/build/b1/`
-*always* contains `bootloader.bin` + `partitions.bin` next to `firmware.bin`,
-so every routine dev reflash silently became a full flash — including a
-partition-table rewrite. On this occasion the freshly-written partition table
-wasn't byte-identical to the one already on the board (drift from an earlier
-PlatformIO/esp-idf default, from before this feature existed), which shifted
-the *physical window* the NVS driver reads as "current" — the master's
-`config_store` (which holds **every** droid's name, all in the master's own
-NVS, see the Storage table) fell back to years-old pages, resurrecting a
-name ("B1-Bleu") from long before it was renamed "B1-Maitre", and losing the
-other droids' names outright. NVS wasn't erased — the partition table's
-window onto it moved.
+Operational rules — every one of them was paid for at the bench on 2026-07-15;
+the full narratives (what broke, why, and how it was diagnosed) are in
+[PROGRESS-ARCHIVE.md](PROGRESS-ARCHIVE.md), section *Incidents*:
 
-Corrected design (2026-07-15, same day): full flash is now **tied to the
-existing "Fully erase the chip" checkbox** (relabeled "New / erased board
-(full erase + flash)" in `FirmwareCardView.xaml`), instead of auto-arming
-from file presence:
-
-- Unchecked (default): **app-only** at `Address` (0x10000) — the partition
-  table is never touched, so this failure mode can't recur. This is also the
-  correct fix for a *second*, pre-existing latent bug: checking "erase chip"
-  used to combine a full chip erase (which wipes the bootloader/partition
-  table too) with an **app-only** write — leaving a board with nothing to
-  boot into. Tying erase to a full 3-image write fixes both bugs with one
-  change.
-- Checked: full flash (bootloader + partitions + app) — but only if the two
-  support images are actually available (`FirmwareViewModel.
-  SupportImagesAvailable`); otherwise `Flash()` blocks with an explanatory
-  error instead of proceeding (`NeedsSupportImagesWarning` also shows an
-  inline warning in the card). This is the only path that ever rewrites the
-  partition table, and it's also the only path that already discards NVS
-  (via the chip erase) — so there's no longer a scenario where the
-  partition table changes while NVS is expected to survive.
-
-Support-image sourcing is unchanged: **Local file…** looks beside the picked
-`.bin` (`DetectSupportImagesBeside`, e.g. `.pio/build/b1/`); **From GitHub**
-downloads the release's shared `bootloader.bin` + `partitions.bin`
-(role-independent — `IS_MASTER` only affects the app, so ~26 KB once, not per
-role; chosen over a single merged 0x0 image because OTA independently needs
-the bare app bin, so separate files reuse it instead of shipping the app
-twice). Wired in `firmware-release.yml` + `tools/release.ps1` (manifest roles
-`bootloader`/`partitions`), `UpdateService`, `FlashService`
-(`Start(IReadOnlyList<FlashImage>)`, sequential byte-weighted progress).
-Older releases without the two files → app-only stays the only option.
-`boot_app0`/otadata (0xe000) is deliberately NOT shipped (a virgin chip's
-otadata is blank → boots app0); a board previously OTA'd to app1 then
-re-USB-flashed is the one residual edge case, handled by the same "erase"
-checkbox.
-
-**Confirmed at the bench (2026-07-15)**: a slave OTA'd earlier in the same
-session (otadata now pointing at app1) was then USB-flashed app-only
-(erase unchecked) with a newer build — the write succeeded with no error,
-but the console kept reporting the OLD version after reboot. Root cause:
-app-only writes a fixed address (0x10000 = app0) without touching otadata,
-so the bootloader kept booting app1, silently running the old image the
-whole time. Checking "New / erased board (full erase + flash)" for that
-board's next USB flash (which resets otadata to blank → boots app0) fixed
-it. Lesson: **a USB flash's app-only mode is only a safe "update" path for
-a board never touched by OTA** — any board that has ever done even one OTA
-session needs the full-erase path for its next USB flash, not just a
-virgin/never-flashed board.
+- **App-only is the default** ("New / erased board" unchecked): writes `Address`
+  (0x10000) only and never touches the partition table. This is the only safe
+  "update" mode for a board whose NVS must survive.
+- **Full flash is tied to the "New / erased board (full erase + flash)"
+  checkbox**, never auto-armed from file presence. It requires both support
+  images (`FirmwareViewModel.SupportImagesAvailable`), otherwise `Flash()`
+  blocks with an explanatory error plus an inline
+  `NeedsSupportImagesWarning`. It is the only path that rewrites the partition
+  table, and it already discards NVS through the chip erase — so the table can
+  never change while NVS is expected to survive.
+- **Any board that has completed even one OTA session needs the full-erase path
+  for its next USB flash.** App-only writes a fixed 0x10000 (app0) without
+  touching otadata, so the bootloader keeps booting app1: the flash "succeeds"
+  and the old image silently keeps running.
+- Support images come from beside the picked `.bin`
+  (`DetectSupportImagesBeside`, e.g. `.pio/build/b1/`) or from the release's
+  shared role-independent `bootloader.bin` + `partitions.bin`
+  (`firmware-release.yml`, `tools/release.ps1`, `UpdateService`,
+  `FlashService.Start(IReadOnlyList<FlashImage>)`). `boot_app0`/otadata
+  (0xe000) is deliberately never shipped. Older releases without the two files
+  stay app-only.
 
 ## Per-droid name resilience (`MSG_NAME`)
 
-Prompted directly by the incident above: droid **names** were the one piece
-of per-droid configuration that lived ONLY in the master's own NVS
-(`config_store`, keyed by srcId) — never relayed to the droid itself, unlike
-servo calibration (`MSG_CALIB`), which a droid already persists in its own
-NVS on receipt. A slave therefore had no memory of its own name; only the
-master's cache did, and that cache is exactly what a partition-table mismatch
-or an intentional full erase can wipe.
+Droid **names** used to live only in the master's own NVS (`config_store`,
+keyed by srcId), unlike servo calibration which each droid already persisted
+locally on receipt of `MSG_CALIB`. One partition-table shift therefore lost or
+resurrected every droid's name at once.
 
-Fix (2026-07-15): renaming a droid (`cmd:"name"` and the `setMulti`/restore
-path in `applyOp`) now ALSO relays `MSG_NAME` (targetId + name[24]) over the
-mesh; the targeted droid persists it immediately in its own NVS via the new
-`ConfigStore::setNameImmediate()` — bypassing the master's own commit
-draft entirely (that draft is a master-side UI concern for its own display
-cache, unrelated to what a remote droid should keep). The master's own
-name-editing UX (the header's "unsaved" auto-commit badge) is unchanged;
-only the mesh-received copy on the OTHER droid is immediate, mirroring how
-`applyCalib` already behaves. Additive mesh message — an older slave simply
-ignores `MSG_NAME`, no fleet-wide reflash required (unlike a `HeartbeatPayload`
-change).
+Fix (2026-07-15): renaming (`cmd:"name"` and the `setMulti`/restore path in
+`applyOp`) also relays `MSG_NAME` (targetId + name[24]); the targeted droid
+persists it immediately via `ConfigStore::setNameImmediate()`, bypassing the
+master's commit draft — that draft is a master-side display concern, unrelated
+to what a remote droid should keep. Mirrors how `applyCalib` already behaves.
+Additive message: an older slave simply ignores it, so no fleet-wide reflash is
+required (unlike a `HeartbeatPayload` change).
 
 ## Known pitfalls
 
 - **Never rewrite the partition table on a board whose NVS must survive**,
-  even with bytes that look identical to what's already there — see "Full
-  flash" above. A generation/offset mismatch between the new table and the
+  even with bytes that look identical to what's already there — see
+  "Full flash vs app-only" above. A generation/offset mismatch between the new table and the
   old one shifts the physical window the NVS driver treats as current,
   silently resurrecting stale data or losing recent data, with no error.
   Only ever pair a partition-table write with a full chip erase (which
@@ -725,7 +537,9 @@ change).
   of keeping the key and changing what the number means — an old console
   or firmware on either side of the pairing just ignores the unrecognized
   field (falls back to 0) instead of misreading it.
-- `serial_console`: 256-byte line buffer (see the bug above).
+- `serial_console`: the historical 256-byte line buffer bug (fixed by the 4 KB
+  buffer + explicit `err`, see [PROGRESS-ARCHIVE.md](PROGRESS-ARCHIVE.md)) —
+  any new line-oriented parsing must respect the announced `lineMax`.
 - `IS_MASTER` lives in `config.h`: check its value before every flash (it
   goes into commits with whatever value was last used).
 - `handleRaw()`: neighbor recording must stay **before** the
@@ -737,7 +551,8 @@ change).
   dual decoder during rolling upgrades; any future payload-size change needs an
   equally explicit compatibility form instead of silently freezing telemetry.
 - Everything is now in English (GUI, code comments, docs) — see the
-  2026-07-14 milestone above. `console/wwwroot/index.html` is the sole,
+  2026-07-14 milestone in [PROGRESS-ARCHIVE.md](PROGRESS-ARCHIVE.md).
+  `console/wwwroot/index.html` is the sole,
   deliberate exception: it stays French and untouched, as a frozen
   design reference no longer rendered at runtime.
 - **WPF `Storyboard` inside a `DataTemplate` (e.g. `ItemsControl.ItemTemplate`)

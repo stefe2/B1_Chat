@@ -51,10 +51,23 @@ A single repo, two halves:
 - **Mesh Topology**: a radar-style live view of the mesh — direct/relayed
   links, signal strength, real-time traffic.
 - **Sequencer**: a multi-track timeline to choreograph several droids (and
-  console-side audio, multi-lane with waveform preview) together, with
-  Play/Pause/Resume/Loop, targeted cleanup plus a fail-closed firmware lease for
-  Sequencer-started infinite gestures, distinct Stop/Safe Stop/Emergency Stop
-  levels, a local library, and `.b1seq.json` export/import.
+  console-side audio, multi-lane with waveform preview) together. Scenes are
+  edited like documents — New / Open / Save from a Scene bar, with a searchable
+  browser over the local Scene library (stable IDs, atomic writes, recoverable
+  trash); `.b1seq.json` export/import stays an explicit external copy for
+  backup, transfer or version control rather than the everyday save path.
+- **Sequencer transport**: one Play/Pause/Resume toggle (`Space`) with a
+  separate explicit `Restart` (`Ctrl+Enter`) — a second Play press never
+  resends choreography from zero. Stop keeps the playhead where it is and
+  `Return to start` (`Ctrl+Home`) is its own action. Three distinct stop levels
+  (Stop / Safe Stop / Emergency Stop), targeted cleanup plus a fail-closed
+  firmware lease for Sequencer-started infinite gestures, whole-pass Loop, a
+  `Follow` playhead mode, and pointer-anchored `Ctrl+wheel` zoom.
+- **Sequencer editing**: one edit-transaction model (bounded 50-step
+  Undo/Redo, Dirty computed against the last saved Scene, not a manual flag),
+  persistent editing locked during Play/Pause, and validated import with
+  explicit schema v1→v5 migrations that refuse ambiguous timing instead of
+  silently changing choreography.
 - **Execution feedback**: tracked Sequencer gestures report software lifecycle
   per droid (started, completed, interrupted, or rejected) without blocking the
   timeline; broadcast clips aggregate the fleet's replies directly in the UI,
@@ -131,11 +144,18 @@ The safe default test protocol builds both firmware roles and the console, then
 auto-detects an available master for non-destructive JSON protocol checks:
 
 ```powershell
-.\tools\self-test.ps1
+.\tools\self-test.ps1              # full run (builds + tests + serial checks)
+.\tools\self-test.ps1 -SkipSerial  # offline only, no hardware needed
 ```
 
-See [`TEST-PROTOCOL.md`](TEST-PROTOCOL.md) for coverage, options, and the
-operations deliberately excluded from automation.
+It also runs the headless Sequencer test suite, which can be run on its own:
+
+```powershell
+dotnet test console.tests\b1-chat-console.Tests.csproj
+```
+
+Neither changes `console/build.number`. See [`TEST-PROTOCOL.md`](TEST-PROTOCOL.md)
+for coverage, options, and the operations deliberately excluded from automation.
 
 ## Project structure
 
@@ -148,9 +168,13 @@ console/               WPF supervision console
   MainWindow.xaml(.cs)   header + card grid
   FirmwareWindow.xaml    flashing/update window
   HelpWindow.xaml        in-app help
+  Scene*Window.xaml      Scene browser / replacement decision / name prompt
   Models/ ViewModels/ Views/ Services/ Converters/   MVVM app code
   Help/                  in-app help content (Markdown + manifest)
   installer/             NSIS installer + release script
+console.tests/         headless xUnit suite (Sequencer) + JSON golden fixtures
+docs/                  SEQUENCER-HARDENING.md backlog, hardware/ PCB concepts
+tools/                 self-test, bench scripts, espflash, release scripts
 ```
 
 Every PlatformIO firmware build also receives an 8-hex, content-derived Build
@@ -173,4 +197,7 @@ tag prefix:
 ## Project status
 
 In active development. See [`CLAUDE.md`](CLAUDE.md)'s *Progress* section
-for the up-to-date, detailed changelog of every completed step.
+for the up-to-date, detailed changelog of every completed step, and
+[`docs/SEQUENCER-HARDENING.md`](docs/SEQUENCER-HARDENING.md) for the tracked
+Sequencer reliability backlog (per-item status, decision log, and the checks
+that still require a real fleet).

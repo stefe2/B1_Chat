@@ -1028,3 +1028,299 @@ still-open items and a short recent-highlights summary.
       bar text/buttons legible on dark, scrollbar thumb visible-but-unobtrusive, no default
       light-chrome bleeding through anywhere) across the resized main window. `dotnet build`
       clean (0 warnings) throughout.
+
+## Incidents (full narratives)
+
+Moved out of `CLAUDE.md` on 2026-08-12. The actionable rules distilled from
+these incidents stay in `CLAUDE.md` (sections *Full flash vs app-only* and
+*Per-droid name resilience*, plus *Known pitfalls*); what follows is the
+complete account of what happened and why.
+
+### Full flash (virgin board support) — 2026-07-15
+
+A PlatformIO build emits three images: `bootloader.bin` (0x1000),
+`partitions.bin` (0x8000), `firmware.bin` (0x10000, the app). The console's
+Firmware card and the espflash one-liner historically wrote **only the app**
+at 0x10000 — which boots only if the board already carries our bootloader +
+partition table. A **virgin ESP32** (or one erased / with a different
+partition scheme) flashed app-only appears to flash fine but never runs.
+
+First fix (2026-07-15) auto-armed a full flash whenever the two support
+images happened to be available (next to the picked `firmware.bin`, or
+downloaded from GitHub), on the theory that "rewriting an identical
+bootloader/partition table on a board that already has them is harmless".
+**That assumption was wrong and cost a droid's saved names**: `.pio/build/b1/`
+*always* contains `bootloader.bin` + `partitions.bin` next to `firmware.bin`,
+so every routine dev reflash silently became a full flash — including a
+partition-table rewrite. On this occasion the freshly-written partition table
+wasn't byte-identical to the one already on the board (drift from an earlier
+PlatformIO/esp-idf default, from before this feature existed), which shifted
+the *physical window* the NVS driver reads as "current" — the master's
+`config_store` (which holds **every** droid's name, all in the master's own
+NVS, see the Storage table) fell back to years-old pages, resurrecting a
+name ("B1-Bleu") from long before it was renamed "B1-Maitre", and losing the
+other droids' names outright. NVS wasn't erased — the partition table's
+window onto it moved.
+
+Corrected design (2026-07-15, same day): full flash is now **tied to the
+existing "Fully erase the chip" checkbox** (relabeled "New / erased board
+(full erase + flash)" in `FirmwareCardView.xaml`), instead of auto-arming
+from file presence:
+
+- Unchecked (default): **app-only** at `Address` (0x10000) — the partition
+  table is never touched, so this failure mode can't recur. This is also the
+  correct fix for a *second*, pre-existing latent bug: checking "erase chip"
+  used to combine a full chip erase (which wipes the bootloader/partition
+  table too) with an **app-only** write — leaving a board with nothing to
+  boot into. Tying erase to a full 3-image write fixes both bugs with one
+  change.
+- Checked: full flash (bootloader + partitions + app) — but only if the two
+  support images are actually available (`FirmwareViewModel.
+  SupportImagesAvailable`); otherwise `Flash()` blocks with an explanatory
+  error instead of proceeding (`NeedsSupportImagesWarning` also shows an
+  inline warning in the card). This is the only path that ever rewrites the
+  partition table, and it's also the only path that already discards NVS
+  (via the chip erase) — so there's no longer a scenario where the
+  partition table changes while NVS is expected to survive.
+
+Support-image sourcing is unchanged: **Local file…** looks beside the picked
+`.bin` (`DetectSupportImagesBeside`, e.g. `.pio/build/b1/`); **From GitHub**
+downloads the release's shared `bootloader.bin` + `partitions.bin`
+(role-independent — `IS_MASTER` only affects the app, so ~26 KB once, not per
+role; chosen over a single merged 0x0 image because OTA independently needs
+the bare app bin, so separate files reuse it instead of shipping the app
+twice). Wired in `firmware-release.yml` + `tools/release.ps1` (manifest roles
+`bootloader`/`partitions`), `UpdateService`, `FlashService`
+(`Start(IReadOnlyList<FlashImage>)`, sequential byte-weighted progress).
+Older releases without the two files → app-only stays the only option.
+`boot_app0`/otadata (0xe000) is deliberately NOT shipped (a virgin chip's
+otadata is blank → boots app0); a board previously OTA'd to app1 then
+re-USB-flashed is the one residual edge case, handled by the same "erase"
+checkbox.
+
+**Confirmed at the bench (2026-07-15)**: a slave OTA'd earlier in the same
+session (otadata now pointing at app1) was then USB-flashed app-only
+(erase unchecked) with a newer build — the write succeeded with no error,
+but the console kept reporting the OLD version after reboot. Root cause:
+app-only writes a fixed address (0x10000 = app0) without touching otadata,
+so the bootloader kept booting app1, silently running the old image the
+whole time. Checking "New / erased board (full erase + flash)" for that
+board's next USB flash (which resets otadata to blank → boots app0) fixed
+it. Lesson: **a USB flash's app-only mode is only a safe "update" path for
+a board never touched by OTA** — any board that has ever done even one OTA
+session needs the full-erase path for its next USB flash, not just a
+virgin/never-flashed board.
+
+### Per-droid name resilience (`MSG_NAME`) — 2026-07-15
+
+Prompted directly by the incident above: droid **names** were the one piece
+of per-droid configuration that lived ONLY in the master's own NVS
+(`config_store`, keyed by srcId) — never relayed to the droid itself, unlike
+servo calibration (`MSG_CALIB`), which a droid already persists in its own
+NVS on receipt. A slave therefore had no memory of its own name; only the
+master's cache did, and that cache is exactly what a partition-table mismatch
+or an intentional full erase can wipe.
+
+Fix (2026-07-15): renaming a droid (`cmd:"name"` and the `setMulti`/restore
+path in `applyOp`) now ALSO relays `MSG_NAME` (targetId + name[24]) over the
+mesh; the targeted droid persists it immediately in its own NVS via the new
+`ConfigStore::setNameImmediate()` — bypassing the master's own commit
+draft entirely (that draft is a master-side UI concern for its own display
+cache, unrelated to what a remote droid should keep). The master's own
+name-editing UX (the header's "unsaved" auto-commit badge) is unchanged;
+only the mesh-received copy on the OTHER droid is immediate, mirroring how
+`applyCalib` already behaves. Additive mesh message — an older slave simply
+ignores `MSG_NAME`, no fleet-wide reflash required (unlike a `HeartbeatPayload`
+change).
+
+## Milestone blocks moved from CLAUDE.md (2026-08-12)
+
+`CLAUDE.md` now keeps only its still-open items plus the most recent
+milestone block; earlier blocks are preserved verbatim below.
+
+**Previous milestones** (2026-08-11):
+- Console-originated gestures now carry non-blocking execution correlation
+  without changing `MSG_ANIM`: the existing mesh sequence is echoed through
+  `MSG_ANIM_EXEC`, mapped back to a serial `requestId`, and rendered on each
+  timeline clip. Firmware reports started/completed/interrupted/rejected;
+  broadcast replies are jittered and legacy slaves still execute normally.
+  A no-hardware-slave bench passed targeted, broadcast and TALK→IDLE lifecycle
+  checks 5/5, followed by 24/24 strict serial checks.
+- Sequencer execution correlation now expires missing start and finite-gesture
+  completion reports without blocking transport. Timeline clips distinguish
+  `UNCONF`/`MISS` from `TIMEOUT`, accept late recovery, and ignore delayed START
+  regressions after a terminal report; the headless suite passes 55/55.
+- Animation delivery now exposes the stages the current transport can prove:
+  local serial write (`WRITE`), parsed/validated master acceptance (`MASTER`),
+  and per-target execution. Disconnected, pre-handshake and failed writes are
+  rejected immediately instead of receiving a misleading sent state.
+- Sequencer Stop/end now tracks and terminates only its own active TALK and
+  POWER_DOWN targets with per-droid IDLE. Broadcast plus targeted overrides,
+  repeat/restart, failed cleanup retry, natural end and Loop boundaries are
+  covered by the headless transport suite.
+- Firmware identity now has two layers: human `FW_VERSION` and an automatic,
+  deterministic 8-hex Build ID derived from normalized firmware source,
+  PlatformIO configuration and role. It is generated before every build,
+  included in release manifests, heartbeats, `hello`/`droids`/`otaResult`, and
+  displayed by the WPF console. The master accepts both current and legacy
+  heartbeat sizes during rolling upgrades. A three-node bench upgrade confirmed
+  same-version OTA success via Build ID (`4DAD66EF` master, `72349AFE` slaves),
+  followed by 22/22 strict serial checks.
+- In-app Help was rewritten as a task-oriented 16-page US-English guide and
+  cross-checked against the current WPF/firmware behavior. It now includes
+  first-install/first-fleet setup, mechanical and flash/OTA safety, exact
+  persistence/backup boundaries, console updating, data locations, a glossary,
+  expanded troubleshooting, and honest Sequencer limitations (console-driven
+  fire-and-forget playback, non-autosaved edits, and the Local Library/external
+  export boundaries). Fourteen focused screenshots captured from the real WPF app
+  now illustrate all 16 pages, including a connected three-droid fleet,
+  calibration, mesh radar, animation controls, audio and gesture tracks,
+  complete gesture library, backups, Firmware, and update status. Crops retain
+  full controls and card boundaries; Help image styling allows readable
+  640px-wide screenshots. Manifest, Markdown targets, and local image links
+  validate with 16/16 pages present. The Help reader now assembles those pages
+  into one continuous document: scrolling crosses page boundaries naturally,
+  menu clicks jump to anchored sections, and the active menu item follows the
+  current reading position.
+- Autonomous preflight: `tools/self-test.ps1` now builds both firmware roles
+  and the WPF console without changing `console/build.number`, checks the
+  critical hardening invariants, and auto-detects an available master for
+  non-destructive serial reads plus invalid-command rejection tests. It never
+  flashes, starts OTA, moves servos, or applies valid settings. JSON reports
+  are written to the user's temporary directory; full usage and exclusions
+  are in `TEST-PROTOCOL.md`.
+- Pre-test hardening: animation tuning is now genuinely keyed and persisted
+  per droid (with migration from the old global NVS keys); `getConfig` and its
+  response carry a target, and v2 backups preserve per-ID values. Animation
+  and calibration debounces snapshot their target/values and cancel on target
+  changes; loading calibration no longer emits preview/save traffic.
+- Strict input boundaries: serial commands and `setMulti` validate targets,
+  types, ranges, name length, calibration ordering, OTA size/MD5, and payload
+  shape before applying anything. Authenticated mesh commands receive the
+  equivalent validation, including finite 0..100 config floats and OTA chunk
+  bounds. OTA START failures now acknowledge the requested session correctly.
+- Mesh sequences start at a random 16-bit value after boot, avoiding false
+  duplicate rejection when a droid reboots while its previous low sequence
+  numbers remain cached by neighbors.
+- GitHub firmware/support-image downloads now fail closed if their manifest
+  SHA-256 is absent or malformed; the UI can no longer label an unverified
+  release as verified. Master, slave, and WPF console builds pass.
+- ESP-NOW callback isolation: ordinary mesh messages are now copied into a
+  bounded 32-frame inbox and drained from `loop()` (maximum 16 per pass).
+  NVS, logging, registry/topology, servo, and animation work therefore no
+  longer runs on the internal Wi-Fi task. Queue overflows are counted and
+  reported from `loop()`. `MeshComm` now also protects its sequence,
+  deduplication, and direct-neighbor caches across tasks. OTA retains its
+  already-safe low-latency callback mailbox/lock path. Master and slave builds
+  pass; the inbox raises static RAM use to 17.8%.
+- Firmware animation safety: randomized movement durations now remain signed
+  until they are clamped to at least 1 ms. A negative duration jitter on the
+  shortest keyframes used to wrap through `uint16_t` and occasionally turn a
+  ~50 ms movement into a ~65-second apparent freeze. Compile-time assertions
+  cover the negative and normal-duration cases.
+- Calibrated animation centers: keyframe offsets now go through
+  `ServoEngine::setTargetOffset()`, which resolves them against each droid's
+  persisted pan/tilt centers. Gestures no longer drift back toward the
+  compile-time 90-degree defaults after calibration. Both `b1_master` and
+  `b1_slave` builds pass with these changes.
+
+**Previous milestones** (2026-07-19 — full detail in the archive):
+- Droids card: ⛭ "Configure" button opens Servo Calibration in its own
+  window, pre-targeted per droid; Calibration removed from the main grid,
+  Mesh Topology promoted to its spot (Droids | Mesh Topology · Animation ·
+  Sequencer, 3 rows instead of 4). Bug fixed along the way: `Droid` had no
+  `ToString()`, so the Calibration window's own droid picker showed the
+  CLR type name once opened standalone.
+- Console startup: auto-connects to the last known port (retries every 3s
+  until found) and silently reloads the last exported/imported sequence.
+- Bug fix: an unplugged master now clears the Droids/Mesh Topology state
+  immediately, like a manual Disconnect — it used to freeze on stale data
+  while auto-reconnecting in the background.
+- Bug fix: main-window mouse-wheel scroll made authoritative everywhere
+  (tunneling `PreviewMouseWheel` on the outer `ScrollViewer`) — was
+  occasionally sticking/going jerky over the densely packed Animation card.
+- Native window chrome recolored dark (DWM title bar + an implicit
+  `ScrollBar` style), replacing the default light Windows chrome across
+  all 4 windows.
+## Reference sections moved from CLAUDE.md (2026-08-12)
+
+`CLAUDE.md` keeps a compact version of each of these — the operational rules
+and invariants only. The full text is preserved below.
+
+
+### Firmware OTA — full design notes (moved from CLAUDE.md 2026-08-12)
+
+
+An adopted slave can be reflashed **without USB**, triggered by a
+"Flash (OTA)" button on its row in the Droids card. The `.bin` travels over the
+existing serial link (console → master, base64-encoded) then over the ESP-NOW mesh
+(master → targeted slave), `stop-and-wait`: one 190-byte fragment in flight at a
+time, acknowledgment required before the next (`Update.write()` on the slave side is
+sequential/append-only, no out-of-order handling). **Only one session at a
+time** across the whole fleet.
+
+Flow: `otaStart` (console, with size + MD5) → the master validates the target
+(known to the registry) and sends `MSG_OTA_START` → once acked, `evt:otaReady`
+→ the console pushes the chunks one by one via `otaChunk`, each relayed as
+`MSG_OTA_CHUNK` → `evt:otaChunkAck` after each ack (triggers sending the
+next one from the console) → last chunk acked → `MSG_OTA_END` → `evt:otaDone`
+(the master is done, the slave reboots) → the master then monitors the
+target's heartbeats until `OTA_REBOOT_WAIT_MS` (~90s) and pushes
+`evt:otaResult`. Since the console can't reliably know the
+version baked into an arbitrary `.bin`, success is determined by comparing
+the content-derived Build ID reported **after** reboot to the one from **before**
+the OTA (captured at `otaStart` time). Semantic version remains a fallback for a
+legacy slave without a Build ID — `ok:true` if either identity changed,
+`reason:"unchanged"` if both are identical, `reason:"unreachable"` if no
+heartbeat arrives within the delay. Grace window (`OTA_REBOOT_GRACE_MS`,
+5s): a sign of life at an unchanged version in the first few seconds is
+ignored — the slave only reboots ~250 ms after its END ack, one last
+heartbeat from the old image can still arrive (false "rolledBack" rendered
+940 ms after `otaDone`, observed at the bench); a real rollback takes ≥ 10-30s.
+
+Anti-brick safety net (`ota_guard.{h,cpp}`): before finalizing (`Update.end(true)`,
+which already checks size/MD5 and refuses to reboot into an invalid image),
+the slave arms an NVS flag then reboots. On the next boot, if this flag is
+present, an attempt counter increments; past
+`OTA_MAX_BOOT_ATTEMPTS` (3), the firmware itself switches
+(`esp_ota_set_boot_partition`) to the other partition (`esp_ota_get_next_update_partition`
+necessarily alternates app0/app1) and reboots — a manual rollback via the standard
+`esp_ota_ops` API, without relying on ESP-IDF's bootloader rollback
+(not simply exposed under `framework=arduino`). If the firmware runs for
+`OTA_VERIFY_UPTIME_MS` (~20s) without a reset, the flag is cleared: the image is
+confirmed good.
+
+**Residual risk accepted**: a crash occurring *before* `OtaGuard::earlyCheck()`
+(1st line of `setup()`) would never be counted or caught. Reduced in
+practice by the MD5/format check already done before any reboot, which
+filters out most corrupted-transfer cases — the only remaining case is "the image
+is valid but crashes almost instantly". An `esp_task_wdt` (10s) is
+also armed to catch a new firmware that loops/hangs without yielding.
+
+**Realistic duration**: ~5,240 fragments for a ~1 MB image → **8 to 15 minutes**
+per slave under normal conditions, up to 20-30 min over a weak or
+multi-hop link. Displayed in the console as a progress indicator (fragments sent
+out of total), not a promised fixed duration.
+
+### Old reference web page — full description (moved from CLAUDE.md 2026-08-12)
+
+
+Inline HTML+CSS+JS page kept **intact** (unmodified since the WPF
+rewrite) — serves only as a behavioral/visual spec (exact French text,
+palette, card-by-card behavior) for the native implementation below.
+No longer **rendered** by the application (the old WebView2 shell, which
+loaded it via `window.chrome.webview.postMessage`, has been removed).
+
+Cards it documents: Droids (names, servos, auto anims, backup/
+restore) · Servo calibration (live preview + auto-save) · Animation ·
+Audio · Firmware (espflash flashing) · Mesh topology (SVG graph of direct
+links, bidirectional merge at the weakest RSSI) · Sequencer (catalog of
+8 slots + unlimited local library + editor + multi-track timeline + audio
+track + console-side Rehearse mode + undo/redo + export/import `.b1seq.json`) ·
+Activity (card removed on the WPF side, see Progress).
+
+The firmware protocol (`cmd`/`evt`, above) is carried there through `write`
+(outgoing) and `line` (incoming, parsed → `handleEvent()`); the WebView2
+transport vocabulary (`listPorts`/`open`/`write`/`flash`/`libList`/...) no longer
+applies on the WPF side, replaced by a direct call to `Services/SerialLinkService.cs` +
+`Services/ProtocolClient.cs` (no postMessage bridge).
