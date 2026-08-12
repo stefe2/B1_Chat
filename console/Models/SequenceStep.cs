@@ -11,6 +11,21 @@ public partial class SequenceStep : ObservableObject
     // previous step — see FIRMWARE-CONTRACT.md §6).
     [ObservableProperty] private int _startMs;
 
+    // Persistent explicit endpoint for looping gestures (POWER_DOWN/TALK). It is ignored by
+    // finite/immediate gestures but retained so changing a clip temporarily does not destroy
+    // the user's chosen length.
+    [ObservableProperty] private int _endAfterMs = Services.AnimationDurationProvider.DefaultInfiniteEndMs;
+
+    // Transient duration projection supplied by AnimationDurationProvider at each document
+    // commit/metadata refresh. Geometry, active state and text all bind to this same value.
+    [ObservableProperty] private int _resolvedDurationMs;
+    [ObservableProperty] private string _durationSummary = "provisional";
+    [ObservableProperty] private string _durationDetail = "Firmware metadata has not been received yet.";
+    [ObservableProperty] private bool _durationProvisional = true;
+    [ObservableProperty] private AnimationDurationKind _durationKind = AnimationDurationKind.Finite;
+
+    public bool IsInfinite => DurationKind == AnimationDurationKind.Infinite || AnimId is 16 or 17;
+
     // Transient view state: true while the clip is being held/dragged on the timeline
     // (dimmed to show it's "in hand"). Never serialized — same idea as AudioClip.Dragging.
     [ObservableProperty] private bool _dragging;
@@ -26,5 +41,14 @@ public partial class SequenceStep : ObservableObject
     [ObservableProperty] private string _executionDetail = "";
     [ObservableProperty] private string _executionTone = "none";
 
-    public SequenceStep Clone() => new() { AnimId = AnimId, Target = Target, StartMs = StartMs };
+    partial void OnAnimIdChanged(int value) => OnPropertyChanged(nameof(IsInfinite));
+    partial void OnDurationKindChanged(AnimationDurationKind value) => OnPropertyChanged(nameof(IsInfinite));
+
+    public SequenceStep Clone() => new()
+    {
+        AnimId = AnimId,
+        Target = Target,
+        StartMs = StartMs,
+        EndAfterMs = EndAfterMs,
+    };
 }

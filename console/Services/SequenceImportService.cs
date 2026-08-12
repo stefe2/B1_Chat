@@ -11,7 +11,7 @@ namespace b1_chat_console.Services;
 internal static class SequenceImportService
 {
     internal const string SchemaType = "b1-sequence";
-    internal const int CurrentVersion = 4;
+    internal const int CurrentVersion = 5;
     internal const int MaxSequenceNameLength = 128;
     internal const int MaxTrackNameLength = 128;
     internal const int MaxLaneLabelLength = 64;
@@ -66,6 +66,7 @@ internal static class SequenceImportService
                 2 => MigrateVersion2(root, name, loop),
                 3 => MigrateVersion3(root, name, loop),
                 4 => ReadVersion4(root, name, loop),
+                5 => ReadVersion5(root, name, loop),
                 _ => throw Error("$.version", $"unsupported schema version {version}"),
             };
         }
@@ -99,13 +100,23 @@ internal static class SequenceImportService
         return new ImportedSequenceDocument(3, name, loop, new(), lanes, steps);
     }
 
-    // Version 4 is the current schema and adds the saved offline droid roster.
+    // Version 4 added the saved offline droid roster.
     private static ImportedSequenceDocument ReadVersion4(JsonElement root, string name, bool loop)
     {
         var tracks = ReadTracks(root);
         var lanes = ReadAudioLanes(root);
         var steps = ReadSteps(root, relativeDelays: false);
         return new ImportedSequenceDocument(4, name, loop, tracks, lanes, steps);
+    }
+
+    // Version 5 persists the real endpoint of infinite gesture clips. Versions 1-4 migrate
+    // to the historical two-second drawing, now promoted to an actual IDLE termination.
+    private static ImportedSequenceDocument ReadVersion5(JsonElement root, string name, bool loop)
+    {
+        var tracks = ReadTracks(root);
+        var lanes = ReadAudioLanes(root);
+        var steps = ReadSteps(root, relativeDelays: false, explicitInfiniteEnds: true);
+        return new ImportedSequenceDocument(5, name, loop, tracks, lanes, steps);
     }
 
     private static List<SequenceTrackDto> ReadTracks(JsonElement root)
@@ -175,7 +186,10 @@ internal static class SequenceImportService
         return lanes;
     }
 
-    private static List<SequenceStepDto> ReadSteps(JsonElement root, bool relativeDelays)
+    private static List<SequenceStepDto> ReadSteps(
+        JsonElement root,
+        bool relativeDelays,
+        bool explicitInfiniteEnds = false)
     {
         var array = ReadArray(root, "steps", "$", MaxSteps);
         var steps = new List<SequenceStepDto>(array.GetArrayLength());
@@ -205,7 +219,24 @@ internal static class SequenceImportService
                 startMs = ReadInt(element, "startMs", path, 0, MaxTimelineMs);
             }
 
-            steps.Add(new SequenceStepDto { AnimId = animId, Target = target, StartMs = startMs });
+            var endAfterMs = AnimationDurationProvider.DefaultInfiniteEndMs;
+            if (explicitInfiniteEnds)
+            {
+                if (element.TryGetProperty("endAfterMs", out _))
+                    endAfterMs = ReadInt(element, "endAfterMs", path, 100, MaxTimelineMs);
+                else if (animId is 16 or 17)
+                    throw Error($"{path}.endAfterMs", "infinite gestures require an explicit endpoint in schema version 5");
+            }
+            if ((long)startMs + endAfterMs > MaxTimelineMs && animId is 16 or 17)
+                throw Error($"{path}.endAfterMs", "infinite gesture end exceeds the timeline limit");
+
+            steps.Add(new SequenceStepDto
+            {
+                AnimId = animId,
+                Target = target,
+                StartMs = startMs,
+                EndAfterMs = endAfterMs,
+            });
             index++;
         }
         return steps;

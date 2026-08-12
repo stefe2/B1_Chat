@@ -52,6 +52,35 @@ public sealed class SequenceImportServiceTests
         }
     }
 
+    [Fact]
+    public void Version4InfiniteGesture_MigratesFormerDisplayWidthToARealEndpoint()
+    {
+        const string json = """
+            {
+              "type":"b1-sequence", "version":4, "name":"Legacy loop", "loop":false,
+              "tracks":[], "audioLanes":[],
+              "steps":[{"animId":17,"target":65535,"startMs":250}]
+            }
+            """;
+
+        var document = SequenceImportService.Parse(json);
+
+        Assert.Equal(AnimationDurationProvider.DefaultInfiniteEndMs,
+            Assert.Single(document.Steps).EndAfterMs);
+    }
+
+    [Fact]
+    public void Version5InfiniteGesture_RequiresItsExplicitEndpoint()
+    {
+        var root = ValidCurrentDocument();
+        root["steps"]![0]!["animId"] = 17;
+
+        var error = Assert.Throws<SequenceImportException>(() =>
+            SequenceImportService.Parse(root.ToJsonString()));
+
+        Assert.Equal("$.steps[0].endAfterMs", error.FieldPath);
+    }
+
     [Theory]
     [InlineData("wrong-type", "$.type")]
     [InlineData("future-version", "$.version")]
@@ -108,11 +137,13 @@ public sealed class SequenceImportServiceTests
         var step = root["steps"]![0]!;
         step["animId"] = 17;
         step["target"] = ushort.MaxValue;
-        step["startMs"] = SequenceImportService.MaxTimelineMs;
+        step["startMs"] = SequenceImportService.MaxTimelineMs - 100;
+        step["endAfterMs"] = 100;
 
         var document = SequenceImportService.Parse(root.ToJsonString());
 
-        Assert.Equal(SequenceImportService.MaxTimelineMs, document.Steps[0].StartMs);
+        Assert.Equal(SequenceImportService.MaxTimelineMs - 100, document.Steps[0].StartMs);
+        Assert.Equal(100, document.Steps[0].EndAfterMs);
         Assert.Equal(0, document.AudioLanes[0].Clips[0].DurationMs);
     }
 

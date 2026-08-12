@@ -60,7 +60,11 @@ the master auto-commits its dirty working copy. Wait until the header shows
 
 ## Timing expectations
 
-The console obtains gesture durations from the connected firmware. Timeline clip
-widths therefore adapt when firmware timing changes. Mesh and serial delivery
-still add small real-world latency; this is choreography timing, not a hard
-real-time motion-control bus.
+The console obtains structured timing from the connected firmware: immediate,
+finite or infinite kind, nominal duration/cycle and keyframe count. Finite
+Sequencer clips adjust that nominal value for the selected droid's Speed and the
+firmware's bounded timing jitter. A mixed-speed broadcast shows the full target
+range and uses the slower bound. Until firmware/config metadata arrives, the
+timeline labels its shared 1.5 s estimate as provisional. Mesh and serial
+delivery still add small real-world latency; this is choreography timing, not a
+hard real-time motion-control bus.

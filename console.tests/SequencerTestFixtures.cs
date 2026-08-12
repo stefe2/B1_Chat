@@ -9,6 +9,10 @@ internal sealed class FakeSequencerProtocol : ISequencerProtocol
     public ObservableCollection<Droid> Droids { get; } = new();
     public Dictionary<int, int> Durations { get; } = new();
     public IReadOnlyDictionary<int, int> AnimDurationMs => Durations;
+    public Dictionary<int, AnimationDurationMetadata> DurationMetadata { get; } = new();
+    public IReadOnlyDictionary<int, AnimationDurationMetadata> AnimDurationMetadata => DurationMetadata;
+    public Dictionary<ushort, int> Speeds { get; } = new();
+    public IReadOnlyDictionary<ushort, int> AnimSpeedPct => Speeds;
     public List<SentGesture> Sent { get; } = new();
     public List<SentLeaseRenewal> LeaseRenewals { get; } = new();
     public List<ushort> SafeStops { get; } = new();
@@ -17,6 +21,7 @@ internal sealed class FakeSequencerProtocol : ISequencerProtocol
 
     public event Action? DroidsChanged;
     public event Action? AnimDurationsReceived;
+    public event Action? AnimConfigurationChanged;
     public event Action<bool>? LinkClosed;
     public event Action<AnimMasterReceipt>? AnimMasterAccepted;
     public event Action<AnimExecutionReport>? AnimExecutionReceived;
@@ -48,6 +53,7 @@ internal sealed class FakeSequencerProtocol : ISequencerProtocol
 
     public void RaiseDroidsChanged() => DroidsChanged?.Invoke();
     public void RaiseAnimDurationsReceived() => AnimDurationsReceived?.Invoke();
+    public void RaiseAnimConfigurationChanged() => AnimConfigurationChanged?.Invoke();
     public void RaiseLinkClosed(bool unexpected = true) => LinkClosed?.Invoke(unexpected);
     public void RaiseAnimMasterAccepted(uint requestId, ushort target, int animId,
         int meshSeq = 77, bool meshQueued = true, bool localHandled = false,

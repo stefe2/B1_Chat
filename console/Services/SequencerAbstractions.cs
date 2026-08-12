@@ -39,10 +39,13 @@ public interface ISequencerProtocol
 {
     ObservableCollection<Droid> Droids { get; }
     IReadOnlyDictionary<int, int> AnimDurationMs { get; }
+    IReadOnlyDictionary<int, AnimationDurationMetadata> AnimDurationMetadata { get; }
+    IReadOnlyDictionary<ushort, int> AnimSpeedPct { get; }
     bool SupportsAnimLease { get; }
     bool SupportsSafeStop { get; }
     event Action? DroidsChanged;
     event Action? AnimDurationsReceived;
+    event Action? AnimConfigurationChanged;
     event Action<bool>? LinkClosed;
     event Action<AnimMasterReceipt>? AnimMasterAccepted;
     event Action<AnimExecutionReport>? AnimExecutionReceived;

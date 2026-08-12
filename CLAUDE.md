@@ -153,8 +153,11 @@ callback-safe lock/mailbox fast path.
 15 GREETING_NOD · 16 POWER_DOWN (**loops**) · 17 TALK (**loops**, fast tilt like
 a talking mouth, meant to accompany an audio track).
 
-The two looping gestures are excluded from the random idle draw and count as
-`LOOPING_ANIM_DEFAULT_MS` (2s, indicative) in `totalDurationMs()`.
+The two looping gestures are excluded from the random idle draw.
+`totalDurationMs()` returns a finite gesture's nominal duration, one nominal
+cycle for POWER_DOWN/TALK (3600/300 ms), and 0 for immediate IDLE. The structured
+duration catalog distinguishes these meanings; its legacy `ms` field retains a
+2 s indicative value for IDLE/looping gestures only for old web clients.
 Idle behavior: the master picks a random gesture every 2.5-5s and
 broadcasts it to everyone (isolated slave: 3-7s, local) — suspendable per droid
 ("Auto anims"), without cutting the servos or blocking Play/Sequencer.
@@ -180,7 +183,8 @@ Session guarded by a handshake: `hello` → `{evt:"hello",ok,id}`, then keepaliv
   `droids {list:[{id,name,rssi,age,role,servos,autoAnim,locate,adopted,fw,build?,servoReverse?}]}` ·
   `log {msg}` · `err {msg}` · `config {target,freq,amp,speed}` ·
   `calibData {target,+6,panReversed,tiltReversed}` ·
-  `meshTopology {links:[{from,to,rssi}]}` · `animDurations {list:[{animId,ms}]}` ·
+  `meshTopology {links:[{from,to,rssi}]}` ·
+  `animDurations {list:[{animId,ms,kind,nominalMs,frameCount,settleMs?}]}` ·
   `animAccepted {requestId,target,animId,meshSeq,meshQueued,local,leaseMs?}` ·
   `animExec {requestId,droid,meshSeq,animId,phase,reason?,atMs}` ·
   `setMultiDone {ok,applied,failedAt?,error?}` · `dirty {dirty}` · `allDone` ·

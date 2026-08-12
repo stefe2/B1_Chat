@@ -42,6 +42,7 @@ public class SequenceStepDto
     public int AnimId { get; set; }
     public ushort Target { get; set; } = 0xFFFF;
     public int StartMs { get; set; }
+    public int EndAfterMs { get; set; } = Services.AnimationDurationProvider.DefaultInfiniteEndMs;
 }
 
 /// <summary>Flat form (POCO) for JSON serialization of AudioClip.</summary>

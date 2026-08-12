@@ -2,11 +2,39 @@ using System.Text;
 using b1_chat_console.Models;
 using b1_chat_console.Services;
 using b1_chat_console.ViewModels;
+using System.Text.Json.Nodes;
 
 namespace b1_chat_console.Tests;
 
 public sealed class SequencerPersistenceTests
 {
+    [Fact]
+    public void InfiniteEndpoint_RoundTripsThroughV5ExportImportAndUndoRedo()
+    {
+        using var fixture = new TemporaryJsonFixture();
+        var path = Path.Combine(fixture.DirectoryPath, "infinite.b1seq.json");
+        using var vm = CreateViewModel(writer: new AtomicTextFileWriter());
+        vm.InsertGestureAt(17, vm.Tracks[0], 250);
+        vm.NudgeEndLongerCommand.Execute(null);
+        vm.NudgeEndLongerCommand.Execute(null);
+
+        Assert.Equal(2_200, vm.Steps[0].EndAfterMs);
+        vm.UndoCommand.Execute(null);
+        Assert.Equal(2_100, vm.Steps[0].EndAfterMs);
+        vm.RedoCommand.Execute(null);
+        Assert.Equal(2_200, vm.Steps[0].EndAfterMs);
+
+        vm.ExportTo(path);
+        var json = JsonNode.Parse(File.ReadAllText(path))!.AsObject();
+        Assert.Equal(5, json["version"]!.GetValue<int>());
+        Assert.Equal(2_200, json["steps"]![0]!["endAfterMs"]!.GetValue<int>());
+
+        using var reopened = CreateViewModel();
+        reopened.ImportFrom(path);
+        Assert.Equal(2_200, Assert.Single(reopened.Steps).EndAfterMs);
+        Assert.Equal(2_200, reopened.Steps[0].ResolvedDurationMs);
+    }
+
     [Fact]
     public void DirtyProperty_HasNoPublicOrInternalSetter()
     {

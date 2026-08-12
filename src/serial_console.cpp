@@ -222,7 +222,15 @@ void SerialConsole::pushAnimDurations() {
     for (uint8_t i = 0; i < ANIM_COUNT; i++) {
         JsonObject o = arr.add<JsonObject>();
         o["animId"] = i;
-        o["ms"] = AnimationPlayer::totalDurationMs(i);
+        const uint32_t nominalMs = AnimationPlayer::totalDurationMs(i);
+        const bool infinite = AnimationPlayer::isInfinite(i);
+        // Preserve the legacy UI's historical indicative tail while structured clients use
+        // nominalMs/kind and never confuse it with a natural endpoint.
+        o["ms"] = (i == ANIM_IDLE || infinite) ? 2000 : nominalMs;
+        o["kind"] = i == ANIM_IDLE ? "immediate" : infinite ? "infinite" : "finite";
+        o["nominalMs"] = nominalMs;
+        o["frameCount"] = AnimationPlayer::frameCount(i);
+        if (i == ANIM_IDLE) o["settleMs"] = 600;
     }
     serializeJson(doc, Serial);
     Serial.print('\n');

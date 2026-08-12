@@ -145,7 +145,8 @@ public partial class SequenceTimelineView : UserControl
     }
 
     // --- Gesture clip drag: StartMs (horizontal) + Target (vertical, retarget to another
-    // droid's row). Clips aren't resizable — no user-editable duration exists in the protocol. ---
+    // droid's row). Infinite endpoints are edited precisely in the inspector rather than by
+    // dragging the clip edge. ---
 
     private void Clip_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {

@@ -659,9 +659,8 @@
                                                 </Canvas.Top>
                                                 <Border.Width>
                                                     <MultiBinding Converter="{StaticResource TimelineGeometryConv}" ConverterParameter="Width">
-                                                        <Binding Path="AnimId" />
+                                                        <Binding Path="ResolvedDurationMs" />
                                                         <Binding Path="DataContext.PxPerMs" RelativeSource="{RelativeSource AncestorType=ItemsControl}" />
-                                                        <Binding Path="DataContext.AnimDurationMsLookup" RelativeSource="{RelativeSource AncestorType=ItemsControl}" />
                                                     </MultiBinding>
                                                 </Border.Width>
                                                 <Border.Style>
@@ -677,9 +676,8 @@
                                                                 <DataTrigger.Binding>
                                                                     <MultiBinding Converter="{StaticResource TimelineActiveConv}">
                                                                         <Binding Path="StartMs" />
-                                                                        <Binding Path="AnimId" />
+                                                                        <Binding Path="ResolvedDurationMs" />
                                                                         <Binding Path="DataContext.PlayheadMs" RelativeSource="{RelativeSource AncestorType=ItemsControl}" />
-                                                                        <Binding Path="DataContext.AnimDurationMsLookup" RelativeSource="{RelativeSource AncestorType=ItemsControl}" />
                                                                     </MultiBinding>
                                                                 </DataTrigger.Binding>
                                                                 <Setter Property="Opacity" Value="1" />
@@ -732,12 +730,7 @@
                                                                    TextTrimming="CharacterEllipsis" />
                                                         <TextBlock FontFamily="{StaticResource MonoFont}" FontSize="9" Foreground="#A6140E04"
                                                                    TextTrimming="CharacterEllipsis">
-                                                            <TextBlock.Text>
-                                                                <MultiBinding Converter="{StaticResource AnimDurationTextConv}">
-                                                                    <Binding Path="AnimId" />
-                                                                    <Binding Path="DataContext.AnimDurationMsLookup" RelativeSource="{RelativeSource AncestorType=ItemsControl}" />
-                                                                </MultiBinding>
-                                                            </TextBlock.Text>
+                                                            <TextBlock.Text><Binding Path="DurationSummary" /></TextBlock.Text>
                                                         </TextBlock>
                                                     </StackPanel>
                                                     <!-- Loop badge (mockup .loop-badge) — POWER_DOWN (16) and TALK (17)
@@ -853,6 +846,24 @@
                             <Button Content="+0.1s" Style="{StaticResource MiniButtonStyle}" Margin="2,0,0,0"
                                     Command="{Binding NudgeStartForwardCommand}" ToolTip="Move the selected clip 0.1 second later." />
                         </UniformGrid>
+
+                        <TextBlock Text="DURATION" Style="{StaticResource FieldLabelStyle}" Margin="0,0,0,4" />
+                        <Border Style="{StaticResource ValuePillStyle}" HorizontalAlignment="Stretch" Margin="0,0,0,4"
+                                ToolTip="{Binding SelectedStep.DurationDetail}">
+                            <TextBlock Style="{StaticResource ValuePillTextStyle}"
+                                       Text="{Binding SelectedStep.DurationSummary}" TextWrapping="Wrap" />
+                        </Border>
+                        <StackPanel Visibility="{Binding SelectedStep.IsInfinite, Converter={StaticResource BoolToVisConv}}">
+                            <TextBlock Text="Infinite gestures are terminated with IDLE at this explicit endpoint."
+                                       Foreground="{StaticResource Muted2Brush}" FontSize="9" TextWrapping="Wrap"
+                                       Margin="0,0,0,4" />
+                            <UniformGrid Columns="2" Margin="0,0,0,10">
+                                <Button Content="−0.1s" Style="{StaticResource MiniButtonStyle}" Margin="0,0,2,0"
+                                        Command="{Binding NudgeEndShorterCommand}" />
+                                <Button Content="+0.1s" Style="{StaticResource MiniButtonStyle}" Margin="2,0,0,0"
+                                        Command="{Binding NudgeEndLongerCommand}" />
+                            </UniformGrid>
+                        </StackPanel>
 
                         <UniformGrid Columns="2">
                             <Button Content="Duplicate" Style="{StaticResource MiniButtonStyle}" Margin="0,0,2,0"

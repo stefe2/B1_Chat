@@ -30,7 +30,8 @@ public record SequenceSnapshot(
             var right = other.Steps[i];
             if (left.AnimId != right.AnimId ||
                 left.Target != right.Target ||
-                left.StartMs != right.StartMs)
+                left.StartMs != right.StartMs ||
+                left.EndAfterMs != right.EndAfterMs)
                 return false;
         }
 

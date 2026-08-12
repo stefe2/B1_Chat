@@ -55,7 +55,9 @@ Muted or offline rows do not create a queue for missed commands.*
   reachable droid immediately. It has no confirmation dialog. With no holding
   torque, unsupported mechanics may fall; re-enable Servos deliberately from
   the Droids card after inspecting the hardware.
-- **Loop** starts a new pass when the calculated sequence duration ends.
+- **Loop** starts a new pass when the calculated sequence duration ends. A
+  `POWER_DOWN`/`TALK` clip first reaches its authored endpoint and sends IDLE;
+  the next pass then starts cleanly.
 
 Persistent timeline and local-library editing is locked during both Play and
 Pause. Press **Stop** before inserting, moving, duplicating, deleting, using the
@@ -93,9 +95,9 @@ cleanup remains retryable. Current firmware also gives Sequencer-started
 `TALK`/`POWER_DOWN` a five-second safety lease, renewed every two seconds while
 the pass still owns the gesture. If the console crashes, the cable is removed,
 the master becomes unreachable, or renewal otherwise stops, the target returns
-to `IDLE` automatically. Pause and a whole-sequence Loop boundary keep renewing;
-explicit Stop cancels renewal before sending IDLE. Delayed renewal from an older
-pass cannot extend a newer gesture.
+to `IDLE` automatically. Pause keeps renewing until the authored clip endpoint;
+that endpoint or explicit Stop cancels renewal before sending IDLE. Delayed
+renewal from an older pass cannot extend a newer gesture.
 
 This lease applies only to Sequencer playback. A looping gesture started from
 the Animation card remains a direct operator command and runs until another
@@ -155,7 +157,7 @@ always needs the console and active serial connection.
 **Export** atomically writes a `.b1seq.json` snapshot containing:
 
 - sequence name and whole-sequence Loop setting;
-- gesture clips and target IDs;
+- gesture clips, target IDs, and explicit `POWER_DOWN`/`TALK` endpoints;
 - saved droid track names/order for offline layout;
 - audio lane names, clip timing, Loop flags, and local file paths.
 
@@ -178,9 +180,10 @@ the document as a Local Library Scene. Import never silently adds a Scene to the
 library.
 
 Before replacing the editor, Import reads and validates the entire file. It
-accepts sequence schema versions 1 through 4 and migrates their historical
-timing/audio/track layouts. In particular, version 1 relative gesture delays are
-converted cumulatively so their original order and timing are preserved. A file
+accepts sequence schema versions 1 through 5 and migrates their historical
+timing/audio/track layouts. Versions 1–4 give legacy looping gestures a real 2 s
+endpoint matching their former displayed width. Version 1 relative gesture
+delays are converted cumulatively so their original order and timing are preserved. A file
 with the wrong type, a future version, invalid targets/animations/timing, unsafe
 counts, or malformed sections is rejected without changing the open sequence,
 selection, or Undo history. The error identifies the offending JSON field.

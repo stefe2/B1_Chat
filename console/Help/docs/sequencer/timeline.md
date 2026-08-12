@@ -74,14 +74,23 @@ audio-synchronized Talk loop.*
 - **Move:** drag a clip horizontally in time or vertically to retarget it.
 - **Select:** click a clip to open its inspector.
 - **Duplicate/Delete:** right-click the clip or use the inspector buttons.
-- **Inspector:** choose a different gesture or target, view its exact start in
-  milliseconds, and use the ±0.1 s buttons. The displayed start value is not a
-  text-entry field in the current release.
+- **Inspector:** choose a different gesture or target, view its exact start and
+  duration estimate, and use the ±0.1 s buttons. For `POWER_DOWN`/`TALK`, a
+  second pair of buttons edits the real endpoint. Displayed values are not
+  text-entry fields in the current release.
 
-Clip widths use durations reported by firmware. The loop badge means the droid
-continues that gesture until another gesture replaces it or the Sequencer sends
-targeted IDLE during Stop/non-looping end cleanup; the displayed width is
-only an indicative timeline duration.
+One shared timing estimate drives clip width, active highlighting, total time
+and inspector text. Finite gestures use firmware nominal timing adjusted for
+the target droid's Speed and keyframe jitter; mixed-speed broadcasts display a
+range and use its conservative upper bound. Before metadata/config arrives, the
+same 1.5 s provisional fallback appears everywhere.
+
+The loop badge identifies `POWER_DOWN` and `TALK`. Their width is a persisted
+fixed duration (2 s by default), not an indication: at the right edge the
+Sequencer sends targeted `IDLE` if that looping gesture still owns the droid.
+A later replacement gesture always wins. `IDLE` itself is an immediate command;
+its physical return to center takes approximately 0.6 s but adds no timeline
+tail.
 
 ## Undo and Redo
 

@@ -21,6 +21,7 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
     private readonly HashSet<string> _caps = new();
     private readonly Dictionary<ushort, Droid> _droidsById = new();
     private readonly Dictionary<ushort, AnimConfig> _animConfigs = new();
+    private readonly Dictionary<ushort, int> _animSpeedPct = new();
     private ushort? _masterId;
     private int _nextAnimRequestId;
 
@@ -29,7 +30,10 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
     public ObservableCollection<Droid> Droids { get; } = new();
     public ObservableCollection<MeshLink> MeshLinks { get; } = new();
     public Dictionary<int, int> AnimDurationMs { get; } = new();
+    public Dictionary<int, AnimationDurationMetadata> AnimDurationMetadata { get; } = new();
     IReadOnlyDictionary<int, int> ISequencerProtocol.AnimDurationMs => AnimDurationMs;
+    IReadOnlyDictionary<int, AnimationDurationMetadata> ISequencerProtocol.AnimDurationMetadata => AnimDurationMetadata;
+    public IReadOnlyDictionary<ushort, int> AnimSpeedPct => _animSpeedPct;
     public IReadOnlyDictionary<ushort, AnimConfig> AnimConfigs => _animConfigs;
 
     [ObservableProperty] private bool _portOpen;
@@ -56,6 +60,7 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
     public event Action<JsonElement>? CalibDataReceived;
     public event Action<ushort, int, int, int>? ConfigDataReceived;
     public event Action? AnimDurationsReceived;
+    public event Action? AnimConfigurationChanged;
     public event Action? MeshTopologyChanged;
     public event Action? DroidsChanged;
     public event Action<ushort, int>? AnimSent; // target, animId — used to drive the mesh topology's broadcast ripple
@@ -116,6 +121,7 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
         Droids.Clear();
         _droidsById.Clear();
         _animConfigs.Clear();
+        _animSpeedPct.Clear();
         _masterId = null;
         FwVersion = null;
         FwBuildId = null;
@@ -490,6 +496,15 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
         var amp = root.TryGetProperty("amp", out var a) ? a.GetInt32() : 60;
         var speed = root.TryGetProperty("speed", out var s) ? s.GetInt32() : 50;
         _animConfigs[target] = new AnimConfig(freq, amp, speed);
+        _animSpeedPct[target] = speed;
+        if (target == ushort.MaxValue)
+        {
+            foreach (var droid in Droids)
+            {
+                _animConfigs[droid.Id] = new AnimConfig(freq, amp, speed);
+                _animSpeedPct[droid.Id] = speed;
+            }
+        }
         if (_masterId == target)
         {
             LastFreq = freq;
@@ -497,6 +512,7 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
             LastSpeed = speed;
         }
         ConfigDataReceived?.Invoke(target, freq, amp, speed);
+        AnimConfigurationChanged?.Invoke();
     }
 
     private void HandleMeshTopology(JsonElement root)
@@ -514,9 +530,39 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
     private void HandleAnimDurations(JsonElement root)
     {
         AnimDurationMs.Clear();
+        AnimDurationMetadata.Clear();
         if (root.TryGetProperty("list", out var list) && list.ValueKind == JsonValueKind.Array)
             foreach (var item in list.EnumerateArray())
-                AnimDurationMs[item.GetProperty("animId").GetInt32()] = item.GetProperty("ms").GetInt32();
+            {
+                var animId = item.GetProperty("animId").GetInt32();
+                var legacyMs = item.GetProperty("ms").GetInt32();
+                AnimDurationMs[animId] = legacyMs;
+                var hasStructuredMetadata = item.TryGetProperty("kind", out var kindElement);
+                var kind = hasStructuredMetadata
+                    ? kindElement.GetString() switch
+                    {
+                        "immediate" => AnimationDurationKind.Immediate,
+                        "infinite" => AnimationDurationKind.Infinite,
+                        _ => AnimationDurationKind.Finite,
+                    }
+                    : animId == 0
+                        ? AnimationDurationKind.Immediate
+                        : animId is 16 or 17
+                            ? AnimationDurationKind.Infinite
+                            : AnimationDurationKind.Finite;
+                var nominalMs = item.TryGetProperty("nominalMs", out var nominal)
+                    ? Math.Max(0, nominal.GetInt32())
+                    : kind == AnimationDurationKind.Finite ? Math.Max(0, legacyMs) : 0;
+                var frameCount = item.TryGetProperty("frameCount", out var frames)
+                    ? Math.Max(0, frames.GetInt32())
+                    : 0;
+                var settleMs = item.TryGetProperty("settleMs", out var settle)
+                    ? Math.Max(0, settle.GetInt32())
+                    : animId == 0 ? 600 : 0;
+                AnimDurationMetadata[animId] = new AnimationDurationMetadata(
+                    animId, kind, nominalMs, frameCount, settleMs,
+                    Provisional: !hasStructuredMetadata);
+            }
         AnimDurationsReceived?.Invoke();
     }
 }

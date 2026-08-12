@@ -65,10 +65,11 @@ public:
     // defaults, so passing them back reproduces today's exact tuning.
     void setAmpSpeedPct(uint8_t ampPct, uint8_t speedPct);
 
-    // Indicative total duration (ms) of a gesture (sum of keyframes). For a
-    // looping gesture (POWER_DOWN, TALK) or IDLE, returns an indicative
-    // default value since there's no natural finite duration.
+    // Nominal duration of one finite gesture or one loop cycle (sum of keyframes).
+    // IDLE is immediate from the protocol's perspective and returns 0.
     static uint32_t totalDurationMs(uint8_t animId);
+    static uint8_t frameCount(uint8_t animId);
+    static bool isInfinite(uint8_t animId);
 
 private:
     ServoEngine* _engine = nullptr;

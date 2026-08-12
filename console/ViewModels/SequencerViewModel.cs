@@ -67,6 +67,8 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         }).ToList();
 
     public IReadOnlyDictionary<int, int> AnimDurationMsLookup => _protocol.AnimDurationMs;
+    private double _totalDurationMs;
+    public double TotalDurationMsValue => _totalDurationMs;
 
     [ObservableProperty] private TimelineTrack? _armedTrack;
     [ObservableProperty] private double _pxPerSecond = 80;
@@ -90,7 +92,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     // pill, split in two so the view renders the current position in accent and the total in
     // muted gray (the mockup's .timecode/.tot duo).
     public string TimecodeNowText => FormatTimecode(PlayheadMs);
-    public string TimecodeTotalText => $" / {FormatTimecode(TotalDurationMs())}";
+    public string TimecodeTotalText => $" / {FormatTimecode(TotalDurationMsValue)}";
     partial void OnPlayheadMsChanged(double value)
     {
         OnPropertyChanged(nameof(TimecodeNowText));
@@ -189,10 +191,13 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         set { if (SelectedStep != null) SetStepAnimId(SelectedStep, value); }
     }
 
+    public int SelectedStepEndAfterMs => SelectedStep?.EndAfterMs ?? 0;
+
     partial void OnSelectedStepChanged(SequenceStep? value)
     {
         OnPropertyChanged(nameof(SelectedStepTrack));
         OnPropertyChanged(nameof(SelectedStepAnimId));
+        OnPropertyChanged(nameof(SelectedStepEndAfterMs));
     }
 
     private readonly SequencerEditHistory _editHistory = new();
@@ -203,6 +208,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     private readonly Dictionary<uint, ExecutionTracker> _executionTrackers = new();
     private readonly Dictionary<ushort, GestureTargetState> _latestGestureByDroid = new();
     private readonly Dictionary<uint, ActiveAnimLease> _activeAnimLeases = new();
+    private readonly Dictionary<int, uint> _infiniteRequestBySourceOrder = new();
     private readonly PlaybackGeneration _playbackGeneration = new();
     private SequencerPlaybackPlan? _activePlaybackPlan;
     private SequenceSnapshot? _savedCheckpoint;
@@ -281,6 +287,8 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         InsertGestureCommand.NotifyCanExecuteChanged();
         NudgeStartForwardCommand.NotifyCanExecuteChanged();
         NudgeStartBackwardCommand.NotifyCanExecuteChanged();
+        NudgeEndLongerCommand.NotifyCanExecuteChanged();
+        NudgeEndShorterCommand.NotifyCanExecuteChanged();
         AddAudioLaneCommand.NotifyCanExecuteChanged();
         DeleteAudioLaneCommand.NotifyCanExecuteChanged();
         ClearTimelineCommand.NotifyCanExecuteChanged();
@@ -319,27 +327,41 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         _persistenceDialogs = persistenceDialogs ?? new WpfSequencerPersistenceDialogs();
         _atomicFileWriter = atomicFileWriter ?? new AtomicTextFileWriter();
         _library = library ?? new LibraryService();
-        _protocol.DroidsChanged += RebuildTracks;
+        _protocol.DroidsChanged += OnDroidsChanged;
         _protocol.AnimDurationsReceived += OnAnimDurationsReceived;
+        _protocol.AnimConfigurationChanged += OnAnimConfigurationChanged;
         _protocol.AnimMasterAccepted += OnAnimMasterAccepted;
         _protocol.AnimExecutionReceived += OnAnimExecutionReceived;
         _protocol.LinkClosed += OnProtocolLinkClosed;
         Steps.CollectionChanged += (_, _) =>
         {
             if (!_editHistory.HasActiveEdit && !_suppressTimelineRefresh)
-                RebuildRulerTicks();
+                RefreshDerivedTimelineState();
         };
         RebuildTracks();
         ApplyAudioLanesFromDto(null);
-        RebuildRulerTicks();
+        RefreshDerivedTimelineState();
         RefreshLibrary();
         EstablishSavedCheckpoint();
+    }
+
+    private void OnDroidsChanged()
+    {
+        RebuildTracks();
+        RefreshDurationDerivedState();
     }
 
     private void OnAnimDurationsReceived()
     {
         OnPropertyChanged(nameof(AnimDurationMsLookup));
-        // Real durations change TotalDurationMs (clip tails) — refresh ruler extent too.
+        RefreshDurationDerivedState();
+    }
+
+    private void OnAnimConfigurationChanged() => RefreshDurationDerivedState();
+
+    private void RefreshDurationDerivedState()
+    {
+        ResolveGestureDurationsAndExtent();
         RebuildRulerTicks();
     }
 
@@ -348,6 +370,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         foreach (var tracker in _executionTrackers.Values)
             DisposeExecutionDeadlines(tracker);
         _executionTrackers.Clear();
+        _infiniteRequestBySourceOrder.Clear();
         foreach (var step in Steps)
         {
             step.ExecutionSummary = "";
@@ -716,8 +739,9 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         foreach (var tracker in _executionTrackers.Values)
             DisposeExecutionDeadlines(tracker);
         _executionTrackers.Clear();
-        _protocol.DroidsChanged -= RebuildTracks;
+        _protocol.DroidsChanged -= OnDroidsChanged;
         _protocol.AnimDurationsReceived -= OnAnimDurationsReceived;
+        _protocol.AnimConfigurationChanged -= OnAnimConfigurationChanged;
         _protocol.AnimMasterAccepted -= OnAnimMasterAccepted;
         _protocol.AnimExecutionReceived -= OnAnimExecutionReceived;
         _protocol.LinkClosed -= OnProtocolLinkClosed;
@@ -730,7 +754,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     // Floored at the viewport width (mockup: width = max(content, viewport)) so the row
     // backgrounds/gridlines fill the whole visible body even for a short/empty sequence,
     // instead of stopping in a stub partway across.
-    public double TimelineWidthPx => Math.Max(Math.Max(400, ViewportWidthPx), (TotalDurationMs() + 2000) * PxPerMs);
+    public double TimelineWidthPx => Math.Max(Math.Max(400, ViewportWidthPx), (TotalDurationMsValue + 2000) * PxPerMs);
 
     // Pushed by the view on ScrollViewer.SizeChanged — a pure layout input, not sequence data.
     private double _viewportWidthPx;
@@ -847,17 +871,33 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         });
     }
 
-    // Public: also read by the view's "Fit" zoom handler (SequenceTimelineView.xaml.cs).
-    // Uses each step's REAL gesture duration (getAnimDurations) rather than a fixed 1.5s
-    // tail — the old flat tail under-measured long gestures (TALK ~4s), which is why "Fit"
-    // kept cutting a sliver off the right edge of the last clip.
-    public double TotalDurationMs()
+    // Public compatibility seam used by the view's Fit handler. The value is cached at the
+    // document/metadata transaction boundary; playhead ticks never rescan clip collections.
+    public double TotalDurationMs() => TotalDurationMsValue;
+
+    private void ResolveGestureDurationsAndExtent()
     {
-        var stepsEnd = Steps.Count == 0 ? 0 : Steps.Max(s =>
-            s.StartMs + (AnimDurationMsLookup.TryGetValue(s.AnimId, out var d) ? d : 1500));
-        var audioEnd = AudioLanes.SelectMany(l => l.Clips)
-            .Select(c => (double)(c.StartMs + c.DurationMs)).DefaultIfEmpty(0).Max();
-        return Math.Max(stepsEnd, audioEnd);
+        var provider = new AnimationDurationProvider(
+            _protocol.AnimDurationMetadata,
+            _protocol.AnimDurationMs,
+            _protocol.AnimSpeedPct,
+            _protocol.Droids);
+        long stepsEnd = 0;
+        foreach (var step in Steps)
+        {
+            var resolved = provider.Resolve(step);
+            step.DurationKind = resolved.Kind;
+            step.ResolvedDurationMs = resolved.EffectiveMs;
+            step.DurationSummary = resolved.Summary;
+            step.DurationDetail = resolved.Detail;
+            step.DurationProvisional = resolved.Provisional;
+            stepsEnd = Math.Max(stepsEnd, (long)Math.Max(0, step.StartMs) + resolved.EffectiveMs);
+        }
+        var audioEnd = AudioLanes.SelectMany(lane => lane.Clips)
+            .Select(clip => (long)Math.Max(0, clip.StartMs) + Math.Max(0, clip.DurationMs))
+            .DefaultIfEmpty(0).Max();
+        _totalDurationMs = Math.Min(int.MaxValue, Math.Max(stepsEnd, audioEnd));
+        OnPropertyChanged(nameof(TotalDurationMsValue));
     }
 
     private void RebuildRulerTicks()
@@ -868,7 +908,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
             // Ticks (and therefore the gridlines bound to them) cover the whole DRAWN width —
             // viewport floor included — not just the sequence's own duration, so the grid
             // never stops in a stub partway across ("la trame reste en pleine longueur").
-            var endMs = Math.Max(TotalDurationMs(), TimelineWidthPx / PxPerMs);
+            var endMs = Math.Max(TotalDurationMsValue, TimelineWidthPx / PxPerMs);
             int[] niceIntervals = { 100, 200, 500, 1000, 2000, 5000, 10000 };
             var interval = niceIntervals.FirstOrDefault(i => i * PxPerMs >= 50, niceIntervals[^1]);
             for (double t = 0; t <= endMs; t += interval)
@@ -927,6 +967,24 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     {
         if (!CanEditSequence || SelectedStep == null) return;
         ExecuteSequenceEdit(() => SelectedStep.StartMs = Math.Max(0, SelectedStep.StartMs - 100));
+    }
+
+    [RelayCommand(CanExecute = nameof(CanEditSequence))]
+    private void NudgeEndLonger()
+    {
+        if (!CanEditSequence || SelectedStep is not { IsInfinite: true }) return;
+        ExecuteSequenceEdit(() => SelectedStep.EndAfterMs = Math.Min(
+            SequenceImportService.MaxTimelineMs - Math.Max(0, SelectedStep.StartMs),
+            SelectedStep.EndAfterMs + 100));
+        OnPropertyChanged(nameof(SelectedStepEndAfterMs));
+    }
+
+    [RelayCommand(CanExecute = nameof(CanEditSequence))]
+    private void NudgeEndShorter()
+    {
+        if (!CanEditSequence || SelectedStep is not { IsInfinite: true }) return;
+        ExecuteSequenceEdit(() => SelectedStep.EndAfterMs = Math.Max(100, SelectedStep.EndAfterMs - 100));
+        OnPropertyChanged(nameof(SelectedStepEndAfterMs));
     }
 
     // --- Audio lanes/clips -------------------------------------------------------
@@ -1138,7 +1196,13 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     // --- Snapshot / undo-redo --------------------------------------------------
 
     private SequenceSnapshot Snapshot() => new(Name, Loop, AudioLanesToDto(),
-        Steps.Select(s => new SequenceStepDto { AnimId = s.AnimId, Target = s.Target, StartMs = s.StartMs }).ToList());
+        Steps.Select(s => new SequenceStepDto
+        {
+            AnimId = s.AnimId,
+            Target = s.Target,
+            StartMs = s.StartMs,
+            EndAfterMs = s.EndAfterMs,
+        }).ToList());
 
     private bool BeginSequenceEdit()
     {
@@ -1184,6 +1248,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     {
         SetScheduleWarnings(Array.Empty<SequencerScheduleWarning>());
         RebuildTracks();
+        ResolveGestureDurationsAndExtent();
         RebuildRulerTicks();
     }
 
@@ -1204,7 +1269,13 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
             ApplyAudioLanesFromDto(snap.AudioLanes, seedDefaultsWhenEmpty: false);
             Steps.Clear();
             foreach (var s in snap.Steps)
-                Steps.Add(new SequenceStep { AnimId = s.AnimId, Target = s.Target, StartMs = s.StartMs });
+                Steps.Add(new SequenceStep
+                {
+                    AnimId = s.AnimId,
+                    Target = s.Target,
+                    StartMs = s.StartMs,
+                    EndAfterMs = s.EndAfterMs,
+                });
             SelectedStep = null;
         }
         finally
@@ -1275,7 +1346,10 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         if (!Steps.Contains(step)) return false;
         var changed = ExecuteSequenceEdit(() => step.AnimId = value);
         if (changed && ReferenceEquals(SelectedStep, step))
+        {
             OnPropertyChanged(nameof(SelectedStepAnimId));
+            OnPropertyChanged(nameof(SelectedStepEndAfterMs));
+        }
         return changed;
     }
 
@@ -1461,8 +1535,14 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         _fileTracks.AddRange(item.Tracks);
         ApplyAudioLanesFromDto(item.AudioLanes);
         Steps.Clear();
-        foreach (var s in item.Steps) Steps.Add(new SequenceStep { AnimId = s.AnimId, Target = s.Target, StartMs = s.StartMs });
-        RebuildTracks();
+        foreach (var s in item.Steps) Steps.Add(new SequenceStep
+        {
+            AnimId = s.AnimId,
+            Target = s.Target,
+            StartMs = s.StartMs,
+            EndAfterMs = s.EndAfterMs,
+        });
+        RefreshDerivedTimelineState();
         SelectedStep = null;
         ClearHistory();
         SetDocumentOrigin(SequencerDocumentOrigin.LocalLibrary, item.Id);
@@ -1609,8 +1689,9 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
                 AnimId = step.AnimId,
                 Target = step.Target,
                 StartMs = step.StartMs,
+                EndAfterMs = step.EndAfterMs,
             });
-        RebuildTracks();
+        RefreshDerivedTimelineState();
         SelectedStep = null;
         ClearHistory();
         EstablishSavedCheckpoint();
@@ -1644,7 +1725,8 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         StopInfiniteGestures(); // a restart must not inherit TALK/POWER_DOWN from the old pass
         ResetExecutionTracking();
         _activePlaybackPlan = SequencerPlaybackPlan.Capture(
-            Steps, AudioLanes, AnimDurationMsLookup, Loop);
+            Steps, AudioLanes, AnimDurationMsLookup, Loop,
+            resolveDurationMs: step => step.ResolvedDurationMs);
         SetScheduleWarnings(_activePlaybackPlan.Warnings);
         _dispatchedPlaybackEvents.Clear();
         _elapsedAtPauseMs = 0;
@@ -1790,10 +1872,35 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
                     gesture.Target, gesture.AnimId, gesture.Seed, leaseMs);
                 TrackExecution(dispatch, gesture);
                 TrackAnimLease(dispatch, gesture, leaseMs);
+                if (dispatch.Written && gesture.AnimId is 16 or 17)
+                    _infiniteRequestBySourceOrder[gesture.SourceOrder] = dispatch.RequestId;
+                break;
+            case GestureTerminationPlaybackEvent termination:
+                TerminateInfiniteGesture(termination);
                 break;
             case AudioPlaybackEvent audio:
                 _audioPlayer.Play(audio.FilePath, audio.Loop);
                 break;
+        }
+    }
+
+    private void TerminateInfiniteGesture(GestureTerminationPlaybackEvent termination)
+    {
+        if (!_infiniteRequestBySourceOrder.Remove(termination.GestureSourceOrder, out var requestId)) return;
+        CancelAnimLease(requestId);
+        var ownedTargets = _latestGestureByDroid
+            .Where(pair => pair.Value.RequestId == requestId && pair.Value.IsInfinite)
+            .Select(pair => pair.Key)
+            .OrderBy(id => id)
+            .ToArray();
+        foreach (var droidId in ownedTargets)
+        {
+            var dispatch = _protocol.PlayAnim(
+                droidId, 0, (uint)Random.Shared.NextInt64(1, (long)uint.MaxValue + 1));
+            if (!dispatch.Written) continue;
+            if (_latestGestureByDroid.TryGetValue(droidId, out var current) &&
+                current.RequestId == requestId)
+                _latestGestureByDroid[droidId] = new GestureTargetState(dispatch.RequestId, 0);
         }
     }
 

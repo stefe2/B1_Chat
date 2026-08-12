@@ -52,7 +52,9 @@ If an available B1 master is detected, the script opens it automatically and:
 - validates the JSON handshake, firmware/protocol metadata and master Build ID;
 - reads the droid inventory and confirms every node publishes a Build ID;
 - reads targeted animation parameters and calibration;
-- checks the 18-entry animation-duration catalog;
+- checks the 18-entry animation-duration catalog; structured clients additionally
+  require `kind`, `nominalMs`, `frameCount` and IDLE `settleMs`, while `ms` remains
+  the backward-compatible legacy field;
 - proves strict runtime validation with a read-only invalid-target probe before
   sending any invalid setter or animation command;
 - sends invalid animation, configuration, and calibration commands and requires

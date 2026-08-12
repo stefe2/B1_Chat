@@ -206,7 +206,7 @@ public sealed class SequencerPlaybackPlanTests
     }
 
     [Fact]
-    public void Capture_TalkAndPowerDownUseTheReportedIndicativeDurations()
+    public void Capture_TalkAndPowerDownUsePersistedEndsAndCreateTerminationEvents()
     {
         const int powerDown = 16;
         const int talk = 17;
@@ -221,9 +221,10 @@ public sealed class SequencerPlaybackPlanTests
             false,
             () => 1);
 
-        var gestures = plan.Events.Cast<GesturePlaybackEvent>().ToArray();
-        Assert.Equal((powerDown, 3_000), (gestures[0].AnimId, gestures[0].DurationMs));
-        Assert.Equal((talk, 4_000), (gestures[1].AnimId, gestures[1].DurationMs));
-        Assert.Equal(4_200, plan.TotalDurationMs);
+        var gestures = plan.Events.OfType<GesturePlaybackEvent>().ToArray();
+        Assert.All(gestures, gesture => Assert.Equal(2_000, gesture.DurationMs));
+        var terminations = plan.Events.OfType<GestureTerminationPlaybackEvent>().ToArray();
+        Assert.Equal(new[] { 2_100, 2_200 }, terminations.Select(item => item.StartMs));
+        Assert.Equal(2_200, plan.TotalDurationMs);
     }
 }

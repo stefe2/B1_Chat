@@ -216,6 +216,7 @@ internal static class SequenceExportSerializer
                 ["animId"] = step.AnimId,
                 ["target"] = step.Target,
                 ["startMs"] = step.StartMs,
+                ["endAfterMs"] = step.EndAfterMs,
             }).ToArray()),
         };
         return root.ToJsonString(new JsonSerializerOptions { WriteIndented = true });

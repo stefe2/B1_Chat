@@ -69,11 +69,11 @@ The dashboard is updated whenever an item changes state.
 | Epic | Description | Required items complete | Deferred ideas complete |
 |---|---|---:|---:|
 | A | Playback isolation and cancellation | 7 / 8 | — |
-| B | Infinite gestures and Stop/Pause semantics | 5 / 6 | 0 / 1 |
-| C | Dirty, Undo/Redo and editing transactions | 7 / 8 | 0 / 1 |
+| B | Infinite gestures and Stop/Pause semantics | 6 / 6 | 0 / 1 |
+| C | Dirty, Undo/Redo and editing transactions | 8 / 8 | 0 / 1 |
 | D | Import, export and local library | 8 / 8 | 0 / 1 |
 | E | Deterministic scheduler and performance | 4 / 6 | 0 / 1 |
-| F | Duration and audio robustness | 0 / 8 | — |
+| F | Duration and audio robustness | 1 / 8 | — |
 | G | Preflight and ergonomics | 0 / 9 | 0 / 4 |
 | H | Automated and hardware validation | 1 / 8 | — |
 | I | Scene & Show System (future) | — | 0 / 22 |
@@ -266,7 +266,7 @@ The dashboard is updated whenever an item changes state.
   persistent `PAUSED · DROID MOTION CONTINUES` warning and its tooltip/Help use
   the same wording.
 
-### [ ] SEQ-B04 — Give infinite gesture clips explicit end semantics
+### [x] SEQ-B04 — Give infinite gesture clips explicit end semantics
 
 - **Priority:** P1
 - **Problem:** their displayed two-second width is only indicative and is not an
@@ -276,6 +276,13 @@ The dashboard is updated whenever an item changes state.
   explicit "until next gesture/end" mode. Playback sends termination at the
   represented endpoint, and timeline width matches behavior.
 - **Validation:** edit, export/import, Play, Pause/Resume, Stop, and Loop tests.
+- **Implemented:** POWER_DOWN/TALK persist a user-visible fixed endpoint
+  (`endAfterMs`, default/migration 2 s) in schema v5. Their clip width and
+  transport endpoint are identical. Playback sends targeted IDLE only while the
+  originating infinite request still owns that droid, so a later gesture at the
+  same timestamp cannot be stopped by stale cleanup. The inspector edits the
+  endpoint in 100 ms increments; Undo/Redo, Pause/Resume, Loop and export/import
+  are covered.
 
 ### [D] SEQ-B05 — Link TALK duration to an audio clip
 
@@ -436,7 +443,7 @@ The dashboard is updated whenever an item changes state.
   cancellation restores equality without retaining the former Dirty Boolean in
   transaction history.
 
-### [ ] SEQ-C06 — Refresh duration and extent after property changes
+### [x] SEQ-C06 — Refresh duration and extent after property changes
 
 - **Priority:** P1
 - **Problem:** collection changes rebuild ruler extent, but nudging `StartMs` or
@@ -446,6 +453,11 @@ The dashboard is updated whenever an item changes state.
   duration, ruler, timecode, and scroll extent exactly once at commit.
 - **Validation:** move the last clip, select longer/shorter gestures, replace
   audio, and Undo/Redo each operation.
+- **Implemented:** each committed document transaction resolves gesture tails,
+  updates one cached total, then refreshes tracks/ruler/timecode/scroll extent
+  once. Metadata/config changes use the same path; playhead ticks read the cache.
+  The edit matrix covers gesture animation/start/end, audio replacement and
+  Undo/Redo with exactly one derived-width notification per commit.
 
 ### [x] SEQ-C07 — Handle lost mouse capture and cancellation
 
@@ -781,7 +793,7 @@ The dashboard is updated whenever an item changes state.
 
 ## EPIC F — Duration and audio robustness
 
-### [ ] SEQ-F01 — Model finite, immediate and infinite gesture duration correctly
+### [H] SEQ-F01 — Model finite, immediate and infinite gesture duration correctly
 
 - **Priority:** P1
 - **Problem:** firmware reports a nominal static sum; target speed scaling and
@@ -792,8 +804,18 @@ The dashboard is updated whenever an item changes state.
   mixed speed settings is explicitly represented or conservatively warned.
 - **Validation:** compare calculated estimates with firmware rules and measured
   samples at representative speed settings.
+- **Implemented:** additive firmware metadata reports `immediate`/`finite`/
+  `infinite`, nominal milliseconds, frame count and IDLE settle time. Finite
+  estimates reproduce the firmware's 10–100 % speed clamp and ±60 ms movement
+  jitter per keyframe. Targeted clips use that droid's config; broadcast clips
+  aggregate every online target and visibly call out mixed speeds while using
+  the conservative upper bound.
+- **Hardware remaining:** capture actual completion times at representative
+  Speed values on the bench and confirm they remain inside the calculated
+  target-specific ranges. The implementation and formula-level tests are
+  complete; this measurement is the only open acceptance check.
 
-### [ ] SEQ-F02 — Use one coherent fallback duration policy
+### [x] SEQ-F02 — Use one coherent fallback duration policy
 
 - **Priority:** P2
 - **Problem:** gesture geometry/active highlighting default to 800 ms while total
@@ -804,6 +826,12 @@ The dashboard is updated whenever an item changes state.
   visibly provisional.
 - **Validation:** disconnected, handshaking, metadata-received, and invalid-ID
   snapshots agree.
+- **Implemented:** `AnimationDurationProvider` exclusively supplies each
+  gesture's kind, effective tail, range, provisional state and inspector text.
+  Geometry, active highlighting, cached total and playback plan consume the
+  resulting per-step projection. The disconnected fallback is consistently
+  1500 ms and explicitly labeled provisional; the former independent 800 ms
+  converter fallbacks were removed.
 
 ### [ ] SEQ-F03 — Notify the UI when an audio filename changes
 
@@ -1513,9 +1541,11 @@ detailed commit after its full regression passes.
 | Decision gate | DEC-003 | Resolved: retain the Local Library as the normal Scene store; keep Export only as an explicit external-copy escape hatch. |
 | P3 — Scene Library and wording | SEQ-D06, SEQ-D07, SEQ-D08 | **Complete.** Scene Save/Save As uses stable IDs and atomic/versioned storage; legacy entries migrate, deletion is recoverable, and naming/source/Dirty badges plus Help agree. External Export remains clearly secondary. |
 | S1 — Single deterministic scheduler | SEQ-E02, SEQ-E03 | **Complete.** One rearmable timer drains monotonic timestamp batches in immutable source order, compensates late wakes, warns about same-target/broadcast overlap and releases completely on cancellation. |
+| T1 — Coherent duration and infinite ends | SEQ-F01, SEQ-F02, SEQ-C06, SEQ-B04 | **Code complete; F01 hardware measurement pending.** Structured firmware timing metadata feeds one target-aware provider and cached extent; schema v5 promotes looping-gesture width into a persisted endpoint with ownership-safe IDLE termination. |
 
-SEQ-D09 remains deferred. The next batch should establish the duration model
-needed by SEQ-F01/SEQ-F02, SEQ-C06 and SEQ-B04 before attempting SEQ-E05/E06.
+SEQ-D09 remains deferred. The next dependency-complete batch is sequence/audio
+end semantics: SEQ-F08 then SEQ-E05, followed by the remaining ruler-performance
+portion of SEQ-E06.
 
 ## Decision log
 
@@ -1576,3 +1606,4 @@ Append concise evidence when closing items; do not paste full build logs.
 | 2026-08-11 | DEC-003, SEQ-J01, SEQ-J02 (hardware pending) | Resolved the product model as Scene Library first and future Show composition, with Export retained only as an explicit external copy. Implemented inert virgin-board Servos/Auto anims/Locate defaults with boot PWM detached, live Locate reconciliation, and independent center-preserving PAN/TILT Reverse through WPF, strict serial validation, rollback-compatible NVS, additive mesh V2 and per-droid capability gating. Master/slave/WPF builds and 137/137 WPF tests passed; offline regression passed 19/19 (`b1-self-test-20260811-224902.json`). Full-erase boot and physical Reverse observations remain. |
 | 2026-08-11 | SEQ-D06, SEQ-D07, SEQ-D08 | Completed the Scene-first Local Library: editable names, Save/Save As with stable GUIDs and conflict refusal, validated versioned envelopes, atomic writes, deterministic legacy migration, visible corrupt-file issues, recoverable confirmed Trash, discriminated startup restore, truthful origin/Dirty badges and aligned Help/tooltips. Export remains an external copy and cannot falsely clear modified library content. Sixteen focused cases expanded the WPF suite to 153/153; Release build completed with zero warnings/errors and offline regression passed 19/19 (`b1-self-test-20260811-231018.json`). No firmware deployment or hardware run was required. |
 | 2026-08-11 | SEQ-E02, SEQ-E03, SEQ-H03 (in progress) | Replaced per-event timers with one rearmable pass timer and a monotonic forward-only batch cursor. Late wakes drain all overdue timestamps in immutable source order and compensate the next delay; Pause/Stop/restart/Loop dispose or replace the whole session. Same-target and broadcast/target overlaps now produce timestamped SCHEDULE warnings with explicit last-received/ambiguous-mesh policy. Added 10,000-event resource, drift catch-up, batch shape/conflict, atomic gesture+audio and 20-pass repeatability coverage; WPF suite passed 157/157, Release build had zero warnings/errors and offline regression passed 19/19 (`b1-self-test-20260811-233354.json`). No firmware change, deployment or hardware run was required. |
+| 2026-08-12 | SEQ-F01, SEQ-F02, SEQ-C06, SEQ-B04 | Added structured immediate/finite/infinite firmware timing metadata and one target-speed-aware console provider with conservative mixed-speed broadcast ranges and visible provisional fallback. Cached duration/extent now refreshes exactly once per edit commit. Schema v5 persists real POWER_DOWN/TALK endpoints; playback issues ownership-safe targeted IDLE at that width across Pause/Loop without stopping a replacement gesture. WPF suite passed 165/165; Release build and all three PlatformIO environments passed; offline regression passed 19/19 (`b1-self-test-20260812-000226.json`). Firmware deployment and measured physical-duration comparison remain hardware checks. |

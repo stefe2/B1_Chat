@@ -116,10 +116,6 @@ const AnimDef ANIMS[ANIM_COUNT] = {
     {TALK,             sizeof(TALK) / sizeof(KeyFrame),             true},   // loops
 };
 
-// Indicative value (ms) used for gestures with no natural finite duration
-// (IDLE: no keyframes; POWER_DOWN/TALK: loop indefinitely).
-const uint32_t LOOPING_ANIM_DEFAULT_MS = 2000;
-
 }  // namespace
 
 void AnimationPlayer::begin(ServoEngine* engine) {
@@ -162,12 +158,19 @@ uint8_t AnimationPlayer::randomAnimId(uint32_t seed) {
 uint32_t AnimationPlayer::totalDurationMs(uint8_t animId) {
     if (animId >= ANIM_COUNT) return 0;
     const AnimDef& a = ANIMS[animId];
-    if (a.count == 0 || a.loop) return LOOPING_ANIM_DEFAULT_MS;
     uint32_t total = 0;
     for (uint8_t i = 0; i < a.count; i++) {
         total += a.frames[i].moveMs + a.frames[i].holdMs;
     }
     return total;
+}
+
+uint8_t AnimationPlayer::frameCount(uint8_t animId) {
+    return animId < ANIM_COUNT ? ANIMS[animId].count : 0;
+}
+
+bool AnimationPlayer::isInfinite(uint8_t animId) {
+    return animId < ANIM_COUNT && ANIMS[animId].loop;
 }
 
 void AnimationPlayer::play(uint8_t animId, uint32_t seed) {

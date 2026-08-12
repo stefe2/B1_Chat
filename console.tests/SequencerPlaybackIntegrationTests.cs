@@ -484,7 +484,7 @@ public sealed class SequencerPlaybackIntegrationTests
     {
         static string Fingerprint(SequencerViewModel vm)
         {
-            var steps = string.Join(";", vm.Steps.Select(s => $"{s.AnimId},{s.Target},{s.StartMs}"));
+            var steps = string.Join(";", vm.Steps.Select(s => $"{s.AnimId},{s.Target},{s.StartMs},{s.EndAfterMs}"));
             var lanes = string.Join(";", vm.AudioLanes.Select(l =>
                 $"{l.Label}[{string.Join("/", l.Clips.Select(c => $"{c.FilePath},{c.DurationMs},{c.StartMs},{c.Loop}"))}]"));
             return $"{vm.Name}|{vm.Loop}|{steps}|{lanes}";
@@ -509,6 +509,11 @@ public sealed class SequencerPlaybackIntegrationTests
                 vm.Steps.Add(new SequenceStep { AnimId = 2, Target = 0xFFFF, StartMs = 100 });
                 vm.SelectedStep = vm.Steps[0];
             }, vm => vm.NudgeStartForwardCommand.Execute(null)),
+            ("infinite gesture end", vm =>
+            {
+                vm.Steps.Add(new SequenceStep { AnimId = 17, Target = 0xFFFF, StartMs = 100 });
+                vm.SelectedStep = vm.Steps[0];
+            }, vm => vm.NudgeEndLongerCommand.Execute(null)),
             ("duplicate gesture", vm =>
             {
                 vm.Steps.Add(new SequenceStep { AnimId = 2, Target = 0xFFFF, StartMs = 100 });
@@ -603,6 +608,35 @@ public sealed class SequencerPlaybackIntegrationTests
             Assert.True(vm.UndoCommand.CanExecute(null));
             Assert.False(vm.RedoCommand.CanExecute(null));
         }
+    }
+
+    [Fact]
+    public void DurationMetadataAndTargetConfigRefreshOneSharedStepProjectionAndCachedExtent()
+    {
+        var protocol = new FakeSequencerProtocol();
+        protocol.Droids.Add(new Droid { Id = 0x1234, Online = true });
+        var scheduler = new FakePlaybackTimerScheduler();
+        using var vm = CreateViewModel(protocol, scheduler);
+        vm.Steps.Add(new SequenceStep { AnimId = 2, Target = 0x1234, StartMs = 100 });
+
+        Assert.True(vm.Steps[0].DurationProvisional);
+        Assert.Equal(1_500, vm.Steps[0].ResolvedDurationMs);
+        Assert.Equal(1_600, vm.TotalDurationMsValue);
+
+        protocol.DurationMetadata[2] = new AnimationDurationMetadata(
+            2, AnimationDurationKind.Finite, 1_000, 2);
+        protocol.Speeds[0x1234] = 50;
+        protocol.RaiseAnimDurationsReceived();
+
+        Assert.False(vm.Steps[0].DurationProvisional);
+        Assert.Equal(1_120, vm.Steps[0].ResolvedDurationMs);
+        Assert.Equal(1_220, vm.TotalDurationMsValue);
+        Assert.Contains("0.88", vm.Steps[0].DurationSummary);
+
+        protocol.Speeds[0x1234] = 100;
+        protocol.RaiseAnimConfigurationChanged();
+        Assert.Equal(620, vm.Steps[0].ResolvedDurationMs);
+        Assert.Equal(720, vm.TotalDurationMsValue);
     }
 
     [Fact]
@@ -1417,7 +1451,34 @@ public sealed class SequencerPlaybackIntegrationTests
     }
 
     [Fact]
-    public void LoopBoundary_KeepsInfiniteStateUntilAnExplicitStop()
+    public void ExplicitInfiniteEnd_UsesPersistedLengthAndDoesNotStopAReplacementGesture()
+    {
+        var protocol = new FakeSequencerProtocol();
+        protocol.Durations[2] = 500;
+        var scheduler = new FakePlaybackTimerScheduler();
+        using var vm = CreateViewModel(protocol, scheduler);
+        vm.Steps.Add(new SequenceStep
+        {
+            StartMs = 20,
+            Target = 0x1234,
+            AnimId = 17,
+            EndAfterMs = 350,
+        });
+        vm.Steps.Add(new SequenceStep { StartMs = 370, Target = 0x1234, AnimId = 2 });
+
+        vm.PlayCommand.Execute(null);
+        Assert.Equal(20, scheduler.Entries[0].DueTimeMs);
+        scheduler.Entries[0].Invoke();
+        Assert.Equal(350, scheduler.Entries[1].DueTimeMs);
+        scheduler.Entries[1].Invoke();
+
+        // The finite replacement shares the explicit endpoint. Editor order dispatches it
+        // first; ownership checking then suppresses the stale TALK termination.
+        Assert.Equal(new[] { 17, 2 }, protocol.Sent.Select(item => item.AnimId));
+    }
+
+    [Fact]
+    public void LoopBoundary_EndsInfiniteGestureBeforeStartingTheNextPass()
     {
         var protocol = new FakeSequencerProtocol();
         protocol.Durations[17] = 4000;
@@ -1429,7 +1490,7 @@ public sealed class SequencerPlaybackIntegrationTests
         vm.PlayCommand.Execute(null);
         scheduler.Entries[0].Invoke();
         scheduler.Entries[1].Invoke();
-        Assert.Single(protocol.Sent);
+        Assert.Equal(new[] { 17, 0 }, protocol.Sent.Select(sent => sent.AnimId));
         Assert.True(vm.IsPlaying);
 
         vm.StopCommand.Execute(null);
@@ -1566,7 +1627,7 @@ public sealed class SequencerPlaybackIntegrationTests
     }
 
     [Fact]
-    public void PauseAndLoopBoundary_KeepAnAcceptedLeaseAlive()
+    public void PauseKeepsLeaseButExplicitLoopBoundaryTerminatesIt()
     {
         var protocol = new FakeSequencerProtocol();
         protocol.Durations[17] = 4000;
@@ -1588,11 +1649,9 @@ public sealed class SequencerPlaybackIntegrationTests
         Assert.False(renewalTimer.Disposed);
         vm.PlayCommand.Execute(null);
         scheduler.Entries[2].Invoke();
-        Assert.False(renewalTimer.Disposed);
-
-        renewalTimer.Invoke();
-        Assert.Equal(new SentLeaseRenewal(0x1234, 92, 5000),
-            Assert.Single(protocol.LeaseRenewals));
+        Assert.True(renewalTimer.Disposed);
+        Assert.Equal(new[] { 17, 0 }, protocol.Sent.Select(item => item.AnimId));
+        Assert.Empty(protocol.LeaseRenewals);
     }
 
     [Fact]

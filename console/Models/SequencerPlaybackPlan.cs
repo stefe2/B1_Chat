@@ -36,7 +36,8 @@ public sealed class SequencerPlaybackPlan
         IEnumerable<AudioLane> audioLanes,
         IReadOnlyDictionary<int, int> animationDurationsMs,
         bool loop,
-        Func<uint>? nextSeed = null)
+        Func<uint>? nextSeed = null,
+        Func<SequenceStep, int>? resolveDurationMs = null)
     {
         ArgumentNullException.ThrowIfNull(steps);
         ArgumentNullException.ThrowIfNull(audioLanes);
@@ -47,15 +48,23 @@ public sealed class SequencerPlaybackPlan
         var captured = new List<SequencerPlaybackEvent>();
         var sourceOrder = 0;
 
+        var infiniteGestures = new List<(GesturePlaybackEvent Gesture, int EndMs)>();
         foreach (var step in steps)
         {
-            var duration = animationDurationsMs.TryGetValue(step.AnimId, out var reported)
-                && reported >= 0
-                ? reported
-                : DefaultGestureDurationMs;
-            captured.Add(new GesturePlaybackEvent(
+            var duration = step.AnimId is 16 or 17
+                ? Math.Max(100, step.EndAfterMs)
+                : resolveDurationMs != null
+                    ? Math.Max(0, resolveDurationMs(step))
+                    : animationDurationsMs.TryGetValue(step.AnimId, out var reported)
+                      && reported >= 0
+                        ? reported
+                        : DefaultGestureDurationMs;
+            var gesture = new GesturePlaybackEvent(
                 Math.Max(0, step.StartMs), sourceOrder++, step.Target, step.AnimId,
-                nextSeed(), duration));
+                nextSeed(), duration);
+            captured.Add(gesture);
+            if (step.AnimId is 16 or 17)
+                infiniteGestures.Add((gesture, EventEndMs(gesture)));
         }
 
         foreach (var lane in audioLanes)
@@ -67,6 +76,10 @@ public sealed class SequencerPlaybackPlan
                     Math.Max(0, clip.DurationMs), clip.Loop));
             }
         }
+
+        foreach (var (gesture, endMs) in infiniteGestures)
+            captured.Add(new GestureTerminationPlaybackEvent(
+                endMs, sourceOrder++, gesture.SourceOrder, gesture.Target));
 
         var ordered = captured
             .OrderBy(e => e.StartMs)
@@ -125,6 +138,7 @@ public sealed class SequencerPlaybackPlan
         var duration = playbackEvent switch
         {
             GesturePlaybackEvent gesture => gesture.DurationMs,
+            GestureTerminationPlaybackEvent => 0,
             AudioPlaybackEvent audio => audio.DurationMs,
             _ => 0,
         };
@@ -156,6 +170,12 @@ public sealed record GesturePlaybackEvent(
     int AnimId,
     uint Seed,
     int DurationMs) : SequencerPlaybackEvent(StartMs, SourceOrder);
+
+public sealed record GestureTerminationPlaybackEvent(
+    int StartMs,
+    int SourceOrder,
+    int GestureSourceOrder,
+    ushort Target) : SequencerPlaybackEvent(StartMs, SourceOrder);
 
 public sealed record AudioPlaybackEvent(
     int StartMs,

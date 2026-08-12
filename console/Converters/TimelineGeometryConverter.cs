@@ -10,10 +10,8 @@ namespace b1_chat_console.Converters;
 /// (same "one converter, several modes" shape as StrengthToBrushConverter's "Color" parameter):
 ///   "Left"  — {timeMs (int/double), pxPerMs (double)} -> double. Used for clip X and the
 ///             playhead line (both are just "a time in ms" at bind time).
-///   "Width" — {animId (int), pxPerMs (double), durationLookup (IReadOnlyDictionary&lt;int,int&gt;)}
-///             -> double. Falls back to 800ms when the real gesture duration hasn't arrived yet
-///             (getAnimDurations is fetched once at handshake); floors at 18px so a short/
-///             zoomed-out clip stays clickable.
+///   "Width" — {resolvedDurationMs (int), pxPerMs (double)} -> double. The shared duration
+///             provider owns all fallback policy; this converter only turns time into pixels.
 ///   "Top"   — {target (ushort), tracks (ObservableCollection&lt;TimelineTrack&gt;)} -> double.
 ///             Falls back to row 0 (the broadcast row) if the target isn't a currently-known
 ///             track (e.g. a droid that went offline since the sequence was authored).
@@ -25,7 +23,6 @@ namespace b1_chat_console.Converters;
 /// </summary>
 public class TimelineGeometryConverter : IMultiValueConverter
 {
-    private const int DefaultDurationMs = 800;
     private const double MinWidth = 18;
     // Vertical breathing room of a clip inside its row (row height 52 - 2×5 = 42px clip).
     public const double ClipInsetY = 5;
@@ -53,11 +50,9 @@ public class TimelineGeometryConverter : IMultiValueConverter
 
     private static double ConvertWidth(object[] values)
     {
-        if (values.Length < 3) return MinWidth;
-        var animId = values[0] is int i ? i : -1;
+        if (values.Length < 2) return MinWidth;
+        var durationMs = ToDouble(values[0]);
         var pxPerMs = ToDouble(values[1]);
-        var durationMs = values[2] is IReadOnlyDictionary<int, int> lookup && lookup.TryGetValue(animId, out var ms)
-            ? ms : DefaultDurationMs;
         return Math.Max(MinWidth, durationMs * pxPerMs);
     }
 
