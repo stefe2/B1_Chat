@@ -29,7 +29,6 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     private readonly IPlaybackTimerScheduler _timerScheduler;
     private readonly IPlaybackTimerScheduler _executionTimerScheduler;
     private readonly IPlaybackClock _playbackClock;
-    private const int HistoryMax = 50;
     private const int ExecutionStartTimeoutMs = 1500;
     private const int ExecutionCompletionGraceMs = 1500;
     private const ushort InfiniteAnimLeaseMs = 5000;
@@ -155,8 +154,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(SelectedStepAnimId));
     }
 
-    private readonly List<SequenceSnapshot> _history = new();
-    private readonly List<SequenceSnapshot> _future = new();
+    private readonly SequencerEditHistory _editHistory = new();
     private readonly List<IDisposable> _playbackTimers = new();
     private readonly HashSet<int> _dispatchedPlaybackEvents = new();
     private readonly Dictionary<uint, ExecutionTracker> _executionTrackers = new();
@@ -164,8 +162,6 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     private readonly Dictionary<uint, ActiveAnimLease> _activeAnimLeases = new();
     private readonly PlaybackGeneration _playbackGeneration = new();
     private SequencerPlaybackPlan? _activePlaybackPlan;
-    private SequenceSnapshot? _activeEditBefore;
-    private bool _activeEditWasDirty;
     private bool _suppressTimelineRefresh;
     private int _elapsedAtPauseMs;
     private bool _disposed;
@@ -273,7 +269,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         _protocol.LinkClosed += OnProtocolLinkClosed;
         Steps.CollectionChanged += (_, _) =>
         {
-            if (_activeEditBefore == null && !_suppressTimelineRefresh)
+            if (!_editHistory.HasActiveEdit && !_suppressTimelineRefresh)
                 RebuildRulerTicks();
         };
         RebuildTracks();
@@ -1068,78 +1064,33 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     private SequenceSnapshot Snapshot() => new(Name, Loop, AudioLanesToDto(),
         Steps.Select(s => new SequenceStepDto { AnimId = s.AnimId, Target = s.Target, StartMs = s.StartMs }).ToList());
 
-    private static bool SnapshotsEqual(SequenceSnapshot left, SequenceSnapshot right)
-    {
-        if (!string.Equals(left.Name, right.Name, StringComparison.Ordinal) ||
-            left.Loop != right.Loop ||
-            left.Steps.Count != right.Steps.Count ||
-            left.AudioLanes.Count != right.AudioLanes.Count)
-            return false;
-
-        for (var i = 0; i < left.Steps.Count; i++)
-        {
-            var a = left.Steps[i];
-            var b = right.Steps[i];
-            if (a.AnimId != b.AnimId || a.Target != b.Target || a.StartMs != b.StartMs)
-                return false;
-        }
-
-        for (var laneIndex = 0; laneIndex < left.AudioLanes.Count; laneIndex++)
-        {
-            var aLane = left.AudioLanes[laneIndex];
-            var bLane = right.AudioLanes[laneIndex];
-            if (!string.Equals(aLane.Label, bLane.Label, StringComparison.Ordinal) ||
-                aLane.Clips.Count != bLane.Clips.Count)
-                return false;
-            for (var clipIndex = 0; clipIndex < aLane.Clips.Count; clipIndex++)
-            {
-                var a = aLane.Clips[clipIndex];
-                var b = bLane.Clips[clipIndex];
-                if (!string.Equals(a.FilePath, b.FilePath, StringComparison.Ordinal) ||
-                    a.DurationMs != b.DurationMs || a.StartMs != b.StartMs || a.Loop != b.Loop)
-                    return false;
-            }
-        }
-        return true;
-    }
-
     private bool BeginSequenceEdit()
     {
-        if (!CanEditSequence || _activeEditBefore != null) return false;
-        _activeEditBefore = Snapshot();
-        _activeEditWasDirty = Dirty;
-        return true;
+        return CanEditSequence && _editHistory.Begin(Snapshot(), Dirty);
     }
 
     private bool CommitSequenceEdit()
     {
-        if (_activeEditBefore == null) return false;
-        var before = _activeEditBefore;
-        _activeEditBefore = null;
-        var after = Snapshot();
-        if (SnapshotsEqual(before, after)) return false;
+        if (!_editHistory.Commit(Snapshot())) return false;
 
-        PushHistory(before);
         Dirty = true;
         RefreshDerivedTimelineState();
+        UpdateUndoButtons();
         return true;
     }
 
     private bool CancelSequenceEdit()
     {
-        if (_activeEditBefore == null) return false;
-        var before = _activeEditBefore;
-        var wasDirty = _activeEditWasDirty;
-        _activeEditBefore = null;
-        var changed = !SnapshotsEqual(before, Snapshot());
-        if (changed) Apply(before, wasDirty);
-        return changed;
+        var cancellation = _editHistory.Cancel(Snapshot());
+        if (cancellation is not { DocumentChanged: true }) return false;
+        Apply(cancellation.Value.Snapshot, cancellation.Value.WasDirty);
+        return true;
     }
 
     private bool ExecuteSequenceEdit(Action mutation)
     {
         if (!CanEditSequence) return false;
-        var ownsTransaction = _activeEditBefore == null;
+        var ownsTransaction = !_editHistory.HasActiveEdit;
         if (ownsTransaction && !BeginSequenceEdit()) return false;
         var committed = false;
         try
@@ -1180,31 +1131,10 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         RefreshDerivedTimelineState();
     }
 
-    private void PushHistory(SequenceSnapshot before)
-    {
-        PushBounded(_history, before);
-        _future.Clear();
-        UpdateUndoButtons();
-    }
-
-    private static void PushBounded(List<SequenceSnapshot> stack, SequenceSnapshot snapshot)
-    {
-        stack.Add(snapshot);
-        if (stack.Count > HistoryMax) stack.RemoveAt(0);
-    }
-
-    private static SequenceSnapshot PopNewest(List<SequenceSnapshot> stack)
-    {
-        var index = stack.Count - 1;
-        var snapshot = stack[index];
-        stack.RemoveAt(index);
-        return snapshot;
-    }
-
     private void UpdateUndoButtons()
     {
-        CanUndo = _history.Count > 0;
-        CanRedo = _future.Count > 0;
+        CanUndo = _editHistory.CanUndo;
+        CanRedo = _editHistory.CanRedo;
     }
 
     private bool CanUndoEdit() => CanEditSequence && CanUndo;
@@ -1212,9 +1142,10 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     [RelayCommand(CanExecute = nameof(CanUndoEdit))]
     private void Undo()
     {
-        if (!CanEditSequence || _history.Count == 0) return;
-        PushBounded(_future, Snapshot());
-        Apply(PopNewest(_history));
+        if (!CanEditSequence) return;
+        var previous = _editHistory.Undo(Snapshot());
+        if (previous == null) return;
+        Apply(previous);
         UpdateUndoButtons();
     }
 
@@ -1223,16 +1154,16 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     [RelayCommand(CanExecute = nameof(CanRedoEdit))]
     private void Redo()
     {
-        if (!CanEditSequence || _future.Count == 0) return;
-        PushBounded(_history, Snapshot());
-        Apply(PopNewest(_future));
+        if (!CanEditSequence) return;
+        var next = _editHistory.Redo(Snapshot());
+        if (next == null) return;
+        Apply(next);
         UpdateUndoButtons();
     }
 
     private void ClearHistory()
     {
-        _history.Clear();
-        _future.Clear();
+        _editHistory.Clear();
         UpdateUndoButtons();
     }
 

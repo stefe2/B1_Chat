@@ -70,7 +70,7 @@ The dashboard is updated whenever an item changes state.
 |---|---|---:|---:|
 | A | Playback isolation and cancellation | 7 / 8 | — |
 | B | Infinite gestures and Stop/Pause semantics | 5 / 6 | 0 / 1 |
-| C | Dirty, Undo/Redo and editing transactions | 5 / 8 | 0 / 1 |
+| C | Dirty, Undo/Redo and editing transactions | 6 / 8 | 0 / 1 |
 | D | Import, export and local library | 0 / 8 | 0 / 1 |
 | E | Deterministic scheduler and performance | 2 / 6 | 0 / 1 |
 | F | Duration and audio robustness | 0 / 8 | — |
@@ -456,7 +456,7 @@ The dashboard is updated whenever an item changes state.
   already-dirty documents; compiled WPF routed-event wiring covers gesture,
   audio, ruler and library-chip capture paths. Full suite passes 82/82.
 
-### [ ] SEQ-C08 — Separate document state from transient UI state
+### [x] SEQ-C08 — Separate document state from transient UI state
 
 - **Priority:** P2
 - **Problem:** the large ViewModel mixes persistence, editor state, playback,
@@ -466,6 +466,17 @@ The dashboard is updated whenever an item changes state.
   without a risky all-at-once rewrite. Snapshots serialize document state only.
 - **Validation:** architecture tests or type-level boundaries plus unchanged UI
   behavior.
+- **Implemented:** `SequenceSnapshot` is now the explicit persistent-document
+  boundary and owns structural comparison of only name/Loop, gesture DTOs and
+  audio lane/clip DTOs. `SequencerEditHistory` independently owns begin/commit/
+  cancel plus bounded Undo/Redo, while immutable `SequencerPlaybackPlan` remains
+  the runtime boundary. The ViewModel coordinates those three responsibilities
+  and continues to own transient selection, viewport, drag and telemetry state.
+- **Evidence:** six type/architecture tests lock the snapshot surface, every
+  persistent comparison field, transaction/cancellation semantics, both bounded
+  history directions and read-only playback-plan state. The pre-existing editor
+  and transport integration suite remains unchanged; full WPF suite passes
+  88/88.
 
 ### [D] SEQ-C09 — Add recoverable draft autosave
 
@@ -1393,3 +1404,4 @@ Append concise evidence when closing items; do not paste full build logs.
 | 2026-08-11 | SEQ-A03 | Closed the Play/Pause editing policy across the complete UI surface: document and Local Library mutations lock, while inspection, arm, runtime mute, viewport tools and Export remain available. Added late-drag transition guards, disabled-control guidance and a three-state command/direct-guard matrix including Undo/Redo; WPF suite passed 76/76 and offline regression passed 17/17 (`b1-self-test-20260811-175250.json`). No firmware change or hardware run was required. |
 | 2026-08-11 | SEQ-C01 | Centralized command and drag mutations behind structural begin/commit transactions. Real edits now create one pre-edit snapshot, clear Redo, set Dirty and refresh derived timeline state once; no-op edits create nothing. Thirteen edit families plus no-op/Redo invalidation passed within the 78/78 WPF suite; offline regression passed 17/17 (`b1-self-test-20260811-201830.json`). No firmware change or hardware run was required. |
 | 2026-08-11 | SEQ-C02, SEQ-C03, SEQ-C04, SEQ-C07 | Added the shared 5 px drag threshold, complete persistent-property transaction coverage, exact 50-entry Undo/Redo bounds, and fail-safe interaction cancellation/restoration for Escape/capture/focus/unload. Twenty edit families, transient-state isolation, threshold/no-op/return, cancellation and 55-edit history ordering pass within the 82/82 WPF suite; offline regression passed 17/17 (`b1-self-test-20260811-203025.json`). No firmware change or hardware run was required. |
+| 2026-08-11 | SEQ-C08 | Established explicit persistent-document (`SequenceSnapshot`), editor-history (`SequencerEditHistory`) and immutable runtime (`SequencerPlaybackPlan`) boundaries without changing UI behavior. Six architecture tests cover the exact document surface, structural comparison, transactions/cancellation, bounded Undo/Redo and read-only playback state; full WPF suite passed 88/88 and offline regression passed 17/17 (`b1-self-test-20260811-203938.json`). No firmware change or hardware run was required. |

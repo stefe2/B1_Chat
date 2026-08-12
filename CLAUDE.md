@@ -272,6 +272,13 @@ sequence/audio Loop, lane labels/order and sequence name now share the same
 transaction path. Undo and Redo are newest-first bounded lists retaining exactly
 50 snapshots; document snapshots exclude every transient editor/telemetry field.
 
+Sequencer state responsibilities have explicit type boundaries. `SequenceSnapshot`
+contains and structurally compares only persistent document DTOs;
+`SequencerEditHistory` owns begin/commit/cancel and bounded Undo/Redo without any
+WPF or playback dependency; `SequencerPlaybackPlan` captures immutable runtime
+events. `SequencerViewModel` coordinates them while retaining transient selection,
+viewport, drag visuals, waveform and execution telemetry.
+
 **No audio in this protocol** (fw 1.6.0): `volume`/`playTrack` (console→master)
 and `config`'s `volume` field were removed when the DFPlayer was retired —
 see the Progress log.
