@@ -432,6 +432,16 @@ Full detailed history: see [PROGRESS-ARCHIVE.md](PROGRESS-ARCHIVE.md).
       routed board yet.
 
 **Recent milestones** (2026-08-12):
+- Released **firmware 1.10.0** (`fw-v1.10.0`, master Build `0798EBB8`, slave
+  `8C9045AE`) and **console 0.11.0** (`v0.11.0`, installer SHA-256
+  `184a4bd4…8740eb`). `FW_VERSION` had been left at 1.9.0 through the whole
+  Sequencer-safety effort, so the previously published binaries contained none
+  of it. Firmware CI built both roles and published the SHA-256 manifest with
+  bootloader/partitions; the console release ran publish → verify → NSIS → tag.
+  Proto stays 5 (everything additive). First release whose minor is two digits:
+  `UpdateService.GetLatestReleaseAsync` parses versions and takes the semantic
+  maximum, so 1.10.0 > 1.9.0 and 0.11.0 > 0.10.6 despite GitHub's
+  lexicographic `/releases` ordering — the pitfall that once flashed a 1.3.9.
 - Sequencer transport is now conventional and non-destructive: one
   Play/Pause/Resume toggle (`Space`), an explicit `Restart` (`Ctrl+Enter`), and
   Stop/Safe/E-STOP that retain the playhead with a separate `Return to start`

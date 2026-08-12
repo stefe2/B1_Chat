@@ -84,3 +84,12 @@ the console silently falls back when a droid does not advertise it.
 Safe Stop, infinite-gesture leases, per-axis PAN/TILT Reverse calibration,
 structured gesture-duration metadata, and inert-by-default servos on a newly
 erased board.
+
+## Download verification
+
+SHA-256 for `b1-chat-console-setup-0.11.0.exe`:
+
+`184a4bd4b48501fe049eea9a335c236f7ddf25171880fcf627dbad191b8740eb`
+
+Matching firmware release `fw-v1.10.0`, Build IDs `0798EBB8` (master) and
+`8C9045AE` (slave).
