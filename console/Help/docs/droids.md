@@ -52,7 +52,13 @@ of repeatedly appearing for adoption.
 | ✕ | Forgets an adopted slave. |
 
 Locate is transient and is not saved. A board or console restart returns the LED
-to its normal status pattern.
+to its normal status pattern; current firmware reports that reset state so the
+row no longer remains optimistically lit after the droid reappears.
+
+On a virgin or full-erased board, **Servos** and **Auto anims** also begin off
+and servo PWM stays detached until explicitly enabled. Once changed by the
+operator, those two switches persist across ordinary reboots and firmware
+updates; Locate never persists.
 
 ## Names and persistence
 

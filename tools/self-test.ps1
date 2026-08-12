@@ -185,6 +185,27 @@ Invoke-Test "Strict serial and mesh validation present" {
     "serial, mesh and OTA guards detected"
 }
 
+Invoke-Test "Virgin-board motion defaults fail closed" {
+    Assert-Source "src/main.cpp" "Config\.servosEnabled\(false\)" "virgin servo default is not off"
+    Assert-Source "src/main.cpp" "Config\.autoAnimEnabled\(false\)" "virgin automatic-animation default is not off"
+    Assert-Source "src/main.cpp" "static bool gLocateOn = false" "locate default is not off"
+    Assert-Source "src/main.cpp" "gLocateOn \? 4 : 0" "Locate state is not reported in heartbeat"
+    Assert-Source "src/servo_engine.h" "bool _enabled = false" "servo PWM engine does not start detached"
+    "servos + automatic animations + locate default off; PWM detached"
+}
+
+Invoke-Test "Per-axis servo reverse pipeline present" {
+    Assert-Source "src/config_store.cpp" "reverseKey\(uint16_t id" "per-droid reverse persistence missing"
+    Assert-Source "src/mesh_comm.h" "MSG_CALIB_V2" "mesh reverse-calibration payload missing"
+    Assert-Source "src/mesh_comm.h" "MSG_CAPABILITIES" "per-droid capability report missing"
+    Assert-Source "src/servo_engine.cpp" "reverseAroundCenter\(panDeg" "PAN output reversal missing"
+    Assert-Source "src/servo_engine.cpp" "reverseAroundCenter\(tiltDeg" "TILT output reversal missing"
+    Assert-Source "console/ViewModels/CalibrationViewModel.cs" "PanReversed" "console PAN reverse setting missing"
+    Assert-Source "console/ViewModels/CalibrationViewModel.cs" "TiltReversed" "console TILT reverse setting missing"
+    Assert-Source "console/ViewModels/CalibrationViewModel.cs" "SelectedTarget\?\.SupportsServoReverse" "selected-droid capability gate missing"
+    "NVS + compatible mesh + servo output + console controls detected"
+}
+
 Invoke-Test "Firmware Build ID pipeline present" {
     Assert-Source "platformio.ini" "pio_build_id\.py" "PlatformIO Build ID generator missing"
     Assert-Source "src/mesh_comm.h" "uint32_t buildId" "heartbeat Build ID missing"
@@ -308,6 +329,10 @@ if (-not $SkipSerial) {
                 Assert-True ($null -ne $calibBefore) "no calibration response"
                 Assert-True ([int]$calibBefore.panMin -le [int]$calibBefore.panCenter -and [int]$calibBefore.panCenter -le [int]$calibBefore.panMax) "invalid stored pan order"
                 Assert-True ([int]$calibBefore.tiltMin -le [int]$calibBefore.tiltCenter -and [int]$calibBefore.tiltCenter -le [int]$calibBefore.tiltMax) "invalid stored tilt order"
+                if (@($hello.caps) -contains "servoReverse") {
+                    Assert-True ($calibBefore.panReversed -is [bool]) "PAN reverse state missing or not boolean"
+                    Assert-True ($calibBefore.tiltReversed -is [bool]) "TILT reverse state missing or not boolean"
+                }
                 "pan $($calibBefore.panMin)/$($calibBefore.panCenter)/$($calibBefore.panMax), tilt $($calibBefore.tiltMin)/$($calibBefore.tiltCenter)/$($calibBefore.tiltMax)"
             }
 
@@ -378,6 +403,24 @@ if (-not $SkipSerial) {
                     }
                     "$($badCalib.msg)"
                 }
+
+                if (@($hello.caps) -contains "servoReverse") {
+                    $badReverseJson = '{"cmd":"calib","target":' + $masterId + ',"panMin":' + [int]$calibBefore.panMin + ',"panCenter":' + [int]$calibBefore.panCenter + ',"panMax":' + [int]$calibBefore.panMax + ',"tiltMin":' + [int]$calibBefore.tiltMin + ',"tiltCenter":' + [int]$calibBefore.tiltCenter + ',"tiltMax":' + [int]$calibBefore.tiltMax + ',"panReversed":"invalid","tiltReversed":false}'
+                    $badReverse = Send-And-Wait $port $badReverseJson { param($e) $e.evt -eq "err" }
+                    $calibAfterReverse = Send-And-Wait $port $calibJson {
+                        param($e) $e.evt -eq "calibData" -and [int]$e.target -eq $masterId
+                    }
+                    Invoke-Test "Invalid servo reverse rejected without mutation" {
+                        Assert-True ($null -ne $badReverse) "invalid reverse flag produced no err event"
+                        Assert-True ($null -ne $calibAfterReverse) "calibration could not be reread"
+                        foreach ($field in @("panMin","panCenter","panMax","tiltMin","tiltCenter","tiltMax","panReversed","tiltReversed")) {
+                            Assert-True ($calibBefore.$field -eq $calibAfterReverse.$field) "invalid reverse flag changed $field"
+                        }
+                        "$($badReverse.msg)"
+                    }
+                } else {
+                    Add-Result "Invalid servo reverse rejected without mutation" "SKIP" "firmware does not advertise servoReverse"
+                }
             } else {
                 $reason = "runtime validation preflight failed; command intentionally not sent"
                 Add-Result "Invalid animation rejected" "SKIP" $reason
@@ -386,6 +429,7 @@ if (-not $SkipSerial) {
                 Add-Result "Invalid Safe Stop rejected" "SKIP" $reason
                 Add-Result "Invalid config rejected without mutation" "SKIP" $reason
                 Add-Result "Invalid calibration rejected without mutation" "SKIP" $reason
+                Add-Result "Invalid servo reverse rejected without mutation" "SKIP" $reason
             }
 
             Start-Sleep -Seconds $ObserveSeconds

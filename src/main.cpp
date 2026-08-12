@@ -27,11 +27,11 @@ static AnimationPlayer anim;
 static uint32_t nextMove = 0;
 
 // Runtime servo state of THIS droid (controllable from the web console).
-static bool gServos = true;
+static bool gServos = false;
 
 // Spontaneous idle anims of THIS droid (controllable from the web console).
 // Doesn't affect Play (anim) or the Sequencer: only the random idle draw.
-static bool gAutoAnim = true;
+static bool gAutoAnim = false;
 
 // Transient safety latch. Unlike gAutoAnim it is never persisted: Safe Stop
 // and Emergency Stop suppress spontaneous motion until an explicit gesture is
@@ -142,6 +142,12 @@ static bool validCalibPayload(const CalibPayload& p) {
            p.tiltMin <= 180 && p.tiltCenter <= 180 && p.tiltMax <= 180 &&
            p.panMin <= p.panCenter && p.panCenter <= p.panMax &&
            p.tiltMin <= p.tiltCenter && p.tiltCenter <= p.tiltMax;
+}
+
+static bool validCalibV2Payload(const CalibV2Payload& p) {
+    const CalibPayload limits{p.targetId, p.panMin, p.panCenter, p.panMax,
+                              p.tiltMin, p.tiltCenter, p.tiltMax};
+    return validCalibPayload(limits) && p.panReversed <= 1 && p.tiltReversed <= 1;
 }
 
 static bool validConfigPayload(const ConfigPayload& p) {
@@ -397,6 +403,9 @@ static void applyName(const char* name) {
 // Applies a "locate" request for THIS droid (master or slave) — see gLocateOn.
 static void applyLocate(bool en) {
     gLocateOn = en;
+#if IS_MASTER
+    Console.setMasterLocate(en);
+#endif
     LOGF("locate %s", en ? "ON" : "OFF");
 }
 
@@ -410,13 +419,14 @@ static void applyAnimParamsEffect(uint8_t freq, uint8_t amp, uint8_t speed) {
 }
 
 // Persists and applies a received calibration for THIS droid (master or slave).
-static void applyCalib(const CalibPayload& p) {
-    const ServoCalib c{p.panMin, p.panCenter, p.panMax, p.tiltMin, p.tiltCenter, p.tiltMax};
+static void applyCalib(const ServoCalib& c) {
     Config.setCalib(Mesh.myId(), c);
     head.setLimits(c.panMin, c.panCenter, c.panMax, c.tiltMin, c.tiltCenter, c.tiltMax);
+    head.setReversed(c.panReversed != 0, c.tiltReversed != 0);
     head.center();
-    LOGF("calibration applied (pan %u/%u/%u, tilt %u/%u/%u)",
-         p.panMin, p.panCenter, p.panMax, p.tiltMin, p.tiltCenter, p.tiltMax);
+    LOGF("calibration applied (pan %u/%u/%u%s, tilt %u/%u/%u%s)",
+         c.panMin, c.panCenter, c.panMax, c.panReversed ? " reversed" : "",
+         c.tiltMin, c.tiltCenter, c.tiltMax, c.tiltReversed ? " reversed" : "");
 }
 
 // Console hook: dispatch a tracked command and play it locally when targeted.
@@ -483,10 +493,11 @@ static void onLocateCmd(uint16_t target, bool en) {
 
 // Console hook: calibration received (already filtered on target == this droid).
 static void onCalibCmd(uint16_t target, uint8_t panMin, uint8_t panCenter, uint8_t panMax,
-                        uint8_t tiltMin, uint8_t tiltCenter, uint8_t tiltMax) {
+                        uint8_t tiltMin, uint8_t tiltCenter, uint8_t tiltMax,
+                        bool panReversed, bool tiltReversed) {
     (void)target;
-    const CalibPayload p{target, panMin, panCenter, panMax, tiltMin, tiltCenter, tiltMax};
-    applyCalib(p);
+    applyCalib(ServoCalib{panMin, panCenter, panMax, tiltMin, tiltCenter, tiltMax,
+                          (uint8_t)panReversed, (uint8_t)tiltReversed});
 }
 
 // Console hook: transient preview (not persisted), already filtered on target.
@@ -580,8 +591,25 @@ static void processMeshMessage(uint8_t type, const uint8_t* payload, uint8_t len
             LOGF("invalid CALIB payload from %04X", srcId);
             return;
         }
+        if (p.targetId == MESH_TARGET_ALL || p.targetId == Mesh.myId()) {
+            // A legacy payload carries only limits. Preserve any direction
+            // flags already stored by newer firmware.
+            ServoCalib c = Config.getCalib(Mesh.myId());
+            c.panMin = p.panMin; c.panCenter = p.panCenter; c.panMax = p.panMax;
+            c.tiltMin = p.tiltMin; c.tiltCenter = p.tiltCenter; c.tiltMax = p.tiltMax;
+            applyCalib(c);
+        }
+    } else if (type == MSG_CALIB_V2 && len == sizeof(CalibV2Payload)) {
+        CalibV2Payload p;
+        memcpy(&p, payload, sizeof(p));
+        if (!validCalibV2Payload(p)) {
+            LOGF("invalid CALIB_V2 payload from %04X", srcId);
+            return;
+        }
         if (p.targetId == MESH_TARGET_ALL || p.targetId == Mesh.myId())
-            applyCalib(p);
+            applyCalib(ServoCalib{p.panMin, p.panCenter, p.panMax,
+                                  p.tiltMin, p.tiltCenter, p.tiltMax,
+                                  p.panReversed, p.tiltReversed});
     } else if (type == MSG_CONFIG && len == sizeof(ConfigPayload)) {
         ConfigPayload p;
         memcpy(&p, payload, sizeof(p));
@@ -608,6 +636,7 @@ static void processMeshMessage(uint8_t type, const uint8_t* payload, uint8_t len
         memcpy(&hb, payload, sizeof(hb));
         Droids.setServos(srcId, hb.state & 0x01);
         Droids.setAutoAnim(srcId, hb.state & 0x02);
+        Droids.setLocate(srcId, hb.state & 0x04);
         Droids.setFwIdentity(srcId, hb.fwMajor, hb.fwMinor, hb.fwPatch, hb.buildId);
 #endif
     } else if (type == MSG_HEARTBEAT && len == sizeof(LegacyHeartbeatPayload)) {
@@ -616,7 +645,14 @@ static void processMeshMessage(uint8_t type, const uint8_t* payload, uint8_t len
         memcpy(&hb, payload, sizeof(hb));
         Droids.setServos(srcId, hb.state & 0x01);
         Droids.setAutoAnim(srcId, hb.state & 0x02);
+        Droids.setLocate(srcId, false);
         Droids.setFwIdentity(srcId, hb.fwMajor, hb.fwMinor, hb.fwPatch, 0);
+#endif
+    } else if (type == MSG_CAPABILITIES && len == sizeof(CapabilitiesPayload)) {
+#if IS_MASTER
+        CapabilitiesPayload p;
+        memcpy(&p, payload, sizeof(p));
+        Droids.setCapabilities(srcId, p.flags);
 #endif
     } else if (type == MSG_HEARTBEAT) {
         // old form / presence: already noted.
@@ -784,15 +820,11 @@ void setup() {
     head.setIdleNoise(true);
     anim.begin(&head);
 
-    // Initial servo/auto-anim state: NVS-persisted value if this droid has
-    // ever been toggled before; the compile-time default (master paused if
-    // MASTER_ANIM_PAUSED) only applies on a never-configured board.
-#if IS_MASTER && MASTER_ANIM_PAUSED
+    // A virgin/full-erased ESP32 always starts inert. Once the operator has
+    // explicitly changed these switches, their NVS values still survive normal
+    // firmware updates and reboots.
     gServos = Config.servosEnabled(false);
-#else
-    gServos = Config.servosEnabled(true);
-#endif
-    gAutoAnim = Config.autoAnimEnabled(true);
+    gAutoAnim = Config.autoAnimEnabled(false);
     head.setEnabled(gServos);
 
 #if IS_MASTER
@@ -811,6 +843,7 @@ void setup() {
     Console.onOtaAbort(onOtaAbortCmd);
     Console.setMasterServos(gServos);
     Console.setMasterAutoAnim(gAutoAnim);
+    Console.setMasterLocate(gLocateOn);
 #endif
 
     const bool meshReady = Mesh.begin(GROUP_KEY);
@@ -829,6 +862,7 @@ void setup() {
         // Persisted calibration of THIS droid (default limits if never set).
         const ServoCalib c = Config.getCalib(Mesh.myId());
         head.setLimits(c.panMin, c.panCenter, c.panMax, c.tiltMin, c.tiltCenter, c.tiltMax);
+        head.setReversed(c.panReversed != 0, c.tiltReversed != 0);
         LOGF("mesh ready, id=%04X (servos %s)", Mesh.myId(), gServos ? "ON" : "OFF");
     } else {
         LOGF("mesh: initialization failed");
@@ -867,10 +901,13 @@ void loop() {
     if (now > nextHeartbeat) {
         nextHeartbeat = now + HEARTBEAT_MS;
         HeartbeatPayload hb{now,
-                            (uint8_t)((gServos ? 1 : 0) | (gAutoAnim ? 2 : 0)),
+                            (uint8_t)((gServos ? 1 : 0) | (gAutoAnim ? 2 : 0) |
+                                      (gLocateOn ? 4 : 0)),
                             gFwMajor, gFwMinor, gFwPatch,
                             (uint32_t)FW_BUILD_ID};
         Mesh.send(MSG_HEARTBEAT, &hb, sizeof(hb));
+        const CapabilitiesPayload capabilities{DROID_CAP_SERVO_REVERSE};
+        Mesh.send(MSG_CAPABILITIES, &capabilities, sizeof(capabilities));
     }
 
     // Direct neighborhood report (topology): each droid periodically

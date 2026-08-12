@@ -46,17 +46,24 @@ public:
     void setLimits(uint8_t panMin, uint8_t panCenter, uint8_t panMax,
                    uint8_t tiltMin, uint8_t tiltCenter, uint8_t tiltMax);
 
+    // Reverses the electrical direction of either servo while keeping the
+    // Sequencer/preview coordinate system unchanged.
+    void setReversed(bool panReversed, bool tiltReversed);
+
     // Physically enables/disables the PWM outputs (servo protection).
     // Disabled: the pins are detached (no signal -> servos free to move).
     void setEnabled(bool en);
 
 private:
-    bool _enabled = true;
+    // Fail closed: begin() must not emit even a brief PWM pulse before the
+    // persisted servo preference has been loaded by setup().
+    bool _enabled = false;
 
     // Current mechanical limits (degrees); defaults set in begin(),
     // replaceable via setLimits() (per-droid persisted calibration).
     uint8_t _panMin = 0, _panCenter = 90, _panMax = 180;
     uint8_t _tiltMin = 0, _tiltCenter = 90, _tiltMax = 180;
+    bool _panReversed = false, _tiltReversed = false;
 
     // Interpolation
     float _startPan = 0, _startTilt = 0;

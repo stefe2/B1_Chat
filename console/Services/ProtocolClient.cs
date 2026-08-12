@@ -236,13 +236,16 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
         SendCmd(new JsonObject { ["cmd"] = "preview", ["target"] = target, ["pan"] = pan, ["tilt"] = tilt });
         PacketSent?.Invoke(target, "preview");
     }
-    public void SetCalib(ushort target, int panMin, int panCenter, int panMax, int tiltMin, int tiltCenter, int tiltMax)
+    public void SetCalib(ushort target, int panMin, int panCenter, int panMax,
+                         int tiltMin, int tiltCenter, int tiltMax,
+                         bool panReversed, bool tiltReversed)
     {
         SendCmd(new JsonObject
         {
             ["cmd"] = "calib", ["target"] = target,
             ["panMin"] = panMin, ["panCenter"] = panCenter, ["panMax"] = panMax,
             ["tiltMin"] = tiltMin, ["tiltCenter"] = tiltCenter, ["tiltMax"] = tiltMax,
+            ["panReversed"] = panReversed, ["tiltReversed"] = tiltReversed,
         });
         PacketSent?.Invoke(target, "calib");
     }
@@ -449,6 +452,8 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
             if (droid.IsMaster) droid.PortName = _link.PortName;
             if (item.TryGetProperty("servos", out var sv)) droid.ServosOn = sv.GetBoolean();
             if (item.TryGetProperty("autoAnim", out var aa)) droid.AutoAnimOn = aa.GetBoolean();
+            if (item.TryGetProperty("locate", out var lo)) droid.LocateOn = lo.GetBoolean();
+            droid.SupportsServoReverse = item.TryGetProperty("servoReverse", out var sr) && sr.GetBoolean();
             if (item.TryGetProperty("adopted", out var ad)) droid.Adopted = ad.GetBoolean();
             if (item.TryGetProperty("fw", out var fw)) droid.FwVersion = fw.GetString() ?? "";
             droid.BuildId = item.TryGetProperty("build", out var build) ? build.GetString() ?? "" : "";

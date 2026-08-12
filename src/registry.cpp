@@ -44,17 +44,27 @@ bool Registry::seen(uint16_t id, int rssi, uint32_t now) {
         _e[_count].id = id;
         _e[_count].rssi = (int16_t)rssi;
         _e[_count].lastSeen = now;
-        _e[_count].servos = true;
-        _e[_count].autoAnim = true;
+        // Fail closed until the first heartbeat reports the actual state.
+        _e[_count].servos = false;
+        _e[_count].autoAnim = false;
+        _e[_count].locate = false;
         _e[_count].adopted = adopted;
         _e[_count].fwMajor = 0;
         _e[_count].fwMinor = 0;
         _e[_count].fwPatch = 0;
         _e[_count].buildId = 0;
+        _e[_count].capabilities = 0;
         _count++;
         return true;
     }
     return false;  // table full
+}
+
+void Registry::setCapabilities(uint16_t id, uint32_t capabilities) {
+    CriticalGuard guard(_mux);
+    for (uint8_t i = 0; i < _count; i++) {
+        if (_e[i].id == id) { _e[i].capabilities = capabilities; return; }
+    }
 }
 
 void Registry::setServos(uint16_t id, bool on) {
@@ -68,6 +78,13 @@ void Registry::setAutoAnim(uint16_t id, bool on) {
     CriticalGuard guard(_mux);
     for (uint8_t i = 0; i < _count; i++) {
         if (_e[i].id == id) { _e[i].autoAnim = on; return; }
+    }
+}
+
+void Registry::setLocate(uint16_t id, bool on) {
+    CriticalGuard guard(_mux);
+    for (uint8_t i = 0; i < _count; i++) {
+        if (_e[i].id == id) { _e[i].locate = on; return; }
     }
 }
 

@@ -69,6 +69,12 @@ A full flash erases all saved data on that board and writes the bootloader,
 partition table, and application. See [Flashing over USB](firmware/flashing.md)
 before using this option on an existing droid.
 
+Current firmware treats a blank/full-erased board as uncommissioned: **Servos**,
+**Auto anims**, and the transient **Locate** override all begin off. Servo PWM
+remains detached, so startup does not briefly command center. These are virgin-
+board defaults only; a normal firmware update preserves choices already stored
+on an existing board.
+
 ## Step 4 — Flash every slave
 
 Repeat the USB process for each remaining board, selecting **Slave**. A release
@@ -112,10 +118,12 @@ board, so an active slave can reappear on its next heartbeat and ask again.
 With the mechanism unobstructed, open calibration for one droid at a time:
 
 1. Start with narrow min/max limits around center.
-2. Move toward each physical limit in small steps.
-3. Stop before binding, buzzing, or excessive current draw.
-4. Set the center to the desired neutral pose.
-5. Wait at least 1.2 seconds after the last change before selecting another
+2. Set **Reverse** independently for PAN or TILT if its physical direction is
+   opposite to the scene/preview direction.
+3. Move toward each physical limit in small steps.
+4. Stop before binding, buzzing, or excessive current draw.
+5. Set the center to the desired neutral pose.
+6. Wait at least 1.2 seconds after the last change before selecting another
    droid, then reselect it to confirm the stored values.
 
 Continue with the full [Servo Calibration](calibration.md) guide.

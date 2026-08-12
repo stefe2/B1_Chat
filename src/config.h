@@ -43,10 +43,6 @@
 #define IS_MASTER 1
 #endif
 
-// Temporary pause of servos/animations on the MASTER (protects the servos
-// while tuning the web page). Set to 0 to re-enable.
-#define MASTER_ANIM_PAUSED 1
-
 // ---------------------------------------------------------------------------
 //  Network & group key (defined by the build flags in platformio.ini)
 // ---------------------------------------------------------------------------

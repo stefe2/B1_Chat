@@ -142,8 +142,10 @@ void SerialConsole::pushDroids() {
     me["role"] = "master";
     me["servos"] = _masterServos;
     me["autoAnim"] = _masterAutoAnim;
+    me["locate"] = _masterLocate;
     me["adopted"] = true;
     me["fw"] = FW_VERSION;
+    me["servoReverse"] = true;
     putBuildId(me, "build", (uint32_t)FW_BUILD_ID);
 
     // The other droids (slaves).
@@ -165,8 +167,10 @@ void SerialConsole::pushDroids() {
         o["role"] = "slave";
         o["servos"] = e.servos;
         o["autoAnim"] = e.autoAnim;
+        o["locate"] = e.locate;
         o["adopted"] = e.adopted;
         o["fw"] = String(e.fwMajor) + "." + String(e.fwMinor) + "." + String(e.fwPatch);
+        o["servoReverse"] = (e.capabilities & DROID_CAP_SERVO_REVERSE) != 0;
         putBuildId(o, "build", e.buildId);
     }
     serializeJson(doc, Serial);
@@ -352,6 +356,8 @@ void SerialConsole::pushCalibData(uint16_t target) {
     doc["tiltMin"] = c.tiltMin;
     doc["tiltCenter"] = c.tiltCenter;
     doc["tiltMax"] = c.tiltMax;
+    doc["panReversed"] = c.panReversed != 0;
+    doc["tiltReversed"] = c.tiltReversed != 0;
     serializeJson(doc, Serial);
     Serial.print('\n');
 }
@@ -434,6 +440,11 @@ bool SerialConsole::validateOp(JsonObjectConst op, char* why, size_t whyLen) {
             snprintf(why, whyLen, "calib requires min <= center <= max");
             return false;
         }
+        if ((!op["panReversed"].isNull() && !op["panReversed"].is<bool>()) ||
+            (!op["tiltReversed"].isNull() && !op["tiltReversed"].is<bool>())) {
+            snprintf(why, whyLen, "calib reverse flags must be boolean");
+            return false;
+        }
         return true;
     }
     // (seqSave/seqDelete ops removed in fw 1.7.0 — an old backup file carrying
@@ -472,11 +483,20 @@ bool SerialConsole::applyOp(JsonObjectConst op) {
         const uint8_t tiltCenter = op["tiltCenter"] | SERVO_TILT_CENTER;
         const uint8_t tiltMax    = op["tiltMax"]    | SERVO_TILT_MAX;
         const uint16_t cacheId = target == MESH_TARGET_ALL ? Mesh.myId() : target;
-        Config.setCalib(cacheId, ServoCalib{panMin, panCenter, panMax, tiltMin, tiltCenter, tiltMax});
+        const ServoCalib previous = Config.getCalib(cacheId);
+        const bool panReversed = op["panReversed"] | (previous.panReversed != 0);
+        const bool tiltReversed = op["tiltReversed"] | (previous.tiltReversed != 0);
+        Config.setCalib(cacheId, ServoCalib{panMin, panCenter, panMax,
+                                            tiltMin, tiltCenter, tiltMax,
+                                            (uint8_t)panReversed, (uint8_t)tiltReversed});
         CalibPayload p{target, panMin, panCenter, panMax, tiltMin, tiltCenter, tiltMax};
         Mesh.send(MSG_CALIB, &p, sizeof(p));
+        CalibV2Payload p2{target, panMin, panCenter, panMax, tiltMin, tiltCenter, tiltMax,
+                          (uint8_t)panReversed, (uint8_t)tiltReversed};
+        Mesh.send(MSG_CALIB_V2, &p2, sizeof(p2));
         if ((target == MESH_TARGET_ALL || target == Mesh.myId()) && _calibCb)
-            _calibCb(target, panMin, panCenter, panMax, tiltMin, tiltCenter, tiltMax);
+            _calibCb(target, panMin, panCenter, panMax, tiltMin, tiltCenter, tiltMax,
+                     panReversed, tiltReversed);
         return true;
     }
     return false;   // impossible after validateOp
@@ -516,6 +536,7 @@ void SerialConsole::handleLine(const char* line) {
         caps.add("animAccepted");
         caps.add("animLease");
         caps.add("safeStop");
+        caps.add("servoReverse");
         ack["dirty"] = Config.dirty();
         _lastDirtySent = Config.dirty();
         serializeJson(ack, Serial);
@@ -775,12 +796,21 @@ void SerialConsole::handleLine(const char* line) {
         // Central cache (like the names): lets getCalib answer without
         // depending on a mesh round-trip to a remote slave.
         const uint16_t cacheId = target == MESH_TARGET_ALL ? Mesh.myId() : target;
-        Config.setCalib(cacheId, ServoCalib{panMin, panCenter, panMax, tiltMin, tiltCenter, tiltMax});
+        const ServoCalib previous = Config.getCalib(cacheId);
+        const bool panReversed = doc["panReversed"] | (previous.panReversed != 0);
+        const bool tiltReversed = doc["tiltReversed"] | (previous.tiltReversed != 0);
+        Config.setCalib(cacheId, ServoCalib{panMin, panCenter, panMax,
+                                            tiltMin, tiltCenter, tiltMax,
+                                            (uint8_t)panReversed, (uint8_t)tiltReversed});
 
         CalibPayload p{target, panMin, panCenter, panMax, tiltMin, tiltCenter, tiltMax};
         Mesh.send(MSG_CALIB, &p, sizeof(p));
+        CalibV2Payload p2{target, panMin, panCenter, panMax, tiltMin, tiltCenter, tiltMax,
+                          (uint8_t)panReversed, (uint8_t)tiltReversed};
+        Mesh.send(MSG_CALIB_V2, &p2, sizeof(p2));
         if ((target == MESH_TARGET_ALL || target == Mesh.myId()) && _calibCb)
-            _calibCb(target, panMin, panCenter, panMax, tiltMin, tiltCenter, tiltMax);
+            _calibCb(target, panMin, panCenter, panMax, tiltMin, tiltCenter, tiltMax,
+                     panReversed, tiltReversed);
         log("calib -> %04X", target);
 
     } else if (!strcmp(cmd, "getCalib")) {

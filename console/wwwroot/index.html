@@ -985,8 +985,8 @@ function upsertDroid(d) {
     name: (prev && prev.name) || d.name || "",
     lastSeen: Date.now() - (d.age || 0), rssi: (d.rssi ?? (prev && prev.rssi) ?? 0),
     state: d.state ?? 0, role: d.role || (prev && prev.role) || "slave",
-    servos: (d.servos ?? (prev && prev.servos) ?? true),
-    autoAnim: (d.autoAnim ?? (prev && prev.autoAnim) ?? true),
+    servos: (d.servos ?? (prev && prev.servos) ?? false),
+    autoAnim: (d.autoAnim ?? (prev && prev.autoAnim) ?? false),
   });
 }
 

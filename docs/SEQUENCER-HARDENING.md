@@ -77,6 +77,7 @@ The dashboard is updated whenever an item changes state.
 | G | Preflight and ergonomics | 0 / 9 | 0 / 4 |
 | H | Automated and hardware validation | 1 / 8 | — |
 | I | Scene & Show System (future) | — | 0 / 22 |
+| J | Commissioning and servo configuration safety | 0 / 2 | — |
 
 ## EPIC A — Playback isolation and cancellation
 
@@ -498,7 +499,7 @@ The dashboard is updated whenever an item changes state.
   startup offers recovery only when the draft is newer and Dirty.
 - **Validation:** crash/restart and stale-draft tests.
 
-## EPIC D — Import, export and local library
+## EPIC D — Scene import, external copies and local library
 
 ### [x] SEQ-D01 — Parse and validate import before mutating the editor
 
@@ -607,9 +608,15 @@ The dashboard is updated whenever an item changes state.
 - **Problem:** the UI can Load/Delete historical library entries but cannot call
   the existing Save method; Import's tooltip incorrectly says it adds an item.
 - **Depends on:** SEQ-D01, SEQ-D04.
-- **Acceptance:** choose and implement one coherent product decision: restore
-  Save/Save As with overwrite rules, or remove the panel/service and migrate
-  users to file import/export. README, Help, and tooltips match.
+- **Decision:** retained. The current Sequencer document is a Scene; the Local
+  Library is its normal working store. Save updates the selected scene and Save
+  As creates a new stable scene identity. A future Show combines scene
+  instances without replacing the scene editor.
+- **Acceptance:** implement Library Save/Save As with explicit overwrite/name
+  conflict rules, stable IDs, versioned/atomic storage and legacy migration.
+  Import never silently adds a scene. Export remains an explicit external copy
+  for transfer, support, version control or backup—not the everyday Save path.
+  README, Help and tooltips match.
 - **Validation:** end-to-end save/load/delete or migration/removal test.
 
 ### [ ] SEQ-D07 — Confirm destructive library deletion
@@ -1383,6 +1390,54 @@ choices that would make these items unnecessarily difficult later.
 - **Validation:** repeatable master-only and multi-droid measurements, missing
   telemetry, outliers, audio-device change and before/after compensation review.
 
+## EPIC J — Commissioning and servo configuration safety
+
+These requirements were identified while resolving the Scene Library model.
+They are cross-cutting firmware/console safeguards rather than Scene features,
+but remain in this tracked plan so they cannot be lost between backlog batches.
+
+### [H] SEQ-J01 — Make a virgin ESP32 inert by default
+
+- **Priority:** P0
+- **Problem:** an erased/new slave previously defaulted Servos and Auto anims to
+  ON, and the servo engine emitted a center PWM pulse before those preferences
+  loaded. Locate already began OFF but had no explicit regression contract.
+- **Acceptance:** on missing NVS keys, Servos, Auto anims and Locate are OFF for
+  both roles; PWM stays detached throughout startup. Normal updates/reboots
+  preserve choices that an operator already stored.
+- **Validation:** master/slave builds and source invariants, then full-erase one
+  bench ESP32 and observe no servo PWM/motion or Locate override before enabling
+  them explicitly.
+- **Implemented:** missing NVS state now resolves Servos and Auto anims to OFF
+  for both roles; the servo engine starts detached and never emits its former
+  pre-preference center pulse. Locate starts OFF and is now included in live
+  heartbeat/inventory state so the console corrects stale optimistic display
+  after a reboot.
+- **Remaining hardware gate:** full-erase one bench ESP32 and directly observe
+  inert boot plus explicit-enable behavior.
+
+### [H] SEQ-J02 — Add independent PAN/TILT Reverse calibration
+
+- **Priority:** P1
+- **Problem:** mechanically mirrored servo installations currently require
+  rewiring, custom firmware or inverted authored motion.
+- **Acceptance:** Calibration exposes PAN Reverse and TILT Reverse per droid;
+  flags persist locally, traverse serial and mesh, apply only at PWM output and
+  leave Scene/preview coordinates unchanged. Old six-byte NVS limits remain
+  rollback-readable; current masters send both legacy limits and additive V2
+  direction data. Each droid reports the additive capability independently, so
+  the controls stay disabled for an older master or slave in a mixed fleet.
+- **Validation:** master/slave/WPF builds, offline invariants, serial read and
+  invalid-type rejection, reboot persistence, and visible direction checks on
+  each axis of one equipped droid.
+- **Implemented:** per-axis controls, debounced serial fields, strict Boolean
+  validation, rollback-compatible NVS sidecar, legacy-plus-V2 mesh delivery,
+  per-droid capability reports and center-preserving asymmetric-range mapping
+  are complete. Logical Scene and preview coordinates are unchanged.
+- **Remaining hardware gate:** deploy current firmware, verify read/reboot
+  persistence, invalid-type rejection and visibly reversed PAN/TILT on the
+  master bench servos.
+
 ## Recommended execution order
 
 The backlog is intentionally exhaustive; implementation should remain small and
@@ -1413,8 +1468,8 @@ after its full regression passes.
 |---|---|---|
 | P1 — Safe import pipeline | SEQ-D01, SEQ-D02, SEQ-D03 | Parse into a temporary document, validate schema/content/bounds, migrate every supported legacy version, then apply once. One fixture-driven import commit. |
 | P2 — Saved-state integrity | SEQ-C05, SEQ-D04, SEQ-D05 | Implement the saved checkpoint and atomic export together, then use that authoritative Dirty state to guard Import and library Load. C05 and D04 are intentionally one batch because their stated dependencies are circular. |
-| Decision gate | DEC-003 | Decide whether Local Library is retained with Save/Save As or removed in favor of files. Do not implement an irreversible product choice without owner input. |
-| P3 — Library and wording | SEQ-D06, SEQ-D07, SEQ-D08 | If retained: restore Save/Save As, protect deletion, then align naming/badges/Help. If removed: remove/migrate the library, mark D07 not applicable, then align naming/badges/Help. |
+| Decision gate | DEC-003 | Resolved: retain the Local Library as the normal Scene store; keep Export only as an explicit external-copy escape hatch. |
+| P3 — Scene Library and wording | SEQ-D06, SEQ-D07, SEQ-D08 | Restore Scene Save/Save As with stable IDs and atomic/versioned storage, migrate legacy entries, make deletion recoverable, then align naming/source/Dirty badges and Help. Keep external Export clearly secondary. |
 
 SEQ-D09 remains deferred. After P3, scheduler and duration work should be
 regrouped from the then-current dependency state rather than prematurely folded
@@ -1429,7 +1484,7 @@ options.
 |---|---|---|
 | DEC-001 | Resolved 2026-08-11 | Lock persistent editing during Play/Pause; allow transient inspection, zoom/scroll and dynamic track mute. |
 | DEC-002 | Resolved 2026-08-11 | Normal Stop uses targeted tracked IDLE only for Sequencer-owned infinite gestures. Safe Stop broadcasts a transient centered/servo-powered hold. Emergency Stop immediately broadcasts persistent Servo OFF without confirmation; the owner accepts loss of holding torque. |
-| DEC-003 | Open | Keep and restore Local Library Save, or remove the legacy library? |
+| DEC-003 | Resolved 2026-08-11 | Treat the current Sequencer document as a Scene and retain Local Library as the normal local working catalog. Save updates the current stable scene ID; Save As creates a new one. Import never auto-adds. Export is not required for normal work, but remains an explicit external snapshot for backup, transfer, support and version control. Future Show authoring combines scenes and published Shows embed immutable scene snapshots. |
 | DEC-004 | Open | Unknown/offline targets: warning or blocking preflight error? |
 | DEC-005 | Open | Same-time broadcast and targeted command precedence? |
 | DEC-006 | Open | Audio-only rehearsal when no master is connected? |
@@ -1476,3 +1531,4 @@ Append concise evidence when closing items; do not paste full build logs.
 | 2026-08-11 | SEQ-C08 | Established explicit persistent-document (`SequenceSnapshot`), editor-history (`SequencerEditHistory`) and immutable runtime (`SequencerPlaybackPlan`) boundaries without changing UI behavior. Six architecture tests cover the exact document surface, structural comparison, transactions/cancellation, bounded Undo/Redo and read-only playback state; full WPF suite passed 88/88 and offline regression passed 17/17 (`b1-self-test-20260811-203938.json`). No firmware change or hardware run was required. |
 | 2026-08-11 | SEQ-D01, SEQ-D02, SEQ-D03 | Added validate-then-apply sequence import, strict field/count/timing limits and explicit v1–v4 migrations. Twenty-nine new golden, invalid, boundary, ambiguity and no-partial-mutation cases pass within the 117/117 WPF suite; offline regression passed 17/17 (`b1-self-test-20260811-215453.json`). No firmware change or hardware run was required. |
 | 2026-08-11 | SEQ-C05, SEQ-D04, SEQ-D05 | Replaced manual Dirty toggles with structural saved-checkpoint equality; added schema-self-validating sibling-temp/flush/atomic-rename export and injected unsaved-work confirmation for Import/Library Load. Twenty new checkpoint, Undo/Redo, create/replace/failure, round-trip, naming, clean/dirty/cancel, Play/Pause and startup cases pass within the 137/137 WPF suite; offline regression passed 17/17 (`b1-self-test-20260811-220731.json`). No firmware change or hardware run was required. |
+| 2026-08-11 | DEC-003, SEQ-J01, SEQ-J02 (hardware pending) | Resolved the product model as Scene Library first and future Show composition, with Export retained only as an explicit external copy. Implemented inert virgin-board Servos/Auto anims/Locate defaults with boot PWM detached, live Locate reconciliation, and independent center-preserving PAN/TILT Reverse through WPF, strict serial validation, rollback-compatible NVS, additive mesh V2 and per-droid capability gating. Master/slave/WPF builds and 137/137 WPF tests passed; offline regression passed 19/19 (`b1-self-test-20260811-224902.json`). Full-erase boot and physical Reverse observations remain. |

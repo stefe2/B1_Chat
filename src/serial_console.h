@@ -74,7 +74,8 @@ public:
     void onAutoAnim(void (*cb)(uint16_t target, bool enabled)) { _autoAnimCb = cb; }
     void onLocate(void (*cb)(uint16_t target, bool enabled)) { _locateCb = cb; }
     void onCalib(void (*cb)(uint16_t target, uint8_t panMin, uint8_t panCenter, uint8_t panMax,
-                            uint8_t tiltMin, uint8_t tiltCenter, uint8_t tiltMax)) { _calibCb = cb; }
+                            uint8_t tiltMin, uint8_t tiltCenter, uint8_t tiltMax,
+                            bool panReversed, bool tiltReversed)) { _calibCb = cb; }
     void onPreview(void (*cb)(uint16_t target, uint8_t pan, uint8_t tilt)) { _previewCb = cb; }
     void onOtaStart(bool (*cb)(uint16_t target, uint32_t size, const char* md5Hex32)) { _otaStartCb = cb; }
     void onOtaChunk(void (*cb)(uint16_t seq, const uint8_t* data, uint8_t len)) { _otaChunkCb = cb; }
@@ -86,6 +87,8 @@ public:
     // Master's auto-anim state (to display it in the list).
     void setMasterAutoAnim(bool on) { _masterAutoAnim = on; }
 
+    void setMasterLocate(bool on) { _masterLocate = on; }
+
 private:
     // Line buffer: 4 KB to accept a large setMulti (and, historically, a
     // 32-step seqSave). (256 B before: any longer line was silently dropped.)
@@ -93,8 +96,9 @@ private:
     char     _buf[SERIAL_LINE_MAX];
     uint16_t _len = 0;
     bool     _overflow = false;
-    bool     _masterServos = true;
-    bool     _masterAutoAnim = true;
+    bool     _masterServos = false;
+    bool     _masterAutoAnim = false;
+    bool     _masterLocate = false;
     bool     _clientReady = false;
     uint32_t _lastHelloMs = 0;
     static const uint32_t CLIENT_TIMEOUT_MS = 5000;
@@ -106,7 +110,8 @@ private:
     void (*_servoCb)(uint16_t, bool) = nullptr;
     void (*_autoAnimCb)(uint16_t, bool) = nullptr;
     void (*_locateCb)(uint16_t, bool) = nullptr;
-    void (*_calibCb)(uint16_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t) = nullptr;
+    void (*_calibCb)(uint16_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t,
+                     bool, bool) = nullptr;
     void (*_previewCb)(uint16_t, uint8_t, uint8_t) = nullptr;
     bool (*_otaStartCb)(uint16_t, uint32_t, const char*) = nullptr;
     void (*_otaChunkCb)(uint16_t, const uint8_t*, uint8_t) = nullptr;

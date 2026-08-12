@@ -36,6 +36,8 @@ enum MeshMsgType : uint8_t {
     MSG_ANIM_LEASED = 18, // safe fail-closed infinite animation with an initial lease
     MSG_ANIM_LEASE_RENEW = 19, // renews only the matching active leased animation
     MSG_SAFE_STOP = 20, // transient safe hold: center and suppress auto anims
+    MSG_CALIB_V2  = 21, // calibration plus independent PAN/TILT direction flags
+    MSG_CAPABILITIES = 22, // source droid's additive feature-bit report
 };
 
 // Lifecycle phases reported for console-originated animation commands.
@@ -50,6 +52,10 @@ enum AnimExecReason : uint8_t {
     ANIM_EXEC_REASON_NONE       = 0,
     ANIM_EXEC_REASON_SERVOS_OFF = 1,
     ANIM_EXEC_REASON_LEASE_EXPIRED = 2,
+};
+
+enum DroidCapability : uint32_t {
+    DROID_CAP_SERVO_REVERSE = 1UL << 0,
 };
 
 // Status/reason codes for OTA messages (OtaAckPayload.status, OtaAbortPayload.reason).
@@ -156,6 +162,10 @@ struct LegacyHeartbeatPayload {
     uint8_t  fwPatch;
 };
 
+struct CapabilitiesPayload {
+    uint32_t flags;
+};
+
 static_assert(sizeof(LegacyHeartbeatPayload) == 8,
               "Legacy heartbeat wire format must remain exactly 8 bytes");
 static_assert(sizeof(HeartbeatPayload) == 12,
@@ -195,6 +205,16 @@ struct CalibPayload {
     uint16_t targetId;
     uint8_t  panMin, panCenter, panMax;
     uint8_t  tiltMin, tiltCenter, tiltMax;
+};
+
+// Additive calibration payload. The master also sends legacy MSG_CALIB so an
+// older slave can still receive limit changes; current firmware applies this
+// V2 payload last and persists the direction flags.
+struct CalibV2Payload {
+    uint16_t targetId;
+    uint8_t  panMin, panCenter, panMax;
+    uint8_t  tiltMin, tiltCenter, tiltMax;
+    uint8_t  panReversed, tiltReversed;
 };
 
 // Transient positioning (preview), not persisted.

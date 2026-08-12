@@ -25,11 +25,15 @@ public partial class CalibrationViewModel : ObservableObject
     [ObservableProperty] private int _tiltMin = 0;
     [ObservableProperty] private int _tiltCenter = 90;
     [ObservableProperty] private int _tiltMax = 180;
+    [ObservableProperty] private bool _panReversed;
+    [ObservableProperty] private bool _tiltReversed;
+    [ObservableProperty] private bool _supportsServoReverse;
 
     public CalibrationViewModel(ProtocolClient protocol)
     {
         _protocol = protocol;
         _protocol.CalibDataReceived += OnCalibData;
+        _protocol.DroidsChanged += RefreshCapabilities;
     }
 
     partial void OnSelectedTargetChanged(Droid? value)
@@ -37,7 +41,13 @@ public partial class CalibrationViewModel : ObservableObject
         CancelPendingSave();
         if (value == null) { _loadedFor = null; return; }
         _loadedFor = value.Id;
+        RefreshCapabilities();
         _protocol.RequestCalib(value.Id);
+    }
+
+    private void RefreshCapabilities()
+    {
+        SupportsServoReverse = SelectedTarget?.SupportsServoReverse == true;
     }
 
     private void OnCalibData(JsonElement root)
@@ -55,6 +65,8 @@ public partial class CalibrationViewModel : ObservableObject
             if (root.TryGetProperty("tiltMin", out var tn)) TiltMin = tn.GetInt32();
             if (root.TryGetProperty("tiltCenter", out var tc)) TiltCenter = tc.GetInt32();
             if (root.TryGetProperty("tiltMax", out var tm)) TiltMax = tm.GetInt32();
+            PanReversed = root.TryGetProperty("panReversed", out var pr) && pr.GetBoolean();
+            TiltReversed = root.TryGetProperty("tiltReversed", out var tr) && tr.GetBoolean();
         }
         finally { _loadingCalibration = false; }
     }
@@ -72,6 +84,14 @@ public partial class CalibrationViewModel : ObservableObject
     partial void OnTiltMinChanged(int value) => OnAxisChanged(PanCenter, value);
     partial void OnTiltCenterChanged(int value) => OnAxisChanged(PanCenter, value);
     partial void OnTiltMaxChanged(int value) => OnAxisChanged(PanCenter, value);
+    partial void OnPanReversedChanged(bool value) => ScheduleDirectionSave();
+    partial void OnTiltReversedChanged(bool value) => ScheduleDirectionSave();
+
+    private void ScheduleDirectionSave()
+    {
+        if (_loadingCalibration || SelectedTarget == null || !SupportsServoReverse) return;
+        ScheduleSave();
+    }
 
     private void ScheduleSave()
     {
@@ -85,6 +105,8 @@ public partial class CalibrationViewModel : ObservableObject
         var tiltMin = TiltMin;
         var tiltCenter = TiltCenter;
         var tiltMax = TiltMax;
+        var panReversed = PanReversed;
+        var tiltReversed = TiltReversed;
         _saveDebounce = new System.Threading.Timer(_ =>
         {
             var dispatcher = System.Windows.Application.Current?.Dispatcher;
@@ -92,7 +114,8 @@ public partial class CalibrationViewModel : ObservableObject
             {
                 if (generation != _saveGeneration) return;
                 _protocol.SetCalib(target, panMin, panCenter, panMax,
-                                   tiltMin, tiltCenter, tiltMax);
+                                   tiltMin, tiltCenter, tiltMax,
+                                   panReversed, tiltReversed);
             }
             if (dispatcher == null || dispatcher.CheckAccess()) Send(); else dispatcher.Invoke(Send);
         }, null, 1200, System.Threading.Timeout.Infinite);

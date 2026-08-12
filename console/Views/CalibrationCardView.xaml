@@ -21,7 +21,12 @@
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Grid.Column="0" Margin="0,0,10,0">
-                    <TextBlock Text="PAN · HORIZONTAL" Style="{StaticResource SectionSubtitleStyle}" />
+                    <DockPanel Margin="0,0,0,6" LastChildFill="False">
+                        <TextBlock Text="PAN · HORIZONTAL" Style="{StaticResource SectionSubtitleStyle}" Margin="0" />
+                        <CheckBox Content="Reverse" IsChecked="{Binding PanReversed}" IsEnabled="{Binding SupportsServoReverse}" DockPanel.Dock="Right"
+                                  Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center"
+                                  ToolTip="Invert the PAN servo electrical direction without changing scene coordinates or calibration limits." />
+                    </DockPanel>
 
                     <Grid Margin="0,0,0,8">
                         <Grid.ColumnDefinitions>
@@ -70,7 +75,12 @@
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Margin="10,0,0,0">
-                    <TextBlock Text="TILT · VERTICAL" Style="{StaticResource SectionSubtitleStyle}" />
+                    <DockPanel Margin="0,0,0,6" LastChildFill="False">
+                        <TextBlock Text="TILT · VERTICAL" Style="{StaticResource SectionSubtitleStyle}" Margin="0" />
+                        <CheckBox Content="Reverse" IsChecked="{Binding TiltReversed}" IsEnabled="{Binding SupportsServoReverse}" DockPanel.Dock="Right"
+                                  Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center"
+                                  ToolTip="Invert the TILT servo electrical direction without changing scene coordinates or calibration limits." />
+                    </DockPanel>
 
                     <Grid Margin="0,0,0,8">
                         <Grid.ColumnDefinitions>

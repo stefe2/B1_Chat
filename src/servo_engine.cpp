@@ -14,6 +14,22 @@ inline float clampf(float v, float lo, float hi) {
     return v < lo ? lo : (v > hi ? hi : v);
 }
 
+// Mirrors one calibrated half-range onto the other. Unlike a raw 180-angle
+// inversion this keeps an asymmetric calibrated center physically unchanged
+// and never maps outside the calibrated endpoints.
+inline float reverseAroundCenter(float angle, float min, float center, float max) {
+    if (angle <= center) {
+        const float inputSpan = center - min;
+        return inputSpan <= 0.0f
+            ? center
+            : center + ((center - angle) / inputSpan) * (max - center);
+    }
+    const float inputSpan = max - center;
+    return inputSpan <= 0.0f
+        ? center
+        : center - ((angle - center) / inputSpan) * (center - min);
+}
+
 // Servo PWM via native LEDC: 50 Hz, 16-bit resolution (20 ms period).
 const uint32_t SERVO_LEDC_FREQ = 50;
 const uint8_t  SERVO_LEDC_BITS = 16;
@@ -27,10 +43,6 @@ inline uint32_t usToDuty(float us) {
 }  // namespace
 
 void ServoEngine::begin() {
-    // Attaches the PWM outputs (pin-based API of the ESP32 3.x core).
-    ledcAttach(PIN_SERVO_PAN, SERVO_LEDC_FREQ, SERVO_LEDC_BITS);
-    ledcAttach(PIN_SERVO_TILT, SERVO_LEDC_FREQ, SERVO_LEDC_BITS);
-
     _panMin = SERVO_PAN_MIN; _panCenter = SERVO_PAN_CENTER; _panMax = SERVO_PAN_MAX;
     _tiltMin = SERVO_TILT_MIN; _tiltCenter = SERVO_TILT_CENTER; _tiltMax = SERVO_TILT_MAX;
 
@@ -39,7 +51,8 @@ void ServoEngine::begin() {
     _targetPan = _curPan;
     _targetTilt = _curTilt;
     _moving = false;
-    writeServos(_curPan, _curTilt);
+    // PWM remains detached until setEnabled(true). This prevents a virgin or
+    // full-erased board from twitching at boot before its safe defaults load.
 }
 
 void ServoEngine::setTarget(float panDeg, float tiltDeg, uint32_t durationMs) {
@@ -68,6 +81,11 @@ void ServoEngine::setLimits(uint8_t panMin, uint8_t panCenter, uint8_t panMax,
     _tiltMin = tiltMin; _tiltMax = tiltMax;
     _panCenter = (uint8_t)clampf(panCenter, panMin, panMax);
     _tiltCenter = (uint8_t)clampf(tiltCenter, tiltMin, tiltMax);
+}
+
+void ServoEngine::setReversed(bool panReversed, bool tiltReversed) {
+    _panReversed = panReversed;
+    _tiltReversed = tiltReversed;
 }
 
 void ServoEngine::setIdleNoise(bool on, float panAmp, float tiltAmp) {
@@ -99,6 +117,11 @@ float ServoEngine::noise(float t, float phase) const {
 void ServoEngine::writeServos(float panDeg, float tiltDeg) {
     panDeg = clampf(panDeg, _panMin, _panMax);
     tiltDeg = clampf(tiltDeg, _tiltMin, _tiltMax);
+
+    // Direction is an electrical-output concern. Logical positions, limits,
+    // animation offsets and UI previews therefore retain the same coordinates.
+    if (_panReversed) panDeg = reverseAroundCenter(panDeg, _panMin, _panCenter, _panMax);
+    if (_tiltReversed) tiltDeg = reverseAroundCenter(tiltDeg, _tiltMin, _tiltCenter, _tiltMax);
 
     // Angle (0..180°) -> pulse width (µs) -> LEDC duty cycle.
     const float span = SERVO_MAX_US - SERVO_MIN_US;

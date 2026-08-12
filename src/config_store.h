@@ -26,6 +26,7 @@
 struct ServoCalib {
     uint8_t panMin, panCenter, panMax;
     uint8_t tiltMin, tiltCenter, tiltMax;
+    uint8_t panReversed, tiltReversed;
 };
 
 class ConfigStore {
@@ -91,6 +92,7 @@ private:
     uint16_t _localId = 0;
     static void nameKey(uint16_t id, char out[8]);
     static void calibKey(uint16_t id, char out[8]);
+    static void reverseKey(uint16_t id, char out[8]);
     static void adoptKey(uint16_t id, char out[8]);
     static void animKey(uint16_t id, char out[8]);
     void writeAnimParams(uint16_t id, uint8_t freq, uint8_t amp, uint8_t speed);

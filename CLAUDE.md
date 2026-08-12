@@ -125,9 +125,9 @@ callback-safe lock/mailbox fast path.
 | --- | --- |
 | `MSG_ANIM` = 1 | targetId (0xFFFF = all), animId, syncDelayMs, seed; high bit of syncDelayMs requests execution telemetry while preserving the legacy payload |
 | `MSG_CONFIG` = 2 | targetId, freq, amplitude, speed |
-| `MSG_HEARTBEAT` = 4 | uptime, state (bit0 = servos, bit1 = auto anims), firmware version (3 bytes major/minor/patch), Build ID; the master also accepts the frozen legacy 8-byte form |
+| `MSG_HEARTBEAT` = 4 | uptime, state (bit0 = servos, bit1 = auto anims, bit2 = Locate), firmware version (3 bytes major/minor/patch), Build ID; the master also accepts the frozen legacy 8-byte form |
 | `MSG_SERVO` = 5 | targetId, enabled |
-| `MSG_CALIB` = 6 | targetId, 6 pan/tilt limits (persisted by the targeted droid) |
+| `MSG_CALIB` = 6 | targetId, 6 legacy pan/tilt limits (persisted by the targeted droid) |
 | `MSG_PREVIEW` = 7 | targetId, pan, tilt (transient, not persisted) |
 | `MSG_AUTOANIM` = 8 | targetId, enabled (pauses spontaneous idle anims) |
 | `MSG_NEIGHBORS` = 9 | count + [{id, rssi}]: periodic report of the sender's **direct** radio neighborhood (3s + anti-collision jitter; RSSI is measured by the report's sender even if the report is then relayed) |
@@ -139,6 +139,11 @@ callback-safe lock/mailbox fast path.
 | `MSG_LOCATE` = 15 | targetId, enabled — overrides the onboard LED's execution-indicator blink with solid on/off ("find me" physically), not persisted |
 | `MSG_NAME` = 16 | targetId, name[24] — persists the targeted droid's own name in its own NVS (mirrors `MSG_CALIB`), never `MESH_TARGET_ALL` |
 | `MSG_ANIM_EXEC` = 17 | originSeq, animId, phase, reason, atMs — authenticated non-blocking lifecycle report (`started`/`completed`/`interrupted`/`rejected`) |
+| `MSG_ANIM_LEASED` = 18 | tracked infinite animation with initial fail-closed lease |
+| `MSG_ANIM_LEASE_RENEW` = 19 | renews only the correlated active leased animation |
+| `MSG_SAFE_STOP` = 20 | targetId — centered servo-powered hold with spontaneous motion suppressed |
+| `MSG_CALIB_V2` = 21 | targetId, 6 limits, PAN/TILT Reverse flags; sent after legacy `MSG_CALIB` |
+| `MSG_CAPABILITIES` = 22 | source droid feature bits, including independent servo Reverse support |
 
 ## Animations (18, aligned firmware ↔ `ANIMS` table in index.html)
 
@@ -167,13 +172,14 @@ Session guarded by a handshake: `hello` → `{evt:"hello",ok,id}`, then keepaliv
   `anim {target,animId,seed,requestId?,leaseMs?}` ·
   `animLease {target,meshSeq,leaseMs}` · `safeStop {target}` ·
   `preview {target,pan,tilt}` ·
-  `calib {target,+6 limits}` · `getCalib {target}` · `getAnimDurations` ·
+  `calib {target,+6 limits,panReversed?,tiltReversed?}` · `getCalib {target}` · `getAnimDurations` ·
   `getMeshTopology` ·
   `setMulti {ops:[...]}` · `commit` ·
   `otaStart {target,size,md5}` · `otaChunk {seq,data}` (data = base64) · `otaAbort {}`
 - **Master → console** (`evt`): `hello {ok,id,fw,build,proto,lineMax,anims,caps[],dirty}` ·
-  `droids {list:[{id,name,rssi,age,role,servos,autoAnim,adopted,fw,build?}]}` ·
-  `log {msg}` · `err {msg}` · `config {target,freq,amp,speed}` · `calibData {target,+6}` ·
+  `droids {list:[{id,name,rssi,age,role,servos,autoAnim,locate,adopted,fw,build?,servoReverse?}]}` ·
+  `log {msg}` · `err {msg}` · `config {target,freq,amp,speed}` ·
+  `calibData {target,+6,panReversed,tiltReversed}` ·
   `meshTopology {links:[{from,to,rssi}]}` · `animDurations {list:[{animId,ms}]}` ·
   `animAccepted {requestId,target,animId,meshSeq,meshQueued,local,leaseMs?}` ·
   `animExec {requestId,droid,meshSeq,animId,phase,reason?,atMs}` ·

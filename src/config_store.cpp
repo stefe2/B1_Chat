@@ -11,6 +11,13 @@ struct StoredAnimParams {
     uint8_t amp;
     uint8_t speed;
 };
+
+// Keep the original six-byte calibration record intact so a rollback to older
+// firmware still sees valid limits. Axis direction lives in a separate key.
+struct StoredServoLimits {
+    uint8_t panMin, panCenter, panMax;
+    uint8_t tiltMin, tiltCenter, tiltMax;
+};
 }
 
 void ConfigStore::begin() {
@@ -194,19 +201,42 @@ void ConfigStore::calibKey(uint16_t id, char out[8]) {
     snprintf(out, 8, "c%04X", id);
 }
 
+void ConfigStore::reverseKey(uint16_t id, char out[8]) {
+    snprintf(out, 8, "r%04X", id);
+}
+
 ServoCalib ConfigStore::getCalib(uint16_t id) {
     ServoCalib c{SERVO_PAN_MIN, SERVO_PAN_CENTER, SERVO_PAN_MAX,
-                 SERVO_TILT_MIN, SERVO_TILT_CENTER, SERVO_TILT_MAX};
+                 SERVO_TILT_MIN, SERVO_TILT_CENTER, SERVO_TILT_MAX, 0, 0};
     char key[8];
     calibKey(id, key);
-    if (_p.isKey(key)) _p.getBytes(key, &c, sizeof(c));
+    StoredServoLimits limits{};
+    if (_p.getBytesLength(key) == sizeof(limits) &&
+        _p.getBytes(key, &limits, sizeof(limits)) == sizeof(limits)) {
+        c.panMin = limits.panMin;
+        c.panCenter = limits.panCenter;
+        c.panMax = limits.panMax;
+        c.tiltMin = limits.tiltMin;
+        c.tiltCenter = limits.tiltCenter;
+        c.tiltMax = limits.tiltMax;
+    }
+    reverseKey(id, key);
+    const uint8_t directions = _p.getUChar(key, 0);
+    c.panReversed = (directions & 0x01) != 0;
+    c.tiltReversed = (directions & 0x02) != 0;
     return c;
 }
 
 void ConfigStore::setCalib(uint16_t id, const ServoCalib& c) {
     char key[8];
     calibKey(id, key);
-    _p.putBytes(key, &c, sizeof(c));
+    const StoredServoLimits limits{c.panMin, c.panCenter, c.panMax,
+                                   c.tiltMin, c.tiltCenter, c.tiltMax};
+    _p.putBytes(key, &limits, sizeof(limits));
+    reverseKey(id, key);
+    const uint8_t directions = (c.panReversed ? 0x01 : 0) |
+                               (c.tiltReversed ? 0x02 : 0);
+    _p.putUChar(key, directions);
 }
 
 void ConfigStore::adoptKey(uint16_t id, char out[8]) {

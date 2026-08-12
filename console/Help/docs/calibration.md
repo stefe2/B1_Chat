@@ -10,8 +10,8 @@ Pan is horizontal; tilt is vertical. Each axis uses degrees from 0 through 180.
 
 ![Servo Calibration window for the selected droid](images/calibration-window.png)
 
-*Figure: The selected droid appears at the top; Pan and Tilt each have Min,
-Center, and Max controls plus exact-position test buttons.*
+*Figure: The selected droid appears at the top; Pan and Tilt each have Reverse,
+Min, Center, and Max controls plus exact-position test buttons.*
 
 ## What the six values mean
 
@@ -19,6 +19,10 @@ Center, and Max controls plus exact-position test buttons.*
   preview and gesture to this interval.
 - **Center** is the droid's neutral position and the reference point from which
   gesture offsets are applied.
+- **Reverse** independently inverts that servo's electrical direction. Scene,
+  animation, preview, limit and center coordinates remain unchanged; only the
+  physical direction is mirrored. Each selected droid must report support for
+  servo reversal; the option remains disabled for an older master or slave.
 - Every axis must satisfy **min ≤ center ≤ max**, and every value must be from
   0 to 180. Invalid ordering is rejected by the firmware.
 
@@ -30,18 +34,20 @@ correct without changing firmware.
 
 1. Select the intended droid and physically verify it with **Locate** if needed.
 2. Begin with conservative values near the existing center.
-3. Adjust Pan Min slowly. The selected droid previews that position live.
-4. Repeat for Pan Max, then choose a comfortable Pan Center.
-5. Repeat for Tilt Min, Center, and Max.
-6. Use **→ Min**, **→ Center**, and **→ Max** to retest exact stored positions.
-7. After the final change, wait at least **1.2 seconds** without moving another
+3. If PAN moves opposite to the intended logical direction, select its
+   **Reverse** option and allow the head to return to center.
+4. Adjust Pan Min slowly. The selected droid previews that position live.
+5. Repeat for Pan Max, then choose a comfortable Pan Center.
+6. Configure TILT Reverse if required, then its Min, Center, and Max.
+7. Use **→ Min**, **→ Center**, and **→ Max** to retest exact stored positions.
+8. After the final change, wait at least **1.2 seconds** without moving another
    slider or changing targets.
-8. Reselect the droid to request its values again and confirm they persisted.
+9. Reselect the droid to request its values again and confirm they persisted.
 
 ## Preview versus saved calibration
 
-Every slider movement sends a transient preview immediately. The full set of six
-calibration values is sent only after 1.2 seconds without another change. The
+Every slider movement sends a transient preview immediately. The six limits and
+two Reverse flags are sent only after 1.2 seconds without another change. The
 target is captured when the edit is made, but selecting another droid before the
 delay expires cancels that pending save.
 
@@ -53,7 +59,7 @@ is not included in Droids Backup. A full chip erase of that droid removes it.
 
 Calibration needs a live path to that specific target. There is no offline queue
 and currently no success/error dialog. If a target loses power or mesh reachability,
-reselect it after reconnection and verify all six returned values before assuming
+reselect it after reconnection and verify all eight returned values before assuming
 the change took effect.
 
 ## Sensible first test

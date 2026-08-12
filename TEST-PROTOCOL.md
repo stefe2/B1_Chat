@@ -29,6 +29,9 @@ enables/disables a servo, previews a position, or starts an animation.
 - verifies that the callback-to-loop mesh inbox is present;
 - verifies the per-droid animation-parameter store and targeted protocol;
 - verifies the serial, mesh, and OTA validation guards;
+- verifies fail-closed virgin-board Servos/Auto anims/Locate defaults and that
+  the servo engine emits no boot-time PWM before the stored preference loads;
+- verifies the per-axis servo Reverse path through console, mesh, NVS and PWM;
 - verifies that the content-derived firmware Build ID is generated and
   propagated through heartbeats, serial inventory and OTA verdicts;
 - verifies the non-blocking animation execution-report path from mesh sequence
