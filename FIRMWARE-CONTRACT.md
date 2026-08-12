@@ -13,7 +13,7 @@ CLAUDE.md's "Known pitfalls" section still references). For the protocol's
 current, authoritative shape, see CLAUDE.md's "JSON serial protocol" section;
 for how each item actually evolved over time, see its Progress log.
 
-## ⚑ Resolution summary (current firmware: 1.9.0, proto 5)
+## ⚑ Resolution summary (current firmware: 1.10.0, proto 5)
 
 | Section | Outcome |
 | --- | --- |

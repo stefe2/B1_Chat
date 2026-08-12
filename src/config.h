@@ -13,7 +13,7 @@
 //  compares it to the latest stefe2/B1_Chat release to offer an update. Bump
 //  on every release (tools/release.ps1 relies on it).
 // ---------------------------------------------------------------------------
-#define FW_VERSION "1.9.0"
+#define FW_VERSION "1.10.0"
 
 // Content-derived identity of the firmware source + PlatformIO role, announced
 // separately as the 8-hex "build" field. tools/pio_build_id.py defines it for
