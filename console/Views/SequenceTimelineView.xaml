@@ -1,7 +1,10 @@
 <UserControl x:Class="b1_chat_console.Views.SequenceTimelineView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:Models="clr-namespace:b1_chat_console.Models">
+             xmlns:Models="clr-namespace:b1_chat_console.Models"
+             Loaded="SequenceTimelineView_Loaded"
+             Unloaded="SequenceTimelineView_Unloaded"
+             PreviewKeyDown="SequenceTimelineView_PreviewKeyDown">
     <Grid x:Name="RootGrid">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -40,7 +43,7 @@
                         ToolTipService.ShowOnDisabled="True" Margin="0,0,10,0">
                     <TextBlock Text="⏸" />
                 </Button>
-                <ToggleButton Style="{StaticResource HaloToggleButtonStyle}" IsChecked="{Binding Loop}"
+                <ToggleButton Style="{StaticResource HaloToggleButtonStyle}" IsChecked="{Binding EditableLoop}"
                               IsEnabled="{Binding CanEditSequence}"
                               ToolTip="Loop the whole sequence. Stop playback before changing this setting."
                               ToolTipService.ShowOnDisabled="True" Margin="0,0,10,0" VerticalAlignment="Center">
@@ -172,7 +175,10 @@
                                                              FontWeight="SemiBold" CaretBrush="{StaticResource AccentBrush}"
                                                              VerticalAlignment="Center"
                                                              ToolTip="Click to rename this lane. Stop playback first."
-                                                             ToolTipService.ShowOnDisabled="True" />
+                                                             ToolTipService.ShowOnDisabled="True"
+                                                             GotKeyboardFocus="LaneLabel_GotKeyboardFocus"
+                                                             LostKeyboardFocus="LaneLabel_LostKeyboardFocus"
+                                                             KeyDown="LaneLabel_KeyDown" />
                                                 </StackPanel>
                                                 <TextBlock Text="AUDIO LANE" FontSize="8.5" FontWeight="Bold"
                                                            Foreground="{StaticResource Muted2Brush}" Margin="0,1,0,0" />
@@ -338,7 +344,8 @@
                                 ToolTip="Click or drag along the ruler to move the playhead. Scrubbing is disabled while playback is running."
                                 MouseLeftButtonDown="Ruler_MouseLeftButtonDown"
                                 MouseMove="Ruler_MouseMove"
-                                MouseLeftButtonUp="Ruler_MouseLeftButtonUp">
+                                MouseLeftButtonUp="Ruler_MouseLeftButtonUp"
+                                LostMouseCapture="Interaction_LostMouseCapture">
                             <ItemsControl ItemsSource="{Binding RulerTicks}">
                                 <ItemsControl.ItemsPanel>
                                     <ItemsPanelTemplate><Canvas /></ItemsPanelTemplate>
@@ -449,7 +456,8 @@
                                                                 Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=ItemsControl, AncestorLevel=2}}"
                                                                 MouseLeftButtonDown="AudioClip_MouseLeftButtonDown"
                                                                 MouseMove="AudioClip_MouseMove"
-                                                                MouseLeftButtonUp="AudioClip_MouseLeftButtonUp">
+                                                                MouseLeftButtonUp="AudioClip_MouseLeftButtonUp"
+                                                                LostMouseCapture="Interaction_LostMouseCapture">
                                                             <!-- Vertical glide while dragged (transient DragOffsetY) — the clip
                                                                  itself follows the cursor across lanes; the actual lane move only
                                                                  settles at mouse-up (see code-behind). -->
@@ -481,7 +489,9 @@
                                                                               CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                                                                     <MenuItem Header="Loop" IsCheckable="True" Style="{StaticResource DarkMenuItemStyle}"
                                                                               IsEnabled="{Binding PlacementTarget.Tag.CanEditSequence, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                                                                              IsChecked="{Binding PlacementTarget.DataContext.Loop, RelativeSource={RelativeSource AncestorType=ContextMenu}, Mode=TwoWay}" />
+                                                                              IsChecked="{Binding PlacementTarget.DataContext.Loop, RelativeSource={RelativeSource AncestorType=ContextMenu}, Mode=OneWay}"
+                                                                              Command="{Binding PlacementTarget.Tag.ToggleAudioLoopCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                                              CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                                                                     <Separator />
                                                                     <MenuItem Header="Delete" Style="{StaticResource DarkMenuItemStyle}"
                                                                               Command="{Binding PlacementTarget.Tag.DeleteAudioClipCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
@@ -601,7 +611,8 @@
                                                      Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                     MouseLeftButtonDown="Clip_MouseLeftButtonDown"
                                                     MouseMove="Clip_MouseMove"
-                                                    MouseLeftButtonUp="Clip_MouseLeftButtonUp">
+                                                    MouseLeftButtonUp="Clip_MouseLeftButtonUp"
+                                                    LostMouseCapture="Interaction_LostMouseCapture">
                                                 <Border.ToolTip>
                                                     <StackPanel MaxWidth="360">
                                                         <TextBlock Text="Click to inspect this gesture. Drag to change its start time or target track; right-click to duplicate or delete it."
@@ -814,7 +825,7 @@
 
                         <TextBlock Text="GESTURE" Style="{StaticResource FieldLabelStyle}" Margin="0,0,0,4" />
                         <ComboBox Style="{StaticResource DarkComboBoxStyle}" ItemsSource="{Binding GestureNames}"
-                                  SelectedIndex="{Binding SelectedStep.AnimId}" Margin="0,0,0,4"
+                                  SelectedIndex="{Binding SelectedStepAnimId}" Margin="0,0,0,4"
                                   ToolTip="Replace the selected clip's gesture while keeping its start time and target track." />
                         <!-- Family color strip under the gesture picker (mockup .clip-color). -->
                         <Rectangle Height="4" RadiusX="2" RadiusY="2" Margin="0,0,0,10"
@@ -890,7 +901,8 @@
                                                         ToolTip="Click to insert this gesture on the armed track at the playhead, or drag it directly onto a target track and time."
                                                         MouseLeftButtonDown="GestureChip_MouseLeftButtonDown"
                                                         MouseMove="GestureChip_MouseMove"
-                                                        MouseLeftButtonUp="GestureChip_MouseLeftButtonUp">
+                                                        MouseLeftButtonUp="GestureChip_MouseLeftButtonUp"
+                                                        LostMouseCapture="Interaction_LostMouseCapture">
                                                     <Border.Style>
                                                         <Style TargetType="Border">
                                                             <Setter Property="Background" Value="{StaticResource PanelBrush}" />

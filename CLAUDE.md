@@ -264,6 +264,14 @@ nothing. Persistent DTO fields participate in comparison, while selection,
 execution telemetry, waveform peaks and drag visuals remain transient. Direct
 property bindings join this transaction boundary under SEQ-C03.
 
+Sequencer clip drags use a 5 px threshold before opening a transaction. Escape,
+lost mouse capture, view unload and window deactivation restore the pre-edit
+snapshot and clear gesture/audio drag state, library ghosts and ruler capture;
+cancelled ruler scrubbing restores its starting playhead. Inspector properties,
+sequence/audio Loop, lane labels/order and sequence name now share the same
+transaction path. Undo and Redo are newest-first bounded lists retaining exactly
+50 snapshots; document snapshots exclude every transient editor/telemetry field.
+
 **No audio in this protocol** (fw 1.6.0): `volume`/`playTrack` (console→master)
 and `config`'s `volume` field were removed when the DFPlayer was retired —
 see the Progress log.

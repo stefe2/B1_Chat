@@ -118,6 +118,12 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         ? "UNSAVED · NEW SEQUENCE"
         : $"\"{Name.ToUpperInvariant()}\"";
     partial void OnNameChanged(string value) => OnPropertyChanged(nameof(SequenceBadgeText));
+    public bool EditableLoop
+    {
+        get => Loop;
+        set => SetSequenceLoop(value);
+    }
+    partial void OnLoopChanged(bool value) => OnPropertyChanged(nameof(EditableLoop));
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(UndoCommand))]
@@ -134,13 +140,23 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     public TimelineTrack? SelectedStepTrack
     {
         get => SelectedStep == null ? null : Tracks.FirstOrDefault(t => t.Id == SelectedStep.Target);
-        set { if (CanEditSequence && SelectedStep != null && value != null) SelectedStep.Target = value.Id; }
+        set { if (value != null && SelectedStep != null) SetStepTarget(SelectedStep, value.Id); }
     }
 
-    partial void OnSelectedStepChanged(SequenceStep? value) => OnPropertyChanged(nameof(SelectedStepTrack));
+    public int SelectedStepAnimId
+    {
+        get => SelectedStep?.AnimId ?? 0;
+        set { if (SelectedStep != null) SetStepAnimId(SelectedStep, value); }
+    }
 
-    private readonly Stack<SequenceSnapshot> _history = new();
-    private readonly Stack<SequenceSnapshot> _future = new();
+    partial void OnSelectedStepChanged(SequenceStep? value)
+    {
+        OnPropertyChanged(nameof(SelectedStepTrack));
+        OnPropertyChanged(nameof(SelectedStepAnimId));
+    }
+
+    private readonly List<SequenceSnapshot> _history = new();
+    private readonly List<SequenceSnapshot> _future = new();
     private readonly List<IDisposable> _playbackTimers = new();
     private readonly HashSet<int> _dispatchedPlaybackEvents = new();
     private readonly Dictionary<uint, ExecutionTracker> _executionTrackers = new();
@@ -149,6 +165,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     private readonly PlaybackGeneration _playbackGeneration = new();
     private SequencerPlaybackPlan? _activePlaybackPlan;
     private SequenceSnapshot? _activeEditBefore;
+    private bool _activeEditWasDirty;
     private bool _suppressTimelineRefresh;
     private int _elapsedAtPauseMs;
     private bool _disposed;
@@ -231,6 +248,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         DuplicateStepCommand.NotifyCanExecuteChanged();
         LoadFromLibraryCommand.NotifyCanExecuteChanged();
         DeleteFromLibraryCommand.NotifyCanExecuteChanged();
+        ToggleAudioLoopCommand.NotifyCanExecuteChanged();
         ImportCommand.NotifyCanExecuteChanged();
     }
 
@@ -822,7 +840,9 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     // its origin therefore commits as a true no-op instead of polluting Undo.
     public bool BeginStepDrag() => BeginSequenceEdit();
     public bool BeginAudioClipDrag() => BeginSequenceEdit();
-    public bool CompleteDragEdit() => CommitSequenceEdit();
+    public bool BeginLaneRename() => BeginSequenceEdit();
+    public bool CompleteEditTransaction() => CommitSequenceEdit();
+    public bool CancelEditTransaction() => CancelSequenceEdit();
 
     [RelayCommand(CanExecute = nameof(CanEditSequence))]
     private void InsertGesture(int animId) =>
@@ -1087,6 +1107,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     {
         if (!CanEditSequence || _activeEditBefore != null) return false;
         _activeEditBefore = Snapshot();
+        _activeEditWasDirty = Dirty;
         return true;
     }
 
@@ -1102,6 +1123,17 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         Dirty = true;
         RefreshDerivedTimelineState();
         return true;
+    }
+
+    private bool CancelSequenceEdit()
+    {
+        if (_activeEditBefore == null) return false;
+        var before = _activeEditBefore;
+        var wasDirty = _activeEditWasDirty;
+        _activeEditBefore = null;
+        var changed = !SnapshotsEqual(before, Snapshot());
+        if (changed) Apply(before, wasDirty);
+        return changed;
     }
 
     private bool ExecuteSequenceEdit(Action mutation)
@@ -1127,7 +1159,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         RebuildRulerTicks();
     }
 
-    private void Apply(SequenceSnapshot snap)
+    private void Apply(SequenceSnapshot snap, bool dirty = true)
     {
         _suppressTimelineRefresh = true;
         try
@@ -1144,16 +1176,29 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         {
             _suppressTimelineRefresh = false;
         }
-        Dirty = true;
+        Dirty = dirty;
         RefreshDerivedTimelineState();
     }
 
     private void PushHistory(SequenceSnapshot before)
     {
-        _history.Push(before);
-        while (_history.Count > HistoryMax) { /* Stack has no RemoveAt: > 50 is tolerated on this minimal port */ break; }
+        PushBounded(_history, before);
         _future.Clear();
         UpdateUndoButtons();
+    }
+
+    private static void PushBounded(List<SequenceSnapshot> stack, SequenceSnapshot snapshot)
+    {
+        stack.Add(snapshot);
+        if (stack.Count > HistoryMax) stack.RemoveAt(0);
+    }
+
+    private static SequenceSnapshot PopNewest(List<SequenceSnapshot> stack)
+    {
+        var index = stack.Count - 1;
+        var snapshot = stack[index];
+        stack.RemoveAt(index);
+        return snapshot;
     }
 
     private void UpdateUndoButtons()
@@ -1168,8 +1213,8 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     private void Undo()
     {
         if (!CanEditSequence || _history.Count == 0) return;
-        _future.Push(Snapshot());
-        Apply(_history.Pop());
+        PushBounded(_future, Snapshot());
+        Apply(PopNewest(_history));
         UpdateUndoButtons();
     }
 
@@ -1179,8 +1224,8 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     private void Redo()
     {
         if (!CanEditSequence || _future.Count == 0) return;
-        _history.Push(Snapshot());
-        Apply(_future.Pop());
+        PushBounded(_history, Snapshot());
+        Apply(PopNewest(_future));
         UpdateUndoButtons();
     }
 
@@ -1192,6 +1237,60 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     }
 
     // --- Editing ----------------------------------------------------------------
+
+    internal bool SetSequenceName(string value) =>
+        ExecuteSequenceEdit(() => Name = value);
+
+    internal bool SetSequenceLoop(bool value) =>
+        ExecuteSequenceEdit(() => Loop = value);
+
+    internal bool SetStepAnimId(SequenceStep step, int value)
+    {
+        if (!Steps.Contains(step)) return false;
+        var changed = ExecuteSequenceEdit(() => step.AnimId = value);
+        if (changed && ReferenceEquals(SelectedStep, step))
+            OnPropertyChanged(nameof(SelectedStepAnimId));
+        return changed;
+    }
+
+    internal bool SetStepTarget(SequenceStep step, ushort value)
+    {
+        if (!Steps.Contains(step)) return false;
+        var changed = ExecuteSequenceEdit(() => step.Target = value);
+        if (changed && ReferenceEquals(SelectedStep, step))
+            OnPropertyChanged(nameof(SelectedStepTrack));
+        return changed;
+    }
+
+    internal bool SetAudioLaneLabel(AudioLane lane, string value)
+    {
+        if (!AudioLanes.Contains(lane)) return false;
+        return ExecuteSequenceEdit(() => lane.Label = value);
+    }
+
+    internal bool MoveAudioLane(AudioLane lane, int destinationIndex)
+    {
+        var sourceIndex = AudioLanes.IndexOf(lane);
+        if (sourceIndex < 0 || destinationIndex < 0 || destinationIndex >= AudioLanes.Count ||
+            sourceIndex == destinationIndex) return false;
+        return ExecuteSequenceEdit(() =>
+        {
+            AudioLanes.Move(sourceIndex, destinationIndex);
+            for (var i = 0; i < AudioLanes.Count; i++) AudioLanes[i].RowIndex = i;
+        });
+    }
+
+    internal bool SetAudioClipLoop(AudioClip clip, bool value)
+    {
+        if (!AudioLanes.Any(lane => lane.Clips.Contains(clip))) return false;
+        return ExecuteSequenceEdit(() => clip.Loop = value);
+    }
+
+    [RelayCommand(CanExecute = nameof(CanEditSequence))]
+    private void ToggleAudioLoop(AudioClip? clip)
+    {
+        if (clip != null) SetAudioClipLoop(clip, !clip.Loop);
+    }
 
     [RelayCommand(CanExecute = nameof(CanEditSequence))]
     private void DeleteStep(SequenceStep? step)

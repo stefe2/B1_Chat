@@ -1,6 +1,7 @@
 using b1_chat_console.Models;
 using b1_chat_console.Services;
 using b1_chat_console.ViewModels;
+using b1_chat_console.Views;
 
 namespace b1_chat_console.Tests;
 
@@ -376,7 +377,7 @@ public sealed class SequencerPlaybackIntegrationTests
         vm.Steps.Add(new SequenceStep { StartMs = 100, Target = 0xFFFF, AnimId = 2 });
         Assert.True(vm.BeginStepDrag());
         vm.Steps[0].StartMs += 100;
-        Assert.True(vm.CompleteDragEdit()); // creates a valid Undo snapshot without opening UI
+        Assert.True(vm.CompleteEditTransaction()); // creates a valid Undo snapshot without opening UI
 
         Assert.True(vm.UndoCommand.CanExecute(null));
         vm.PlayCommand.Execute(null);
@@ -409,7 +410,18 @@ public sealed class SequencerPlaybackIntegrationTests
 
         var cases = new (string Name, Action<SequencerViewModel> Arrange, Action<SequencerViewModel> Edit)[]
         {
+            ("sequence name", _ => { }, vm => Assert.True(vm.SetSequenceName("Scene A"))),
+            ("sequence loop", _ => { }, vm => vm.EditableLoop = true),
             ("insert gesture", _ => { }, vm => vm.InsertGestureAt(2, vm.Tracks[0], 100)),
+            ("gesture animation", vm =>
+            {
+                vm.Steps.Add(new SequenceStep { AnimId = 2, Target = 0xFFFF, StartMs = 100 });
+                vm.SelectedStep = vm.Steps[0];
+            }, vm => vm.SelectedStepAnimId = 3),
+            ("gesture target", vm =>
+            {
+                vm.Steps.Add(new SequenceStep { AnimId = 2, Target = 0xFFFF, StartMs = 100 });
+            }, vm => Assert.True(vm.SetStepTarget(vm.Steps[0], 0x1234))),
             ("nudge gesture", vm =>
             {
                 vm.Steps.Add(new SequenceStep { AnimId = 2, Target = 0xFFFF, StartMs = 100 });
@@ -430,10 +442,17 @@ public sealed class SequencerPlaybackIntegrationTests
             {
                 Assert.True(vm.BeginStepDrag());
                 vm.Steps[0].StartMs = 350;
-                Assert.True(vm.CompleteDragEdit());
+                Assert.True(vm.CompleteEditTransaction());
             }),
             ("add audio lane", _ => { }, vm => vm.AddAudioLaneCommand.Execute(null)),
             ("delete audio lane", _ => { }, vm => vm.DeleteAudioLaneCommand.Execute(vm.AudioLanes[1])),
+            ("rename audio lane", _ => { }, vm =>
+            {
+                Assert.True(vm.BeginLaneRename());
+                vm.AudioLanes[0].Label = "MUSIC";
+                Assert.True(vm.CompleteEditTransaction());
+            }),
+            ("reorder audio lane", _ => { }, vm => Assert.True(vm.MoveAudioLane(vm.AudioLanes[1], 0))),
             ("insert audio clip", _ => { }, vm =>
                 Assert.True(vm.InsertAudioClip(vm.AudioLanes[0],
                     new AudioClip { FilePath = "insert.wav", DurationMs = 100, StartMs = 10 }))),
@@ -442,6 +461,10 @@ public sealed class SequencerPlaybackIntegrationTests
                 vm.AudioLanes[0].Clips.Add(new AudioClip { FilePath = "old.wav", DurationMs = 100, StartMs = 10 });
             }, vm => Assert.True(vm.ReplaceAudioClipSource(
                 vm.AudioLanes[0].Clips[0], "new.wav", 250))),
+            ("audio loop", vm =>
+            {
+                vm.AudioLanes[0].Clips.Add(new AudioClip { FilePath = "loop.wav", DurationMs = 100, StartMs = 10 });
+            }, vm => vm.ToggleAudioLoopCommand.Execute(vm.AudioLanes[0].Clips[0])),
             ("move audio clip lane", vm =>
             {
                 vm.AudioLanes[0].Clips.Add(new AudioClip { FilePath = "move.wav", DurationMs = 100, StartMs = 10 });
@@ -457,7 +480,7 @@ public sealed class SequencerPlaybackIntegrationTests
             {
                 Assert.True(vm.BeginAudioClipDrag());
                 vm.AudioLanes[0].Clips[0].StartMs = 250;
-                Assert.True(vm.CompleteDragEdit());
+                Assert.True(vm.CompleteEditTransaction());
             }),
             ("clear timeline", vm =>
             {
@@ -516,7 +539,7 @@ public sealed class SequencerPlaybackIntegrationTests
         };
 
         Assert.True(vm.BeginStepDrag());
-        Assert.False(vm.CompleteDragEdit()); // selection/click with no persistent movement
+        Assert.False(vm.CompleteEditTransaction()); // selection/click with no persistent movement
         vm.NudgeStartBackwardCommand.Execute(null); // already at zero
         vm.MoveAudioClipToLane(new AudioClip(), vm.AudioLanes[0]); // not in the document
         var unchangedAudio = new AudioClip { FilePath = "same.wav", DurationMs = 100, StartMs = 10 };
@@ -535,6 +558,131 @@ public sealed class SequencerPlaybackIntegrationTests
         vm.NudgeStartForwardCommand.Execute(null);
         Assert.False(vm.RedoCommand.CanExecute(null));
         Assert.True(vm.UndoCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void DragThresholdAndTransaction_DistinguishClickReturnAndRealMovement()
+    {
+        Assert.False(SequenceTimelineView.ExceedsDragThreshold(new(10, 10), new(12, 12)));
+        Assert.True(SequenceTimelineView.ExceedsDragThreshold(new(10, 10), new(15, 10)));
+
+        var protocol = new FakeSequencerProtocol();
+        var scheduler = new FakePlaybackTimerScheduler();
+        using var vm = CreateViewModel(protocol, scheduler);
+        vm.Steps.Add(new SequenceStep { AnimId = 2, Target = 0xFFFF, StartMs = 100 });
+
+        Assert.True(vm.BeginStepDrag());
+        vm.Steps[0].StartMs = 300;
+        vm.Steps[0].StartMs = 100;
+        Assert.False(vm.CompleteEditTransaction());
+        Assert.False(vm.Dirty);
+        Assert.False(vm.UndoCommand.CanExecute(null));
+
+        Assert.True(vm.BeginStepDrag());
+        vm.Steps[0].StartMs = 300;
+        Assert.True(vm.CompleteEditTransaction());
+        Assert.True(vm.Dirty);
+        Assert.True(vm.UndoCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void CancelEditTransaction_RestoresDocumentDirtyStateAndHistory()
+    {
+        var protocol = new FakeSequencerProtocol();
+        var scheduler = new FakePlaybackTimerScheduler();
+        using var vm = CreateViewModel(protocol, scheduler);
+        vm.Steps.Add(new SequenceStep { AnimId = 2, Target = 0xFFFF, StartMs = 100 });
+        vm.AudioLanes[0].Clips.Add(new AudioClip
+        {
+            FilePath = "original.wav", DurationMs = 100, StartMs = 20,
+        });
+
+        Assert.True(vm.BeginStepDrag());
+        vm.Steps[0].StartMs = 900;
+        vm.AudioLanes[0].Clips[0].FilePath = "cancelled.wav";
+        vm.AudioLanes[0].Label = "CANCELLED";
+        Assert.True(vm.CancelEditTransaction());
+
+        Assert.Equal(100, vm.Steps[0].StartMs);
+        Assert.Equal("original.wav", vm.AudioLanes[0].Clips[0].FilePath);
+        Assert.Equal("AMBIENT", vm.AudioLanes[0].Label);
+        Assert.False(vm.Dirty);
+        Assert.False(vm.UndoCommand.CanExecute(null));
+        Assert.False(vm.CancelEditTransaction()); // cancellation is idempotent
+
+        vm.SelectedStep = vm.Steps[0];
+        vm.NudgeStartForwardCommand.Execute(null);
+        Assert.True(vm.Dirty);
+        Assert.True(vm.UndoCommand.CanExecute(null));
+        var committedStart = vm.Steps[0].StartMs;
+
+        Assert.True(vm.BeginStepDrag());
+        vm.Steps[0].StartMs = 1_500;
+        Assert.True(vm.CancelEditTransaction());
+        Assert.Equal(committedStart, vm.Steps[0].StartMs);
+        Assert.True(vm.Dirty);
+        Assert.True(vm.UndoCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void UndoAndRedoHistory_RetainExactlyTheNewestFiftyEditsInOrder()
+    {
+        var protocol = new FakeSequencerProtocol();
+        var scheduler = new FakePlaybackTimerScheduler();
+        using var vm = CreateViewModel(protocol, scheduler);
+        vm.Steps.Add(new SequenceStep { AnimId = 2, Target = 0xFFFF, StartMs = 0 });
+        vm.SelectedStep = vm.Steps[0];
+
+        for (var i = 0; i < 55; i++) vm.NudgeStartForwardCommand.Execute(null);
+        Assert.Equal(5_500, vm.Steps[0].StartMs);
+
+        var undoCount = 0;
+        while (vm.UndoCommand.CanExecute(null))
+        {
+            vm.UndoCommand.Execute(null);
+            undoCount++;
+        }
+        Assert.Equal(50, undoCount);
+        Assert.Equal(500, vm.Steps[0].StartMs); // the oldest five snapshots were evicted
+
+        var redoCount = 0;
+        while (vm.RedoCommand.CanExecute(null))
+        {
+            vm.RedoCommand.Execute(null);
+            redoCount++;
+        }
+        Assert.Equal(50, redoCount);
+        Assert.Equal(5_500, vm.Steps[0].StartMs);
+    }
+
+    [Fact]
+    public void TransientEditorAndTelemetryState_DoesNotCreateDocumentHistory()
+    {
+        var protocol = new FakeSequencerProtocol();
+        var scheduler = new FakePlaybackTimerScheduler();
+        using var vm = CreateViewModel(protocol, scheduler);
+        var step = new SequenceStep { AnimId = 2, Target = 0xFFFF, StartMs = 100 };
+        var clip = new AudioClip { FilePath = "transient.wav", DurationMs = 100, StartMs = 10 };
+        vm.Steps.Add(step);
+        vm.AudioLanes[0].Clips.Add(clip);
+
+        vm.SelectedStep = step;
+        vm.ArmTrackCommand.Execute(vm.Tracks[0]);
+        vm.ToggleMuteCommand.Execute(vm.Tracks[0]);
+        vm.PxPerSecond = 140;
+        vm.SnapToGrid = false;
+        vm.PlayheadMs = 75;
+        step.Dragging = true;
+        step.DragOffsetY = 8;
+        step.ExecutionSummary = "DONE";
+        step.ExecutionDetail = "telemetry";
+        step.ExecutionTone = "completed";
+        clip.Peaks = new[] { 0.1f, 0.5f };
+        clip.Dragging = true;
+        clip.DragOffsetY = 4;
+
+        Assert.False(vm.Dirty);
+        Assert.False(vm.UndoCommand.CanExecute(null));
     }
 
     [Fact]

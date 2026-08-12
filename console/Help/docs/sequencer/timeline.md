@@ -53,6 +53,12 @@ released. While held, a clip moves freely at pixel precision. Disable Snap to
 retain the unsnapped millisecond position. The inspector's −0.1 s and +0.1 s
 buttons always nudge by 100 ms.
 
+A clip drag starts only after 5 pixels of pointer movement, so selecting a clip
+does not create an edit. **Escape**, lost mouse capture, window deactivation, or
+leaving the Sequencer cancels an active gesture/audio drag and restores its
+original placement. The same cancellation clears a gesture-library ghost;
+cancelled ruler scrubbing returns the playhead to its starting position.
+
 ## Gesture clips
 
 ![Gesture library](../images/gesture-library.png)
@@ -85,10 +91,12 @@ A click without movement, a drag returned to its original placement, or another
 edit that leaves the persistent document unchanged creates no Undo entry and
 does not mark the sequence dirty.
 
-Some direct property edits in the current release — notably changing a gesture
-or target in the inspector, renaming an audio lane, and toggling an audio clip's
-Loop flag — are not guaranteed to create their own history entry. Export before
-making a set of changes you may need to recover exactly.
+Gesture/target inspector changes, audio-lane names and order, clip Loop, and the
+whole-sequence Loop setting use the same history rules. Undo and Redo retain the
+newest 50 edits; once that capacity is exceeded, the oldest snapshots are
+discarded first. Selection, armed track, droid-track mute, zoom, Snap, waveform
+peaks, execution reports, and drag visuals remain transient and create no
+history.
 
 ## Saving your work
 

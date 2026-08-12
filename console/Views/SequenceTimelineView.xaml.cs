@@ -15,12 +15,14 @@ namespace b1_chat_console.Views;
 // mouse-capture idiom driving a floating ghost element rather than DragDrop.DoDragDrop).
 public partial class SequenceTimelineView : UserControl
 {
+    private bool _clipCandidate;
     private bool _draggingClip;
     private SequenceStep? _dragStep;
     private double _dragStartMouseX;
     private double _dragStartMouseY;
     private int _dragStartMs;
 
+    private bool _audioClipCandidate;
     private bool _draggingAudioClip;
     private AudioClip? _dragAudioClip;
     private AudioLane? _dragAudioSourceLane;
@@ -29,6 +31,7 @@ public partial class SequenceTimelineView : UserControl
     private int _dragAudioStartMs;
 
     private bool _scrubbing;
+    private double _scrubStartPlayheadMs;
 
     // Gesture-library click-vs-drag: MouseLeftButtonDown always captures and arms candidate
     // state; only once the mouse has moved past a small threshold does this become a real drag
@@ -39,6 +42,7 @@ public partial class SequenceTimelineView : UserControl
     private bool _chipDragging;
     private int _chipAnimId;
     private Point _chipDownPos;
+    private Window? _hostWindow;
 
     public SequenceTimelineView()
     {
@@ -46,6 +50,74 @@ public partial class SequenceTimelineView : UserControl
     }
 
     private SequencerViewModel? Vm => DataContext as SequencerViewModel;
+
+    internal static bool ExceedsDragThreshold(Point start, Point current) =>
+        Math.Abs(current.X - start.X) + Math.Abs(current.Y - start.Y) >= DragThresholdPx;
+
+    private void SequenceTimelineView_Loaded(object sender, RoutedEventArgs e)
+    {
+        var window = Window.GetWindow(this);
+        if (ReferenceEquals(window, _hostWindow)) return;
+        if (_hostWindow != null) _hostWindow.Deactivated -= HostWindow_Deactivated;
+        _hostWindow = window;
+        if (_hostWindow != null) _hostWindow.Deactivated += HostWindow_Deactivated;
+    }
+
+    private void SequenceTimelineView_Unloaded(object sender, RoutedEventArgs e)
+    {
+        if (_hostWindow != null) _hostWindow.Deactivated -= HostWindow_Deactivated;
+        _hostWindow = null;
+        CancelAllInteractions();
+    }
+
+    private void HostWindow_Deactivated(object? sender, EventArgs e) => CancelAllInteractions();
+
+    private void SequenceTimelineView_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Escape) return;
+        CancelAllInteractions();
+        Keyboard.ClearFocus();
+        e.Handled = true;
+    }
+
+    private void Interaction_LostMouseCapture(object sender, MouseEventArgs e)
+    {
+        if (_clipCandidate || _audioClipCandidate || _chipCandidate || _scrubbing)
+            CancelAllInteractions();
+    }
+
+    private void CancelAllInteractions()
+    {
+        var captured = Mouse.Captured as UIElement;
+        var restoreScrub = _scrubbing;
+        _clipCandidate = false;
+        _draggingClip = false;
+        if (_dragStep != null)
+        {
+            _dragStep.DragOffsetY = 0;
+            _dragStep.Dragging = false;
+        }
+        _dragStep = null;
+
+        _audioClipCandidate = false;
+        _draggingAudioClip = false;
+        if (_dragAudioClip != null)
+        {
+            _dragAudioClip.DragOffsetY = 0;
+            _dragAudioClip.Dragging = false;
+        }
+        _dragAudioClip = null;
+        _dragAudioSourceLane = null;
+
+        _chipCandidate = false;
+        _chipDragging = false;
+        GhostBorder.Visibility = Visibility.Collapsed;
+        _scrubbing = false;
+
+        Vm?.CancelEditTransaction();
+        if (restoreScrub && Vm is { } vm) vm.PlayheadMs = _scrubStartPlayheadMs;
+        captured?.ReleaseMouseCapture();
+    }
 
     // Keeps the timeline's minimum drawn width in sync with the visible viewport, so row
     // backgrounds/gridlines always fill the body (mockup: width = max(content, viewport)).
@@ -80,22 +152,28 @@ public partial class SequenceTimelineView : UserControl
         if (sender is not FrameworkElement fe || fe.DataContext is not SequenceStep step || Vm is not { } vm) return;
         vm.SelectedStep = step;
         if (!vm.CanEditSequence) { e.Handled = true; return; }
-        if (!vm.BeginStepDrag()) { e.Handled = true; return; }
+        _clipCandidate = true;
+        _draggingClip = false;
         _dragStep = step;
         var pos = e.GetPosition(TracksCanvas);
         _dragStartMouseX = pos.X;
         _dragStartMouseY = pos.Y;
         _dragStartMs = step.StartMs;
-        _draggingClip = true;
-        step.Dragging = true; // dimmed while "in hand" (cleared on mouse-up)
         fe.CaptureMouse();
         e.Handled = true;
     }
 
     private void Clip_MouseMove(object sender, MouseEventArgs e)
     {
-        if (!_draggingClip || _dragStep == null || Vm is not { CanEditSequence: true } vm || vm.PxPerMs <= 0) return;
+        if (!_clipCandidate || _dragStep == null || Vm is not { CanEditSequence: true } vm || vm.PxPerMs <= 0) return;
         var pos = e.GetPosition(TracksCanvas);
+        if (!_draggingClip)
+        {
+            if (!ExceedsDragThreshold(new Point(_dragStartMouseX, _dragStartMouseY), pos)) return;
+            if (!vm.BeginStepDrag()) { CancelAllInteractions(); return; }
+            _draggingClip = true;
+            _dragStep.Dragging = true;
+        }
         var deltaMs = (pos.X - _dragStartMouseX) / vm.PxPerMs;
         // Free pixel-level movement while dragging, on BOTH axes — Snap (horizontal grid) and
         // Target (row) only apply at release, so the clip glides with the cursor instead of
@@ -106,11 +184,13 @@ public partial class SequenceTimelineView : UserControl
 
     private void Clip_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
-        if (!_draggingClip) return;
+        if (!_clipCandidate) return;
+        var completedDrag = _draggingClip;
+        _clipCandidate = false;
         _draggingClip = false;
         if (_dragStep != null)
         {
-            if (Vm is { CanEditSequence: true } vm)
+            if (completedDrag && Vm is { CanEditSequence: true } vm)
             {
                 _dragStep.StartMs = Math.Max(0, vm.RoundToGrid(_dragStep.StartMs)); // snap settles here
                 // The row settles here too: retarget to whichever track is under the cursor —
@@ -128,7 +208,7 @@ public partial class SequenceTimelineView : UserControl
         if (sender is FrameworkElement fe) fe.ReleaseMouseCapture();
         // The transaction compares the final persistent state with mouse-down, then refreshes
         // the timeline once only if something really moved.
-        Vm?.CompleteDragEdit();
+        if (completedDrag) Vm?.CompleteEditTransaction();
     }
 
     // Clicking empty timeline space clears the selection — clip mouse-downs mark their event
@@ -154,23 +234,30 @@ public partial class SequenceTimelineView : UserControl
     {
         if (sender is not FrameworkElement fe || fe.DataContext is not AudioClip clip || Vm is not { } vm) return;
         if (!vm.CanEditSequence) { e.Handled = true; return; }
-        if (!vm.BeginAudioClipDrag()) { e.Handled = true; return; }
+        _audioClipCandidate = true;
+        _draggingAudioClip = false;
         _dragAudioClip = clip;
         _dragAudioSourceLane = vm.AudioLanes.FirstOrDefault(l => l.Clips.Contains(clip));
         var posRoot = e.GetPosition(RootGrid);
         _dragAudioStartMouseX = posRoot.X;
         _dragAudioStartMouseY = posRoot.Y;
         _dragAudioStartMs = clip.StartMs;
-        _draggingAudioClip = true;
-        clip.Dragging = true; // dimmed while "in hand" (cleared on mouse-up)
         fe.CaptureMouse();
         e.Handled = true;
     }
 
     private void AudioClip_MouseMove(object sender, MouseEventArgs e)
     {
-        if (!_draggingAudioClip || _dragAudioClip == null || Vm is not { CanEditSequence: true } vm || vm.PxPerMs <= 0) return;
+        if (!_audioClipCandidate || _dragAudioClip == null || Vm is not { CanEditSequence: true } vm || vm.PxPerMs <= 0) return;
         var posRoot = e.GetPosition(RootGrid);
+        if (!_draggingAudioClip)
+        {
+            if (!ExceedsDragThreshold(
+                    new Point(_dragAudioStartMouseX, _dragAudioStartMouseY), posRoot)) return;
+            if (!vm.BeginAudioClipDrag()) { CancelAllInteractions(); return; }
+            _draggingAudioClip = true;
+            _dragAudioClip.Dragging = true;
+        }
         var deltaMs = (posRoot.X - _dragAudioStartMouseX) / vm.PxPerMs;
         // Same smooth-drag rule as gesture clips: free on both axes while moving, snap (time
         // grid) and lane both settle at release.
@@ -180,13 +267,15 @@ public partial class SequenceTimelineView : UserControl
 
     private void AudioClip_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
-        if (!_draggingAudioClip) return;
+        if (!_audioClipCandidate) return;
+        var completedDrag = _draggingAudioClip;
+        _audioClipCandidate = false;
         _draggingAudioClip = false;
         if (sender is FrameworkElement fe) fe.ReleaseMouseCapture();
 
         if (_dragAudioClip != null)
         {
-            if (Vm is { CanEditSequence: true } vm)
+            if (completedDrag && Vm is { CanEditSequence: true } vm)
             {
                 _dragAudioClip.StartMs = Math.Max(0, vm.RoundToGrid(_dragAudioClip.StartMs));
                 // The lane settles here: released over another lane's row → move the clip there;
@@ -203,7 +292,26 @@ public partial class SequenceTimelineView : UserControl
         }
         _dragAudioClip = null;
         _dragAudioSourceLane = null;
-        Vm?.CompleteDragEdit();
+        if (completedDrag) Vm?.CompleteEditTransaction();
+    }
+
+    private void LaneLabel_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (sender is not TextBox textBox || textBox.DataContext is not AudioLane ||
+            Vm is not { } vm || vm.BeginLaneRename()) return;
+        Keyboard.ClearFocus();
+    }
+
+    private void LaneLabel_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e) =>
+        Vm?.CompleteEditTransaction();
+
+    private void LaneLabel_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter) return;
+        Vm?.CompleteEditTransaction();
+        if (sender is UIElement element)
+            element.MoveFocus(new TraversalRequest(FocusNavigationDirection.Next));
+        e.Handled = true;
     }
 
     // --- Ruler: local scrub (ignored while a real hardware playback is driving the
@@ -211,10 +319,11 @@ public partial class SequenceTimelineView : UserControl
 
     private void Ruler_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (Vm == null) return;
+        if (Vm is not { IsLiveTracking: false } vm) return;
+        _scrubStartPlayheadMs = vm.PlayheadMs;
         _scrubbing = true;
         ((UIElement)sender).CaptureMouse();
-        Vm.SetPlayheadFromPixel(e.GetPosition(RulerCanvas).X);
+        vm.SetPlayheadFromPixel(e.GetPosition(RulerCanvas).X);
     }
 
     private void Ruler_MouseMove(object sender, MouseEventArgs e)
@@ -251,8 +360,7 @@ public partial class SequenceTimelineView : UserControl
 
         if (!_chipDragging)
         {
-            var moved = Math.Abs(pos.X - _chipDownPos.X) + Math.Abs(pos.Y - _chipDownPos.Y);
-            if (moved < DragThresholdPx) return;
+            if (!ExceedsDragThreshold(_chipDownPos, pos)) return;
             _chipDragging = true;
             GhostText.Text = Vm?.GestureLibrary.FirstOrDefault(g => g.Id == _chipAnimId)?.Name ?? "";
             // Chips are neutral pills now (only their left edge is family-colored), so the

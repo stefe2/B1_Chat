@@ -70,7 +70,7 @@ The dashboard is updated whenever an item changes state.
 |---|---|---:|---:|
 | A | Playback isolation and cancellation | 7 / 8 | — |
 | B | Infinite gestures and Stop/Pause semantics | 5 / 6 | 0 / 1 |
-| C | Dirty, Undo/Redo and editing transactions | 1 / 8 | 0 / 1 |
+| C | Dirty, Undo/Redo and editing transactions | 5 / 8 | 0 / 1 |
 | D | Import, export and local library | 0 / 8 | 0 / 1 |
 | E | Deterministic scheduler and performance | 2 / 6 | 0 / 1 |
 | F | Duration and audio robustness | 0 / 8 | — |
@@ -363,7 +363,7 @@ The dashboard is updated whenever an item changes state.
   and that only a subsequent real edit invalidates Redo. Full WPF suite passes
   78/78.
 
-### [ ] SEQ-C02 — Do not create history for selection or no-op drags
+### [x] SEQ-C02 — Do not create history for selection or no-op drags
 
 - **Priority:** P1
 - **Problem:** mouse-down immediately pushes history even when the user only
@@ -374,8 +374,14 @@ The dashboard is updated whenever an item changes state.
   no-op.
 - **Validation:** click, sub-threshold motion, moved-and-returned, and real-drag
   interaction tests.
+- **Implemented:** gesture and audio clips remain selection candidates until
+  pointer movement reaches a shared 5 px threshold. Only then does the edit
+  transaction and drag visual begin; structural commit still rejects a drag
+  returned to its exact original document state.
+- **Evidence:** threshold boundary, click/no-change, moved-and-returned and real
+  movement cases pass in the WPF suite.
 
-### [ ] SEQ-C03 — Cover every persistent property edit
+### [x] SEQ-C03 — Cover every persistent property edit
 
 - **Priority:** P1
 - **Problem:** gesture/target inspector changes, lane rename, audio Loop, and
@@ -386,8 +392,16 @@ The dashboard is updated whenever an item changes state.
   participate in transactions. Mute, armed track, selection, zoom, scroll, Snap,
   peaks, and drag visual state remain transient.
 - **Validation:** one Undo and one Redo test per property category.
+- **Implemented:** transaction-backed editor properties/operations now cover
+  sequence name/Loop, gesture animation/target/start, audio path/duration/start/
+  lane/Loop, lane label/order, insert/delete/duplicate and Clear. The lane-name
+  TextBox spans one focus transaction; inspector and Loop controls no longer
+  bind directly to untracked persistent fields. Mute, armed track, selection,
+  viewport/Snap, waveform, execution and drag state remain transient.
+- **Evidence:** the expanded 20-family matrix performs exact Undo and Redo round
+  trips, while a dedicated transient-state test proves no Dirty/history entry.
 
-### [ ] SEQ-C04 — Enforce the history capacity
+### [x] SEQ-C04 — Enforce the history capacity
 
 - **Priority:** P2
 - **Problem:** `HistoryMax = 50` is declared but old snapshots are never removed.
@@ -395,6 +409,10 @@ The dashboard is updated whenever an item changes state.
 - **Acceptance:** history retains exactly the newest configured number of edits,
   without unbounded memory growth, and Redo follows the same bounded policy.
 - **Validation:** perform more than 50 edits and verify boundaries/order.
+- **Implemented:** Undo and Redo use bounded newest-first lists. Each push evicts
+  the oldest snapshot beyond `HistoryMax`, for both history directions.
+- **Evidence:** 55 ordered edits permit exactly 50 Undo operations down to edit
+  5, then exactly 50 Redo operations back to edit 55.
 
 ### [ ] SEQ-C05 — Base Dirty on a saved checkpoint
 
@@ -418,7 +436,7 @@ The dashboard is updated whenever an item changes state.
 - **Validation:** move the last clip, select longer/shorter gestures, replace
   audio, and Undo/Redo each operation.
 
-### [ ] SEQ-C07 — Handle lost mouse capture and cancellation
+### [x] SEQ-C07 — Handle lost mouse capture and cancellation
 
 - **Priority:** P2
 - **Problem:** losing capture/window focus can leave drag flags, offsets, or the
@@ -429,6 +447,14 @@ The dashboard is updated whenever an item changes state.
   all transient visual state is cleared.
 - **Validation:** manual and UI-level capture-loss scenarios for gesture, audio,
   ruler scrub, and library-chip drag.
+- **Implemented:** Escape, lost mouse capture, view unload and host-window
+  deactivation route through one cancellation path. Active gesture/audio/lane
+  edits restore their pre-edit document and prior Dirty state without touching
+  history; all drag offsets/flags and the library ghost are cleared. Cancelled
+  ruler scrubbing restores its starting playhead. Normal MouseUp/Enter commit.
+- **Evidence:** cancellation restoration/idempotence tests cover clean and
+  already-dirty documents; compiled WPF routed-event wiring covers gesture,
+  audio, ruler and library-chip capture paths. Full suite passes 82/82.
 
 ### [ ] SEQ-C08 — Separate document state from transient UI state
 
@@ -1366,3 +1392,4 @@ Append concise evidence when closing items; do not paste full build logs.
 | 2026-08-11 | SEQ-A06 | Replaced independently writable transport booleans with the guarded `Stopped`/`Playing`/`Paused` state machine and one shared pass-start path. All command/badge/edit-lock flags derive from that state; partial scheduler startup failure now rolls back cleanly. The nine-path transition table and UI notification check passed within the full WPF suite at 75/75; offline regression passed 17/17 (`b1-self-test-20260811-174442.json`). No firmware change or hardware run was required. |
 | 2026-08-11 | SEQ-A03 | Closed the Play/Pause editing policy across the complete UI surface: document and Local Library mutations lock, while inspection, arm, runtime mute, viewport tools and Export remain available. Added late-drag transition guards, disabled-control guidance and a three-state command/direct-guard matrix including Undo/Redo; WPF suite passed 76/76 and offline regression passed 17/17 (`b1-self-test-20260811-175250.json`). No firmware change or hardware run was required. |
 | 2026-08-11 | SEQ-C01 | Centralized command and drag mutations behind structural begin/commit transactions. Real edits now create one pre-edit snapshot, clear Redo, set Dirty and refresh derived timeline state once; no-op edits create nothing. Thirteen edit families plus no-op/Redo invalidation passed within the 78/78 WPF suite; offline regression passed 17/17 (`b1-self-test-20260811-201830.json`). No firmware change or hardware run was required. |
+| 2026-08-11 | SEQ-C02, SEQ-C03, SEQ-C04, SEQ-C07 | Added the shared 5 px drag threshold, complete persistent-property transaction coverage, exact 50-entry Undo/Redo bounds, and fail-safe interaction cancellation/restoration for Escape/capture/focus/unload. Twenty edit families, transient-state isolation, threshold/no-op/return, cancellation and 55-edit history ordering pass within the 82/82 WPF suite; offline regression passed 17/17 (`b1-self-test-20260811-203025.json`). No firmware change or hardware run was required. |
