@@ -13,7 +13,7 @@ calibration, sequencing, and local audio stay on your PC and local mesh.
 > It covers Windows requirements, hardware power, the first master/slave flash,
 > connection, adoption, and safe calibration in the right order.
 
-This guide describes **B1 Chat Console 0.10.4** with **firmware 1.9.0,
+This guide describes **B1 Chat Console 0.11.0** with **firmware 1.10.0,
 protocol 5**. Use matching current console and firmware releases whenever
 possible; older firmware may omit controls that depend on newer capabilities.
 
