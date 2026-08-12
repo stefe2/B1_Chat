@@ -14,6 +14,19 @@ public class SequenceLibraryItem
     public DateTime SavedAt { get; set; }
 }
 
+public sealed record SequenceLibraryIssue(string FileName, string Message);
+
+public sealed record SequenceLibraryScan(
+    IReadOnlyList<SequenceLibraryItem> Items,
+    IReadOnlyList<SequenceLibraryIssue> Issues);
+
+public enum SequencerDocumentOrigin
+{
+    New,
+    ExternalFile,
+    LocalLibrary,
+}
+
 /// <summary>One droid track of the sequence's layout (id + display name, in row order) —
 /// saved with the sequence so a load/import with the fleet unplugged still lays every
 /// step out on its own row (role "OFFLINE") instead of collapsing onto one line.</summary>

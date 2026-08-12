@@ -95,9 +95,10 @@ change, the console sends all six values to the selected droid, which stores
 them immediately. There is currently no calibration saved indicator; changing
 targets before the 1.2-second delay cancels that pending change.
 
-Sequences and their audio layout live on the PC. Timeline edits are **not
-autosaved**. Export a `.b1seq.json` snapshot before closing the console or making
-risky edits, and keep the referenced audio files in place. See
+Scenes and their audio layout live on the PC. Timeline edits are **not
+autosaved**. Save the Scene to the Local Library before closing the console or
+making risky edits. Export a `.b1seq.json` copy when you need backup or transfer,
+and keep the referenced audio files in place. See
 [Data & Backups](reference/data-and-backups.md) for the exact boundaries.
 
 ## A useful rule of thumb

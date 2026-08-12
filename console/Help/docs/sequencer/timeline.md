@@ -19,8 +19,8 @@ controls stay together above the timeline.*
 3. Click the ruler to place the playhead at the desired time.
 4. Click a gesture in the bottom library, or drag it directly onto a track and
    time.
-5. Add more droids or audio, choose **Play**, then **Export** a snapshot when the
-   result is worth keeping.
+5. Give the Scene a name, choose **Save** to keep it in the Local Library, then
+   use **Export** only when you need an external copy.
 
 ## Tracks
 
@@ -100,7 +100,10 @@ history.
 
 ## Saving your work
 
-Timeline edits are not autosaved and there is no Save-to-droid step. Use
-**Export** to create a `.b1seq.json` snapshot. See [Playback](playback.md) for
-what is restored at startup and the current Local Library limitation, and
-[Audio](audio.md) for portable-file considerations.
+Timeline edits are not autosaved and there is no Save-to-droid step. **Save**
+updates the current Local Library Scene; **Save As** creates a separate Scene
+with a new stable identity. The badge shows the Scene source and whether its
+content is saved or modified. **Export** creates an optional `.b1seq.json`
+external snapshot without updating a library-backed Scene. See
+[Playback](playback.md) for details and [Audio](audio.md) for portable-file
+considerations.

@@ -16,15 +16,17 @@ When a newer console version exists, the **Updates (GitHub)** area shows it with
 an **Install** button.
 
 1. Stop sequence playback.
-2. Export any timeline edits you need to keep. Timeline work is not autosaved.
+2. Save any timeline edits you need to keep. Export an external copy if desired;
+   timeline work is not autosaved.
 3. Choose **Install**.
 4. The console downloads the release installer, launches it, and shuts down.
 5. Complete the installer and relaunch the console.
 6. Confirm the new version in the main header.
 
 The last connected COM port is stored locally and is offered again after the
-update. The last imported/exported sequence file may reload, but only the last
-written snapshot is recovered — not edits left solely in memory.
+update. The last Local Library Scene or imported/exported sequence file may
+reload, but only the last saved snapshot is recovered—not edits left solely in
+memory.
 
 ## Offline or failed update checks
 

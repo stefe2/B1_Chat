@@ -318,11 +318,12 @@ public sealed class SequenceImportServiceTests
 
     private static SequencerViewModel CreateViewModel() => new(
         new FakeSequencerProtocol(),
-        new SettingsService(),
+        new FakeSequencerSettings(),
         new FakeAudioPlayer(),
         new FakePlaybackTimerScheduler(),
         new FakePlaybackClock(),
-        new FakePlaybackTimerScheduler());
+        new FakePlaybackTimerScheduler(),
+        library: new FakeSequenceLibraryService());
 
     private static string FixturePath(string fileName) =>
         Path.Combine(AppContext.BaseDirectory, "Fixtures", "Sequences", fileName);

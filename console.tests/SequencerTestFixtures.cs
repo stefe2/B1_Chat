@@ -78,12 +78,20 @@ internal sealed record AudioAction(string Kind, string? Path, bool Loop);
 internal sealed class FakeSequencerSettings : ISequencerSettings
 {
     public string? LastSequencePath { get; set; }
+    public string? LastSceneId { get; set; }
     public int SequencePathWrites { get; private set; }
+    public int SceneIdWrites { get; private set; }
 
     public void SetLastSequencePath(string? path)
     {
         LastSequencePath = path;
         SequencePathWrites++;
+    }
+
+    public void SetLastSceneId(string? sceneId)
+    {
+        LastSceneId = sceneId;
+        SceneIdWrites++;
     }
 }
 
@@ -92,10 +100,14 @@ internal sealed class FakeSequencerPersistenceDialogs : ISequencerPersistenceDia
     public string? ExportPath { get; set; }
     public string? ImportPath { get; set; }
     public bool ConfirmResult { get; set; }
+    public bool DeleteConfirmResult { get; set; }
+    public string? SceneNameResult { get; set; }
     public List<string> ConfirmationRequests { get; } = new();
     public List<(string Title, string Message)> Errors { get; } = new();
     public int ExportSelections { get; private set; }
     public int ImportSelections { get; private set; }
+    public int SceneNamePrompts { get; private set; }
+    public List<string> DeleteConfirmationRequests { get; } = new();
 
     public string? ChooseExportPath(string suggestedFileName)
     {
@@ -109,13 +121,52 @@ internal sealed class FakeSequencerPersistenceDialogs : ISequencerPersistenceDia
         return ImportPath;
     }
 
+    public string? PromptForSceneName(string initialName, string title)
+    {
+        SceneNamePrompts++;
+        return SceneNameResult;
+    }
+
     public bool ConfirmDiscardUnsavedChanges(string replacementDescription)
     {
         ConfirmationRequests.Add(replacementDescription);
         return ConfirmResult;
     }
 
+    public bool ConfirmMoveSceneToTrash(string sceneName)
+    {
+        DeleteConfirmationRequests.Add(sceneName);
+        return DeleteConfirmResult;
+    }
+
     public void ShowError(string title, string message) => Errors.Add((title, message));
+}
+
+internal sealed class FakeSequenceLibraryService : ISequenceLibraryService
+{
+    public List<SequenceLibraryItem> Items { get; } = new();
+    public List<SequenceLibraryIssue> Issues { get; } = new();
+    public List<SequenceLibraryItem> Saved { get; } = new();
+    public List<string> Trashed { get; } = new();
+    public Exception? SaveError { get; set; }
+    public Exception? TrashError { get; set; }
+
+    public SequenceLibraryScan Scan() => new(Items.ToArray(), Issues.ToArray());
+    public SequenceLibraryItem? Get(string id) => Items.FirstOrDefault(item => item.Id == id);
+    public void Save(SequenceLibraryItem item)
+    {
+        if (SaveError != null) throw SaveError;
+        Saved.Add(item);
+        Items.RemoveAll(existing => existing.Id == item.Id);
+        Items.Add(item);
+    }
+    public void MoveToTrash(string id)
+    {
+        if (TrashError != null) throw TrashError;
+        if (Items.RemoveAll(item => item.Id == id) == 0)
+            throw new FileNotFoundException("Scene is missing.");
+        Trashed.Add(id);
+    }
 }
 
 internal sealed class ThrowingAtomicTextFileWriter(Exception exception) : IAtomicTextFileWriter

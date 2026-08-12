@@ -6,7 +6,9 @@ namespace b1_chat_console.Services;
 public interface ISequencerSettings
 {
     string? LastSequencePath { get; }
+    string? LastSceneId { get; }
     void SetLastSequencePath(string? path);
+    void SetLastSceneId(string? sceneId);
 }
 
 /// <summary>Port of LoadSettings/SaveSettings (formerly MainWindow.xaml.cs): same file, same shape.</summary>
@@ -18,6 +20,7 @@ public class SettingsService : ISequencerSettings
 
     public string? LastPort { get; private set; }
     public string? LastSequencePath { get; private set; }
+    public string? LastSceneId { get; private set; }
 
     public void Load()
     {
@@ -29,6 +32,8 @@ public class SettingsService : ISequencerSettings
                 LastPort = p.GetString();
             if (doc.TryGetProperty("lastSequencePath", out var s) && s.ValueKind == JsonValueKind.String)
                 LastSequencePath = s.GetString();
+            if (doc.TryGetProperty("lastSceneId", out var scene) && scene.ValueKind == JsonValueKind.String)
+                LastSceneId = scene.GetString();
         }
         catch { /* file missing/corrupt: start over without a known last port */ }
     }
@@ -45,12 +50,23 @@ public class SettingsService : ISequencerSettings
         Save();
     }
 
+    public void SetLastSceneId(string? sceneId)
+    {
+        LastSceneId = sceneId;
+        Save();
+    }
+
     private void Save()
     {
         try
         {
             Directory.CreateDirectory(SettingsDir);
-            var json = JsonSerializer.Serialize(new { lastPort = LastPort, lastSequencePath = LastSequencePath });
+            var json = JsonSerializer.Serialize(new
+            {
+                lastPort = LastPort,
+                lastSequencePath = LastSequencePath,
+                lastSceneId = LastSceneId,
+            });
             File.WriteAllText(SettingsFile, json);
         }
         catch { /* disk full/locked: non-blocking */ }

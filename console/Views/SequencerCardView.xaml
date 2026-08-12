@@ -22,14 +22,38 @@
                 </Border>
             </DockPanel>
 
-            <!-- Name field + New/"→ Library" buttons removed on request (2026-07-16) — Clear
-                 (transport bar) empties the editor, and sequence names now only come from a
-                 loaded/imported file. Play/Stop/Pause/Resume/Loop/Undo/Redo/Export/Import/
-                 Clear/zoom/snap all live in SequenceTimelineView's own transport bar. -->
+            <Grid Margin="0,0,0,10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="SCENE" Style="{StaticResource SectionSubtitleStyle}"
+                           VerticalAlignment="Center" Margin="0,0,8,0" />
+                <TextBox Grid.Column="1" Text="{Binding EditableName}" MaxLength="128"
+                         Style="{StaticResource RecessedTextBoxStyle}" IsEnabled="{Binding CanEditSequence}"
+                         ToolTip="Editable Scene name. Changes participate in Undo/Redo and mark the Scene as modified."
+                         ToolTipService.ShowOnDisabled="True" Margin="0,0,8,0" />
+                <Button Grid.Column="2" Content="Save" Style="{StaticResource MiniButtonStyle}"
+                        Command="{Binding SaveSceneCommand}" Margin="0,0,4,0"
+                        ToolTip="Save changes to the current Local Library Scene. For a new or imported document, this creates a new stable Scene identity. Stop playback first."
+                        ToolTipService.ShowOnDisabled="True" />
+                <Button Grid.Column="3" Content="Save As…" Style="{StaticResource MiniButtonStyle}"
+                        Command="{Binding SaveSceneAsCommand}"
+                        ToolTip="Create a separate Local Library Scene with a new stable identity. Existing scenes are never silently overwritten. Stop playback first."
+                        ToolTipService.ShowOnDisabled="True" />
+            </Grid>
+
             <views:SequenceTimelineView Margin="0,0,0,10" />
 
             <Separator Margin="0,0,0,8" />
-            <TextBlock Text="LOCAL LIBRARY" Style="{StaticResource SectionSubtitleStyle}" />
+            <DockPanel Margin="0,0,0,3">
+                <TextBlock Text="LOCAL LIBRARY" Style="{StaticResource SectionSubtitleStyle}" DockPanel.Dock="Left" />
+                <TextBlock Text="{Binding LibraryStatusText}" Style="{StaticResource MetaTextStyle}"
+                           DockPanel.Dock="Right" VerticalAlignment="Center"
+                           ToolTip="{Binding LibraryIssueText}" />
+            </DockPanel>
             <ItemsControl ItemsSource="{Binding Library}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
@@ -47,9 +71,9 @@
                                         Command="{Binding DataContext.LoadFromLibraryCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}" Margin="0,0,4,0"
                                         ToolTip="Load this saved sequence into the timeline, replacing the current editor contents. Stop playback first."
                                         ToolTipService.ShowOnDisabled="True" />
-                                <Button Grid.Column="2" Content="Del." Style="{StaticResource MiniButtonStyle}"
+                                <Button Grid.Column="2" Content="Trash" Style="{StaticResource MiniButtonStyle}"
                                         Command="{Binding DataContext.DeleteFromLibraryCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}"
-                                        ToolTip="Delete this sequence from the local library. Stop playback first."
+                                        ToolTip="After confirmation, move this Scene to the recoverable Local Library trash folder. Stop playback first."
                                         ToolTipService.ShowOnDisabled="True" />
                             </Grid>
                         </Border>

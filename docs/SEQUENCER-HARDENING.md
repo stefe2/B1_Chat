@@ -71,7 +71,7 @@ The dashboard is updated whenever an item changes state.
 | A | Playback isolation and cancellation | 7 / 8 | — |
 | B | Infinite gestures and Stop/Pause semantics | 5 / 6 | 0 / 1 |
 | C | Dirty, Undo/Redo and editing transactions | 7 / 8 | 0 / 1 |
-| D | Import, export and local library | 5 / 8 | 0 / 1 |
+| D | Import, export and local library | 8 / 8 | 0 / 1 |
 | E | Deterministic scheduler and performance | 2 / 6 | 0 / 1 |
 | F | Duration and audio robustness | 0 / 8 | — |
 | G | Preflight and ergonomics | 0 / 9 | 0 / 4 |
@@ -602,7 +602,7 @@ The dashboard is updated whenever an item changes state.
   preserves unsaved work and reports the parse error; startup recovery invokes
   no dialog.
 
-### [ ] SEQ-D06 — Resolve the local-library dead end
+### [x] SEQ-D06 — Resolve the local-library dead end
 
 - **Priority:** P2
 - **Problem:** the UI can Load/Delete historical library entries but cannot call
@@ -618,8 +618,17 @@ The dashboard is updated whenever an item changes state.
   for transfer, support, version control or backup—not the everyday Save path.
   README, Help and tooltips match.
 - **Validation:** end-to-end save/load/delete or migration/removal test.
+- **Implemented:** the Scene name is editable; Save updates the active GUID and
+  Save As creates another. Case-insensitive conflicts are refused without
+  overwriting. `b1-scene-library-item` v1 envelopes contain the strictly
+  validated sequence document and are written atomically. Flat legacy JSON is
+  assigned a deterministic GUID, migrated, and retained in the trash folder.
+  Invalid entries remain untouched and visible through a detailed issue status.
+- **Validated:** atomic round-trip/replacement failure, legacy migration,
+  invalid-entry isolation, stable identity, Save/Save As, conflicts, startup
+  restore and library-backed Export semantics are automated.
 
-### [ ] SEQ-D07 — Confirm destructive library deletion
+### [x] SEQ-D07 — Confirm destructive library deletion
 
 - **Priority:** P2
 - **Problem:** deleting a library entry is immediate and unrecoverable from the
@@ -628,8 +637,14 @@ The dashboard is updated whenever an item changes state.
 - **Acceptance:** identify the exact item, request confirmation, report file
   errors, and refresh only after success. Prefer a recoverable move if practical.
 - **Validation:** confirm, cancel, missing file, and access-error cases.
+- **Implemented:** Trash names the exact Scene, asks first, moves the versioned
+  file to `library\trash` with a UTC suffix, refreshes only after success and
+  reports failures. Trashing the open Scene preserves its editor content as a
+  modified new document that can be saved again.
+- **Validated:** confirm/cancel, recoverable file movement, missing entry,
+  simulated access failure and current-Scene behavior are automated.
 
-### [ ] SEQ-D08 — Align naming, badges, tooltips and Help with reality
+### [x] SEQ-D08 — Align naming, badges, tooltips and Help with reality
 
 - **Priority:** P2
 - **Problem:** new sequences cannot be named naturally; the badge ignores Dirty;
@@ -641,6 +656,13 @@ The dashboard is updated whenever an item changes state.
   contradictory tooltip/help passage.
 - **Validation:** content review plus UI smoke test for new/imported/exported and
   edited sequences.
+- **Implemented:** the header reports Scene name, `NEW`/`LOCAL LIBRARY`/
+  `IMPORTED / EXTERNAL FILE` origin and `CLEAN`/`SAVED`/`MODIFIED` state. Save,
+  Save As, Import, Export, Load and Trash tooltips now describe their actual
+  boundaries; in-app Help and storage documentation use the same Scene-first
+  workflow and linked-audio warning.
+- **Validated:** badge/origin transitions and Play/Pause command locking are
+  automated; compiled XAML plus the Help/content review cover the visible text.
 
 ### [D] SEQ-D09 — Export a portable show package
 
@@ -1469,7 +1491,7 @@ after its full regression passes.
 | P1 — Safe import pipeline | SEQ-D01, SEQ-D02, SEQ-D03 | Parse into a temporary document, validate schema/content/bounds, migrate every supported legacy version, then apply once. One fixture-driven import commit. |
 | P2 — Saved-state integrity | SEQ-C05, SEQ-D04, SEQ-D05 | Implement the saved checkpoint and atomic export together, then use that authoritative Dirty state to guard Import and library Load. C05 and D04 are intentionally one batch because their stated dependencies are circular. |
 | Decision gate | DEC-003 | Resolved: retain the Local Library as the normal Scene store; keep Export only as an explicit external-copy escape hatch. |
-| P3 — Scene Library and wording | SEQ-D06, SEQ-D07, SEQ-D08 | Restore Scene Save/Save As with stable IDs and atomic/versioned storage, migrate legacy entries, make deletion recoverable, then align naming/source/Dirty badges and Help. Keep external Export clearly secondary. |
+| P3 — Scene Library and wording | SEQ-D06, SEQ-D07, SEQ-D08 | **Complete.** Scene Save/Save As uses stable IDs and atomic/versioned storage; legacy entries migrate, deletion is recoverable, and naming/source/Dirty badges plus Help agree. External Export remains clearly secondary. |
 
 SEQ-D09 remains deferred. After P3, scheduler and duration work should be
 regrouped from the then-current dependency state rather than prematurely folded
@@ -1532,3 +1554,4 @@ Append concise evidence when closing items; do not paste full build logs.
 | 2026-08-11 | SEQ-D01, SEQ-D02, SEQ-D03 | Added validate-then-apply sequence import, strict field/count/timing limits and explicit v1–v4 migrations. Twenty-nine new golden, invalid, boundary, ambiguity and no-partial-mutation cases pass within the 117/117 WPF suite; offline regression passed 17/17 (`b1-self-test-20260811-215453.json`). No firmware change or hardware run was required. |
 | 2026-08-11 | SEQ-C05, SEQ-D04, SEQ-D05 | Replaced manual Dirty toggles with structural saved-checkpoint equality; added schema-self-validating sibling-temp/flush/atomic-rename export and injected unsaved-work confirmation for Import/Library Load. Twenty new checkpoint, Undo/Redo, create/replace/failure, round-trip, naming, clean/dirty/cancel, Play/Pause and startup cases pass within the 137/137 WPF suite; offline regression passed 17/17 (`b1-self-test-20260811-220731.json`). No firmware change or hardware run was required. |
 | 2026-08-11 | DEC-003, SEQ-J01, SEQ-J02 (hardware pending) | Resolved the product model as Scene Library first and future Show composition, with Export retained only as an explicit external copy. Implemented inert virgin-board Servos/Auto anims/Locate defaults with boot PWM detached, live Locate reconciliation, and independent center-preserving PAN/TILT Reverse through WPF, strict serial validation, rollback-compatible NVS, additive mesh V2 and per-droid capability gating. Master/slave/WPF builds and 137/137 WPF tests passed; offline regression passed 19/19 (`b1-self-test-20260811-224902.json`). Full-erase boot and physical Reverse observations remain. |
+| 2026-08-11 | SEQ-D06, SEQ-D07, SEQ-D08 | Completed the Scene-first Local Library: editable names, Save/Save As with stable GUIDs and conflict refusal, validated versioned envelopes, atomic writes, deterministic legacy migration, visible corrupt-file issues, recoverable confirmed Trash, discriminated startup restore, truthful origin/Dirty badges and aligned Help/tooltips. Export remains an external copy and cannot falsely clear modified library content. Sixteen focused cases expanded the WPF suite to 153/153; Release build completed with zero warnings/errors and offline regression passed 19/19 (`b1-self-test-20260811-231018.json`). No firmware deployment or hardware run was required. |

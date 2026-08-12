@@ -22,7 +22,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
 {
     private readonly ISequencerProtocol _protocol;
     private readonly ISequencerSettings _settings;
-    private readonly LibraryService _library = new();
+    private readonly ISequenceLibraryService _library;
     private readonly ISequencerAudioPlayer _audioPlayer;
     private readonly IPlaybackTimerScheduler _timerScheduler;
     private readonly IPlaybackTimerScheduler _executionTimerScheduler;
@@ -114,14 +114,50 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     public bool Dirty
     {
         get => _dirty;
-        private set => SetProperty(ref _dirty, value);
+        private set
+        {
+            if (!SetProperty(ref _dirty, value)) return;
+            OnPropertyChanged(nameof(SequenceBadgeText));
+        }
     }
 
-    // Card header badge — name only, now that the ESP32 slot concept is gone from the console.
-    public string SequenceBadgeText => string.IsNullOrWhiteSpace(Name)
-        ? "UNSAVED · NEW SEQUENCE"
-        : $"\"{Name.ToUpperInvariant()}\"";
-    partial void OnNameChanged(string value) => OnPropertyChanged(nameof(SequenceBadgeText));
+    private SequencerDocumentOrigin _documentOrigin = SequencerDocumentOrigin.New;
+    private string? _currentSceneId;
+    private int _libraryIssueCount;
+    private IReadOnlyList<SequenceLibraryIssue> _libraryIssues = Array.Empty<SequenceLibraryIssue>();
+    public SequencerDocumentOrigin DocumentOrigin => _documentOrigin;
+    public string? CurrentSceneId => _currentSceneId;
+    public string SceneOriginText => DocumentOrigin switch
+    {
+        SequencerDocumentOrigin.LocalLibrary => "LOCAL LIBRARY",
+        SequencerDocumentOrigin.ExternalFile => "IMPORTED / EXTERNAL FILE",
+        _ => "NEW",
+    };
+    public string LibraryStatusText => _libraryIssueCount == 0
+        ? $"{Library.Count} scene{(Library.Count == 1 ? "" : "s")}"
+        : $"{Library.Count} scene{(Library.Count == 1 ? "" : "s")} · {_libraryIssueCount} file issue{(_libraryIssueCount == 1 ? "" : "s")}";
+    public string LibraryIssueText => _libraryIssueCount == 0
+        ? "All Local Library files are readable."
+        : string.Join(Environment.NewLine, _libraryIssues.Select(issue => $"{issue.FileName}: {issue.Message}"));
+    public string SequenceBadgeText
+    {
+        get
+        {
+            var name = string.IsNullOrWhiteSpace(Name) ? "UNTITLED" : $"\"{Name.ToUpperInvariant()}\"";
+            var state = Dirty ? "MODIFIED" : DocumentOrigin == SequencerDocumentOrigin.New ? "CLEAN" : "SAVED";
+            return $"{name} · {SceneOriginText} · {state}";
+        }
+    }
+    public string EditableName
+    {
+        get => Name;
+        set => SetSequenceName(value);
+    }
+    partial void OnNameChanged(string value)
+    {
+        OnPropertyChanged(nameof(EditableName));
+        OnPropertyChanged(nameof(SequenceBadgeText));
+    }
     public bool EditableLoop
     {
         get => Loop;
@@ -250,6 +286,8 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         DuplicateStepCommand.NotifyCanExecuteChanged();
         LoadFromLibraryCommand.NotifyCanExecuteChanged();
         DeleteFromLibraryCommand.NotifyCanExecuteChanged();
+        SaveSceneCommand.NotifyCanExecuteChanged();
+        SaveSceneAsCommand.NotifyCanExecuteChanged();
         ToggleAudioLoopCommand.NotifyCanExecuteChanged();
         ImportCommand.NotifyCanExecuteChanged();
     }
@@ -262,7 +300,8 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         IPlaybackClock? playbackClock = null,
         IPlaybackTimerScheduler? executionTimerScheduler = null,
         ISequencerPersistenceDialogs? persistenceDialogs = null,
-        IAtomicTextFileWriter? atomicFileWriter = null)
+        IAtomicTextFileWriter? atomicFileWriter = null,
+        ISequenceLibraryService? library = null)
     {
         _protocol = protocol;
         _settings = settings;
@@ -272,6 +311,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         _playbackClock = playbackClock ?? new StopwatchPlaybackClock();
         _persistenceDialogs = persistenceDialogs ?? new WpfSequencerPersistenceDialogs();
         _atomicFileWriter = atomicFileWriter ?? new AtomicTextFileWriter();
+        _library = library ?? new LibraryService();
         _protocol.DroidsChanged += RebuildTracks;
         _protocol.AnimDurationsReceived += OnAnimDurationsReceived;
         _protocol.AnimMasterAccepted += OnAnimMasterAccepted;
@@ -1069,8 +1109,23 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
 
     private void RefreshLibrary()
     {
+        var scan = _library.Scan();
         Library.Clear();
-        foreach (var item in _library.List()) Library.Add(item);
+        foreach (var item in scan.Items) Library.Add(item);
+        _libraryIssues = scan.Issues;
+        _libraryIssueCount = scan.Issues.Count;
+        OnPropertyChanged(nameof(LibraryStatusText));
+        OnPropertyChanged(nameof(LibraryIssueText));
+    }
+
+    private void SetDocumentOrigin(SequencerDocumentOrigin origin, string? sceneId)
+    {
+        _documentOrigin = origin;
+        _currentSceneId = sceneId;
+        OnPropertyChanged(nameof(DocumentOrigin));
+        OnPropertyChanged(nameof(CurrentSceneId));
+        OnPropertyChanged(nameof(SceneOriginText));
+        OnPropertyChanged(nameof(SequenceBadgeText));
     }
 
     // --- Snapshot / undo-redo --------------------------------------------------
@@ -1282,10 +1337,109 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     // --- Local library ------------------------------------------------------
 
     [RelayCommand(CanExecute = nameof(CanEditSequence))]
+    private void SaveScene()
+    {
+        if (!CanEditSequence) return;
+        if (DocumentOrigin != SequencerDocumentOrigin.LocalLibrary ||
+            string.IsNullOrWhiteSpace(CurrentSceneId))
+        {
+            SaveAsNewScene(promptAlways: string.IsNullOrWhiteSpace(Name));
+            return;
+        }
+
+        SaveSceneCore(CurrentSceneId, Name);
+    }
+
+    [RelayCommand(CanExecute = nameof(CanEditSequence))]
+    private void SaveSceneAs()
+    {
+        if (!CanEditSequence) return;
+        SaveAsNewScene(promptAlways: true);
+    }
+
+    private void SaveAsNewScene(bool promptAlways)
+    {
+        var suggestedName = string.IsNullOrWhiteSpace(Name)
+            ? "New Scene"
+            : DocumentOrigin == SequencerDocumentOrigin.LocalLibrary
+                ? $"{Name.Trim()} Copy"
+                : Name.Trim();
+        var chosenName = promptAlways
+            ? _persistenceDialogs.PromptForSceneName(suggestedName, "Save Scene As")
+            : Name;
+        if (chosenName == null) return;
+        SaveSceneCore(Guid.NewGuid().ToString("N"), chosenName);
+    }
+
+    private void SaveSceneCore(string id, string requestedName)
+    {
+        var sceneName = requestedName.Trim();
+        if (sceneName.Length == 0)
+        {
+            _persistenceDialogs.ShowError("Scene save failed", "Enter a scene name before saving.");
+            return;
+        }
+        if (sceneName.Length > SequenceImportService.MaxSequenceNameLength)
+        {
+            _persistenceDialogs.ShowError(
+                "Scene save failed",
+                $"Scene names are limited to {SequenceImportService.MaxSequenceNameLength} characters.");
+            return;
+        }
+
+        var conflict = Library.FirstOrDefault(item =>
+            !string.Equals(item.Id, id, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(item.Name.Trim(), sceneName, StringComparison.CurrentCultureIgnoreCase));
+        if (conflict != null)
+        {
+            _persistenceDialogs.ShowError(
+                "Scene name already exists",
+                $"The Local Library already contains \"{conflict.Name}\". Choose a different name; Save never overwrites another scene identity.");
+            return;
+        }
+
+        try
+        {
+            var document = Snapshot() with { Name = sceneName };
+            var item = new SequenceLibraryItem
+            {
+                Id = id,
+                Name = sceneName,
+                Loop = document.Loop,
+                Tracks = Tracks.Where(track => !track.IsBroadcast)
+                    .Select(track => new SequenceTrackDto { Id = track.Id, Name = track.Label })
+                    .ToList(),
+                AudioLanes = document.AudioLanes,
+                Steps = document.Steps,
+                SavedAt = DateTime.UtcNow,
+            };
+            _library.Save(item);
+
+            Name = sceneName;
+            SetDocumentOrigin(SequencerDocumentOrigin.LocalLibrary, id);
+            EstablishSavedCheckpoint(document);
+            _settings.SetLastSequencePath(null);
+            _settings.SetLastSceneId(id);
+            RefreshLibrary();
+        }
+        catch (Exception ex)
+        {
+            _persistenceDialogs.ShowError("Scene save failed", ex.Message);
+        }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanEditSequence))]
     private void LoadFromLibrary(SequenceLibraryItem? item)
     {
         if (!CanEditSequence || item == null) return;
         if (!ConfirmDocumentReplacement($"load the Local Library sequence \"{item.Name}\"")) return;
+        ApplyLibraryItem(item);
+        _settings.SetLastSequencePath(null);
+        _settings.SetLastSceneId(item.Id);
+    }
+
+    private void ApplyLibraryItem(SequenceLibraryItem item)
+    {
         Name = item.Name;
         Loop = item.Loop;
         _fileTracks.Clear();
@@ -1296,6 +1450,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         RebuildTracks();
         SelectedStep = null;
         ClearHistory();
+        SetDocumentOrigin(SequencerDocumentOrigin.LocalLibrary, item.Id);
         EstablishSavedCheckpoint();
     }
 
@@ -1303,8 +1458,24 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     private void DeleteFromLibrary(SequenceLibraryItem? item)
     {
         if (!CanEditSequence || item == null) return;
-        _library.Delete(item.Id);
-        RefreshLibrary();
+        if (!_persistenceDialogs.ConfirmMoveSceneToTrash(item.Name)) return;
+        try
+        {
+            _library.MoveToTrash(item.Id);
+            if (DocumentOrigin == SequencerDocumentOrigin.LocalLibrary &&
+                string.Equals(CurrentSceneId, item.Id, StringComparison.OrdinalIgnoreCase))
+            {
+                SetDocumentOrigin(SequencerDocumentOrigin.New, null);
+                _savedCheckpoint = null;
+                RefreshDirtyFromCheckpoint();
+                _settings.SetLastSceneId(null);
+            }
+            RefreshLibrary();
+        }
+        catch (Exception ex)
+        {
+            _persistenceDialogs.ShowError("Scene removal failed", ex.Message);
+        }
     }
 
     // --- Export / import ----------------------------------------------------------
@@ -1338,9 +1509,15 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         _ = SequenceImportService.Parse(contents);
 
         _atomicFileWriter.WriteAllText(path, contents);
-        _settings.SetLastSequencePath(path);
-        // Export preserves the explicit document Name; choosing a filename is not an edit.
-        EstablishSavedCheckpoint(document);
+        // Export is an external-copy escape hatch. For a library-backed Scene it must not
+        // claim that edits were saved back to the library or change startup restoration.
+        if (DocumentOrigin != SequencerDocumentOrigin.LocalLibrary)
+        {
+            SetDocumentOrigin(SequencerDocumentOrigin.ExternalFile, null);
+            _settings.SetLastSceneId(null);
+            _settings.SetLastSequencePath(path);
+            EstablishSavedCheckpoint(document);
+        }
     }
 
     [RelayCommand(CanExecute = nameof(CanEditSequence))]
@@ -1353,6 +1530,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         try
         {
             ImportFrom(path);
+            _settings.SetLastSceneId(null);
             _settings.SetLastSequencePath(path);
         }
         catch (Exception ex)
@@ -1369,6 +1547,22 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     // missing/corrupt file at startup shouldn't pop a dialog before the app has even settled).
     public void TryLoadLastSequence()
     {
+        if (!string.IsNullOrWhiteSpace(_settings.LastSceneId))
+        {
+            try
+            {
+                var scene = _library.Get(_settings.LastSceneId);
+                if (scene != null)
+                {
+                    ApplyLibraryItem(scene);
+                    return;
+                }
+            }
+            catch
+            {
+                // Fall back to the last external path or an empty document.
+            }
+        }
         var path = _settings.LastSequencePath;
         if (string.IsNullOrEmpty(path) || !File.Exists(path)) return;
         try { ImportFrom(path); }
@@ -1381,6 +1575,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         // below runs unless the complete source document has already passed every check.
         var imported = SequenceImportService.ParseFile(path);
         ApplyImportedDocument(imported);
+        SetDocumentOrigin(SequencerDocumentOrigin.ExternalFile, null);
     }
 
     private void ApplyImportedDocument(ImportedSequenceDocument imported)

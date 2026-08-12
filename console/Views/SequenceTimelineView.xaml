@@ -81,7 +81,7 @@
                 <Button Content="Redo" Style="{StaticResource MiniButtonStyle}" Command="{Binding RedoCommand}" Margin="0,0,4,0"
                         ToolTip="Restore the most recently undone timeline edit." ToolTipService.ShowOnDisabled="True" />
                 <Button Content="Export" Style="{StaticResource MiniButtonStyle}" Command="{Binding ExportCommand}" Margin="0,0,4,0"
-                        ToolTip="Atomically save the current sequence as .b1seq.json. Referenced audio files remain linked and are not copied." />
+                        ToolTip="Write an atomic external .b1seq.json snapshot for backup, transfer, support, or version control. This does not update a Local Library Scene; referenced audio files remain linked and are not copied." />
                 <Button Content="Import" Style="{StaticResource MiniButtonStyle}" Command="{Binding ImportCommand}" Margin="0,0,4,0"
                         ToolTip="Replace the editor with a validated .b1seq.json file. Unsaved changes require confirmation; the Local Library is not modified. Stop playback first."
                         ToolTipService.ShowOnDisabled="True" />

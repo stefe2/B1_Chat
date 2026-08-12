@@ -12,9 +12,9 @@ complete fleet backup.
 | Servo calibration | Target droid NVS | Yes | **No** |
 | Adoption | Master NVS | Yes on the master | **No** |
 | Servos / Auto anims / Locate state | Runtime/transient behavior | Do not rely on it | No |
-| Sequence gesture/audio layout | PC memory and exported `.b1seq.json` | Not applicable | No |
+| Scene gesture/audio layout | PC Local Library and exported `.b1seq.json` copies | Not applicable | No |
 | Actual audio bytes | Original files on the PC | Not applicable | No |
-| Last COM port and last sequence path | PC `settings.json` | Not applicable | No |
+| Last COM port and last Scene identity/external path | PC `settings.json` | Not applicable | No |
 
 A full erase destroys all NVS on the board being flashed. An app-only flash is
 designed to leave NVS untouched when the board already has the expected
@@ -35,7 +35,12 @@ substitute for sequence exports, copied audio files, or a calibration record.*
 Calibration, adoption, toggle state, sequences, and sound files require separate
 protection.
 
-## Sequence export
+## Scene Library and sequence export
+
+**Save** is the normal working path. It atomically updates a versioned Scene in
+the Local Library; **Save As** creates a new GUID-backed identity. The last
+library Scene is restored at startup. Removing a Scene moves it to
+`library\trash` after confirmation instead of permanently deleting it.
 
 Export writes a `.b1seq.json` snapshot containing gesture clips, target IDs,
 offline track layout, audio-lane layout, and **paths** to audio files. It does
@@ -44,9 +49,11 @@ until the next export.
 
 Export writes and flushes a sibling temporary file before atomically replacing
 the destination. A failed write or replacement preserves the previous file and
-does not move the editor's saved checkpoint. A successful Export, Import, or
-Local Library Load establishes the clean checkpoint used by the Dirty indicator;
-Undo/Redo compares the actual document with that checkpoint.
+does not move the editor's saved checkpoint. Export clears Dirty for a new or
+external-file document, but never claims that changes to a library-backed Scene
+were saved into the library. Save, Import, and Local Library Load establish the
+appropriate clean checkpoint; Undo/Redo compares actual document content with
+that checkpoint.
 
 For another PC, copy both the sequence JSON and every audio file. Import the JSON,
 then use Replace file on any clip whose old absolute path is invalid.
@@ -63,12 +70,13 @@ The following directory is used under the signed-in Windows account:
 
 `%LOCALAPPDATA%\B1ChatConsole`
 
-- `settings.json` — last selected COM port and last imported/exported sequence
-  path.
+- `settings.json` — last selected COM port and last Local Library Scene identity
+  or imported/exported sequence path.
 - `serial-trace.log` — recreated at every launch; copy it before relaunching if
   it contains a problem report.
-- `library\` — legacy/local-library JSON entries shown by Load/Delete. The
-  current UI cannot create new entries here.
+- `library\` — atomic, versioned Local Library Scene entries. Valid legacy JSON
+  entries migrate automatically; `library\trash\` retains removed Scenes and
+  migration originals for manual recovery.
 - `updates\` — downloaded console installers and verified firmware assets.
 
 Do not hand-edit these files while the console is running. Normal sequence
@@ -77,7 +85,7 @@ portability should use Export/Import rather than copying `settings.json`.
 ## Before changing PCs or performing a full erase
 
 1. Export a fresh Droids Backup.
-2. Export every sequence you need.
+2. Save every Scene, then Export external copies needed off this PC.
 3. Copy the audio assets used by those sequences.
 4. Record every droid's six calibration values separately.
 5. Record which board is master and which boards have previously used OTA.

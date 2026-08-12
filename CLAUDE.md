@@ -259,7 +259,7 @@ Stopped after disposing partial timers/audio.
 
 Persistent Sequencer editing is permitted only in `Stopped`: timeline content,
 Loop, inspector fields, audio lanes/clips, Undo/Redo, Import/Clear, and Local
-Library Load/Delete all lock during Play and Pause. Selection/inspection, track
+Library Save/Save As/Load/Trash all lock during Play and Pause. Selection/inspection, track
 arming, runtime track mute, zoom/Snap/Fit/scroll, and Export remain available
 because they do not change the immutable pass being performed.
 
@@ -294,13 +294,24 @@ sum of prior delays. Retired numeric DFPlayer `audioTrack` metadata is validated
 but intentionally discarded; it cannot identify a console-side audio file.
 
 Sequencer `Dirty` is structural equality against one saved `SequenceSnapshot`,
-never a manually toggled edit flag. Successful Export, Import and Local Library
-Load establish that checkpoint; normal edits and Undo/Redo recompute equality,
-so returning exactly to the checkpoint clears Dirty without deleting history.
-Export serializes one captured snapshot, flushes a sibling temporary file, then
-atomically renames it over the destination; failure preserves the old file,
-checkpoint and last path. Interactive Import/Load ask before replacing a Dirty
-document and remain locked throughout Play/Pause; startup restore stays silent.
+never a manually toggled edit flag. Local Library Save/Load and Import establish
+that checkpoint; Export also establishes it for new/external documents but stays
+an external copy for a library-backed Scene, where it cannot falsely clear
+unsaved library edits. Normal edits and Undo/Redo recompute equality, so returning
+exactly to the checkpoint clears Dirty without deleting history. Export and
+Local Library writes flush sibling temporary files and atomically rename them;
+failure preserves the old file and checkpoint. Interactive Import/Load ask
+before replacing a Dirty document and all library mutations remain locked
+throughout Play/Pause; startup restore stays silent.
+
+The current Sequencer document is a Scene. `LibraryService` stores versioned
+`b1-scene-library-item` envelopes under stable GUID filenames, with the validated
+`b1-sequence` document nested inside. Save updates the active identity; Save As
+creates another and case-insensitive name conflicts never overwrite. Valid flat
+legacy entries migrate atomically and their originals move to `library\trash`;
+confirmed removal uses the same recoverable trash directory. Corrupt entries
+remain untouched and are counted in the UI. `settings.json` discriminates the
+last library Scene identity from the last external file path.
 
 **No audio in this protocol** (fw 1.6.0): `volume`/`playTrack` (console→master)
 and `config`'s `volume` field were removed when the DFPlayer was retired —
@@ -457,8 +468,8 @@ same pass that moved Calibration out.
 | What | Where |
 | --- | --- |
 | Names, per-droid anim-param cache, calibrations, adoption status | Master's NVS (`config_store`); each droid also persists its own name/anim params/calibration locally |
-| Sequences | Console only (`.b1seq.json` export/import, with droid roster and audio paths) — the master's 8 NVS slots were removed in fw 1.7.0; the current Local Library UI can only load/delete pre-existing entries |
-| Sequence library, last port, last exported/imported sequence path | `%LOCALAPPDATA%\B1ChatConsole\` (`library\*.json` plus `settings.json`) |
+| Scenes | Console only: normal Save/Save As uses the versioned Local Library; `.b1seq.json` Export/Import is the external-copy path. Both retain droid roster and linked audio paths. The master's 8 NVS slots were removed in fw 1.7.0. |
+| Scene library, recoverable trash, last port, last Scene ID/external path | `%LOCALAPPDATA%\B1ChatConsole\` (`library\*.b1scene.json`, `library\trash\`, and `settings.json`) |
 | Console-side audio lanes (label + clips, each a file path/duration/start/loop) | Stored inside the sequence library/export JSON; audio bytes remain at their original PC paths |
 | OTA anti-brick flag (pending/attempts) | NVS of **each droid** flashed via OTA, separate `"ota"` namespace (`ota_guard`) |
 
@@ -505,8 +516,8 @@ Full detailed history: see [PROGRESS-ARCHIVE.md](PROGRESS-ARCHIVE.md).
   first-install/first-fleet setup, mechanical and flash/OTA safety, exact
   persistence/backup boundaries, console updating, data locations, a glossary,
   expanded troubleshooting, and honest Sequencer limitations (console-driven
-  fire-and-forget playback, non-autosaved edits, current read-only Local Library
-  creation path). Fourteen focused screenshots captured from the real WPF app
+  fire-and-forget playback, non-autosaved edits, and the Local Library/external
+  export boundaries). Fourteen focused screenshots captured from the real WPF app
   now illustrate all 16 pages, including a connected three-droid fleet,
   calibration, mesh radar, animation controls, audio and gesture tracks,
   complete gesture library, backups, Firmware, and update status. Crops retain

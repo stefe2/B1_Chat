@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Windows;
+using System.Windows.Controls;
 using b1_chat_console.Models;
 using Microsoft.Win32;
 
@@ -12,7 +13,9 @@ public interface ISequencerPersistenceDialogs
 {
     string? ChooseExportPath(string suggestedFileName);
     string? ChooseImportPath();
+    string? PromptForSceneName(string initialName, string title);
     bool ConfirmDiscardUnsavedChanges(string replacementDescription);
+    bool ConfirmMoveSceneToTrash(string sceneName);
     void ShowError(string title, string message);
 }
 
@@ -37,10 +40,50 @@ internal sealed class WpfSequencerPersistenceDialogs : ISequencerPersistenceDial
         return dialog.ShowDialog() == true ? dialog.FileName : null;
     }
 
+    public string? PromptForSceneName(string initialName, string title)
+    {
+        var nameBox = new TextBox
+        {
+            Text = initialName,
+            MaxLength = SequenceImportService.MaxSequenceNameLength,
+            MinWidth = 320,
+            Margin = new Thickness(0, 8, 0, 14),
+        };
+        var ok = new Button { Content = "Save", IsDefault = true, MinWidth = 80, Margin = new Thickness(0, 0, 8, 0) };
+        var cancel = new Button { Content = "Cancel", IsCancel = true, MinWidth = 80 };
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+        buttons.Children.Add(ok);
+        buttons.Children.Add(cancel);
+        var panel = new StackPanel { Margin = new Thickness(18) };
+        panel.Children.Add(new TextBlock { Text = "Scene name" });
+        panel.Children.Add(nameBox);
+        panel.Children.Add(buttons);
+        var dialog = new Window
+        {
+            Title = title,
+            Content = panel,
+            SizeToContent = SizeToContent.WidthAndHeight,
+            ResizeMode = ResizeMode.NoResize,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Owner = Application.Current?.MainWindow,
+            ShowInTaskbar = false,
+        };
+        ok.Click += (_, _) => dialog.DialogResult = true;
+        dialog.ContentRendered += (_, _) => { nameBox.Focus(); nameBox.SelectAll(); };
+        return dialog.ShowDialog() == true ? nameBox.Text : null;
+    }
+
     public bool ConfirmDiscardUnsavedChanges(string replacementDescription) =>
         MessageBox.Show(
             $"The current sequence has unsaved changes.\n\nDiscard them and {replacementDescription}?",
             "Replace unsaved sequence",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning) == MessageBoxResult.Yes;
+
+    public bool ConfirmMoveSceneToTrash(string sceneName) =>
+        MessageBox.Show(
+            $"Move the Local Library scene \"{sceneName}\" to the recoverable trash folder?",
+            "Remove scene from Local Library",
             MessageBoxButton.YesNo,
             MessageBoxImage.Warning) == MessageBoxResult.Yes;
 

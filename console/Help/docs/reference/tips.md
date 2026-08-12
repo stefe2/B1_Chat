@@ -30,8 +30,8 @@ for the armed track or drag it when target and timing must be explicit.*
   lane.
 - **Fit** shows the complete sequence and returns horizontal scroll to the start.
 - The timecode shows current position / calculated total duration.
-- Export checkpoints often. Undo history and unsaved edits do not survive an
-  application restart.
+- Save Local Library checkpoints often. Export external copies for backup or
+  transfer. Undo history and unsaved edits do not survive an application restart.
 
 ## Reliable show preparation
 

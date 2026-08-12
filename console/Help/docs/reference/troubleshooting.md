@@ -109,10 +109,11 @@ received by firmware. One-shot gestures finish naturally. Replace `TALK` or
 
 ## A sequence was not there after restart
 
-Timeline edits are not autosaved. Export a `.b1seq.json` file whenever you need a
-recoverable snapshot. The console reloads the last imported/exported file, not
-unsaved changes made afterward. The current Local Library panel cannot save new
-entries. See [Data & Backups](data-and-backups.md).
+Timeline edits are not autosaved. Use **Save** for normal Local Library work, or
+**Save As** for a separate Scene. The console reloads the last library Scene or
+imported/exported file, but not unsaved changes made afterward. Export a
+`.b1seq.json` copy for backup or transfer. See
+[Data & Backups](data-and-backups.md).
 
 ## Audio is silent or has no waveform
 

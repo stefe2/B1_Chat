@@ -321,6 +321,8 @@ public sealed class SequencerPlaybackIntegrationTests
             Assert.Equal(expected, vm.DuplicateStepCommand.CanExecute(step));
             Assert.Equal(expected, vm.LoadFromLibraryCommand.CanExecute(libraryItem));
             Assert.Equal(expected, vm.DeleteFromLibraryCommand.CanExecute(libraryItem));
+            Assert.Equal(expected, vm.SaveSceneCommand.CanExecute(null));
+            Assert.Equal(expected, vm.SaveSceneAsCommand.CanExecute(null));
             Assert.Equal(expected, vm.ImportCommand.CanExecute(null));
         }
 
@@ -1630,7 +1632,8 @@ public sealed class SequencerPlaybackIntegrationTests
         IPlaybackClock? clock = null,
         FakeAudioPlayer? audio = null,
         FakePlaybackTimerScheduler? executionScheduler = null) =>
-        new(protocol, new SettingsService(), audio ?? new FakeAudioPlayer(), scheduler, clock,
-            executionScheduler ?? new FakePlaybackTimerScheduler());
+        new(protocol, new FakeSequencerSettings(), audio ?? new FakeAudioPlayer(), scheduler, clock,
+            executionScheduler ?? new FakePlaybackTimerScheduler(),
+            library: new FakeSequenceLibraryService());
 
 }

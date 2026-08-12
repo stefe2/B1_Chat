@@ -153,15 +153,17 @@ repair paths when moving a sequence to another PC.
 The console first writes and flushes a temporary file beside the destination,
 then replaces the destination in one rename. A denied path, full disk, or failed
 replacement leaves the previous file and the editor's saved state unchanged.
-After a successful export, the current document becomes the saved checkpoint:
-its Dirty indication clears, but Undo history remains available. Undoing away
-from that checkpoint marks the document Dirty; Redoing exactly back clears it.
-Choosing a different filename does not silently rename the sequence inside the
-document.
+For a new or imported document, a successful export becomes its external-file
+checkpoint: its Dirty indication clears, but Undo history remains available.
+For a Local Library Scene, Export is only an external copy: it neither updates
+that Scene nor clears a modified indication. Use Save for that. Choosing a
+different filename never silently renames the Scene inside the document.
 
 **Import** loads the snapshot and records that file as the last sequence path.
 The console tries to reload that same file on its next launch. Later edits are
-still in memory only: they do not update the file until you Export again.
+still in memory only: they do not update the file until you Export again or save
+the document as a Local Library Scene. Import never silently adds a Scene to the
+library.
 
 Before replacing the editor, Import reads and validates the entire file. It
 accepts sequence schema versions 1 through 4 and migrates their historical
@@ -179,21 +181,28 @@ Legacy numeric DFPlayer `audioTrack` values cannot identify a sound file on the
 PC and are not imported as audio clips. Add or replace the corresponding audio
 file manually after importing an old version 1 or 2 document.
 
-## Current Local Library behavior
+## Scene names and the Local Library
 
-The Local Library panel can **Load** and **Delete** entries already present in
-the console's local library directory. The current interface no longer includes
-a command to save a new or edited sequence into that library. For all new work,
-use Export/Import. See [Data & Backups](../reference/data-and-backups.md) for the
-library and settings locations.
+The current Sequencer document is a **Scene**. Edit its name above the timeline.
+**Save** updates the selected Local Library Scene, or creates a new stable Scene
+identity for a new/imported document. **Save As** always asks for a name and
+creates a separate identity. Names are unique without regard to case; a
+conflict is reported and never overwrites a different Scene.
 
 Loading a Local Library entry also replaces the editor. A Dirty document asks
 for confirmation first; a successful Load establishes the library content as
-the clean checkpoint. Cancel leaves the current content and history intact.
+the clean checkpoint and the console restores that Scene on its next launch.
+Cancel leaves the current content and history intact.
+
+**Trash** identifies the exact Scene and asks before moving its versioned JSON
+entry to `library\trash`. The file remains recoverable manually. If the Scene
+being edited is trashed, its content stays open as a modified new document so it
+can be saved again. Valid historical library JSON is migrated automatically;
+unreadable files remain untouched and are counted in the Local Library status.
 
 ## Clear and recovery
 
 **Clear** removes every gesture and audio clip but keeps the audio lanes and
 current sequence name. It asks before clearing when the editor reports changes,
 and the clear itself can be undone immediately. Undo history is memory-only; an
-application restart cannot recover an unexported timeline.
+application restart cannot recover edits that were neither saved nor exported.
