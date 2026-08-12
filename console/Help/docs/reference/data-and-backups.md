@@ -45,6 +45,12 @@ until the next export.
 For another PC, copy both the sequence JSON and every audio file. Import the JSON,
 then use Replace file on any clip whose old absolute path is invalid.
 
+Sequence Import validates the complete document before replacing the editor.
+Versions 1–4 are supported and migrated explicitly; unknown future versions and
+invalid fields are refused with a field-specific error, leaving the open
+sequence unchanged. Very old DFPlayer track numbers do not contain PC file paths
+and therefore cannot restore their original sound automatically.
+
 ## Console-local files
 
 The following directory is used under the signed-in Windows account:

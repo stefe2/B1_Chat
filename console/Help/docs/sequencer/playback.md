@@ -154,6 +154,18 @@ repair paths when moving a sequence to another PC.
 The console tries to reload that same file on its next launch. Later edits are
 still in memory only: they do not update the file until you Export again.
 
+Before replacing the editor, Import reads and validates the entire file. It
+accepts sequence schema versions 1 through 4 and migrates their historical
+timing/audio/track layouts. In particular, version 1 relative gesture delays are
+converted cumulatively so their original order and timing are preserved. A file
+with the wrong type, a future version, invalid targets/animations/timing, unsafe
+counts, or malformed sections is rejected without changing the open sequence,
+selection, or Undo history. The error identifies the offending JSON field.
+
+Legacy numeric DFPlayer `audioTrack` values cannot identify a sound file on the
+PC and are not imported as audio clips. Add or replace the corresponding audio
+file manually after importing an old version 1 or 2 document.
+
 Export currently does not clear every internal dirty/edit warning, so Clear may
 still ask for confirmation after an export. Treat the exported file as the
 authoritative snapshot, not the warning state.

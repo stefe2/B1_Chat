@@ -999,12 +999,15 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         Clips = l.Clips.Select(c => new AudioClipDto { FilePath = c.FilePath, DurationMs = c.DurationMs, StartMs = c.StartMs, Loop = c.Loop }).ToList(),
     }).ToList();
 
-    // Null/empty falls back to the default two lanes — used both for a brand-new sequence and
-    // for a slot/library item that predates this feature (or simply never had audio attached).
-    private void ApplyAudioLanesFromDto(List<AudioLaneDto>? dtos)
+    // Null and legacy-library empty lists seed the two default lanes. Current document
+    // snapshots/imports pass seedDefaultsWhenEmpty=false so an explicitly empty lane list
+    // round-trips exactly through Undo/Redo and schema v3/v4 import.
+    private void ApplyAudioLanesFromDto(
+        List<AudioLaneDto>? dtos,
+        bool seedDefaultsWhenEmpty = true)
     {
         AudioLanes.Clear();
-        if (dtos == null || dtos.Count == 0)
+        if (dtos == null || (seedDefaultsWhenEmpty && dtos.Count == 0))
         {
             AudioLanes.Add(new AudioLane { Label = "AMBIENT", RowIndex = 0 });
             AudioLanes.Add(new AudioLane { Label = "AUDIO", RowIndex = 1 });
@@ -1117,7 +1120,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         {
             Name = snap.Name;
             Loop = snap.Loop;
-            ApplyAudioLanesFromDto(snap.AudioLanes);
+            ApplyAudioLanesFromDto(snap.AudioLanes, seedDefaultsWhenEmpty: false);
             Steps.Clear();
             foreach (var s in snap.Steps)
                 Steps.Add(new SequenceStep { AnimId = s.AnimId, Target = s.Target, StartMs = s.StartMs });
@@ -1290,7 +1293,8 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         if (dlg.ShowDialog() != true) return;
         var obj = new JsonObject
         {
-            ["type"] = "b1-sequence", ["version"] = 4, ["name"] = Name, ["loop"] = Loop,
+            ["type"] = SequenceImportService.SchemaType, ["version"] = SequenceImportService.CurrentVersion,
+            ["name"] = Name, ["loop"] = Loop,
             // Droid roster (id + name, row order): re-imported on a console with the fleet
             // unplugged, every step still gets its own named row instead of one flat line.
             ["tracks"] = new JsonArray(Tracks.Where(t => !t.IsBroadcast)
@@ -1340,56 +1344,31 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         catch { /* stale/corrupt last-sequence file: start with an empty sequence instead */ }
     }
 
-    private void ImportFrom(string path)
+    internal void ImportFrom(string path)
     {
-        var obj = JsonNode.Parse(File.ReadAllText(path)) as JsonObject;
-        if (obj == null) return;
-        Name = obj["name"]?.GetValue<string>() ?? "";
-        Loop = obj["loop"]?.GetValue<bool>() ?? false;
+        // Parsing, schema migration and validation are deliberately side-effect free. Nothing
+        // below runs unless the complete source document has already passed every check.
+        var imported = SequenceImportService.ParseFile(path);
+        ApplyImportedDocument(imported);
+    }
+
+    private void ApplyImportedDocument(ImportedSequenceDocument imported)
+    {
+        Name = imported.Name;
+        Loop = imported.Loop;
         _fileTracks.Clear();
-        if (obj["tracks"] is JsonArray trackArr)
-            foreach (var tn in trackArr)
-                if (tn is JsonObject to)
-                    _fileTracks.Add(new SequenceTrackDto
-                    {
-                        Id = to["id"]?.GetValue<ushort>() ?? 0xFFFF,
-                        Name = to["name"]?.GetValue<string>() ?? "",
-                    });
-        List<AudioLaneDto>? lanes = null;
-        if (obj["audioLanes"] is JsonArray laneArr)
-        {
-            lanes = new List<AudioLaneDto>();
-            foreach (var ln in laneArr)
-                if (ln is JsonObject lo)
-                {
-                    var laneDto = new AudioLaneDto { Label = lo["label"]?.GetValue<string>() ?? "AUDIO" };
-                    if (lo["clips"] is JsonArray clipArr)
-                        foreach (var cl in clipArr)
-                            if (cl is JsonObject co)
-                                laneDto.Clips.Add(new AudioClipDto
-                                {
-                                    FilePath = co["filePath"]?.GetValue<string>() ?? "",
-                                    DurationMs = co["durationMs"]?.GetValue<int>() ?? 0,
-                                    StartMs = co["startMs"]?.GetValue<int>() ?? 0,
-                                    Loop = co["loop"]?.GetValue<bool>() ?? false,
-                                });
-                    lanes.Add(laneDto);
-                }
-        }
-        ApplyAudioLanesFromDto(lanes);
+        _fileTracks.AddRange(imported.Tracks);
+        ApplyAudioLanesFromDto(
+            imported.AudioLanes,
+            seedDefaultsWhenEmpty: imported.SourceVersion < 3);
         Steps.Clear();
-        if (obj["steps"] is JsonArray arr)
-            foreach (var st in arr)
-                if (st is JsonObject so)
-                    // "delayMs": pre-timeline export (schema version 1) — read back as a
-                    // start offset, not a relative delay; not equivalent, but a reasonable
-                    // best-effort rather than silently dropping the step.
-                    Steps.Add(new SequenceStep
-                    {
-                        AnimId = so["animId"]?.GetValue<int>() ?? 0,
-                        Target = so["target"]?.GetValue<ushort>() ?? 0xFFFF,
-                        StartMs = so["startMs"]?.GetValue<int>() ?? so["delayMs"]?.GetValue<int>() ?? 0,
-                    });
+        foreach (var step in imported.Steps)
+            Steps.Add(new SequenceStep
+            {
+                AnimId = step.AnimId,
+                Target = step.Target,
+                StartMs = step.StartMs,
+            });
         RebuildTracks();
         SelectedStep = null;
         ClearHistory();

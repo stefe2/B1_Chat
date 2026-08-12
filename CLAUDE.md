@@ -279,6 +279,14 @@ WPF or playback dependency; `SequencerPlaybackPlan` captures immutable runtime
 events. `SequencerViewModel` coordinates them while retaining transient selection,
 viewport, drag visuals, waveform and execution telemetry.
 
+Sequencer file import is validate-then-apply. `SequenceImportService` strictly
+parses `b1-sequence` schemas 1–4 into a temporary `ImportedSequenceDocument`,
+checks identities, bounded counts/strings/timing and target/gesture ranges, and
+runs named migrations before the ViewModel mutates. V1 `delayMs` values are
+cumulative waits after the current gesture, producing absolute starts from the
+sum of prior delays. Retired numeric DFPlayer `audioTrack` metadata is validated
+but intentionally discarded; it cannot identify a console-side audio file.
+
 **No audio in this protocol** (fw 1.6.0): `volume`/`playTrack` (console→master)
 and `config`'s `volume` field were removed when the DFPlayer was retired —
 see the Progress log.

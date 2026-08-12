@@ -1,0 +1,31 @@
+{
+  "type": "b1-sequence",
+  "version": 4,
+  "name": "Current document",
+  "loop": false,
+  "tracks": [
+    { "id": 16385, "name": "R2-D2" },
+    { "id": 16386, "name": "D-O" }
+  ],
+  "audioLanes": [
+    {
+      "label": "AMBIENT",
+      "clips": [
+        {
+          "filePath": "C:\\fixtures\\room.wav",
+          "durationMs": 4000,
+          "startMs": 0,
+          "loop": true
+        }
+      ]
+    },
+    {
+      "label": "VOICE",
+      "clips": []
+    }
+  ],
+  "steps": [
+    { "animId": 7, "target": 16385, "startMs": 1000 },
+    { "animId": 8, "target": 65535, "startMs": 2000 }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "type": "b1-sequence",
+  "version": 1,
+  "name": "Legacy relative",
+  "loop": true,
+  "audioTrack": 7,
+  "steps": [
+    { "animId": 1, "target": 65535, "delayMs": 100 },
+    { "animId": 2, "target": 4660, "delayMs": 250 },
+    { "animId": 3, "target": 4661, "delayMs": 50 }
+  ]
+}

@@ -71,7 +71,7 @@ The dashboard is updated whenever an item changes state.
 | A | Playback isolation and cancellation | 7 / 8 | — |
 | B | Infinite gestures and Stop/Pause semantics | 5 / 6 | 0 / 1 |
 | C | Dirty, Undo/Redo and editing transactions | 6 / 8 | 0 / 1 |
-| D | Import, export and local library | 0 / 8 | 0 / 1 |
+| D | Import, export and local library | 3 / 8 | 0 / 1 |
 | E | Deterministic scheduler and performance | 2 / 6 | 0 / 1 |
 | F | Duration and audio robustness | 0 / 8 | — |
 | G | Preflight and ergonomics | 0 / 9 | 0 / 4 |
@@ -490,7 +490,7 @@ The dashboard is updated whenever an item changes state.
 
 ## EPIC D — Import, export and local library
 
-### [ ] SEQ-D01 — Parse and validate import before mutating the editor
+### [x] SEQ-D01 — Parse and validate import before mutating the editor
 
 - **Priority:** P1
 - **Problem:** `ImportFrom` changes Name, Loop, tracks, audio, and steps
@@ -501,8 +501,16 @@ The dashboard is updated whenever an item changes state.
   untouched and reports an actionable error.
 - **Validation:** malformed input at every major section produces no partial
   mutation.
+- **Implemented:** file reading now produces a temporary
+  `ImportedSequenceDocument` through a side-effect-free parser. The ViewModel
+  applies that complete document only after parsing, migration and validation
+  all succeed. Failures include the JSON field path and leave document content,
+  file roster, history, Dirty, selection, armed track and playhead untouched.
+- **Evidence:** malformed metadata, tracks, audio and steps integration fixtures
+  all fail before replacement while preserving persistent and transient editor
+  fingerprints, Undo/Redo availability and object selection.
 
-### [ ] SEQ-D02 — Validate schema identity, version and numeric bounds
+### [x] SEQ-D02 — Validate schema identity, version and numeric bounds
 
 - **Priority:** P1
 - **Problem:** imports do not enforce `type`, supported version, gesture range,
@@ -514,8 +522,16 @@ The dashboard is updated whenever an item changes state.
   the offending field.
 - **Validation:** boundary, overflow, negative, wrong-type, huge-count, and
   unknown-version fixtures.
+- **Implemented:** strict field readers enforce `b1-sequence` versions 1–4,
+  gesture IDs 0–17, nonzero physical/broadcast target rules, 24-hour checked
+  timing, nonempty bounded lane labels and bounded names/paths. Documents are
+  limited to 256 tracks, 10,000 steps, 64 lanes and 10,000 total audio clips;
+  audio end arithmetic is checked before conversion to editor objects.
+- **Evidence:** sixteen invalid-schema scenarios cover type/version, numeric
+  range, reserved IDs, negative values, end overflow, duplicates, missing fields
+  and every count limit. A separate exact-boundary fixture passes.
 
-### [ ] SEQ-D03 — Implement explicit schema migrations
+### [x] SEQ-D03 — Implement explicit schema migrations
 
 - **Priority:** P1
 - **Problem:** legacy `delayMs` is relative but is currently treated as an
@@ -525,6 +541,14 @@ The dashboard is updated whenever an item changes state.
   are cumulatively converted according to the historical format; unsupported
   ambiguous files fail clearly instead of silently changing timing.
 - **Validation:** golden fixtures for every supported schema version.
+- **Implemented:** named readers cover v1 relative gesture delays, v2 absolute
+  gesture timing, v3 console audio lanes and v4 offline droid rosters. V1 starts
+  are reconstructed as zero followed by cumulative prior delays. Retired
+  DFPlayer `audioTrack` metadata is validated but discarded because no reliable
+  mapping to a PC audio path exists. Timing fields that contradict their stated
+  schema fail as ambiguous rather than silently changing choreography.
+- **Evidence:** four copied golden JSON fixtures verify versions 1–4, including
+  v1 starts `0/100/350`; dedicated ambiguity and cumulative-overflow checks pass.
 
 ### [ ] SEQ-D04 — Make export atomic and establish the saved checkpoint
 
@@ -1351,6 +1375,23 @@ sequential. Unless a test seam must be introduced first, follow this order:
     until the M1–M4 reliability baseline is complete and a separate Scene/Show
     design is approved.
 
+### Immediate implementation batches
+
+The next persistence work is grouped by shared responsibility and dependency.
+Each batch should remain independently testable and receive one detailed commit
+after its full regression passes.
+
+| Batch | Items | Scope and commit boundary |
+|---|---|---|
+| P1 — Safe import pipeline | SEQ-D01, SEQ-D02, SEQ-D03 | Parse into a temporary document, validate schema/content/bounds, migrate every supported legacy version, then apply once. One fixture-driven import commit. |
+| P2 — Saved-state integrity | SEQ-C05, SEQ-D04, SEQ-D05 | Implement the saved checkpoint and atomic export together, then use that authoritative Dirty state to guard Import and library Load. C05 and D04 are intentionally one batch because their stated dependencies are circular. |
+| Decision gate | DEC-003 | Decide whether Local Library is retained with Save/Save As or removed in favor of files. Do not implement an irreversible product choice without owner input. |
+| P3 — Library and wording | SEQ-D06, SEQ-D07, SEQ-D08 | If retained: restore Save/Save As, protect deletion, then align naming/badges/Help. If removed: remove/migrate the library, mark D07 not applicable, then align naming/badges/Help. |
+
+SEQ-D09 remains deferred. After P3, scheduler and duration work should be
+regrouped from the then-current dependency state rather than prematurely folded
+into these persistence commits.
+
 ## Decision log
 
 Record decisions here before implementing behavior with multiple reasonable
@@ -1405,3 +1446,4 @@ Append concise evidence when closing items; do not paste full build logs.
 | 2026-08-11 | SEQ-C01 | Centralized command and drag mutations behind structural begin/commit transactions. Real edits now create one pre-edit snapshot, clear Redo, set Dirty and refresh derived timeline state once; no-op edits create nothing. Thirteen edit families plus no-op/Redo invalidation passed within the 78/78 WPF suite; offline regression passed 17/17 (`b1-self-test-20260811-201830.json`). No firmware change or hardware run was required. |
 | 2026-08-11 | SEQ-C02, SEQ-C03, SEQ-C04, SEQ-C07 | Added the shared 5 px drag threshold, complete persistent-property transaction coverage, exact 50-entry Undo/Redo bounds, and fail-safe interaction cancellation/restoration for Escape/capture/focus/unload. Twenty edit families, transient-state isolation, threshold/no-op/return, cancellation and 55-edit history ordering pass within the 82/82 WPF suite; offline regression passed 17/17 (`b1-self-test-20260811-203025.json`). No firmware change or hardware run was required. |
 | 2026-08-11 | SEQ-C08 | Established explicit persistent-document (`SequenceSnapshot`), editor-history (`SequencerEditHistory`) and immutable runtime (`SequencerPlaybackPlan`) boundaries without changing UI behavior. Six architecture tests cover the exact document surface, structural comparison, transactions/cancellation, bounded Undo/Redo and read-only playback state; full WPF suite passed 88/88 and offline regression passed 17/17 (`b1-self-test-20260811-203938.json`). No firmware change or hardware run was required. |
+| 2026-08-11 | SEQ-D01, SEQ-D02, SEQ-D03 | Added validate-then-apply sequence import, strict field/count/timing limits and explicit v1–v4 migrations. Twenty-nine new golden, invalid, boundary, ambiguity and no-partial-mutation cases pass within the 117/117 WPF suite; offline regression passed 17/17 (`b1-self-test-20260811-215453.json`). No firmware change or hardware run was required. |

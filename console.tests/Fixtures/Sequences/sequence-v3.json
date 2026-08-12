@@ -1,0 +1,23 @@
+{
+  "type": "b1-sequence",
+  "version": 3,
+  "name": "Audio lanes",
+  "loop": true,
+  "audioTrack": 0,
+  "audioLanes": [
+    {
+      "label": "VOICE",
+      "clips": [
+        {
+          "filePath": "C:\\fixtures\\voice.wav",
+          "durationMs": 1750,
+          "startMs": 125,
+          "loop": false
+        }
+      ]
+    }
+  ],
+  "steps": [
+    { "animId": 6, "target": 12289, "startMs": 500 }
+  ]
+}

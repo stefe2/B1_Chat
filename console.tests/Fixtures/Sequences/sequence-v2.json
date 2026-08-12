@@ -1,0 +1,11 @@
+{
+  "type": "b1-sequence",
+  "version": 2,
+  "name": "Absolute gestures",
+  "loop": false,
+  "audioTrack": 9,
+  "steps": [
+    { "animId": 4, "target": 65535, "startMs": 250 },
+    { "animId": 5, "target": 8193, "startMs": 1250 }
+  ]
+}
