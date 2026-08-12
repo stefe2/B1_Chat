@@ -1,7 +1,8 @@
 <UserControl x:Class="b1_chat_console.Views.SequencerCardView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:views="clr-namespace:b1_chat_console.Views">
+             xmlns:views="clr-namespace:b1_chat_console.Views"
+             PreviewKeyDown="SequencerCardView_PreviewKeyDown">
     <Border Style="{StaticResource CardBorderStyle}">
         <StackPanel>
             <DockPanel LastChildFill="False" Margin="0,0,0,12">
@@ -22,64 +23,62 @@
                 </Border>
             </DockPanel>
 
+            <!-- Conventional document bar: the Local Library is an implementation detail
+                 behind Open, not a permanently exposed list below the editor. -->
             <Grid Margin="0,0,0,10">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <TextBlock Grid.Column="0" Text="SCENE" Style="{StaticResource SectionSubtitleStyle}"
                            VerticalAlignment="Center" Margin="0,0,8,0" />
-                <TextBox Grid.Column="1" Text="{Binding EditableName}" MaxLength="128"
+                <TextBox x:Name="SceneNameBox" Grid.Column="1" Text="{Binding EditableName}" MaxLength="128"
                          Style="{StaticResource RecessedTextBoxStyle}" IsEnabled="{Binding CanEditSequence}"
                          ToolTip="Editable Scene name. Changes participate in Undo/Redo and mark the Scene as modified."
                          ToolTipService.ShowOnDisabled="True" Margin="0,0,8,0" />
-                <Button Grid.Column="2" Content="Save" Style="{StaticResource MiniButtonStyle}"
+                <Border Grid.Column="2" Style="{StaticResource ValuePillStyle}" Margin="0,0,10,0"
+                        VerticalAlignment="Center">
+                    <TextBlock Text="{Binding SceneDocumentStateText}" Style="{StaticResource ValuePillTextStyle}"
+                               FontSize="9.5" />
+                </Border>
+                <Button Grid.Column="3" Content="New" Style="{StaticResource MiniButtonStyle}"
+                        Command="{Binding NewSceneCommand}" Margin="0,0,4,0"
+                        ToolTip="Create a new empty Scene (Ctrl+N). Unsaved changes and active playback are handled explicitly." />
+                <Button Grid.Column="4" Content="Open…" Style="{StaticResource MiniButtonStyle}"
+                        Command="{Binding OpenSceneLibraryCommand}" Margin="0,0,4,0"
+                        ToolTip="Open the Scene browser (Ctrl+O)." />
+                <Button Grid.Column="5" Content="Save" Style="{StaticResource MiniButtonStyle}"
                         Command="{Binding SaveSceneCommand}" Margin="0,0,4,0"
                         ToolTip="Save changes to the current Local Library Scene. For a new or imported document, this creates a new stable Scene identity. Stop playback first."
                         ToolTipService.ShowOnDisabled="True" />
-                <Button Grid.Column="3" Content="Save As…" Style="{StaticResource MiniButtonStyle}"
-                        Command="{Binding SaveSceneAsCommand}"
-                        ToolTip="Create a separate Local Library Scene with a new stable identity. Existing scenes are never silently overwritten. Stop playback first."
-                        ToolTipService.ShowOnDisabled="True" />
+                <Button x:Name="SceneMoreButton" Grid.Column="6" Content="⋯" Style="{StaticResource MiniButtonStyle}"
+                        MinWidth="31" Click="SceneMoreButton_Click" ToolTip="More Scene actions.">
+                    <Button.ContextMenu>
+                        <ContextMenu Style="{StaticResource DarkContextMenuStyle}"
+                                     DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                            <MenuItem Header="Save As…" Style="{StaticResource DarkMenuItemStyle}"
+                                      Command="{Binding SaveSceneAsCommand}" InputGestureText="Ctrl+Shift+S" />
+                            <MenuItem Header="Rename" Style="{StaticResource DarkMenuItemStyle}"
+                                      IsEnabled="{Binding CanEditSequence}" Click="RenameSceneMenuItem_Click" InputGestureText="F2" />
+                            <Separator Margin="4,2" Background="{StaticResource BorderLoBrush}" />
+                            <MenuItem Header="Import from file…" Style="{StaticResource DarkMenuItemStyle}"
+                                      Command="{Binding ImportCommand}" />
+                            <MenuItem Header="Export a copy…" Style="{StaticResource DarkMenuItemStyle}"
+                                      Command="{Binding ExportCommand}" />
+                            <Separator Margin="4,2" Background="{StaticResource BorderLoBrush}" />
+                            <MenuItem Header="Move current Scene to Trash…" Style="{StaticResource DarkMenuItemStyle}"
+                                      Command="{Binding DeleteCurrentSceneCommand}" />
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                </Button>
             </Grid>
 
-            <views:SequenceTimelineView Margin="0,0,0,10" />
-
-            <Separator Margin="0,0,0,8" />
-            <DockPanel Margin="0,0,0,3">
-                <TextBlock Text="LOCAL LIBRARY" Style="{StaticResource SectionSubtitleStyle}" DockPanel.Dock="Left" />
-                <TextBlock Text="{Binding LibraryStatusText}" Style="{StaticResource MetaTextStyle}"
-                           DockPanel.Dock="Right" VerticalAlignment="Center"
-                           ToolTip="{Binding LibraryIssueText}" />
-            </DockPanel>
-            <ItemsControl ItemsSource="{Binding Library}">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <Border BorderBrush="{StaticResource BorderLoBrush}" BorderThickness="0,0,0,1" Padding="0,4">
-                            <!-- "→ ESP32" removed with the rest of the slot machinery (fw 1.7.0):
-                                 the console no longer writes the master's sequence slots at all. -->
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="70" />
-                                    <ColumnDefinition Width="70" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center" />
-                                <Button Grid.Column="1" Content="Load" Style="{StaticResource MiniButtonStyle}"
-                                        Command="{Binding DataContext.LoadFromLibraryCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}" Margin="0,0,4,0"
-                                        ToolTip="Load this saved sequence into the timeline, replacing the current editor contents. Stop playback first."
-                                        ToolTipService.ShowOnDisabled="True" />
-                                <Button Grid.Column="2" Content="Trash" Style="{StaticResource MiniButtonStyle}"
-                                        Command="{Binding DataContext.DeleteFromLibraryCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}"
-                                        ToolTip="After confirmation, move this Scene to the recoverable Local Library trash folder. Stop playback first."
-                                        ToolTipService.ShowOnDisabled="True" />
-                            </Grid>
-                        </Border>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+            <views:SequenceTimelineView />
         </StackPanel>
     </Border>
 </UserControl>

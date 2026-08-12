@@ -304,6 +304,134 @@ public sealed class SceneLibraryTests
         Assert.Contains("IMPORTED / EXTERNAL FILE · MODIFIED", vm.SequenceBadgeText);
     }
 
+    [Fact]
+    public void OpenSceneBrowser_UsesSelectedLibrarySceneAndMarksItCurrent()
+    {
+        var library = new FakeSequenceLibraryService();
+        var selected = Scene(Guid.NewGuid().ToString("N"), "Scene 1");
+        library.Items.Add(selected);
+        var dialogs = new FakeSequencerPersistenceDialogs
+        {
+            BrowserResult = new SceneBrowserResult(selected),
+        };
+        var settings = new FakeSequencerSettings();
+        using var vm = CreateViewModel(library, settings, dialogs);
+
+        vm.OpenSceneLibraryCommand.Execute(null);
+
+        Assert.Equal(1, dialogs.SceneBrowserSelections);
+        Assert.Equal("Scene 1", vm.Name);
+        Assert.Equal(selected.Id, vm.CurrentSceneId);
+        Assert.Equal(selected.Id, settings.LastSceneId);
+        Assert.False(vm.Dirty);
+    }
+
+    [Fact]
+    public void NewScene_WithSaveChoiceSavesDraftBeforeCreatingCleanUntitledDocument()
+    {
+        var library = new FakeSequenceLibraryService();
+        var settings = new FakeSequencerSettings();
+        var dialogs = new FakeSequencerPersistenceDialogs
+        {
+            UnsavedChoice = UnsavedSceneChoice.Save,
+        };
+        using var vm = CreateViewModel(library, settings, dialogs);
+        Assert.True(vm.SetSequenceName("Draft Scene"));
+        vm.InsertGestureAt(4, vm.Tracks.Single(track => track.IsBroadcast), 300);
+
+        vm.NewSceneCommand.Execute(null);
+
+        Assert.Equal("Draft Scene", Assert.Single(library.Saved).Name);
+        Assert.Equal("", vm.Name);
+        Assert.Equal("Untitled Scene", vm.SceneDisplayName);
+        Assert.Equal(SequencerDocumentOrigin.New, vm.DocumentOrigin);
+        Assert.Null(vm.CurrentSceneId);
+        Assert.Empty(vm.Steps);
+        Assert.Equal(2, vm.AudioLanes.Count);
+        Assert.False(vm.Dirty);
+        Assert.Null(settings.LastSceneId);
+        Assert.Null(settings.LastSequencePath);
+    }
+
+    [Fact]
+    public void NewScene_CancelAtUnsavedPromptKeepsDraftIntact()
+    {
+        var library = new FakeSequenceLibraryService();
+        var dialogs = new FakeSequencerPersistenceDialogs
+        {
+            UnsavedChoice = UnsavedSceneChoice.Cancel,
+        };
+        using var vm = CreateViewModel(library, dialogs: dialogs);
+        Assert.True(vm.SetSequenceName("Keep Editing"));
+
+        vm.NewSceneCommand.Execute(null);
+
+        Assert.Equal("Keep Editing", vm.Name);
+        Assert.True(vm.Dirty);
+        Assert.Empty(library.Saved);
+        Assert.Single(dialogs.ConfirmationRequests);
+    }
+
+    [Fact]
+    public void BrowserNewSceneChoiceUsesTheSameProtectedNewDocumentWorkflow()
+    {
+        var library = new FakeSequenceLibraryService();
+        var dialogs = new FakeSequencerPersistenceDialogs
+        {
+            BrowserResult = new SceneBrowserResult(null, CreateNew: true),
+            UnsavedChoice = UnsavedSceneChoice.Discard,
+        };
+        using var vm = CreateViewModel(library, dialogs: dialogs);
+        Assert.True(vm.SetSequenceName("Discard Me"));
+
+        vm.OpenSceneLibraryCommand.Execute(null);
+
+        Assert.Equal(1, dialogs.SceneBrowserSelections);
+        Assert.Equal("", vm.Name);
+        Assert.False(vm.Dirty);
+        Assert.Single(dialogs.ConfirmationRequests);
+    }
+
+    [Fact]
+    public void ReplacementSaveCancelledAtNamePromptKeepsUntitledDraft()
+    {
+        var library = new FakeSequenceLibraryService();
+        var dialogs = new FakeSequencerPersistenceDialogs
+        {
+            UnsavedChoice = UnsavedSceneChoice.Save,
+            SceneNameResult = null,
+        };
+        using var vm = CreateViewModel(library, dialogs: dialogs);
+        vm.InsertGestureAt(4, vm.Tracks.Single(track => track.IsBroadcast), 300);
+
+        vm.NewSceneCommand.Execute(null);
+
+        Assert.Single(vm.Steps);
+        Assert.True(vm.Dirty);
+        Assert.Equal(1, dialogs.SceneNamePrompts);
+        Assert.Empty(library.Saved);
+    }
+
+    [Fact]
+    public void DeleteCurrentSceneCommandIsAvailableOnlyForTheOpenLibraryIdentity()
+    {
+        var id = Guid.NewGuid().ToString("N");
+        var library = new FakeSequenceLibraryService();
+        var scene = Scene(id, "Disposable");
+        library.Items.Add(scene);
+        var dialogs = new FakeSequencerPersistenceDialogs { DeleteConfirmResult = true };
+        using var vm = CreateViewModel(library, dialogs: dialogs);
+        Assert.False(vm.DeleteCurrentSceneCommand.CanExecute(null));
+        vm.LoadFromLibraryCommand.Execute(scene);
+        Assert.True(vm.DeleteCurrentSceneCommand.CanExecute(null));
+
+        vm.DeleteCurrentSceneCommand.Execute(null);
+
+        Assert.Equal(id, Assert.Single(library.Trashed));
+        Assert.False(vm.DeleteCurrentSceneCommand.CanExecute(null));
+        Assert.Equal(SequencerDocumentOrigin.New, vm.DocumentOrigin);
+    }
+
     private static SequenceLibraryItem Scene(string id, string name) => new()
     {
         Id = id,

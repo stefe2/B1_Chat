@@ -1,5 +1,7 @@
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using b1_chat_console.Models;
 using b1_chat_console.Services;
 using b1_chat_console.ViewModels;
@@ -88,13 +90,40 @@ public partial class MainWindow : Window
     // ComboBox/Slider/etc. happens to be under the cursor: in a dense card (e.g. Animation's
     // stacked Target/Gesture/idle-tuning row), a child control can otherwise intercept the
     // wheel first and the page scroll gets stuck or jerky depending on exact cursor position.
-    // Page scroll is made authoritative everywhere in the main window — ComboBox popups are
-    // separate top-level windows (unaffected) and the Sequencer timeline has no vertical
-    // scroll of its own to compete with.
+    // Page scroll is authoritative for an unmodified wheel. Ctrl/Shift wheel over the
+    // Sequencer viewport is deliberately yielded to its nested horizontal ScrollViewer so
+    // pointer zoom and horizontal pan can receive the routed event.
     private void MainScroll_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
+        if (ShouldYieldWheelToTimeline(
+                Keyboard.Modifiers,
+                IsInsideNamedScrollViewer(e.OriginalSource as DependencyObject, "ScrollArea")))
+            return;
+
         MainScroll.ScrollToVerticalOffset(MainScroll.VerticalOffset - e.Delta);
         e.Handled = true;
+    }
+
+    internal static bool ShouldYieldWheelToTimeline(ModifierKeys modifiers, bool insideTimelineViewport) =>
+        insideTimelineViewport && (modifiers & (ModifierKeys.Control | ModifierKeys.Shift)) != 0;
+
+    private static bool IsInsideNamedScrollViewer(DependencyObject? source, string name)
+    {
+        while (source != null)
+        {
+            if (source is ScrollViewer viewer && string.Equals(viewer.Name, name, StringComparison.Ordinal))
+                return true;
+            source = GetRoutedParent(source);
+        }
+        return false;
+    }
+
+    private static DependencyObject? GetRoutedParent(DependencyObject source)
+    {
+        if (source is ContentElement content)
+            return ContentOperations.GetParent(content) ??
+                   (content as FrameworkContentElement)?.Parent;
+        return VisualTreeHelper.GetParent(source) ?? LogicalTreeHelper.GetParent(source);
     }
 
     protected override void OnClosed(EventArgs e)

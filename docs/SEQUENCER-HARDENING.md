@@ -74,10 +74,11 @@ The dashboard is updated whenever an item changes state.
 | D | Import, export and local library | 8 / 8 | 0 / 1 |
 | E | Deterministic scheduler and performance | 5 / 6 | 0 / 1 |
 | F | Duration and audio robustness | 1 / 8 | — |
-| G | Preflight and ergonomics | 0 / 13 | 0 / 4 |
+| G | Preflight and ergonomics | 0 / 14 | 0 / 4 |
 | H | Automated and hardware validation | 1 / 8 | — |
 | I | Scene & Show System (future) | — | 0 / 22 |
 | J | Commissioning and servo configuration safety | 0 / 2 | — |
+| K | Project workspace (future) | — | 0 / 8 |
 
 ## EPIC A — Playback isolation and cancellation
 
@@ -120,19 +121,22 @@ The dashboard is updated whenever an item changes state.
   may remain available.
 - **Validation:** manual UI matrix covers every editing command in stopped,
   playing, and paused states.
-- **Implemented:** persistent document and Local Library mutations are enabled
-  only in `Stopped`. Relay-command `CanExecute`, direct ViewModel guards,
+- **Implemented:** persistent document and Local Library mutations occur only
+  in `Stopped`. Relay-command `CanExecute`, direct ViewModel guards,
   inspector/container disabling and pointer-drag rechecks all derive from
   `CanEditSequence`; the transport displays `EDIT LOCKED` and disabled controls
-  explain that Stop is required. A transport transition during a captured drag
-  now releases transient visuals without applying a late placement change.
+  explain that Stop is required. Document-replacement entry points remain
+  discoverable during Play/Pause, but require explicit approval and transition
+  to `Stopped` before mutating anything. A transport transition during a
+  captured drag releases transient visuals without applying a late change.
 - **Policy/validation matrix:**
 
   | Operation group | Stopped | Playing | Paused |
   |---|---|---|---|
   | Insert, drag, retarget, inspector, duplicate/delete, Loop | edit | locked | locked |
-  | Audio lane/clip edits, Undo/Redo, Import, Clear | edit | locked | locked |
-  | Local Library Load/Delete | edit | locked | locked |
+  | Audio lane/clip edits, Undo/Redo, Clear | edit | locked | locked |
+  | New/Open/Import document replacement | replace | confirm Stop, then replace | confirm Stop, then replace |
+  | Local Library Trash | edit | locked | locked |
   | Select/inspect, arm track, dynamic track mute | allowed | allowed | allowed |
   | Zoom, Snap, Fit, scroll and Export snapshot | allowed | allowed | allowed |
 
@@ -604,15 +608,15 @@ The dashboard is updated whenever an item changes state.
 - **Acceptance:** replacement prompts when Dirty, supports Cancel, and follows
   the playback policy from SEQ-A03. Startup recovery remains silent/safe.
 - **Validation:** clean/dirty plus stopped/playing/paused matrix.
-- **Implemented:** interactive Import and Local Library Load share an injected
-  replacement confirmation. Clean documents proceed directly; Dirty documents
-  identify the selected file/item and cancel without changing content, history
-  or last path. Both remain inert during Play/Pause under the existing edit lock.
-  Startup last-file restore bypasses UI and remains silent.
-- **Evidence:** clean/dirty/confirm/cancel matrices cover Import and Load; four
-  Play/Pause cases cover clean and Dirty documents. Invalid confirmed Import
-  preserves unsaved work and reports the parse error; startup recovery invokes
-  no dialog.
+- **Implemented:** interactive New, Import and Scene Open share an injected
+  replacement workflow. Clean documents proceed directly; modified documents
+  offer Save, continue without saving, or Cancel. Play/Pause replacements first
+  ask permission to stop, and defer that Stop until all cancel-capable questions
+  succeed. Startup last-file restore bypasses UI and remains silent.
+- **Evidence:** clean/dirty/save/discard/cancel matrices cover New, Import and
+  Open. Play/Pause cases cover stop refusal, accepted replacement and later
+  unsaved-work cancellation without stopping the pass. Invalid confirmed Import
+  preserves the editor and reports the parse error; startup invokes no dialog.
 
 ### [x] SEQ-D06 — Resolve the local-library dead end
 
@@ -668,13 +672,14 @@ The dashboard is updated whenever an item changes state.
   contradictory tooltip/help passage.
 - **Validation:** content review plus UI smoke test for new/imported/exported and
   edited sequences.
-- **Implemented:** the header reports Scene name, `NEW`/`LOCAL LIBRARY`/
+- **Implemented:** the Scene bar reports name, `NEW`/`LOCAL LIBRARY`/
   `IMPORTED / EXTERNAL FILE` origin and `CLEAN`/`SAVED`/`MODIFIED` state. Save,
-  Save As, Import, Export, Load and Trash tooltips now describe their actual
+  Save As, Import, Export, Open and Trash tooltips now describe their actual
   boundaries; in-app Help and storage documentation use the same Scene-first
-  workflow and linked-audio warning.
-- **Validated:** badge/origin transitions and Play/Pause command locking are
-  automated; compiled XAML plus the Help/content review cover the visible text.
+  workflow and linked-audio warning. The later G18 browser revision removes raw
+  Load/Trash rows without changing the stable-ID storage contract.
+- **Validated:** badge/origin transitions and replacement/edit-lock behavior are
+  automated; compiled XAML plus the Help/content review cover visible text.
 
 ### [D] SEQ-D09 — Export a portable show package
 
@@ -1071,7 +1076,7 @@ The dashboard is updated whenever an item changes state.
 - **Validation:** device removal/change, mute, unsupported media, battery/power,
   sleep-policy warning, low-space and successful show-PC checklist.
 
-### [ ] SEQ-G14 — Redesign Play as an unambiguous Play/Pause control
+### [~] SEQ-G14 — Redesign Play as an unambiguous Play/Pause control
 
 - **Priority:** P1
 - **Problem:** pressing Play while already playing currently restarts the Scene
@@ -1088,8 +1093,16 @@ The dashboard is updated whenever an item changes state.
   control rather than hiding restart behind a second Play press.
 - **Validation:** state/command/UI tests cover stopped Play, playing Pause,
   paused Resume, explicit Restart, rapid double-click, failure to start and Loop.
+- **Implemented:** the primary button and `Space` now expose Play/Pause/Resume
+  through a state-dependent glyph and tooltip. A second Play pauses rather than
+  resending choreography; `Restart`/`Ctrl+Enter` owns the explicit clean restart
+  path. Existing generation and Loop safety tests now use that separate action.
+  The safety hierarchy is visually explicit: E-STOP uses a permanent filled-red
+  treatment, while Loop is a neutral editing mode that turns orange when active.
+- **Remaining validation:** rendered toolbar/glyph/keyboard interaction check in
+  the Release console.
 
-### [ ] SEQ-G15 — Separate Stop from playhead navigation and rewind
+### [~] SEQ-G15 — Separate Stop from playhead navigation and rewind
 
 - **Priority:** P2
 - **Problem:** normal Stop currently ends playback and always returns the
@@ -1108,8 +1121,15 @@ The dashboard is updated whenever an item changes state.
   Stop should prioritize safety and may retain the last position diagnostically.
 - **Validation:** tests cover Stop from Play/Pause, repeated Stop, return to
   start, Play after retained Stop, natural end, Safe/Emergency Stop and Loop.
+- **Implemented:** normal, Safe and Emergency Stop retain the measured cursor;
+  non-looping natural completion retains the calculated end. A distinct
+  return-to-start button/`Ctrl+Home` is enabled only while stopped. Play starts
+  from a retained cursor and skips older events; at the natural end it starts a
+  new pass from zero. Restart is the always-explicit performance-from-zero path.
+- **Remaining validation:** rendered control ordering and rehearsal workflow
+  check in the Release console.
 
-### [ ] SEQ-G16 — Add an operator-controlled Follow Playhead mode
+### [~] SEQ-G16 — Add an operator-controlled Follow Playhead mode
 
 - **Priority:** P2
 - **Problem:** on a timeline longer than the viewport, the playhead leaves the
@@ -1129,8 +1149,18 @@ The dashboard is updated whenever an item changes state.
   catches up. Pause freezes auto-scroll while leaving inspection free.
 - **Validation:** long-timeline UI tests and manual checks cover every zoom,
   manual-scroll, Pause/Resume, Loop/restart and end-boundary combination.
+- **Implemented:** a visible transient Follow toggle uses a 15–72% viewport
+  comfort corridor and changes horizontal offset only. New Play/Restart enables
+  it; manual scroll/zoom/pan suspends it, re-enabling catches up, Pause freezes
+  it and Resume preserves a suspension. Automatic scroll destinations remain
+  tagged until WPF's deferred `ScrollChanged` observes them; this prevents
+  Follow from mistaking its own movement for manual navigation and turning
+  itself off at the corridor boundary. Pure navigation and scroll-correlation
+  math is unit-tested.
+- **Remaining validation:** manual long-timeline smoothness and scrollbar test
+  in the Release console.
 
-### [ ] SEQ-G17 — Add pointer-centered timeline wheel zoom
+### [~] SEQ-G17 — Add pointer-centered timeline wheel zoom
 
 - **Priority:** P2
 - **Problem:** changing the zoom currently requires reaching for the toolbar
@@ -1153,6 +1183,53 @@ The dashboard is updated whenever an item changes state.
   min/max clamping, rapid/high-resolution wheel input, horizontal scroll,
   Play/Pause, Follow suspension/re-enable, Fit and timelines shorter than the
   viewport.
+- **Implemented:** `Ctrl+wheel` applies a continuous multiplicative 1.15-per-notch
+  zoom clamped to 20–300 px/s and restores the pointer's content time after WPF
+  layout. `Shift+wheel` pans horizontally; plain wheel remains native. Slider,
+  Fit and deliberate wheel navigation suspend Follow. The main page's tunneling
+  wheel handler now yields modified wheel events originating in the timeline
+  viewport; previously it consumed them before the nested timeline handler could
+  run. Boundary, fractional wheel, pointer-anchor, routing and corridor
+  calculations are unit-tested.
+- **Remaining validation:** physical mouse/trackpad interaction check in the
+  Release console.
+
+### [~] SEQ-G18 — Replace the exposed library list with a Scene document workflow
+
+- **Priority:** P1
+- **Problem:** the Local Library is rendered below the entire timeline as raw
+  Load/Trash rows. Finding and opening a Scene requires unexplained page
+  scrolling, destructive actions are visually overexposed, and the workflow
+  does not resemble familiar document or editing applications.
+- **Depends on:** SEQ-D05 through SEQ-D08, DEC-003.
+- **Acceptance:** the primary Scene bar exposes New, Open and Save; less common
+  Save As, Rename, Import, Export and Trash actions move to a secondary menu.
+  Open launches a searchable Scene browser with selection, double-click,
+  current-Scene indication, last-save/content metadata and an empty state.
+  Conventional Ctrl+N/O/S, Ctrl+Shift+S and F2 shortcuts work. Replacing a
+  modified Scene offers save/continue, continue without saving, or cancel;
+  active playback offers an explicit stop-and-continue decision rather than an
+  unexplained disabled Open action. The same browser can later serve Add Scene
+  in the Show editor.
+- **Validation:** command tests cover browser selection/cancel/new, every dirty
+  choice, save failure/cancel, active Play/Pause accept/cancel, current Scene
+  deletion and startup restore; rendered keyboard, search, double-click,
+  metadata, focus, empty state and narrow-window layout are manually checked.
+- **Implemented:** the permanent Local Library list has been removed from below
+  the timeline. A conventional document bar now provides New/Open/Save and a
+  secondary Scene menu; the modal browser sorts by recent save, searches by
+  name, marks the current Scene, summarizes gesture/audio content and supports
+  double-click. Protected replacement can save, discard or cancel, and can
+  explicitly stop an active/paused pass. Ctrl+N/O/S, Ctrl+Shift+S and F2 are
+  wired at the Sequencer card level. Automated Scene/persistence coverage now
+  includes the new browser and replacement paths.
+- **Visual polish:** colored status pills now use crisp semantic borders without
+  glow/blur, avoiding color bleed between dense droid rows and controls. Every
+  application-owned WPF window now uses the common dark native title bar and
+  themed content; the former programmatic Save As prompt was replaced by a
+  dedicated themed Scene-name window. Native Windows file pickers remain native.
+- **Remaining validation:** rendered browser, menu, shortcuts, double-click,
+  search/empty state and Play/Pause replacement check in the Release console.
 
 ## EPIC H — Automated and hardware validation
 
@@ -1603,6 +1680,122 @@ but remain in this tracked plan so they cannot be lost between backlog batches.
   persistence, invalid-type rejection and visibly reversed PAN/TILT on the
   master bench servos.
 
+## EPIC K — Project workspace (entirely deferred)
+
+This epic adds a **Project mode** that keeps the mutable authoring material for
+one production in one explicit folder. A Project is not a published Show
+package: the Project remains editable and may contain drafts, while publishing
+produces a frozen, validated output through SEQ-I08 and SEQ-I21. Project work is
+deferred and must not interrupt the current reliability baseline.
+
+### [D] SEQ-K01 — Define the Project domain and versioned manifest
+
+- **Priority:** P3
+- **Problem:** Scenes currently live in the application Local Library while
+  linked audio and future Shows can live anywhere on the PC, so one production
+  has no clear working boundary.
+- **Depends on:** DEC-003, SEQ-I01, SEQ-I03.
+- **Acceptance:** define a versioned `.b1project.json` manifest with stable
+  project ID/name, schema version, authoring metadata and relative references to
+  Scenes, Shows and assets. Unknown future versions fail safely and migrations
+  never partially mutate the source project.
+- **Validation:** golden round-trip, migration, unknown-version, malformed and
+  interrupted-write fixtures.
+
+### [D] SEQ-K02 — Establish a predictable Project folder layout
+
+- **Priority:** P3
+- **Problem:** simply placing files in one directory is insufficient if generated
+  files, source assets and recoverable drafts cannot be distinguished.
+- **Depends on:** SEQ-K01.
+- **Acceptance:** define a human-readable layout such as
+  `Scenes/`, `Shows/`, `Assets/Audio/`, `Backups/` and a rebuildable local cache.
+  Authored source files are never hidden in the cache; temporary and generated
+  content cannot overwrite source material.
+- **Validation:** create/open/move/copy fixtures on paths containing spaces,
+  accents and long names; verify that deleting the cache loses no authored work.
+
+### [D] SEQ-K03 — Add New/Open/Close/Save Project workflow
+
+- **Priority:** P3
+- **Problem:** a workspace needs an application-level lifecycle rather than an
+  implicit collection of unrelated recent files.
+- **Depends on:** SEQ-K01, SEQ-K02, SEQ-G18.
+- **Acceptance:** provide conventional New Project, Open Project, Close Project
+  and recent-project actions; show the active Project prominently; protect
+  modified Scenes/Shows before switching; restore the last valid Project only
+  when safe and offer a clear no-Project mode.
+- **Validation:** clean/dirty/open/cancel/missing/recent/startup matrices plus
+  keyboard and rendered-window checks.
+
+### [D] SEQ-K04 — Scope Scene and Show libraries to the active Project
+
+- **Priority:** P3
+- **Problem:** a global Local Library becomes ambiguous when several productions
+  contain similarly named Scenes or different revisions.
+- **Depends on:** SEQ-K03, SEQ-I04.
+- **Acceptance:** Scene Open/Save and future Show Open/Save default to the active
+  Project. Import/copy from the global legacy library is explicit, preserves
+  stable identities where safe, resolves conflicts without overwrite and leaves
+  the existing library usable when no Project is open.
+- **Validation:** two-project isolation, same-name/stable-ID conflict, legacy
+  import, project switch and no-Project compatibility tests.
+
+### [D] SEQ-K05 — Manage project assets with relative paths
+
+- **Priority:** P3
+- **Problem:** absolute audio paths break when a Project folder is moved or
+  copied, while silently copying every chosen file can create confusing
+  duplicates.
+- **Depends on:** SEQ-F05, SEQ-K02.
+- **Acceptance:** importing an asset defaults to a managed copy under
+  `Assets/`, with an explicit advanced option to link externally. Project-owned
+  references are relative and path traversal outside the root is rejected.
+  Hashes identify duplicates and source changes without claiming that filenames
+  alone are identities.
+- **Validation:** copy/move/rename, duplicate-content, same-name collision,
+  external-link, traversal and read-only-source cases.
+
+### [D] SEQ-K06 — Detect, relink and audit missing or changed assets
+
+- **Priority:** P3
+- **Problem:** a Project can open successfully while audio has been deleted,
+  moved or replaced behind its back.
+- **Depends on:** SEQ-K05, SEQ-G02.
+- **Acceptance:** opening and Preflight distinguish missing, changed and external
+  assets; offer locate/relink with a preview of every affected Scene/Show; never
+  silently accept a different file; record deliberate relinks in Project
+  metadata/history.
+- **Validation:** missing/changed/restored assets, bulk relink, wrong hash,
+  cancel and one-asset-used-by-many-scenes cases.
+
+### [D] SEQ-K07 — Make Project persistence atomic and recoverable
+
+- **Priority:** P3
+- **Problem:** a multi-file workspace can be left internally inconsistent by a
+  crash, full disk or interrupted save.
+- **Depends on:** SEQ-C09, SEQ-D04, SEQ-K01 through SEQ-K05.
+- **Acceptance:** use atomic per-file writes plus a Project transaction/journal
+  boundary, bounded backups and crash recovery that identifies exactly which
+  documents were recovered. Autosave never overwrites the last explicit save,
+  and cleanup cannot remove the only recoverable copy.
+- **Validation:** injected failure at every transaction phase, crash/restart,
+  full disk, access denial, stale recovery and backup-retention tests.
+
+### [D] SEQ-K08 — Keep working Projects distinct from published packages
+
+- **Priority:** P3
+- **Problem:** an editable Project folder may contain drafts, unused assets,
+  external links and caches that must not become performance input by accident.
+- **Depends on:** SEQ-I08, SEQ-I21, SEQ-K01 through SEQ-K07.
+- **Acceptance:** Publish consumes an explicit Project revision but outputs a
+  separate immutable Show package containing only resolved Scenes/assets and
+  hashes. The UI clearly labels Project/Draft versus Published; Show mode never
+  arms a mutable Project directly. Publishing reports unused, missing, external
+  and changed assets before creating output.
+- **Validation:** publish then edit Project, transfer output to another PC,
+  rollback published revision, unused-asset exclusion and tamper tests.
+
 ## Recommended execution order
 
 The backlog is intentionally exhaustive; implementation should remain small and
@@ -1619,9 +1812,9 @@ sequential. Unless a test seam must be introduced first, follow this order:
 9. **Preflight/ergonomics:** required SEQ-G01 through SEQ-G06 and SEQ-G11
    through SEQ-G17.
 10. **Validation gate:** SEQ-H02 through SEQ-H08.
-11. **Optional enhancements:** only selected `[D]` items. EPIC I remains deferred
-    until the M1–M4 reliability baseline is complete and a separate Scene/Show
-    design is approved.
+11. **Optional enhancements:** only selected `[D]` items. EPIC I (Scene/Show)
+    and EPIC K (Project workspace) remain deferred until the M1–M4 reliability
+    baseline is complete and their shared design is approved.
 
 ### Immediate implementation batches
 
@@ -1638,9 +1831,9 @@ detailed commit after its full regression passes.
 | S1 — Single deterministic scheduler | SEQ-E02, SEQ-E03 | **Complete.** One rearmable timer drains monotonic timestamp batches in immutable source order, compensates late wakes, warns about same-target/broadcast overlap and releases completely on cancellation. |
 | T1 — Coherent duration and infinite ends | SEQ-F01, SEQ-F02, SEQ-C06, SEQ-B04 | **Code complete; F01 hardware measurement pending.** Structured firmware timing metadata feeds one target-aware provider and cached extent; schema v5 promotes looping-gesture width into a persisted endpoint with ownership-safe IDLE termination. |
 
-SEQ-D09 remains deferred. With ruler performance closed, the next batch is the
-transport/navigation UX (SEQ-G14 through SEQ-G17), followed by sequence/audio
-end semantics (SEQ-F08 then SEQ-E05).
+SEQ-D09 remains deferred. Transport/navigation UX (SEQ-G14 through SEQ-G17) and
+the Scene document workflow (SEQ-G18) are implemented with rendered validation
+pending, followed by sequence/audio end semantics (SEQ-F08 then SEQ-E05).
 
 ## Decision log
 
@@ -1667,9 +1860,11 @@ options.
 | DEC-016 | Open | Mechanical policy for Safe Stop versus Emergency Stop and servo power? |
 | DEC-017 | Resolved 2026-08-11 | Target execution is the required success signal. Missing reports warn but do not gate playback; serial-write/master-relay stages may be added diagnostically. |
 | DEC-018 | Deferred | Published Show revision naming, retention and rollback policy? |
-| DEC-019 | Open | Transport UX: Play/Pause toggle versus separate controls; explicit Restart; normal Stop cursor retention; and Play-from-zero versus Play-from-cursor policy? |
-| DEC-020 | Open | Timeline following: comfort-corridor behavior, default Follow state, and how manual scroll suspends/re-enables it? |
-| DEC-021 | Open | Timeline pointer navigation: exact Ctrl/Shift-wheel bindings, trackpad behavior and whether manual zoom/pan suspends Follow until explicitly re-enabled? |
+| DEC-019 | Resolved 2026-08-12 | Primary Play is a Play/Pause/Resume toggle (`Space`), while Restart (`Ctrl+Enter`) is the explicit clean from-zero action. Stop/Safe/Emergency retain the playhead; Return to start (`Ctrl+Home`) is separate. Stopped Play begins at the retained cursor and skips prior events, except Play at natural end begins from zero. |
+| DEC-020 | Resolved 2026-08-12 | Follow defaults on for each new Play/Restart and uses a 15–72% viewport comfort corridor. Pause freezes it; Resume preserves its state. Manual horizontal scroll, Fit or zoom/pan suspends it, and the visible Follow toggle re-enables it with immediate catch-up. |
+| DEC-021 | Resolved 2026-08-12 | Ctrl+wheel zooms continuously and multiplicatively around the pointer within 20–300 px/s; Shift+wheel pans horizontally and plain wheel remains native. Slider/Fit/wheel navigation suspends Follow until the operator re-enables it. |
+| DEC-022 | Resolved 2026-08-12 | Treat Scenes like conventional editor documents: New/Open/Save are primary, Local Library storage stays behind a searchable Open browser, Save As/rename/import/export/trash are secondary, and replacement explicitly handles active playback plus save/discard/cancel. The browser is reusable by the future Show editor. |
+| DEC-023 | Direction recorded 2026-08-12; details deferred | Add a Project mode as the mutable working boundary for one production: manifest, Scenes, Shows and managed assets live under one movable folder with relative references. A Project remains distinct from the immutable portable package created by Publish; Show mode must arm the published package, not mutable Project drafts. |
 
 ## Completion evidence log
 
@@ -1706,3 +1901,5 @@ Append concise evidence when closing items; do not paste full build logs.
 | 2026-08-11 | SEQ-E02, SEQ-E03, SEQ-H03 (in progress) | Replaced per-event timers with one rearmable pass timer and a monotonic forward-only batch cursor. Late wakes drain all overdue timestamps in immutable source order and compensate the next delay; Pause/Stop/restart/Loop dispose or replace the whole session. Same-target and broadcast/target overlaps now produce timestamped SCHEDULE warnings with explicit last-received/ambiguous-mesh policy. Added 10,000-event resource, drift catch-up, batch shape/conflict, atomic gesture+audio and 20-pass repeatability coverage; WPF suite passed 157/157, Release build had zero warnings/errors and offline regression passed 19/19 (`b1-self-test-20260811-233354.json`). No firmware change, deployment or hardware run was required. |
 | 2026-08-12 | SEQ-F01, SEQ-F02, SEQ-C06, SEQ-B04 | Added structured immediate/finite/infinite firmware timing metadata and one target-speed-aware console provider with conservative mixed-speed broadcast ranges and visible provisional fallback. Cached duration/extent now refreshes exactly once per edit commit. Schema v5 persists real POWER_DOWN/TALK endpoints; playback issues ownership-safe targeted IDLE at that width across Pause/Loop without stopping a replacement gesture. WPF suite passed 165/165; Release build and all three PlatformIO environments passed; offline regression passed 19/19 (`b1-self-test-20260812-000226.json`). Firmware deployment and measured physical-duration comparison remain hardware checks. |
 | 2026-08-12 | SEQ-E06 | Removed the visible 1.5 s UI hitch introduced by duration refreshes on every unchanged `droids` heartbeat. Sequencer roster and broadcast-duration target signatures now invalidate independently, avoiding track/ruler reconstruction for age/RSSI-only telemetry while preserving real fleet/name/online changes. Ruler intervals now expand from milliseconds through hours and enforce a 600-tick ceiling across all three WPF consumers. Maximum-size coverage commits 10,000 events over 24 hours with one derived refresh and verifies spacing/count at maximum zoom. The WPF suite passed 168/168; Release build 348 and offline regression passed 19/19 (`b1-self-test-20260812-002905.json`). The operator previously confirmed smooth radar and playhead animation in build 347; no firmware deployment or hardware run was required. |
+| 2026-08-12 | SEQ-G14, SEQ-G15, SEQ-G16, SEQ-G17 (validation pending) | Implemented explicit Play/Pause/Resume, Restart, retained Stop cursor and Return-to-start semantics; added operator-controlled comfort-corridor Follow plus pointer-anchored Ctrl-wheel zoom and Shift-wheel pan. Four focused transport/navigation tests cover double-click safety, play-from-cursor filtering, Stop/Pause/Safe/E-STOP retention, Follow state and navigation math within the 172/172 WPF suite. Release build 350 succeeded and offline regression passed 19/19 (`b1-self-test-20260812-003817.json`). Rendered toolbar, long-timeline Follow and physical mouse/trackpad checks remain before closure; no firmware deployment or hardware run is required. |
+| 2026-08-12 | DEC-022, SEQ-G18 (validation pending) | Replaced raw Local Library Load/Trash rows with a conventional New/Open/Save Scene bar, secondary menu and searchable modal browser with current/recent/content context. Replacement now offers explicitly labelled save/discard/cancel actions and negotiates stopping Play/Pause while deferring Stop until every cancellation point succeeds. Nine focused browser/new/replacement/trash cases expanded the WPF suite to 181/181; Release build 352 succeeded and offline regression passed 19/19 (`b1-self-test-20260812-010808.json`). Browser layout, menu, search, double-click and shortcut checks remain for operator confirmation; no firmware deployment or hardware run is required. |

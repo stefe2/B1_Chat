@@ -4,6 +4,7 @@
              xmlns:Models="clr-namespace:b1_chat_console.Models"
              Loaded="SequenceTimelineView_Loaded"
              Unloaded="SequenceTimelineView_Unloaded"
+             DataContextChanged="SequenceTimelineView_DataContextChanged"
              PreviewKeyDown="SequenceTimelineView_PreviewKeyDown">
     <Grid x:Name="RootGrid">
         <Grid.RowDefinitions>
@@ -22,28 +23,33 @@
         <Border Grid.Row="0" Margin="0,0,0,8" Padding="10,7" CornerRadius="7"
                 Background="{StaticResource RecessBrush}" BorderBrush="{StaticResource BorderLoBrush}" BorderThickness="1">
             <StackPanel Orientation="Horizontal">
-                <!-- Play doubles as Resume when paused — the dedicated ⏵ button was removed. -->
-                <Button Style="{StaticResource IconTransportButtonStyle}" Command="{Binding PlayCommand}" ToolTip="Play / Resume"
+                <!-- The primary button exposes its next action. Restart and return-to-start are
+                     deliberately separate from normal Play and Stop. -->
+                <Button Style="{StaticResource IconTransportButtonStyle}" Command="{Binding PlayCommand}" ToolTip="{Binding PrimaryTransportToolTip}"
                         ToolTipService.ShowOnDisabled="True" Margin="0,0,4,0">
-                    <TextBlock Text="▶" />
+                    <TextBlock Text="{Binding PrimaryTransportGlyph}" />
                 </Button>
-                <Button Style="{StaticResource IconTransportButtonStyle}" Command="{Binding StopCommand}" ToolTip="Stop playback/audio and send targeted IDLE to Sequencer-started TALK or POWER_DOWN gestures."
+                <Button Style="{StaticResource IconTransportButtonStyle}" Command="{Binding RestartCommand}"
+                        ToolTip="Restart explicitly from the beginning (Ctrl+Enter). Stops current audio and cleans up Sequencer-owned TALK/POWER_DOWN first."
+                        ToolTipService.ShowOnDisabled="True" Margin="0,0,4,0">
+                    <TextBlock Text="↻" />
+                </Button>
+                <Button Style="{StaticResource IconTransportButtonStyle}" Command="{Binding StopCommand}" ToolTip="Stop playback/audio and send targeted IDLE to Sequencer-started TALK or POWER_DOWN gestures. The playhead stays at its current position."
                         ToolTipService.ShowOnDisabled="True" Margin="0,0,4,0">
                     <TextBlock Text="■" />
+                </Button>
+                <Button Style="{StaticResource IconTransportButtonStyle}" Command="{Binding ReturnToStartCommand}"
+                        ToolTip="Return the stopped playhead to the beginning (Ctrl+Home). This is navigation, not a safety stop."
+                        ToolTipService.ShowOnDisabled="True" Margin="0,0,4,0">
+                    <TextBlock Text="⏮" />
                 </Button>
                 <Button Content="SAFE" Style="{StaticResource MiniButtonStyle}" Command="{Binding SafeStopCommand}"
                         ToolTip="Safe Stop: cancel the show, center every reachable droid, keep servo holding torque, and suppress automatic motion until an explicit gesture."
                         ToolTipService.ShowOnDisabled="True" Margin="0,0,4,0" />
-                <Button Content="E-STOP" Style="{StaticResource MiniButtonStyle}" Command="{Binding EmergencyStopCommand}"
-                        Background="#A83232" BorderBrush="#FF6B60" Foreground="White" FontWeight="Bold"
+                <Button Content="E-STOP" Style="{StaticResource DangerButtonStyle}" Command="{Binding EmergencyStopCommand}"
                         ToolTip="Emergency Stop: immediately cancel the show and persistently disable servo outputs on every reachable droid. No confirmation."
                         ToolTipService.ShowOnDisabled="True" Margin="0,0,4,0" />
-                <Button Style="{StaticResource IconTransportButtonStyle}" Command="{Binding PauseCommand}"
-                        ToolTip="Pause the PC transport and audio. Gestures already received by droids continue; TALK/POWER_DOWN safety leases remain renewed."
-                        ToolTipService.ShowOnDisabled="True" Margin="0,0,10,0">
-                    <TextBlock Text="⏸" />
-                </Button>
-                <ToggleButton Style="{StaticResource HaloToggleButtonStyle}" IsChecked="{Binding EditableLoop}"
+                <ToggleButton Style="{StaticResource LoopToggleButtonStyle}" IsChecked="{Binding EditableLoop}"
                               IsEnabled="{Binding CanEditSequence}"
                               ToolTip="Loop the whole sequence. Stop playback before changing this setting."
                               ToolTipService.ShowOnDisabled="True" Margin="0,0,10,0" VerticalAlignment="Center">
@@ -67,12 +73,16 @@
                            Foreground="{StaticResource TextBrush}" VerticalAlignment="Center" Margin="0,0,6,0" />
                 <Slider Style="{StaticResource MetalSliderStyle}" Width="100" Minimum="20" Maximum="300"
                         Value="{Binding PxPerSecond}" Margin="0,0,10,0"
-                        ToolTip="Timeline zoom: change how many horizontal pixels represent one second." />
+                        PreviewMouseDown="ZoomSlider_PreviewMouseDown"
+                        ToolTip="Timeline zoom: change how many horizontal pixels represent one second. Ctrl+wheel zooms around the pointer." />
                 <CheckBox Content="Snap" IsChecked="{Binding SnapToGrid}" Foreground="{StaticResource MutedBrush}"
                           VerticalAlignment="Center" Margin="0,0,10,0"
                           ToolTip="Snap gesture and audio clip start times to the nearest 0.1 second when released." />
                 <Button Content="Fit" Style="{StaticResource MiniButtonStyle}" Click="BtnFit_Click" Margin="0,0,10,0"
                         ToolTip="Adjust zoom so the complete sequence fits in the visible timeline." />
+                <ToggleButton Content="Follow" Style="{StaticResource HaloToggleButtonStyle}"
+                              IsChecked="{Binding FollowPlayhead}" Margin="0,0,10,0" VerticalAlignment="Center"
+                              ToolTip="Keep the running playhead inside a comfort corridor. Manual horizontal scroll, Fit, slider zoom, Ctrl+wheel zoom, or Shift+wheel pan turns Follow off; click to catch up." />
 
                 <Rectangle Width="1" Fill="{StaticResource BorderHiBrush}" Opacity="0.5" Margin="0,2,10,2" />
 
@@ -80,11 +90,6 @@
                         ToolTip="Undo the most recent timeline edit." ToolTipService.ShowOnDisabled="True" />
                 <Button Content="Redo" Style="{StaticResource MiniButtonStyle}" Command="{Binding RedoCommand}" Margin="0,0,4,0"
                         ToolTip="Restore the most recently undone timeline edit." ToolTipService.ShowOnDisabled="True" />
-                <Button Content="Export" Style="{StaticResource MiniButtonStyle}" Command="{Binding ExportCommand}" Margin="0,0,4,0"
-                        ToolTip="Write an atomic external .b1seq.json snapshot for backup, transfer, support, or version control. This does not update a Local Library Scene; referenced audio files remain linked and are not copied." />
-                <Button Content="Import" Style="{StaticResource MiniButtonStyle}" Command="{Binding ImportCommand}" Margin="0,0,4,0"
-                        ToolTip="Replace the editor with a validated .b1seq.json file. Unsaved changes require confirmation; the Local Library is not modified. Stop playback first."
-                        ToolTipService.ShowOnDisabled="True" />
                 <Button Content="Clear" Style="{StaticResource MiniButtonStyle}" Command="{Binding ClearTimelineCommand}"
                         ToolTip="Empty the timeline (gestures + audio clips). Stop playback first; asks if unsaved."
                         ToolTipService.ShowOnDisabled="True" Margin="0,0,10,0" />
@@ -336,7 +341,8 @@
 
                 <!-- Ruler + audio lanes + tracks, scrolling together horizontally -->
                 <ScrollViewer x:Name="ScrollArea" Grid.Column="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"
-                              Background="Transparent" SizeChanged="ScrollArea_SizeChanged">
+                              Background="Transparent" SizeChanged="ScrollArea_SizeChanged"
+                              ScrollChanged="ScrollArea_ScrollChanged" PreviewMouseWheel="ScrollArea_PreviewMouseWheel">
                     <!-- HorizontalAlignment="Left" is load-bearing: without it, when the sequence is
                          short/zoomed out (content narrower than the viewport), ScrollViewer's default
                          content stretching centers this StackPanel instead of pinning it flush against

@@ -9,12 +9,27 @@ using Microsoft.Win32;
 
 namespace b1_chat_console.Services;
 
+public enum UnsavedSceneChoice
+{
+    Save,
+    Discard,
+    Cancel,
+}
+
+public sealed record SceneBrowserResult(SequenceLibraryItem? Scene, bool CreateNew = false);
+
 public interface ISequencerPersistenceDialogs
 {
     string? ChooseExportPath(string suggestedFileName);
     string? ChooseImportPath();
     string? PromptForSceneName(string initialName, string title);
-    bool ConfirmDiscardUnsavedChanges(string replacementDescription);
+    SceneBrowserResult? ChooseSceneToOpen(
+        IReadOnlyList<SequenceLibraryItem> scenes,
+        string? currentSceneId,
+        string libraryStatus,
+        string libraryIssueText);
+    UnsavedSceneChoice ConfirmUnsavedSceneChanges(string sceneName, string replacementDescription);
+    bool ConfirmStopPlayback(string replacementDescription);
     bool ConfirmMoveSceneToTrash(string sceneName);
     void ShowError(string title, string message);
 }
@@ -42,43 +57,59 @@ internal sealed class WpfSequencerPersistenceDialogs : ISequencerPersistenceDial
 
     public string? PromptForSceneName(string initialName, string title)
     {
-        var nameBox = new TextBox
+        var dialog = new SceneNameWindow(initialName, title)
         {
-            Text = initialName,
-            MaxLength = SequenceImportService.MaxSequenceNameLength,
-            MinWidth = 320,
-            Margin = new Thickness(0, 8, 0, 14),
-        };
-        var ok = new Button { Content = "Save", IsDefault = true, MinWidth = 80, Margin = new Thickness(0, 0, 8, 0) };
-        var cancel = new Button { Content = "Cancel", IsCancel = true, MinWidth = 80 };
-        var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
-        buttons.Children.Add(ok);
-        buttons.Children.Add(cancel);
-        var panel = new StackPanel { Margin = new Thickness(18) };
-        panel.Children.Add(new TextBlock { Text = "Scene name" });
-        panel.Children.Add(nameBox);
-        panel.Children.Add(buttons);
-        var dialog = new Window
-        {
-            Title = title,
-            Content = panel,
-            SizeToContent = SizeToContent.WidthAndHeight,
-            ResizeMode = ResizeMode.NoResize,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
             Owner = Application.Current?.MainWindow,
-            ShowInTaskbar = false,
         };
-        ok.Click += (_, _) => dialog.DialogResult = true;
-        dialog.ContentRendered += (_, _) => { nameBox.Focus(); nameBox.SelectAll(); };
-        return dialog.ShowDialog() == true ? nameBox.Text : null;
+        return dialog.ShowDialog() == true ? dialog.SceneName : null;
     }
 
-    public bool ConfirmDiscardUnsavedChanges(string replacementDescription) =>
-        MessageBox.Show(
-            $"The current sequence has unsaved changes.\n\nDiscard them and {replacementDescription}?",
-            "Replace unsaved sequence",
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Warning) == MessageBoxResult.Yes;
+    public SceneBrowserResult? ChooseSceneToOpen(
+        IReadOnlyList<SequenceLibraryItem> scenes,
+        string? currentSceneId,
+        string libraryStatus,
+        string libraryIssueText)
+    {
+        var dialog = new SceneBrowserWindow(scenes, currentSceneId, libraryStatus, libraryIssueText)
+        {
+            Owner = Application.Current?.MainWindow,
+        };
+        return dialog.ShowDialog() == true ? dialog.Selection : null;
+    }
+
+    public UnsavedSceneChoice ConfirmUnsavedSceneChanges(string sceneName, string replacementDescription)
+    {
+        var dialog = new SceneDecisionWindow(
+            "Unsaved Scene Changes",
+            $"Save changes to \"{sceneName}\"?",
+            $"This Scene has changes that have not been saved. Choose what to do before you {replacementDescription}.",
+            "Save and Continue",
+            "Continue Without Saving")
+        {
+            Owner = Application.Current?.MainWindow,
+        };
+        _ = dialog.ShowDialog();
+        return dialog.Selection switch
+        {
+            SceneDecisionResult.Primary => UnsavedSceneChoice.Save,
+            SceneDecisionResult.Secondary => UnsavedSceneChoice.Discard,
+            _ => UnsavedSceneChoice.Cancel,
+        };
+    }
+
+    public bool ConfirmStopPlayback(string replacementDescription)
+    {
+        var dialog = new SceneDecisionWindow(
+            "Stop Playback",
+            "Stop the current playback?",
+            $"Playback must stop before the editor can {replacementDescription}.",
+            "Stop and Continue")
+        {
+            Owner = Application.Current?.MainWindow,
+        };
+        _ = dialog.ShowDialog();
+        return dialog.Selection == SceneDecisionResult.Primary;
+    }
 
     public bool ConfirmMoveSceneToTrash(string sceneName) =>
         MessageBox.Show(

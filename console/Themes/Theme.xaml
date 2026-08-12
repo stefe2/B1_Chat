@@ -26,6 +26,21 @@
     <SolidColorBrush x:Key="BadBrush" Color="#FF5B52" />
     <SolidColorBrush x:Key="BadDimBrush" Color="#29FF5B52" />
 
+    <LinearGradientBrush x:Key="DangerButtonBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#D94842" Offset="0" />
+        <GradientStop Color="#B82F2A" Offset="0.18" />
+        <GradientStop Color="#7E201D" Offset="1" />
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="DangerButtonHoverBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#F05A53" Offset="0" />
+        <GradientStop Color="#D43C36" Offset="0.18" />
+        <GradientStop Color="#972923" Offset="1" />
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="DangerButtonPressedBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#8E2420" Offset="0" />
+        <GradientStop Color="#B82F2A" Offset="1" />
+    </LinearGradientBrush>
+
     <FontFamily x:Key="MonoFont">Consolas</FontFamily>
 
     <!-- App-wide tooltip chrome. Tooltips are operational guidance in this UI, so keep

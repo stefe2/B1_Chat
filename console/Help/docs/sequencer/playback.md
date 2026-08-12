@@ -2,8 +2,9 @@
 
 ![Sequencer transport and file controls](../images/sequencer-transport.png)
 
-*Figure: Playback is controlled from the left; Snap, Fit, Undo/Redo,
-Export/Import, Clear, and audio-lane creation follow in the same toolbar.*
+*Figure: Playback is controlled from the left; Snap, Fit, Undo/Redo, Clear, and
+audio-lane creation follow in the same toolbar. Scene file actions now live in
+the document bar above the timeline.*
 
 ## What Play actually does
 
@@ -36,34 +37,43 @@ Muted or offline rows do not create a queue for missed commands.*
 
 ## Play, Pause, Stop, and Loop
 
-- **Play** while stopped starts from t = 0. Pressing Play during playback restarts
-  cleanly from t = 0.
+- **Play** (`Space`) starts from the current playhead. At the natural end it
+  starts a new pass from t = 0. Events before a manually retained cursor are
+  skipped; their droid state and an already-started audio clip are not recreated.
+- The same primary button becomes **Pause** while running and **Resume** while
+  paused. A rapid second press therefore pauses; it never silently restarts the
+  Scene.
+- **Restart** (`Ctrl+Enter`) is the explicit from-zero action. It cleans up the
+  current pass before scheduling a fresh one.
 - **Pause** freezes the console playhead, pauses active PC audio, and cancels
   future scheduled sends. It sends no pause/stop command to the droids: every
   finite gesture already received continues to its natural completion, and a
   running `TALK`/`POWER_DOWN` continues while its safety lease is renewed.
-- **Play** while paused resumes local audio and schedules items that have not yet
-  reached their start time.
 - **Stop** cancels future sends, stops local audio, sends targeted `IDLE` cleanup
-  to droids whose latest Sequencer gesture is `TALK` or `POWER_DOWN`, and resets
-  the playhead to 0.
+  to droids whose latest Sequencer gesture is `TALK` or `POWER_DOWN`, and retains
+  the playhead for inspection. **Return to start** (`Ctrl+Home`) is a separate
+  navigation action available after stopping.
 - **Safe Stop** cancels the same console work, then tells every reachable droid
   to interrupt its current gesture, move to calibrated center, retain servo
   holding torque, and suppress automatic animation until a later explicit
-  gesture is sent.
+  gesture is sent. It also retains the last playhead position diagnostically.
 - **E-STOP** cancels the show and persistently disables servo outputs on every
   reachable droid immediately. It has no confirmation dialog. With no holding
   torque, unsupported mechanics may fall; re-enable Servos deliberately from
-  the Droids card after inspecting the hardware.
+  the Droids card after inspecting the hardware. It retains the last playhead
+  position diagnostically.
 - **Loop** starts a new pass when the calculated sequence duration ends. A
   `POWER_DOWN`/`TALK` clip first reaches its authored endpoint and sends IDLE;
-  the next pass then starts cleanly.
+  the next pass then starts cleanly at t = 0. Without Loop, natural completion
+  stops at the calculated end so the finished position remains visible.
 
-Persistent timeline and local-library editing is locked during both Play and
-Pause. Press **Stop** before inserting, moving, duplicating, deleting, using the
-inspector, changing Loop or audio lanes, Undo/Redo, Import/Clear, or loading or
-deleting a Local Library entry. The disabled controls, their tooltips, and the
-**EDIT LOCKED** badge expose that policy.
+Persistent timeline editing is locked during both Play and Pause. Press
+**Stop** before inserting, moving, duplicating, deleting, using the inspector,
+changing Loop or audio lanes, Undo/Redo, Clear, Save, Save As, or Trash. The
+disabled controls, their tooltips, and the **EDIT LOCKED** badge expose that
+policy. **New**, **Open**, and **Import** remain available: after a destination
+is chosen, they explicitly ask before stopping playback and replacing the
+document.
 
 Selection and inspection, track arming, dynamic droid-track mute, zoom, Snap,
 Fit, scrolling, and Export remain available because they do not alter the
@@ -188,9 +198,10 @@ with the wrong type, a future version, invalid targets/animations/timing, unsafe
 counts, or malformed sections is rejected without changing the open sequence,
 selection, or Undo history. The error identifies the offending JSON field.
 
-If the open sequence is Dirty, Import asks before discarding it. Choosing No
-cancels the replacement without changing the last sequence path. A successful
-Import becomes the new saved checkpoint and starts with empty Undo/Redo history.
+If the open sequence is modified, Import offers **save and continue**,
+**continue without saving**, or **cancel**. Cancel preserves the document and
+last sequence path. A successful Import becomes the new saved checkpoint and
+starts with empty Undo/Redo history.
 
 Legacy numeric DFPlayer `audioTrack` values cannot identify a sound file on the
 PC and are not imported as audio clips. Add or replace the corresponding audio
@@ -198,19 +209,25 @@ file manually after importing an old version 1 or 2 document.
 
 ## Scene names and the Local Library
 
-The current Sequencer document is a **Scene**. Edit its name above the timeline.
-**Save** updates the selected Local Library Scene, or creates a new stable Scene
-identity for a new/imported document. **Save As** always asks for a name and
-creates a separate identity. Names are unique without regard to case; a
-conflict is reported and never overwrites a different Scene.
+The current Sequencer document is a **Scene**. Its document bar provides
+**New**, **Open**, **Save**, and a **…** menu. Edit its name directly or choose
+**Rename** (`F2`). **Save** (`Ctrl+S`) updates the open Local Library Scene, or
+creates a new stable Scene identity for a new/imported document. **Save As**
+(`Ctrl+Shift+S`) always asks for a name and creates a separate identity. Names
+are unique without regard to case; a conflict is reported and never overwrites
+a different Scene.
 
-Loading a Local Library entry also replaces the editor. A Dirty document asks
-for confirmation first; a successful Load establishes the library content as
-the clean checkpoint and the console restores that Scene on its next launch.
-Cancel leaves the current content and history intact.
+**Open** (`Ctrl+O`) displays the searchable Scene browser instead of exposing
+storage rows below the timeline. A click selects; a double-click or **Open**
+loads the Scene; the current Scene carries an OPEN badge. The browser also
+offers **New Scene**. A modified document offers save-and-open, open without
+saving, or cancel. Active playback asks to stop before replacement. A
+successful Open establishes a clean checkpoint and the console restores that
+Scene on its next launch. Cancel leaves content, playback and history intact.
 
-**Trash** identifies the exact Scene and asks before moving its versioned JSON
-entry to `library\trash`. The file remains recoverable manually. If the Scene
+**Move current Scene to Trash** is deliberately kept in the **…** menu. It
+identifies the exact Scene and asks before moving its versioned JSON entry to
+`library\trash`. The file remains recoverable manually. If the Scene
 being edited is trashed, its content stays open as a modified new document so it
 can be saved again. Valid historical library JSON is migrated automatically;
 unreadable files remain untouched and are counted in the Local Library status.

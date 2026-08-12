@@ -106,13 +106,18 @@ internal sealed class FakeSequencerPersistenceDialogs : ISequencerPersistenceDia
     public string? ExportPath { get; set; }
     public string? ImportPath { get; set; }
     public bool ConfirmResult { get; set; }
+    public UnsavedSceneChoice? UnsavedChoice { get; set; }
+    public bool StopPlaybackConfirmResult { get; set; }
     public bool DeleteConfirmResult { get; set; }
     public string? SceneNameResult { get; set; }
+    public SceneBrowserResult? BrowserResult { get; set; }
     public List<string> ConfirmationRequests { get; } = new();
+    public List<string> StopPlaybackRequests { get; } = new();
     public List<(string Title, string Message)> Errors { get; } = new();
     public int ExportSelections { get; private set; }
     public int ImportSelections { get; private set; }
     public int SceneNamePrompts { get; private set; }
+    public int SceneBrowserSelections { get; private set; }
     public List<string> DeleteConfirmationRequests { get; } = new();
 
     public string? ChooseExportPath(string suggestedFileName)
@@ -133,10 +138,26 @@ internal sealed class FakeSequencerPersistenceDialogs : ISequencerPersistenceDia
         return SceneNameResult;
     }
 
-    public bool ConfirmDiscardUnsavedChanges(string replacementDescription)
+    public SceneBrowserResult? ChooseSceneToOpen(
+        IReadOnlyList<SequenceLibraryItem> scenes,
+        string? currentSceneId,
+        string libraryStatus,
+        string libraryIssueText)
+    {
+        SceneBrowserSelections++;
+        return BrowserResult;
+    }
+
+    public UnsavedSceneChoice ConfirmUnsavedSceneChanges(string sceneName, string replacementDescription)
     {
         ConfirmationRequests.Add(replacementDescription);
-        return ConfirmResult;
+        return UnsavedChoice ?? (ConfirmResult ? UnsavedSceneChoice.Discard : UnsavedSceneChoice.Cancel);
+    }
+
+    public bool ConfirmStopPlayback(string replacementDescription)
+    {
+        StopPlaybackRequests.Add(replacementDescription);
+        return StopPlaybackConfirmResult;
     }
 
     public bool ConfirmMoveSceneToTrash(string sceneName)

@@ -71,6 +71,42 @@
         <Setter Property="FontSize" Value="11" />
     </Style>
 
+    <!-- Destructive emergency action: a filled red control stays unmistakable even when no
+         pointer is hovering over it. Kept free of a colored glow so it remains crisp. -->
+    <Style x:Key="DangerButtonStyle" TargetType="Button">
+        <Setter Property="Foreground" Value="White" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="Padding" Value="8,4" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="BorderThickness" Value="1.5" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bd" CornerRadius="5" BorderThickness="{TemplateBinding BorderThickness}"
+                            BorderBrush="{StaticResource BadBrush}" Background="{StaticResource DangerButtonBrush}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          Margin="{TemplateBinding Padding}" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource DangerButtonHoverBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource DangerButtonPressedBrush}" />
+                            <Setter TargetName="Bd" Property="RenderTransform">
+                                <Setter.Value><TranslateTransform Y="1" /></Setter.Value>
+                            </Setter>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="Bd" Property="Opacity" Value="0.45" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- Small square icon button (Sequencer transport bar: Play/Stop/Pause/Resume) — same
          beveled chrome, fixed size, centered glyph instead of text. -->
     <Style x:Key="IconTransportButtonStyle" TargetType="Button" BasedOn="{StaticResource BeveledButtonStyle}">
@@ -192,12 +228,8 @@
         <Setter Property="Background" Value="{StaticResource AccentButtonBrush}" />
     </Style>
 
-    <!--
-        Status halo: bevel + accentuated outer glow. The color (Ok/Warn/Bad) is fixed per
-        variant rather than parametrized dynamically (Style.Triggers can't read an arbitrary
-        DependencyProperty without a DataTrigger on a VM property bound at the call site);
-        each view picks the variant via BoolToStyleConverter.
-    -->
+    <!-- Crisp status pills. Color is carried by the border without an outer glow, which keeps
+         dense droid lists readable and avoids colored blur bleeding into adjacent rows. -->
     <Style x:Key="HaloBadgeBaseStyle" TargetType="Border">
         <Setter Property="CornerRadius" Value="10" />
         <Setter Property="Padding" Value="9,4" />
@@ -207,32 +239,17 @@
 
     <Style x:Key="HaloBadgeOkStyle" TargetType="Border" BasedOn="{StaticResource HaloBadgeBaseStyle}">
         <Setter Property="BorderBrush" Value="{StaticResource OkBrush}" />
-        <Setter Property="Effect">
-            <Setter.Value>
-                <DropShadowEffect Color="#3DDC84" ShadowDepth="0" BlurRadius="14" Opacity="0.85" />
-            </Setter.Value>
-        </Setter>
     </Style>
 
     <Style x:Key="HaloBadgeWarnStyle" TargetType="Border" BasedOn="{StaticResource HaloBadgeBaseStyle}">
         <Setter Property="BorderBrush" Value="{StaticResource WarnBrush}" />
-        <Setter Property="Effect">
-            <Setter.Value>
-                <DropShadowEffect Color="#FFCC4D" ShadowDepth="0" BlurRadius="14" Opacity="0.85" />
-            </Setter.Value>
-        </Setter>
     </Style>
 
     <Style x:Key="HaloBadgeBadStyle" TargetType="Border" BasedOn="{StaticResource HaloBadgeBaseStyle}">
         <Setter Property="BorderBrush" Value="{StaticResource BadBrush}" />
-        <Setter Property="Effect">
-            <Setter.Value>
-                <DropShadowEffect Color="#FF5B52" ShadowDepth="0" BlurRadius="14" Opacity="0.85" />
-            </Setter.Value>
-        </Setter>
     </Style>
 
-    <!-- Toggle button (Servos / Auto anims): same accentuated halo, checked = Ok, unchecked = Bad. -->
+    <!-- Toggle button (Servos / Auto anims): checked = Ok, unchecked = Bad, with crisp borders. -->
     <Style x:Key="HaloToggleButtonStyle" TargetType="ToggleButton">
         <Setter Property="Padding" Value="9,5" />
         <Setter Property="Cursor" Value="Hand" />
@@ -243,23 +260,46 @@
                     <Border x:Name="Bd" CornerRadius="10" BorderThickness="1.5"
                             Background="{StaticResource RecessBrush}"
                             BorderBrush="{StaticResource BadBrush}">
-                        <Border.Effect>
-                            <DropShadowEffect Color="#FF5B52" ShadowDepth="0" BlurRadius="12" Opacity="0.75" />
-                        </Border.Effect>
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
                                           Margin="{TemplateBinding Padding}" />
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsChecked" Value="True">
                             <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource OkBrush}" />
-                            <Setter TargetName="Bd" Property="Effect">
-                                <Setter.Value>
-                                    <DropShadowEffect Color="#3DDC84" ShadowDepth="0" BlurRadius="12" Opacity="0.75" />
-                                </Setter.Value>
-                            </Setter>
                         </Trigger>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Bd" Property="Background" Value="{StaticResource PanelBrush}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Loop is an editing mode, not an error/safety state: neutral when off and orange when on. -->
+    <Style x:Key="LoopToggleButtonStyle" TargetType="ToggleButton">
+        <Setter Property="Padding" Value="9,5" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Border x:Name="Bd" CornerRadius="10" BorderThickness="1.5"
+                            Background="{StaticResource RecessBrush}"
+                            BorderBrush="{StaticResource BorderHiBrush}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          Margin="{TemplateBinding Padding}" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource AccentDimBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource PanelBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="Bd" Property="Opacity" Value="0.45" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

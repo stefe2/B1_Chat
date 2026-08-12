@@ -2,6 +2,7 @@ using b1_chat_console.Models;
 using b1_chat_console.Services;
 using b1_chat_console.ViewModels;
 using b1_chat_console.Views;
+using System.Windows.Input;
 
 namespace b1_chat_console.Tests;
 
@@ -33,15 +34,15 @@ public sealed class SequencerPlaybackIntegrationTests
                 break;
             case "Restart":
                 vm.PlayCommand.Execute(null);
-                vm.PlayCommand.Execute(null);
+                vm.RestartCommand.Execute(null);
                 break;
             case "Pause":
                 vm.PlayCommand.Execute(null);
-                vm.PauseCommand.Execute(null);
+                vm.PlayCommand.Execute(null);
                 break;
             case "Resume":
                 vm.PlayCommand.Execute(null);
-                vm.PauseCommand.Execute(null);
+                vm.PlayCommand.Execute(null);
                 vm.PlayCommand.Execute(null);
                 break;
             case "Stop":
@@ -100,6 +101,109 @@ public sealed class SequencerPlaybackIntegrationTests
         Assert.Contains(nameof(vm.IsPaused), changed);
         Assert.Contains(nameof(vm.IsLiveTracking), changed);
         Assert.Contains(nameof(vm.CanEditSequence), changed);
+    }
+
+    [Fact]
+    public void PrimaryTransport_DoubleClickPausesInsteadOfRestartingAndThirdPressResumes()
+    {
+        var protocol = new FakeSequencerProtocol();
+        var scheduler = new FakePlaybackTimerScheduler();
+        using var vm = CreateViewModel(protocol, scheduler);
+        vm.Steps.Add(new SequenceStep { StartMs = 500, Target = 0xFFFF, AnimId = 2 });
+
+        vm.PlayCommand.Execute(null);
+        var originalWake = Assert.Single(scheduler.Entries);
+        Assert.Equal("⏸", vm.PrimaryTransportGlyph);
+
+        vm.PlayCommand.Execute(null);
+        Assert.True(vm.IsPaused);
+        Assert.True(originalWake.Disposed);
+        Assert.Single(scheduler.Entries);
+        Assert.Equal("▶", vm.PrimaryTransportGlyph);
+
+        vm.PlayCommand.Execute(null);
+        Assert.True(vm.IsPlaying);
+        Assert.Equal(2, scheduler.Entries.Count);
+        Assert.Empty(protocol.Sent);
+    }
+
+    [Fact]
+    public void StopRetainsCursor_ReturnToStartIsSeparateAndPlayFromCursorSkipsPastEvents()
+    {
+        var protocol = new FakeSequencerProtocol();
+        protocol.Durations[2] = 100;
+        protocol.Durations[3] = 100;
+        var scheduler = new FakePlaybackTimerScheduler();
+        var clock = new FakePlaybackClock();
+        using var vm = CreateViewModel(protocol, scheduler, clock);
+        vm.Steps.Add(new SequenceStep { StartMs = 100, Target = 0xFFFF, AnimId = 2 });
+        vm.Steps.Add(new SequenceStep { StartMs = 500, Target = 0xFFFF, AnimId = 3 });
+
+        vm.PlayCommand.Execute(null);
+        clock.SetElapsed(TimeSpan.FromMilliseconds(300));
+        vm.PlayCommand.Execute(null);
+        Assert.True(vm.IsPaused);
+        vm.StopCommand.Execute(null);
+
+        Assert.Equal(300, vm.PlayheadMs);
+        Assert.True(vm.ReturnToStartCommand.CanExecute(null));
+        vm.PlayCommand.Execute(null);
+        Assert.Equal(200, scheduler.Entries[^1].DueTimeMs);
+        scheduler.Entries[^1].Invoke();
+        Assert.Equal(3, Assert.Single(protocol.Sent).AnimId);
+
+        vm.StopCommand.Execute(null);
+        vm.ReturnToStartCommand.Execute(null);
+        Assert.Equal(0, vm.PlayheadMs);
+        Assert.False(vm.ReturnToStartCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void FollowDefaultsOnForANewPassButManualSuspensionSurvivesPauseResume()
+    {
+        var protocol = new FakeSequencerProtocol();
+        var scheduler = new FakePlaybackTimerScheduler();
+        using var vm = CreateViewModel(protocol, scheduler);
+        vm.Steps.Add(new SequenceStep { StartMs = 500, Target = 0xFFFF, AnimId = 2 });
+        vm.FollowPlayhead = false;
+
+        vm.PlayCommand.Execute(null);
+        Assert.True(vm.FollowPlayhead);
+        vm.FollowPlayhead = false;
+        vm.PlayCommand.Execute(null);
+        vm.PlayCommand.Execute(null);
+
+        Assert.False(vm.FollowPlayhead);
+        Assert.True(vm.IsPlaying);
+    }
+
+    [Fact]
+    public void TimelineNavigationMath_AnchorsZoomAndUsesABoundedComfortCorridor()
+    {
+        Assert.Equal(92, SequenceTimelineView.CalculateWheelZoom(80, 120), precision: 0);
+        Assert.InRange(SequenceTimelineView.CalculateWheelZoom(80, 30), 82.8, 82.9);
+        Assert.Equal(300, SequenceTimelineView.CalculateWheelZoom(299, 120));
+        Assert.Equal(20, SequenceTimelineView.CalculateWheelZoom(21, -120));
+
+        Assert.True(MainWindow.ShouldYieldWheelToTimeline(ModifierKeys.Control, insideTimelineViewport: true));
+        Assert.True(MainWindow.ShouldYieldWheelToTimeline(ModifierKeys.Shift, insideTimelineViewport: true));
+        Assert.False(MainWindow.ShouldYieldWheelToTimeline(ModifierKeys.None, insideTimelineViewport: true));
+        Assert.False(MainWindow.ShouldYieldWheelToTimeline(ModifierKeys.Control, insideTimelineViewport: false));
+
+        Assert.Equal(400, SequenceTimelineView.CalculatePointerCenteredOffset(
+            currentOffset: 100, pointerViewportX: 200,
+            oldPxPerSecond: 80, newPxPerSecond: 160, scrollableWidth: 1_000));
+        Assert.Equal(212, SequenceTimelineView.CalculateFollowOffset(
+            currentOffset: 0, playheadContentX: 500, viewportWidth: 400, scrollableWidth: 1_000));
+        Assert.Equal(212, SequenceTimelineView.CalculateFollowOffset(
+            currentOffset: 212, playheadContentX: 350, viewportWidth: 400, scrollableWidth: 1_000));
+
+        Assert.True(SequenceTimelineView.MatchesAutomaticScrollTarget(212, 212));
+        Assert.True(SequenceTimelineView.MatchesAutomaticScrollTarget(212, 212.5));
+        Assert.False(SequenceTimelineView.MatchesAutomaticScrollTarget(212, 215));
+        Assert.False(SequenceTimelineView.MatchesAutomaticScrollTarget(null, 212));
+        Assert.Equal(0, SequenceTimelineView.CalculateFollowOffset(
+            currentOffset: 500, playheadContentX: 0, viewportWidth: 400, scrollableWidth: 1_000));
     }
 
     [Fact]
@@ -264,7 +368,7 @@ public sealed class SequencerPlaybackIntegrationTests
 
         for (var pass = 0; pass < 20; pass++)
         {
-            vm.PlayCommand.Execute(null);
+            vm.RestartCommand.Execute(null);
             scheduler.Entries[^1].Invoke();
         }
 
@@ -288,7 +392,7 @@ public sealed class SequencerPlaybackIntegrationTests
         vm.PlayCommand.Execute(null);
         var staleEvent = scheduler.Entries[0];
 
-        vm.PlayCommand.Execute(null);
+        vm.RestartCommand.Execute(null);
         var currentEvent = scheduler.Entries[1]; // one wake timer was created for each pass
 
         Assert.True(staleEvent.Disposed);
@@ -304,7 +408,7 @@ public sealed class SequencerPlaybackIntegrationTests
     }
 
     [Fact]
-    public void RapidPlayRestarts_OnlyNewestGenerationCanDispatch()
+    public void RapidExplicitRestarts_OnlyNewestGenerationCanDispatch()
     {
         var protocol = new FakeSequencerProtocol();
         protocol.Durations[2] = 100;
@@ -314,9 +418,9 @@ public sealed class SequencerPlaybackIntegrationTests
 
         vm.PlayCommand.Execute(null);
         var first = scheduler.Entries[0];
-        vm.PlayCommand.Execute(null);
+        vm.RestartCommand.Execute(null);
         var second = scheduler.Entries[1];
-        vm.PlayCommand.Execute(null);
+        vm.RestartCommand.Execute(null);
         var third = scheduler.Entries[2];
 
         first.InvokeEvenIfDisposed();
@@ -341,7 +445,7 @@ public sealed class SequencerPlaybackIntegrationTests
         vm.PlayCommand.Execute(null);
         scheduler.Entries[0].Invoke();
         var staleEnd = scheduler.Entries[1];
-        vm.PlayCommand.Execute(null);
+        vm.RestartCommand.Execute(null);
         scheduler.Entries[2].Invoke();
         var currentEnd = scheduler.Entries[3];
 
@@ -450,11 +554,9 @@ public sealed class SequencerPlaybackIntegrationTests
             Assert.Equal(expected, vm.ClearTimelineCommand.CanExecute(null));
             Assert.Equal(expected, vm.DeleteStepCommand.CanExecute(step));
             Assert.Equal(expected, vm.DuplicateStepCommand.CanExecute(step));
-            Assert.Equal(expected, vm.LoadFromLibraryCommand.CanExecute(libraryItem));
             Assert.Equal(expected, vm.DeleteFromLibraryCommand.CanExecute(libraryItem));
             Assert.Equal(expected, vm.SaveSceneCommand.CanExecute(null));
             Assert.Equal(expected, vm.SaveSceneAsCommand.CanExecute(null));
-            Assert.Equal(expected, vm.ImportCommand.CanExecute(null));
         }
 
         void AssertInspectionAndRuntimeControlsRemainAvailable()
@@ -462,6 +564,10 @@ public sealed class SequencerPlaybackIntegrationTests
             Assert.True(vm.ArmTrackCommand.CanExecute(vm.Tracks[0]));
             Assert.True(vm.ToggleMuteCommand.CanExecute(vm.Tracks[0]));
             Assert.True(vm.ExportCommand.CanExecute(null));
+            Assert.True(vm.NewSceneCommand.CanExecute(null));
+            Assert.True(vm.OpenSceneLibraryCommand.CanExecute(null));
+            Assert.True(vm.LoadFromLibraryCommand.CanExecute(libraryItem));
+            Assert.True(vm.ImportCommand.CanExecute(null));
         }
 
         void AssertDirectMutationGuards()
@@ -873,6 +979,7 @@ public sealed class SequencerPlaybackIntegrationTests
         vm.ToggleMuteCommand.Execute(vm.Tracks[0]);
         vm.PxPerSecond = 140;
         vm.SnapToGrid = false;
+        vm.FollowPlayhead = false;
         vm.PlayheadMs = 75;
         step.Dragging = true;
         step.DragOffsetY = 8;
@@ -931,9 +1038,9 @@ public sealed class SequencerPlaybackIntegrationTests
         queued.InvokeEvenIfDisposed();
         Assert.Empty(protocol.Sent);
 
-        vm.PlayCommand.Execute(null); // starts a new pass; it cannot resume the disconnected one
+        vm.PlayCommand.Execute(null); // starts a new pass from the retained diagnostic cursor
         Assert.Equal(2, scheduler.Entries.Count);
-        Assert.Equal(500, scheduler.Entries[1].DueTimeMs);
+        Assert.Equal(400, scheduler.Entries[1].DueTimeMs);
     }
 
     [Fact]
@@ -1169,7 +1276,7 @@ public sealed class SequencerPlaybackIntegrationTests
 
         Assert.False(vm.IsPlaying);
         Assert.False(vm.IsPaused);
-        Assert.Equal(0, vm.PlayheadMs);
+        Assert.Equal(150, vm.PlayheadMs);
         Assert.All(scheduler.Entries, entry => Assert.True(entry.Disposed));
         eventTimer.InvokeEvenIfDisposed();
         Assert.Single(protocol.Sent);
@@ -1315,7 +1422,8 @@ public sealed class SequencerPlaybackIntegrationTests
         protocol.Droids.Add(new Droid { Id = 0x1234, Online = true });
         var scheduler = new FakePlaybackTimerScheduler();
         var executionScheduler = new FakePlaybackTimerScheduler();
-        using var vm = CreateViewModel(protocol, scheduler, executionScheduler: executionScheduler);
+        var clock = new FakePlaybackClock();
+        using var vm = CreateViewModel(protocol, scheduler, clock, executionScheduler: executionScheduler);
         var step = new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = 2 };
         vm.Steps.Add(step);
 
@@ -1622,7 +1730,7 @@ public sealed class SequencerPlaybackIntegrationTests
 
         vm.PlayCommand.Execute(null);
         scheduler.Entries[0].Invoke();
-        vm.PlayCommand.Execute(null);
+        vm.RestartCommand.Execute(null);
 
         Assert.Equal(new[] { 17, 0 }, protocol.Sent.Select(s => s.AnimId));
         Assert.True(vm.IsPlaying);
@@ -1790,7 +1898,8 @@ public sealed class SequencerPlaybackIntegrationTests
         protocol.Droids.Add(new Droid { Id = 0x1234, Online = true });
         var scheduler = new FakePlaybackTimerScheduler();
         var executionScheduler = new FakePlaybackTimerScheduler();
-        using var vm = CreateViewModel(protocol, scheduler, executionScheduler: executionScheduler);
+        var clock = new FakePlaybackClock();
+        using var vm = CreateViewModel(protocol, scheduler, clock, executionScheduler: executionScheduler);
         vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = 17 });
 
         vm.PlayCommand.Execute(null);
@@ -1800,6 +1909,7 @@ public sealed class SequencerPlaybackIntegrationTests
             meshSeq: 95, leaseMs: 5000);
         var renewalTimer = executionScheduler.Entries[1];
 
+        clock.SetElapsed(TimeSpan.FromMilliseconds(250));
         vm.SafeStopCommand.Execute(null);
         scheduler.Entries[1].InvokeEvenIfDisposed();
         renewalTimer.InvokeEvenIfDisposed();
@@ -1809,6 +1919,7 @@ public sealed class SequencerPlaybackIntegrationTests
         Assert.Empty(protocol.LeaseRenewals);
         Assert.False(vm.IsPlaying);
         Assert.False(vm.IsPaused);
+        Assert.Equal(250, vm.PlayheadMs);
     }
 
     [Fact]
@@ -1834,11 +1945,13 @@ public sealed class SequencerPlaybackIntegrationTests
     {
         var protocol = new FakeSequencerProtocol();
         var scheduler = new FakePlaybackTimerScheduler();
-        using var vm = CreateViewModel(protocol, scheduler);
+        var clock = new FakePlaybackClock();
+        using var vm = CreateViewModel(protocol, scheduler, clock);
         vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = 2 });
 
         vm.PlayCommand.Execute(null);
         var queuedGesture = scheduler.Entries[0];
+        clock.SetElapsed(TimeSpan.FromMilliseconds(250));
         vm.EmergencyStopCommand.Execute(null);
         queuedGesture.InvokeEvenIfDisposed();
 
@@ -1847,6 +1960,7 @@ public sealed class SequencerPlaybackIntegrationTests
             Assert.Single(protocol.ServoCommands));
         Assert.False(vm.IsPlaying);
         Assert.False(vm.IsPaused);
+        Assert.Equal(250, vm.PlayheadMs);
     }
 
     private static SequencerViewModel CreateViewModel(

@@ -19,8 +19,9 @@ controls stay together above the timeline.*
 3. Click the ruler to place the playhead at the desired time.
 4. Click a gesture in the bottom library, or drag it directly onto a track and
    time.
-5. Give the Scene a name, choose **Save** to keep it in the Local Library, then
-   use **Export** only when you need an external copy.
+5. Give the Scene a name, choose **Save** (`Ctrl+S`) to keep it in the Local
+   Library, then use **Export a copy** from the **…** menu only when you need an
+   external file.
 
 ## Tracks
 
@@ -46,7 +47,15 @@ droid lanes preserved from its saved roster.*
 The ruler shows time; click or drag it to move the local playhead while playback
 is stopped or paused. The zoom control ranges from 20 to 300 pixels per second.
 **Fit** zooms the whole sequence into view and returns horizontal scroll to the
-start.
+start. `Ctrl+mouse wheel` zooms multiplicatively around the time beneath the
+pointer; `Shift+mouse wheel` pans horizontally, while an unmodified wheel keeps
+its normal WPF behavior.
+
+**Follow** keeps a running playhead inside a comfort corridor instead of pinning
+it permanently to the center. A new Play or Restart enables Follow. Manual
+horizontal scrolling, Fit, slider zoom, pointer zoom, or Shift-wheel panning
+turns it off so the view never fights inspection. Click Follow to catch up;
+Pause freezes automatic scrolling, and Resume preserves a manual suspension.
 
 With **Snap** enabled, inserted or dragged clips round to the nearest 100 ms when
 released. While held, a clip moves freely at pixel precision. Disable Snap to
@@ -109,10 +118,13 @@ history.
 
 ## Saving your work
 
-Timeline edits are not autosaved and there is no Save-to-droid step. **Save**
-updates the current Local Library Scene; **Save As** creates a separate Scene
-with a new stable identity. The badge shows the Scene source and whether its
-content is saved or modified. **Export** creates an optional `.b1seq.json`
-external snapshot without updating a library-backed Scene. See
+Timeline edits are not autosaved and there is no Save-to-droid step. The Scene
+bar follows a conventional document workflow: **New** (`Ctrl+N`), **Open**
+(`Ctrl+O`) and **Save** (`Ctrl+S`). Open displays a searchable Local Library;
+single-click selects a Scene and double-click opens it. **Save As**
+(`Ctrl+Shift+S`) is in the **…** menu and creates a separate Scene with a new
+stable identity. The Scene bar shows whether the document is new, saved or
+modified. **Export a copy** in the same menu creates an optional
+`.b1seq.json` external snapshot without updating a library-backed Scene. See
 [Playback](playback.md) for details and [Audio](audio.md) for portable-file
 considerations.

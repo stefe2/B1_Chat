@@ -1,6 +1,8 @@
 using System.Globalization;
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using b1_chat_console.Converters;
@@ -43,6 +45,17 @@ public partial class SequenceTimelineView : UserControl
     private int _chipAnimId;
     private Point _chipDownPos;
     private Window? _hostWindow;
+    private SequencerViewModel? _subscribedVm;
+    // ScrollChanged is raised after ScrollToHorizontalOffset returns. A transient Boolean is
+    // therefore already false when the event arrives and makes Follow disable itself. Retain
+    // the requested destination until that exact automatic change is observed instead.
+    private double? _automaticHorizontalScrollTarget;
+
+    private const double FollowCorridorLeftRatio = 0.15;
+    private const double FollowCorridorRightRatio = 0.72;
+    private const double ZoomStepFactor = 1.15;
+    private const double MinimumZoomPxPerSecond = 20;
+    private const double MaximumZoomPxPerSecond = 300;
 
     public SequenceTimelineView()
     {
@@ -54,8 +67,43 @@ public partial class SequenceTimelineView : UserControl
     internal static bool ExceedsDragThreshold(Point start, Point current) =>
         Math.Abs(current.X - start.X) + Math.Abs(current.Y - start.Y) >= DragThresholdPx;
 
+    internal static double CalculateWheelZoom(double currentPxPerSecond, int wheelDelta) =>
+        Math.Clamp(
+            currentPxPerSecond * Math.Pow(ZoomStepFactor, wheelDelta / 120.0),
+            MinimumZoomPxPerSecond,
+            MaximumZoomPxPerSecond);
+
+    internal static double CalculatePointerCenteredOffset(
+        double currentOffset, double pointerViewportX,
+        double oldPxPerSecond, double newPxPerSecond, double scrollableWidth)
+    {
+        if (oldPxPerSecond <= 0 || newPxPerSecond <= 0) return currentOffset;
+        var contentX = currentOffset + Math.Max(0, pointerViewportX);
+        var scaledContentX = contentX * newPxPerSecond / oldPxPerSecond;
+        return Math.Clamp(scaledContentX - Math.Max(0, pointerViewportX), 0, Math.Max(0, scrollableWidth));
+    }
+
+    internal static double CalculateFollowOffset(
+        double currentOffset, double playheadContentX, double viewportWidth, double scrollableWidth)
+    {
+        if (viewportWidth <= 0) return currentOffset;
+        var viewportX = playheadContentX - currentOffset;
+        var left = viewportWidth * FollowCorridorLeftRatio;
+        var right = viewportWidth * FollowCorridorRightRatio;
+        var desired = viewportX < left
+            ? playheadContentX - left
+            : viewportX > right
+                ? playheadContentX - right
+                : currentOffset;
+        return Math.Clamp(desired, 0, Math.Max(0, scrollableWidth));
+    }
+
+    internal static bool MatchesAutomaticScrollTarget(double? requestedOffset, double observedOffset) =>
+        requestedOffset is { } requested && Math.Abs(requested - observedOffset) <= 0.75;
+
     private void SequenceTimelineView_Loaded(object sender, RoutedEventArgs e)
     {
+        AttachViewModel(Vm);
         var window = Window.GetWindow(this);
         if (ReferenceEquals(window, _hostWindow)) return;
         if (_hostWindow != null) _hostWindow.Deactivated -= HostWindow_Deactivated;
@@ -65,6 +113,7 @@ public partial class SequenceTimelineView : UserControl
 
     private void SequenceTimelineView_Unloaded(object sender, RoutedEventArgs e)
     {
+        AttachViewModel(null);
         if (_hostWindow != null) _hostWindow.Deactivated -= HostWindow_Deactivated;
         _hostWindow = null;
         CancelAllInteractions();
@@ -72,12 +121,56 @@ public partial class SequenceTimelineView : UserControl
 
     private void HostWindow_Deactivated(object? sender, EventArgs e) => CancelAllInteractions();
 
+    private void SequenceTimelineView_DataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (IsLoaded) AttachViewModel(e.NewValue as SequencerViewModel);
+    }
+
+    private void AttachViewModel(SequencerViewModel? vm)
+    {
+        if (ReferenceEquals(_subscribedVm, vm)) return;
+        if (_subscribedVm != null) _subscribedVm.PropertyChanged -= ViewModel_PropertyChanged;
+        _subscribedVm = vm;
+        if (_subscribedVm != null) _subscribedVm.PropertyChanged += ViewModel_PropertyChanged;
+    }
+
+    private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (sender is not SequencerViewModel vm || !ReferenceEquals(vm, Vm)) return;
+        if (e.PropertyName == nameof(vm.PlayheadMs) && vm.IsPlaying && vm.FollowPlayhead)
+            KeepPlayheadInComfortCorridor(vm);
+        else if (e.PropertyName == nameof(vm.FollowPlayhead) && vm.FollowPlayhead)
+            KeepPlayheadInComfortCorridor(vm);
+    }
+
     private void SequenceTimelineView_PreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key != Key.Escape) return;
-        CancelAllInteractions();
-        Keyboard.ClearFocus();
-        e.Handled = true;
+        if (e.Key == Key.Escape)
+        {
+            CancelAllInteractions();
+            Keyboard.ClearFocus();
+            e.Handled = true;
+            return;
+        }
+        if (Vm is not { } vm || Keyboard.FocusedElement is TextBoxBase or PasswordBox
+            or ComboBox or Slider or ButtonBase) return;
+
+        if (e.Key == Key.Space && Keyboard.Modifiers == ModifierKeys.None)
+        {
+            vm.PlayCommand.Execute(null);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Enter && Keyboard.Modifiers == ModifierKeys.Control)
+        {
+            vm.RestartCommand.Execute(null);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Home && Keyboard.Modifiers == ModifierKeys.Control
+                 && vm.ReturnToStartCommand.CanExecute(null))
+        {
+            vm.ReturnToStartCommand.Execute(null);
+            e.Handled = true;
+        }
     }
 
     private void Interaction_LostMouseCapture(object sender, MouseEventArgs e)
@@ -128,6 +221,73 @@ public partial class SequenceTimelineView : UserControl
         if (Vm is { } vm) vm.ViewportWidthPx = Math.Max(0, e.NewSize.Width - 2);
     }
 
+    private void ScrollArea_ScrollChanged(object sender, ScrollChangedEventArgs e)
+    {
+        if (Math.Abs(e.HorizontalChange) <= 0.01) return;
+        if (MatchesAutomaticScrollTarget(_automaticHorizontalScrollTarget, e.HorizontalOffset))
+        {
+            _automaticHorizontalScrollTarget = null;
+            return;
+        }
+
+        // Any different offset is a user/navigation change (scrollbar, Shift+wheel, or a
+        // layout coercion), so discard a stale automatic request and yield control.
+        _automaticHorizontalScrollTarget = null;
+        if (Vm is { } vm) vm.FollowPlayhead = false;
+    }
+
+    private void ScrollArea_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (Vm is not { } vm || e.Delta == 0) return;
+        var modifiers = Keyboard.Modifiers;
+        if ((modifiers & ModifierKeys.Control) != 0)
+        {
+            var oldZoom = vm.PxPerSecond;
+            var newZoom = CalculateWheelZoom(oldZoom, e.Delta);
+            if (Math.Abs(newZoom - oldZoom) < 0.001) { e.Handled = true; return; }
+            var pointerX = e.GetPosition(ScrollArea).X;
+            var oldOffset = ScrollArea.HorizontalOffset;
+            vm.FollowPlayhead = false;
+            vm.PxPerSecond = newZoom;
+            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, () =>
+            {
+                var target = CalculatePointerCenteredOffset(
+                    oldOffset, pointerX, oldZoom, newZoom, ScrollArea.ScrollableWidth);
+                ScrollHorizontally(target, automatic: true);
+            });
+            e.Handled = true;
+        }
+        else if ((modifiers & ModifierKeys.Shift) != 0)
+        {
+            vm.FollowPlayhead = false;
+            ScrollHorizontally(ScrollArea.HorizontalOffset - e.Delta, automatic: false);
+            e.Handled = true;
+        }
+    }
+
+    private void ZoomSlider_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (Vm is { } vm) vm.FollowPlayhead = false;
+    }
+
+    private void KeepPlayheadInComfortCorridor(SequencerViewModel vm)
+    {
+        var target = CalculateFollowOffset(
+            ScrollArea.HorizontalOffset,
+            vm.PlayheadMs * vm.PxPerMs,
+            ScrollArea.ViewportWidth,
+            ScrollArea.ScrollableWidth);
+        if (Math.Abs(target - ScrollArea.HorizontalOffset) > 0.25)
+            ScrollHorizontally(target, automatic: true);
+    }
+
+    private void ScrollHorizontally(double offset, bool automatic)
+    {
+        var target = Math.Clamp(offset, 0, Math.Max(0, ScrollArea.ScrollableWidth));
+        _automaticHorizontalScrollTarget = automatic ? target : null;
+        ScrollArea.ScrollToHorizontalOffset(target);
+    }
+
     // Scales zoom so the whole sequence fits the visible scroll area — mirrors the mockup's
     // "Fit" button. Needs the viewport's actual pixel width (a view concern), so this stays
     // code-behind rather than a ViewModel RelayCommand.
@@ -138,10 +298,11 @@ public partial class SequenceTimelineView : UserControl
         if (totalSec <= 0) return;
         var viewportPx = ScrollArea.ActualWidth - 40;
         if (viewportPx <= 0) return;
-        vm.PxPerSecond = Math.Clamp(viewportPx / totalSec, 20, 300);
+        vm.FollowPlayhead = false;
+        vm.PxPerSecond = Math.Clamp(viewportPx / totalSec, MinimumZoomPxPerSecond, MaximumZoomPxPerSecond);
         // "Fit" means "show me the whole sequence" — scroll back to t=0, otherwise a
         // previously-scrolled view can still be looking past the (now fully zoomed-out) content.
-        ScrollArea.ScrollToHorizontalOffset(0);
+        ScrollHorizontally(0, automatic: true);
     }
 
     // --- Gesture clip drag: StartMs (horizontal) + Target (vertical, retarget to another

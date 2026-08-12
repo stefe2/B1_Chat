@@ -277,14 +277,14 @@ public sealed class SequencerPersistenceTests
     [InlineData("Playing", true)]
     [InlineData("Paused", false)]
     [InlineData("Paused", true)]
-    public void ReplacementCommands_AreInertDuringPlayAndPause(
+    public void ActivePlayback_ReplacementCanBeCancelledWithoutChangingAnything(
         string state,
         bool dirty)
     {
         var dialogs = new FakeSequencerPersistenceDialogs
         {
-            ImportPath = FixturePath("sequence-v4.json"),
             ConfirmResult = true,
+            StopPlaybackConfirmResult = false,
         };
         var protocol = new FakeSequencerProtocol();
         protocol.Durations[2] = 1_000;
@@ -295,16 +295,70 @@ public sealed class SequencerPersistenceTests
         var before = vm.Name;
         vm.PlayCommand.Execute(null);
         if (state == "Paused") vm.PauseCommand.Execute(null);
-        var item = new SequenceLibraryItem { Id = "blocked", Name = "Blocked library load" };
+        var item = new SequenceLibraryItem { Id = "blocked", Name = "Cancelled library load" };
 
-        Assert.False(vm.ImportCommand.CanExecute(null));
-        Assert.False(vm.LoadFromLibraryCommand.CanExecute(item));
-        vm.ImportCommand.Execute(null);
+        Assert.True(vm.LoadFromLibraryCommand.CanExecute(item));
         vm.LoadFromLibraryCommand.Execute(item);
 
         Assert.Equal(before, vm.Name);
-        Assert.Equal(0, dialogs.ImportSelections);
+        Assert.Equal(state == "Paused", vm.IsPaused);
+        Assert.Equal(state == "Playing", vm.IsPlaying);
+        Assert.Single(dialogs.StopPlaybackRequests);
         Assert.Empty(dialogs.ConfirmationRequests);
+    }
+
+    [Theory]
+    [InlineData("Playing")]
+    [InlineData("Paused")]
+    public void ActivePlayback_AcceptedReplacementStopsThenOpensScene(string state)
+    {
+        var dialogs = new FakeSequencerPersistenceDialogs
+        {
+            StopPlaybackConfirmResult = true,
+            UnsavedChoice = UnsavedSceneChoice.Discard,
+        };
+        var protocol = new FakeSequencerProtocol();
+        protocol.Durations[2] = 1_000;
+        using var vm = CreateViewModel(protocol, dialogs: dialogs);
+        vm.Steps.Add(new SequenceStep { AnimId = 2, Target = ushort.MaxValue, StartMs = 0 });
+        vm.EstablishSavedCheckpoint();
+        Assert.True(vm.SetSequenceName("Unsaved"));
+        vm.PlayCommand.Execute(null);
+        if (state == "Paused") vm.PauseCommand.Execute(null);
+        var item = new SequenceLibraryItem { Id = "opened", Name = "Opened Scene" };
+
+        vm.LoadFromLibraryCommand.Execute(item);
+
+        Assert.Equal(SequencerTransportState.Stopped, vm.TransportState);
+        Assert.Equal("Opened Scene", vm.Name);
+        Assert.Equal("opened", vm.CurrentSceneId);
+        Assert.Single(dialogs.StopPlaybackRequests);
+        Assert.Single(dialogs.ConfirmationRequests);
+    }
+
+    [Fact]
+    public void ActivePlayback_UnsavedCancelPreservesPlaybackAndDocument()
+    {
+        var dialogs = new FakeSequencerPersistenceDialogs
+        {
+            StopPlaybackConfirmResult = true,
+            UnsavedChoice = UnsavedSceneChoice.Cancel,
+        };
+        var protocol = new FakeSequencerProtocol();
+        protocol.Durations[2] = 1_000;
+        using var vm = CreateViewModel(protocol, dialogs: dialogs);
+        vm.Steps.Add(new SequenceStep { AnimId = 2, Target = ushort.MaxValue, StartMs = 0 });
+        vm.EstablishSavedCheckpoint();
+        Assert.True(vm.SetSequenceName("Keep Running"));
+        vm.PlayCommand.Execute(null);
+
+        vm.LoadFromLibraryCommand.Execute(new SequenceLibraryItem { Id = "not-opened", Name = "Other" });
+
+        Assert.True(vm.IsPlaying);
+        Assert.Equal("Keep Running", vm.Name);
+        Assert.True(vm.Dirty);
+        Assert.Single(dialogs.StopPlaybackRequests);
+        Assert.Single(dialogs.ConfirmationRequests);
     }
 
     [Fact]

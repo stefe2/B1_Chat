@@ -29,9 +29,16 @@ for the armed track or drag it when target and timing must be explicit.*
 - Click an audio lane's name to rename it. Right-click the gutter to delete the
   lane.
 - **Fit** shows the complete sequence and returns horizontal scroll to the start.
+- Use `Ctrl+wheel` to zoom around the pointer and `Shift+wheel` to pan. Both
+  suspend Follow; click **Follow** when you want the view to catch up again.
+- **Play** is a Play/Pause/Resume toggle. Use **Restart** for an explicit pass
+  from zero; normal **Stop** retains the playhead, and the separate return button
+  moves it back to the beginning.
 - The timecode shows current position / calculated total duration.
-- Save Local Library checkpoints often. Export external copies for backup or
-  transfer. Undo history and unsaved edits do not survive an application restart.
+- Use **Ctrl+S** to save the open Scene often and **Ctrl+O** to switch Scenes
+  through the browser. Export external copies from the **…** menu only for
+  backup or transfer. Undo history and unsaved edits do not survive an
+  application restart.
 
 ## Reliable show preparation
 

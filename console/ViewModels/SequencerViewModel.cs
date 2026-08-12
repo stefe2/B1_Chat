@@ -82,6 +82,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     [ObservableProperty] private TimelineTrack? _armedTrack;
     [ObservableProperty] private double _pxPerSecond = 80;
     [ObservableProperty] private bool _snapToGrid = true;
+    [ObservableProperty] private bool _followPlayhead = true;
     [ObservableProperty] private double _playheadMs;
 
     private SequencerTransportState _transportState = SequencerTransportState.Stopped;
@@ -89,6 +90,13 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     public bool IsPlaying => TransportState == SequencerTransportState.Playing;
     public bool IsPaused => TransportState == SequencerTransportState.Paused;
     public bool IsLiveTracking => TransportState == SequencerTransportState.Playing;
+    public string PrimaryTransportGlyph => IsPlaying ? "⏸" : "▶";
+    public string PrimaryTransportToolTip => TransportState switch
+    {
+        SequencerTransportState.Playing => "Pause playback (Space). Droid motion already dispatched continues.",
+        SequencerTransportState.Paused => "Resume playback from the paused position (Space).",
+        _ => "Play from the current playhead (Space). Use Restart to play explicitly from the beginning.",
+    };
 
     public double PxPerMs => PxPerSecond / 1000.0;
     partial void OnPxPerSecondChanged(double value)
@@ -106,6 +114,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     {
         OnPropertyChanged(nameof(TimecodeNowText));
         OnPropertyChanged(nameof(TimecodeTotalText));
+        ReturnToStartCommand.NotifyCanExecuteChanged();
     }
 
     private static string FormatTimecode(double ms)
@@ -129,6 +138,8 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         {
             if (!SetProperty(ref _dirty, value)) return;
             OnPropertyChanged(nameof(SequenceBadgeText));
+            OnPropertyChanged(nameof(SceneDisplayName));
+            OnPropertyChanged(nameof(SceneDocumentStateText));
         }
     }
 
@@ -159,6 +170,10 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
             return $"{name} · {SceneOriginText} · {state}";
         }
     }
+    public string SceneDisplayName => string.IsNullOrWhiteSpace(Name) ? "Untitled Scene" : Name.Trim();
+    public string SceneDocumentStateText => Dirty
+        ? "MODIFIED"
+        : DocumentOrigin == SequencerDocumentOrigin.New ? "NEW" : "SAVED";
     public string EditableName
     {
         get => Name;
@@ -168,6 +183,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     {
         OnPropertyChanged(nameof(EditableName));
         OnPropertyChanged(nameof(SequenceBadgeText));
+        OnPropertyChanged(nameof(SceneDisplayName));
     }
     public bool EditableLoop
     {
@@ -286,9 +302,12 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(IsPlaying));
         OnPropertyChanged(nameof(IsPaused));
         OnPropertyChanged(nameof(IsLiveTracking));
+        OnPropertyChanged(nameof(PrimaryTransportGlyph));
+        OnPropertyChanged(nameof(PrimaryTransportToolTip));
         // Relay commands do not re-evaluate CanExecute automatically when a derived property
         // changes. Keep every transport-dependent command synchronized from this one source.
         PauseCommand.NotifyCanExecuteChanged();
+        ReturnToStartCommand.NotifyCanExecuteChanged();
         RefreshEditAvailability();
     }
 
@@ -310,12 +329,11 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         RedoCommand.NotifyCanExecuteChanged();
         DeleteStepCommand.NotifyCanExecuteChanged();
         DuplicateStepCommand.NotifyCanExecuteChanged();
-        LoadFromLibraryCommand.NotifyCanExecuteChanged();
         DeleteFromLibraryCommand.NotifyCanExecuteChanged();
+        DeleteCurrentSceneCommand.NotifyCanExecuteChanged();
         SaveSceneCommand.NotifyCanExecuteChanged();
         SaveSceneAsCommand.NotifyCanExecuteChanged();
         ToggleAudioLoopCommand.NotifyCanExecuteChanged();
-        ImportCommand.NotifyCanExecuteChanged();
     }
 
     public SequencerViewModel(
@@ -1242,6 +1260,8 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(CurrentSceneId));
         OnPropertyChanged(nameof(SceneOriginText));
         OnPropertyChanged(nameof(SequenceBadgeText));
+        OnPropertyChanged(nameof(SceneDocumentStateText));
+        DeleteCurrentSceneCommand.NotifyCanExecuteChanged();
     }
 
     // --- Snapshot / undo-redo --------------------------------------------------
@@ -1476,6 +1496,49 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
 
     // --- Local library ------------------------------------------------------
 
+    [RelayCommand]
+    private void OpenSceneLibrary()
+    {
+        RefreshLibrary();
+        var result = _persistenceDialogs.ChooseSceneToOpen(
+            Library.ToArray(), CurrentSceneId, LibraryStatusText, LibraryIssueText);
+        if (result == null) return;
+        if (result.CreateNew)
+        {
+            NewScene();
+            return;
+        }
+        if (result.Scene != null) LoadFromLibrary(result.Scene);
+    }
+
+    [RelayCommand]
+    private void NewScene()
+    {
+        if (!PrepareDocumentReplacement("create a new Scene")) return;
+
+        _suppressTimelineRefresh = true;
+        try
+        {
+            Name = "";
+            Loop = false;
+            _fileTracks.Clear();
+            ApplyAudioLanesFromDto(null);
+            Steps.Clear();
+            SelectedStep = null;
+            PlayheadMs = 0;
+        }
+        finally
+        {
+            _suppressTimelineRefresh = false;
+        }
+        ClearHistory();
+        SetDocumentOrigin(SequencerDocumentOrigin.New, null);
+        EstablishSavedCheckpoint();
+        _settings.SetLastSceneId(null);
+        _settings.SetLastSequencePath(null);
+        RefreshDerivedTimelineState();
+    }
+
     [RelayCommand(CanExecute = nameof(CanEditSequence))]
     private void SaveScene()
     {
@@ -1568,11 +1631,11 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         }
     }
 
-    [RelayCommand(CanExecute = nameof(CanEditSequence))]
+    [RelayCommand]
     private void LoadFromLibrary(SequenceLibraryItem? item)
     {
-        if (!CanEditSequence || item == null) return;
-        if (!ConfirmDocumentReplacement($"load the Local Library sequence \"{item.Name}\"")) return;
+        if (item == null) return;
+        if (!PrepareDocumentReplacement($"open \"{item.Name}\"")) return;
         ApplyLibraryItem(item);
         _settings.SetLastSequencePath(null);
         _settings.SetLastSceneId(item.Id);
@@ -1624,6 +1687,20 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         }
     }
 
+    private bool CanDeleteCurrentScene() =>
+        CanEditSequence &&
+        DocumentOrigin == SequencerDocumentOrigin.LocalLibrary &&
+        !string.IsNullOrWhiteSpace(CurrentSceneId);
+
+    [RelayCommand(CanExecute = nameof(CanDeleteCurrentScene))]
+    private void DeleteCurrentScene()
+    {
+        if (!CanDeleteCurrentScene()) return;
+        var item = Library.FirstOrDefault(scene =>
+            string.Equals(scene.Id, CurrentSceneId, StringComparison.OrdinalIgnoreCase));
+        if (item != null) DeleteFromLibrary(item);
+    }
+
     // --- Export / import ----------------------------------------------------------
 
     [RelayCommand]
@@ -1666,13 +1743,12 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         }
     }
 
-    [RelayCommand(CanExecute = nameof(CanEditSequence))]
+    [RelayCommand]
     private void Import()
     {
-        if (!CanEditSequence) return;
         var path = _persistenceDialogs.ChooseImportPath();
         if (path == null) return;
-        if (!ConfirmDocumentReplacement($"import \"{Path.GetFileName(path)}\"")) return;
+        if (!PrepareDocumentReplacement($"import \"{Path.GetFileName(path)}\"")) return;
         try
         {
             ImportFrom(path);
@@ -1685,8 +1761,32 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         }
     }
 
-    private bool ConfirmDocumentReplacement(string replacementDescription) =>
-        !Dirty || _persistenceDialogs.ConfirmDiscardUnsavedChanges(replacementDescription);
+    private bool PrepareDocumentReplacement(string replacementDescription)
+    {
+        var mustStopPlayback = !CanEditSequence;
+        if (mustStopPlayback && !_persistenceDialogs.ConfirmStopPlayback(replacementDescription))
+            return false;
+
+        var unsavedChoice = Dirty
+            ? _persistenceDialogs.ConfirmUnsavedSceneChanges(SceneDisplayName, replacementDescription)
+            : UnsavedSceneChoice.Discard;
+        if (unsavedChoice == UnsavedSceneChoice.Cancel) return false;
+
+        // Defer the accepted Stop until every cancel-capable question has completed. Cancelling
+        // the unsaved-changes prompt therefore leaves an active rehearsal running untouched.
+        if (mustStopPlayback) Stop();
+
+        switch (unsavedChoice)
+        {
+            case UnsavedSceneChoice.Save:
+                SaveScene();
+                return !Dirty;
+            case UnsavedSceneChoice.Discard:
+                return true;
+            default:
+                return false;
+        }
+    }
 
     // Restores whatever sequence was last exported/imported, so the console resumes exactly
     // where the previous session left off instead of starting blank. Silent on failure (a
@@ -1758,30 +1858,47 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     // save required, like Rehearse did) and drives the exact same real commands + audio, with
     // genuine pause/resume on top.
 
-    // Play doubles as Resume (the dedicated ⏵ button was removed on request): pressed while
-    // paused it picks up exactly where Pause left off; otherwise it (re)starts from t=0.
+    // The primary transport is an ordinary Play/Pause/Resume toggle. Restart is deliberately
+    // separate so a double-click can never resend the beginning of a physical choreography.
     [RelayCommand]
     private void Play()
     {
+        if (IsPlaying)
+        {
+            Pause();
+            return;
+        }
         if (IsPaused)
         {
             if (_activePlaybackPlan == null) { Stop(); return; }
-            StartPlaybackPass(_elapsedAtPauseMs, resumeAudio: true);
+            StartPlaybackPass(_elapsedAtPauseMs, resumeAudio: true, skipEventsBeforeStart: false);
             return;
         }
+        StartNewPlaybackPass((int)Math.Clamp(PlayheadMs, 0, int.MaxValue));
+    }
+
+    [RelayCommand]
+    private void Restart() => StartNewPlaybackPass(0);
+
+    private void StartNewPlaybackPass(int requestedFromMs)
+    {
         if (Steps.Count == 0 && AudioLanes.All(l => l.Clips.Count == 0)) return;
         _playbackGeneration.Cancel();
         DisposePlaybackScheduler();
-        _audioPlayer.StopAll(); // Play pressed mid-playback restarts clean, no overlapped audio
-        StopInfiniteGestures(); // a restart must not inherit TALK/POWER_DOWN from the old pass
+        _audioPlayer.StopAll();
+        StopInfiniteGestures();
         ResetExecutionTracking();
         _activePlaybackPlan = SequencerPlaybackPlan.Capture(
             Steps, AudioLanes, AnimDurationMsLookup, Loop,
             resolveDurationMs: step => step.ResolvedDurationMs);
         SetScheduleWarnings(_activePlaybackPlan.Warnings);
         _dispatchedPlaybackEvents.Clear();
-        _elapsedAtPauseMs = 0;
-        StartPlaybackPass(0, resumeAudio: false);
+        // At the natural end, Play behaves like a conventional transport and starts a new pass.
+        // At every other retained cursor position it is an explicit play-from-cursor rehearsal.
+        var fromMs = requestedFromMs >= _activePlaybackPlan.TotalDurationMs ? 0 : requestedFromMs;
+        _elapsedAtPauseMs = fromMs;
+        FollowPlayhead = true;
+        StartPlaybackPass(fromMs, resumeAudio: false, skipEventsBeforeStart: true);
     }
 
     [RelayCommand]
@@ -1816,6 +1933,8 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
 
     private void StopTransportCore()
     {
+        if (TransportState == SequencerTransportState.Playing)
+            PlayheadMs = _liveAnchorElapsedMs + _playbackClock.Elapsed.TotalMilliseconds;
         _playbackGeneration.Cancel();
         TransitionTransportTo(SequencerTransportState.Stopped);
         DisposePlaybackScheduler();
@@ -1823,8 +1942,13 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         _activePlaybackPlan = null;
         _dispatchedPlaybackEvents.Clear();
         StopPlayheadTimer();
-        PlayheadMs = 0;
     }
+
+    [RelayCommand(CanExecute = nameof(CanReturnToStart))]
+    private void ReturnToStart() => PlayheadMs = 0;
+
+    private bool CanReturnToStart() =>
+        TransportState == SequencerTransportState.Stopped && PlayheadMs > 0;
 
     [RelayCommand(CanExecute = nameof(CanPause))]
     private void Pause()
@@ -1842,7 +1966,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
 
     private bool CanPause() => TransportState == SequencerTransportState.Playing;
 
-    private void StartPlaybackPass(int fromMs, bool resumeAudio)
+    private void StartPlaybackPass(int fromMs, bool resumeAudio, bool skipEventsBeforeStart)
     {
         var plan = _activePlaybackPlan
             ?? throw new InvalidOperationException("Cannot start Sequencer transport without a playback plan.");
@@ -1853,7 +1977,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
             if (resumeAudio)
                 _audioPlayer.ResumeAll(); // continues from each clip's retained position, no seek math
             StartPlayheadTicker(fromMs);
-            StartPlaybackScheduler(plan, fromMs, generation);
+            StartPlaybackScheduler(plan, fromMs, generation, skipEventsBeforeStart);
         }
         catch
         {
@@ -1867,13 +1991,15 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     // absolute timestamp is due according to monotonic elapsed time, preserving plan/source
     // order inside each batch. This eliminates per-event timers and catches up deterministically
     // after host scheduling drift. Muted events still count as consumed at their due instant.
-    private void StartPlaybackScheduler(SequencerPlaybackPlan plan, int fromMs, long generation)
+    private void StartPlaybackScheduler(
+        SequencerPlaybackPlan plan, int fromMs, long generation, bool skipEventsBeforeStart)
     {
         DisposePlaybackScheduler();
         _nextPlaybackBatchIndex = 0;
         while (_nextPlaybackBatchIndex < plan.Batches.Count &&
-               plan.Batches[_nextPlaybackBatchIndex].Events.All(playbackEvent =>
-                   _dispatchedPlaybackEvents.Contains(playbackEvent.SourceOrder)))
+               ((skipEventsBeforeStart && plan.Batches[_nextPlaybackBatchIndex].StartMs < fromMs) ||
+                plan.Batches[_nextPlaybackBatchIndex].Events.All(playbackEvent =>
+                    _dispatchedPlaybackEvents.Contains(playbackEvent.SourceOrder))))
             _nextPlaybackBatchIndex++;
         _playbackWakeTimer = _timerScheduler.Create(() => RunOnUiThread(() =>
             ProcessPlaybackWake(plan, fromMs, generation)));
@@ -1975,9 +2101,13 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
             _elapsedAtPauseMs = 0;
             _dispatchedPlaybackEvents.Clear();
             ResetExecutionTracking();
-            StartPlaybackPass(0, resumeAudio: false);
+            StartPlaybackPass(0, resumeAudio: false, skipEventsBeforeStart: false);
         }
-        else Stop();
+        else
+        {
+            Stop();
+            PlayheadMs = plan.TotalDurationMs;
+        }
     }
 
     private static void RunOnUiThread(Action action)
