@@ -33,6 +33,15 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     private const int ExecutionCompletionGraceMs = 1500;
     private const ushort InfiniteAnimLeaseMs = 5000;
     private const int InfiniteAnimLeaseRenewMs = 2000;
+    internal const int MaxRulerTickCount = 600;
+    private const double MinimumRulerTickSpacingPx = 50;
+    private static readonly int[] RulerIntervalsMs =
+    {
+        100, 200, 500,
+        1_000, 2_000, 5_000, 10_000, 15_000, 30_000,
+        60_000, 120_000, 300_000, 600_000, 900_000, 1_800_000,
+        3_600_000, 7_200_000, 14_400_000, 21_600_000, 43_200_000, 86_400_000,
+    };
     private const string AudioFileFilter = "Audio files (*.mp3;*.wav;*.wma;*.ogg)|*.mp3;*.wav;*.wma;*.ogg|All files (*.*)|*.*";
 
     public ObservableCollection<SequenceLibraryItem> Library { get; } = new();
@@ -932,11 +941,12 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
             // viewport floor included — not just the sequence's own duration, so the grid
             // never stops in a stub partway across ("la trame reste en pleine longueur").
             var endMs = Math.Max(TotalDurationMsValue, TimelineWidthPx / PxPerMs);
-            int[] niceIntervals = { 100, 200, 500, 1000, 2000, 5000, 10000 };
-            var interval = niceIntervals.FirstOrDefault(i => i * PxPerMs >= 50, niceIntervals[^1]);
-            for (double t = 0; t <= endMs; t += interval)
+            var interval = SelectRulerIntervalMs(endMs, PxPerMs);
+            for (var index = 0; index < MaxRulerTickCount; index++)
             {
-                var major = (long)t % (interval * 5) == 0;
+                var t = (double)index * interval;
+                if (t > endMs) break;
+                var major = index % 5 == 0;
                 RulerTicks.Add(new TimelineTick
                 {
                     Left = t * PxPerMs,
@@ -948,6 +958,24 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(TimelineWidthPx));
         OnPropertyChanged(nameof(TimecodeNowText));
         OnPropertyChanged(nameof(TimecodeTotalText));
+    }
+
+    internal static int SelectRulerIntervalMs(double endMs, double pxPerMs)
+    {
+        if (!double.IsFinite(endMs) || endMs < 0)
+            throw new ArgumentOutOfRangeException(nameof(endMs));
+        if (!double.IsFinite(pxPerMs) || pxPerMs <= 0)
+            throw new ArgumentOutOfRangeException(nameof(pxPerMs));
+
+        // Satisfy both constraints at once: labels remain readable at the current zoom and
+        // the three WPF ItemsControls bound to this collection can never materialize an
+        // unbounded number of ruler/gridline elements on a long Scene.
+        var requiredMs = Math.Max(
+            MinimumRulerTickSpacingPx / pxPerMs,
+            endMs / (MaxRulerTickCount - 1));
+        return RulerIntervalsMs.FirstOrDefault(
+            candidate => candidate >= requiredMs,
+            RulerIntervalsMs[^1]);
     }
 
     public int RoundToGrid(double ms) => SnapToGrid ? (int)(Math.Round(ms / 100.0) * 100) : (int)ms;

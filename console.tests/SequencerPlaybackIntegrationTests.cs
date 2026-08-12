@@ -155,6 +155,7 @@ public sealed class SequencerPlaybackIntegrationTests
         var protocol = new FakeSequencerProtocol();
         var scheduler = new FakePlaybackTimerScheduler();
         using var vm = CreateViewModel(protocol, scheduler);
+        Assert.True(vm.BeginStepDrag());
         for (var i = 0; i < 10_000; i++)
             vm.Steps.Add(new SequenceStep
             {
@@ -162,6 +163,7 @@ public sealed class SequencerPlaybackIntegrationTests
                 Target = ushort.MaxValue,
                 AnimId = i % 16,
             });
+        Assert.True(vm.CompleteEditTransaction());
 
         vm.PlayCommand.Execute(null);
 
@@ -172,6 +174,55 @@ public sealed class SequencerPlaybackIntegrationTests
         vm.StopCommand.Execute(null);
         Assert.Equal(0, scheduler.ActiveWakeTimers);
         Assert.True(scheduler.Entries[0].Disposed);
+    }
+
+    [Fact]
+    public void MaximumSupportedTimeline_RebuildsOnceAndKeepsRulerBoundedAtMaximumZoom()
+    {
+        var protocol = new FakeSequencerProtocol();
+        var scheduler = new FakePlaybackTimerScheduler();
+        using var vm = CreateViewModel(protocol, scheduler);
+        vm.PxPerSecond = 300;
+        var extentRefreshes = 0;
+        vm.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(vm.TimelineWidthPx)) extentRefreshes++;
+        };
+
+        Assert.True(vm.BeginStepDrag());
+        for (var i = 0; i < SequenceImportService.MaxSteps; i++)
+            vm.Steps.Add(new SequenceStep
+            {
+                StartMs = i == SequenceImportService.MaxSteps - 1
+                    ? SequenceImportService.MaxTimelineMs - 1_500
+                    : i,
+                Target = ushort.MaxValue,
+                AnimId = i % 16,
+            });
+
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        Assert.True(vm.CompleteEditTransaction());
+        stopwatch.Stop();
+
+        Assert.Equal(SequenceImportService.MaxTimelineMs, vm.TotalDurationMsValue);
+        Assert.Equal(1, extentRefreshes);
+        Assert.InRange(vm.RulerTicks.Count, 1, SequencerViewModel.MaxRulerTickCount);
+        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(5),
+            $"Maximum-size timeline refresh took {stopwatch.Elapsed.TotalSeconds:0.000} s.");
+    }
+
+    [Fact]
+    public void MaximumSupportedTimeline_RulerIntervalPreservesDensityAndCountLimits()
+    {
+        const double maximumZoomPxPerMs = 0.3;
+        var interval = SequencerViewModel.SelectRulerIntervalMs(
+            SequenceImportService.MaxTimelineMs,
+            maximumZoomPxPerMs);
+
+        Assert.True(interval * maximumZoomPxPerMs >= 50);
+        Assert.True(Math.Floor(SequenceImportService.MaxTimelineMs / (double)interval) + 1
+            <= SequencerViewModel.MaxRulerTickCount);
+        Assert.Equal(300_000, interval);
     }
 
     [Fact]
