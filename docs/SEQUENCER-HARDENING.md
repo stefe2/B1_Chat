@@ -74,7 +74,7 @@ The dashboard is updated whenever an item changes state.
 | D | Import, export and local library | 8 / 8 | 0 / 1 |
 | E | Deterministic scheduler and performance | 4 / 6 | 0 / 1 |
 | F | Duration and audio robustness | 1 / 8 | — |
-| G | Preflight and ergonomics | 0 / 9 | 0 / 4 |
+| G | Preflight and ergonomics | 0 / 12 | 0 / 4 |
 | H | Automated and hardware validation | 1 / 8 | — |
 | I | Scene & Show System (future) | — | 0 / 22 |
 | J | Commissioning and servo configuration safety | 0 / 2 | — |
@@ -1067,6 +1067,65 @@ The dashboard is updated whenever an item changes state.
 - **Validation:** device removal/change, mute, unsupported media, battery/power,
   sleep-policy warning, low-space and successful show-PC checklist.
 
+### [ ] SEQ-G14 — Redesign Play as an unambiguous Play/Pause control
+
+- **Priority:** P1
+- **Problem:** pressing Play while already playing currently restarts the Scene
+  from zero and resends its first commands. This is surprising for a conventional
+  transport and can cause an accidental motion restart.
+- **Depends on:** SEQ-A06, SEQ-E04.
+- **Acceptance:** the primary control always exposes the action that will happen
+  next. Decide whether it is a two-state Play/Pause button or two adjacent
+  controls, but a second ordinary Play press must not silently restart. Restart
+  from zero remains available through a separate, unmistakable action. Tooltips,
+  keyboard shortcuts, disabled states and Help all match Stopped/Playing/Paused.
+- **Recommendation:** use one large Play/Pause toggle: Play becomes Pause while
+  running and becomes Resume while paused. Add a separate `Restart`/`From start`
+  control rather than hiding restart behind a second Play press.
+- **Validation:** state/command/UI tests cover stopped Play, playing Pause,
+  paused Resume, explicit Restart, rapid double-click, failure to start and Loop.
+
+### [ ] SEQ-G15 — Separate Stop from playhead navigation and rewind
+
+- **Priority:** P2
+- **Problem:** normal Stop currently ends playback and always returns the
+  playhead to zero. Transport safety cleanup and timeline navigation are two
+  different intentions, and forcing both makes inspection/rehearsal awkward.
+- **Depends on:** SEQ-A06, SEQ-B07, SEQ-G14.
+- **Acceptance:** define and expose the post-Stop playhead policy separately from
+  hardware/audio cleanup. Specify normal Stop, Safe Stop, Emergency Stop,
+  natural end and Loop boundaries, plus whether Play while stopped begins at
+  zero or at the retained cursor. A dedicated return-to-start action is always
+  available and cannot be confused with a safety stop.
+- **Recommendation:** normal Stop should cancel/clean up immediately but retain
+  the current playhead for inspection. Add a distinct `Return to start` button.
+  Keep performance-mode GO-from-zero and rehearsal Play-from-cursor as explicit
+  choices instead of inferring them from the cursor position. Safe/Emergency
+  Stop should prioritize safety and may retain the last position diagnostically.
+- **Validation:** tests cover Stop from Play/Pause, repeated Stop, return to
+  start, Play after retained Stop, natural end, Safe/Emergency Stop and Loop.
+
+### [ ] SEQ-G16 — Add an operator-controlled Follow Playhead mode
+
+- **Priority:** P2
+- **Problem:** on a timeline longer than the viewport, the playhead leaves the
+  visible window while playback continues. A forced center-on-every-tick design,
+  however, would fight manual inspection and can make the whole timeline feel
+  constantly in motion.
+- **Depends on:** SEQ-E06, SEQ-G14.
+- **Acceptance:** a visible `Follow` mode keeps the active playhead in view
+  without changing vertical scroll or stealing manual control. Behavior is
+  defined for Play/Pause/Resume, zoom/Fit, manual horizontal scrolling, Loop,
+  Restart and natural end. Scrolling is smooth and bounded; it does not rebuild
+  timeline content or create a per-tick layout stall.
+- **Recommendation:** default Follow on when playback begins, but use a comfort
+  corridor rather than permanent centering: let the playhead move across roughly
+  the first 65–75% of the viewport, then smoothly advance the window. Manual
+  horizontal scroll disables/suspends Follow; a visible button re-enables it and
+  catches up. Pause freezes auto-scroll while leaving inspection free.
+- **Validation:** long-timeline UI tests and manual checks cover every zoom,
+  manual-scroll, Pause/Resume, Loop/restart and end-boundary combination.
+
 ## EPIC H — Automated and hardware validation
 
 ### [x] SEQ-H01 — Create a Sequencer-focused test project and fixtures
@@ -1530,7 +1589,7 @@ sequential. Unless a test seam must be introduced first, follow this order:
 7. **Scheduler replacement:** SEQ-E02 through SEQ-E06.
 8. **Duration/audio:** SEQ-F01 through SEQ-F08 and SEQ-B04.
 9. **Preflight/ergonomics:** required SEQ-G01 through SEQ-G06 and SEQ-G11
-   through SEQ-G13.
+   through SEQ-G16.
 10. **Validation gate:** SEQ-H02 through SEQ-H08.
 11. **Optional enhancements:** only selected `[D]` items. EPIC I remains deferred
     until the M1–M4 reliability baseline is complete and a separate Scene/Show
@@ -1580,6 +1639,8 @@ options.
 | DEC-016 | Open | Mechanical policy for Safe Stop versus Emergency Stop and servo power? |
 | DEC-017 | Resolved 2026-08-11 | Target execution is the required success signal. Missing reports warn but do not gate playback; serial-write/master-relay stages may be added diagnostically. |
 | DEC-018 | Deferred | Published Show revision naming, retention and rollback policy? |
+| DEC-019 | Open | Transport UX: Play/Pause toggle versus separate controls; explicit Restart; normal Stop cursor retention; and Play-from-zero versus Play-from-cursor policy? |
+| DEC-020 | Open | Timeline following: comfort-corridor behavior, default Follow state, and how manual scroll suspends/re-enables it? |
 
 ## Completion evidence log
 
