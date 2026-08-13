@@ -163,6 +163,8 @@ for coverage, options, and the operations deliberately excluded from automation.
 platformio.ini        firmware build config (env b1 / b1_master / b1_slave)
 CLAUDE.md              project instructions and documentation index
 AGENTS.md              Codex project instructions
+docs/README.md              documentation index (what each document owns)
+docs/ARCHITECTURE.md        firmware/console module map and storage locations
 docs/FIRMWARE-CONTRACT.md   console <-> firmware protocol contract/history
 docs/PROTOCOL-REFERENCE.md  current mesh and JSON protocol reference
 docs/TEST-PROTOCOL.md       validation scope and test procedures
@@ -201,8 +203,8 @@ tag prefix:
 
 ## Project status
 
-In active development. See [`CLAUDE.md`](CLAUDE.md)'s *Progress* section
-for the up-to-date, detailed changelog of every completed step, and
+In active development. See [`docs/PROGRESS-ARCHIVE.md`](docs/PROGRESS-ARCHIVE.md)
+for the detailed changelog of every completed step, and
 [`docs/SEQUENCER-HARDENING.md`](docs/SEQUENCER-HARDENING.md) for the tracked
 Sequencer reliability backlog (per-item status, decision log, and the checks
 that still require a real fleet).

@@ -7,9 +7,12 @@ architecture, protocol and pitfalls.
 
 Related documents:
 
-- [`../CLAUDE.md`](../CLAUDE.md) — project overview, firmware architecture,
-  serial/mesh protocol, known pitfalls. Keeps a short invariants summary that
-  must stay consistent with this file.
+- [`../CLAUDE.md`](../CLAUDE.md) — project-wide rules. Keeps a short invariants
+  summary that must stay consistent with this file.
+- [`ARCHITECTURE.md`](ARCHITECTURE.md) — where the Sequencer's types and
+  services live inside `console/`.
+- [`KNOWN-PITFALLS.md`](KNOWN-PITFALLS.md) — WPF layout and input traps that
+  apply to the timeline.
 - [`SEQUENCER-HARDENING.md`](SEQUENCER-HARDENING.md) — the tracked backlog
   (`SEQ-*` items, decision log, evidence log). **That** file records what is
   still open; **this** file records what currently ships.

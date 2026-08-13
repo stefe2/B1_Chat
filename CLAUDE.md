@@ -8,6 +8,7 @@ short: durable detail belongs in the linked documents.
 
 | Area | Document | Read when |
 | --- | --- | --- |
+| Firmware/console module map and storage | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Locating a responsibility or adding a module |
 | Sequencer runtime behavior | [docs/SEQUENCER-BEHAVIOR.md](docs/SEQUENCER-BEHAVIOR.md) | Changing the console Sequencer |
 | Sequencer backlog and decisions | [docs/SEQUENCER-HARDENING.md](docs/SEQUENCER-HARDENING.md) | Picking up Sequencer work |
 | Console ↔ firmware contract/history | [docs/FIRMWARE-CONTRACT.md](docs/FIRMWARE-CONTRACT.md) | Changing serial or mesh protocol |
@@ -19,7 +20,7 @@ short: durable detail belongs in the linked documents.
 
 `CLAUDE.md` defines the project-wide rules. The linked document is authoritative
 for its own area. When a behavior changes, update the relevant document in the
-same commit.
+same commit. [docs/README.md](docs/README.md) is the full index.
 
 ## Project overview
 

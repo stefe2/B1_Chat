@@ -3,8 +3,9 @@
 Full chronological history of completed steps, moved out of `CLAUDE.md` on
 2026-07-19 to keep that file lighter (it's reloaded as context on every
 Claude Code turn in this project). Nothing here is deleted — this is purely
-an archival split. See `CLAUDE.md`'s own "Progress" section for the
-still-open items and a short recent-highlights summary.
+an archival split. `CLAUDE.md`'s *Current open work* section lists what is
+still open; [`SEQUENCER-HARDENING.md`](SEQUENCER-HARDENING.md) tracks the
+Sequencer backlog item by item.
 
 ## Progress (archived entries)
 
@@ -1032,8 +1033,8 @@ still-open items and a short recent-highlights summary.
 ## Incidents (full narratives)
 
 Moved out of `CLAUDE.md` on 2026-08-12. The actionable rules distilled from
-these incidents stay in `CLAUDE.md` (sections *Full flash vs app-only* and
-*Per-droid name resilience*, plus *Known pitfalls*); what follows is the
+these incidents now live in [`KNOWN-PITFALLS.md`](KNOWN-PITFALLS.md) (full
+flash vs app-only, and per-droid name resilience); what follows is the
 complete account of what happened and why.
 
 ### Full flash (virgin board support) — 2026-07-15
@@ -1244,8 +1245,10 @@ milestone block; earlier blocks are preserved verbatim below.
   all 4 windows.
 ## Reference sections moved from CLAUDE.md (2026-08-12)
 
-`CLAUDE.md` keeps a compact version of each of these — the operational rules
-and invariants only. The full text is preserved below.
+The operational rules distilled from these sections now live in
+[`KNOWN-PITFALLS.md`](KNOWN-PITFALLS.md) (OTA and flash safety) and
+[`ARCHITECTURE.md`](ARCHITECTURE.md) (module and storage map); `CLAUDE.md`
+keeps only the invariants. The full original text is preserved below.
 
 
 ### Firmware OTA — full design notes (moved from CLAUDE.md 2026-08-12)
