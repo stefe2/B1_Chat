@@ -8,7 +8,7 @@ public partial class SequenceStep : ObservableObject
     [ObservableProperty] private int _animId;
     [ObservableProperty] private ushort _target = 0xFFFF;
     // Absolute offset from the sequence's own t=0 (not a delay from the
-    // previous step — see FIRMWARE-CONTRACT.md §6).
+    // previous step — see docs/FIRMWARE-CONTRACT.md §6).
     [ObservableProperty] private int _startMs;
 
     // Persistent explicit endpoint for looping gestures (POWER_DOWN/TALK). It is ignored by

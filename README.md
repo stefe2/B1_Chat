@@ -16,7 +16,7 @@ A single repo, two halves:
    and an in-app Help window.
 
 > Full architecture, protocol reference, and a detailed progress log:
-> [`CLAUDE.md`](CLAUDE.md). [`FIRMWARE-CONTRACT.md`](FIRMWARE-CONTRACT.md)
+> [`CLAUDE.md`](CLAUDE.md). [`docs/FIRMWARE-CONTRACT.md`](docs/FIRMWARE-CONTRACT.md)
 > tracks the console ↔ firmware protocol contract specifically.
 
 ## Features
@@ -154,15 +154,20 @@ It also runs the headless Sequencer test suite, which can be run on its own:
 dotnet test console.tests\b1-chat-console.Tests.csproj
 ```
 
-Neither changes `console/build.number`. See [`TEST-PROTOCOL.md`](TEST-PROTOCOL.md)
+Neither changes `console/build.number`. See [`docs/TEST-PROTOCOL.md`](docs/TEST-PROTOCOL.md)
 for coverage, options, and the operations deliberately excluded from automation.
 
 ## Project structure
 
 ```
 platformio.ini        firmware build config (env b1 / b1_master / b1_slave)
-CLAUDE.md              full architecture, protocol, and progress log
-FIRMWARE-CONTRACT.md   console <-> firmware protocol contract
+CLAUDE.md              project instructions and documentation index
+AGENTS.md              Codex project instructions
+docs/FIRMWARE-CONTRACT.md   console <-> firmware protocol contract/history
+docs/PROTOCOL-REFERENCE.md  current mesh and JSON protocol reference
+docs/TEST-PROTOCOL.md       validation scope and test procedures
+docs/PROGRESS-ARCHIVE.md    chronological history and incident archive
+docs/KNOWN-PITFALLS.md      detailed implementation traps
 src/                   firmware (mesh, animation, servo engine, OTA, ...)
 console/               WPF supervision console
   MainWindow.xaml(.cs)   header + card grid
@@ -173,7 +178,7 @@ console/               WPF supervision console
   Help/                  in-app help content (Markdown + manifest)
   installer/             NSIS installer + release script
 console.tests/         headless xUnit suite (Sequencer) + JSON golden fixtures
-docs/                  SEQUENCER-HARDENING.md backlog, hardware/ PCB concepts
+docs/                  architecture, protocol, testing, history, Sequencer and hardware docs
 tools/                 self-test, bench scripts, espflash, release scripts
 ```
 

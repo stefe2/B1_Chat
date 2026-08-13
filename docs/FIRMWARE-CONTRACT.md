@@ -9,9 +9,11 @@ code didn't exist yet.
 proposed, or superseded/fully removed by a later redesign. There is nothing
 outstanding from this contract; it's kept as the historical rationale for
 those decisions (in particular the field-rename reasoning §6 explains, which
-CLAUDE.md's "Known pitfalls" section still references). For the protocol's
-current, authoritative shape, see CLAUDE.md's "JSON serial protocol" section;
-for how each item actually evolved over time, see its Progress log.
+the project's detailed pitfall reference still covers). For the protocol's
+current authoritative implementation, use `src/mesh_comm.h` and
+`src/serial_console.cpp`; this document records the contract decisions and
+their implementation status. For how each item evolved over time, see the
+Progress archive.
 
 ## ⚑ Resolution summary (current firmware: 1.10.0, proto 5)
 
@@ -49,8 +51,8 @@ owns multi-track audio playback entirely client-side (`AudioLane`/
 `AudioClip`/`AudioPlaybackService`) and drives it in sync with real mesh
 `anim` commands from the Sequencer's own `Play`, no firmware audio
 involvement at all. `volume`/`playTrack` (console→master) and the
-`config` evt's `volume` field are gone with it. See CLAUDE.md's Progress
-log for the full removal.
+`config` evt's `volume` field are gone with it. See `PROGRESS-ARCHIVE.md` for
+the full removal history.
 
 ## 3. Reading the general configuration — implemented (fw 1.0.0)
 
@@ -108,8 +110,8 @@ its onboard player. Sequences are entirely console-driven now (own timers,
 
 ## 6. Absolute-time sequence model — implemented (fw 1.5.0), then removed (fw 1.7.0)
 
-Kept in full below for its field-rename rationale, still referenced by
-CLAUDE.md's "Known pitfalls" — but this entire model (and the `seq*` command
+Kept in full below for its field-rename rationale, also summarized in
+`KNOWN-PITFALLS.md` — but this entire model (and the `seq*` command
 family it belongs to) no longer exists in the firmware as of fw 1.7.0; skip to
 the bullet list's last point if you just want the outcome.
 

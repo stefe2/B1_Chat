@@ -13,7 +13,7 @@ Related documents:
 - [`SEQUENCER-HARDENING.md`](SEQUENCER-HARDENING.md) — the tracked backlog
   (`SEQ-*` items, decision log, evidence log). **That** file records what is
   still open; **this** file records what currently ships.
-- [`../FIRMWARE-CONTRACT.md`](../FIRMWARE-CONTRACT.md) — protocol contract
+- [`FIRMWARE-CONTRACT.md`](FIRMWARE-CONTRACT.md) — protocol contract
   status.
 
 This file describes shipped behavior. When behavior changes, update this file
