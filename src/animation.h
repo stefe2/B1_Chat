@@ -9,13 +9,13 @@
 //    is finished and the hold time has elapsed.
 //  - Variation via `seed`: slight deterministic jitter on targets and
 //    durations, so the same animation feels alive rather than repetitive.
-//  See project.md (section 6).
+//  See CLAUDE.md (section 6).
 // ============================================================================
 
 #include <Arduino.h>
 #include "servo_engine.h"
 
-// Animation IDs (must stay aligned with project.md §6).
+// Animation IDs (must stay aligned with CLAUDE.md §6).
 enum AnimId : uint8_t {
     ANIM_IDLE           = 0,
     ANIM_LOOK_AROUND    = 1,

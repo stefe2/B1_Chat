@@ -5,7 +5,7 @@
 //
 //  Fed by the MSG_NEIGHBORS reports received from each droid (see
 //  mesh_comm.h) and by the master's own direct neighborhood. Each edge is
-//  directed: {from} heard {to} directly, at {rssi}. See project.md §5.
+//  directed: {from} heard {to} directly, at {rssi}. See CLAUDE.md §5.
 // ============================================================================
 
 #include <Arduino.h>

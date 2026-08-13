@@ -9,7 +9,7 @@
 //  - Security  : every frame is HMAC-SHA256-signed (truncated) with the group
 //                key; messages from another group / tampered ones are
 //                rejected. The TTL is excluded from the signature (mutated on relay).
-//  See project.md (sections 5 and 9).
+//  See CLAUDE.md (sections 5 and 9).
 // ============================================================================
 
 #include <Arduino.h>
@@ -318,7 +318,7 @@ public:
 
     // Copies up to `maxOut` "fresh" (< staleMs) direct radio neighbors into
     // `out`. Returns the number copied. Used to build the periodic
-    // neighborhood report (topology), see project.md §5.
+    // neighborhood report (topology), see CLAUDE.md §5.
     uint8_t copyNeighbors(NeighborEntry* out, uint8_t maxOut, uint32_t staleMs) const;
 
 private:

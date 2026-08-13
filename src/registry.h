@@ -6,7 +6,7 @@
 //  Fed by incoming messages (heartbeat, anim, ...). Tracks for each droid:
 //  srcId, RSSI, last-seen timestamp. Lets us detect new connections and
 //  offline droids (timeout).
-//  See project.md (§10).
+//  See CLAUDE.md (§10).
 //
 //  Incoming application messages are copied by the ESP-NOW callback into
 //  main.cpp's bounded inbox, then these setters run from loop(). Public

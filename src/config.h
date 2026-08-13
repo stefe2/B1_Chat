@@ -2,7 +2,7 @@
 
 // ============================================================================
 //  B1 Battle Droid — Hardware configuration and global constants
-//  See project.md (section 3 Wiring) for wiring details.
+//  See CLAUDE.md (section 3 Wiring) for wiring details.
 // ============================================================================
 
 #include <Arduino.h>
