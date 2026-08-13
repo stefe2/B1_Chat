@@ -55,13 +55,24 @@ public interface ISequencerProtocol
     void SetServo(ushort target, bool enabled);
 }
 
-/// <summary>Audio side effects consumed by the Sequencer.</summary>
+/// <summary>
+/// Audio side effects consumed by the Sequencer. The audio-specific seams (probe, waveform
+/// decoding, media handles) live in <c>AudioAbstractions.cs</c>.
+/// </summary>
 public interface ISequencerAudioPlayer
 {
-    void Play(string? path, bool loop = false);
+    /// <summary>
+    /// <paramref name="clipId"/> is the playback plan's source order for this clip. It is optional
+    /// so the existing dispatch call site stays unchanged; it exists only so a failure can name
+    /// the clip that caused it (SEQ-F07).
+    /// </summary>
+    void Play(string? path, bool loop = false, int clipId = 0);
     void PauseAll();
     void ResumeAll();
     void StopAll();
+
+    /// <summary>Raised when a clip cannot play. Playback of the other clips continues.</summary>
+    event Action<AudioPlaybackFailure>? PlaybackFailed;
 }
 
 /// <summary>

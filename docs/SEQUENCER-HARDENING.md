@@ -6,14 +6,14 @@ Scope: WPF console Sequencer, console-side audio, serial/mesh animation dispatch
 and the small firmware changes needed to give playback safe stop semantics.
 
 This document is the persistent source of truth for making the Animation
-Sequencer reliable. It carries **only actionable work** — the 40 items that are
+Sequencer reliable. It carries **only actionable work** — the 35 items that are
 open, in progress or awaiting hardware validation.
 
 Three companion documents hold the rest, so this one stays cheap to read:
 
 - [SEQUENCER-BEHAVIOR.md](SEQUENCER-BEHAVIOR.md) — what currently *ships*, at
   runtime. Read it before changing Sequencer behavior.
-- [SEQUENCER-DONE.md](SEQUENCER-DONE.md) — the 36 closed items with their
+- [SEQUENCER-DONE.md](SEQUENCER-DONE.md) — the 41 closed items with their
   acceptance criteria and the completion evidence log.
 - [SEQUENCER-IDEAS.md](SEQUENCER-IDEAS.md) — EPIC I and EPIC K, 30 deferred
   design ideas gated behind the M1–M4 baseline.
@@ -89,7 +89,7 @@ along is the Sequencer".
 | C | Dirty, Undo/Redo and editing transactions | 8 / 8 | 0 / 1 |
 | D | Import, export and local library | 8 / 8 | 0 / 1 |
 | E | Deterministic scheduler and performance | 5 / 6 | 0 / 1 |
-| F | Duration and audio robustness | 1 / 8 | — |
+| F | Duration and audio robustness | 6 / 8 | — |
 | G | Preflight and ergonomics | 0 / 14 | 0 / 4 |
 | H | Automated and hardware validation | 1 / 8 | — |
 | I | Scene & Show System (future) | — | 0 / 22 |
@@ -187,7 +187,7 @@ along is the Sequencer".
 
 ## EPIC F — Duration and audio robustness
 
-1 completed item moved to [SEQUENCER-DONE.md](SEQUENCER-DONE.md): SEQ-F02.
+6 completed items moved to [SEQUENCER-DONE.md](SEQUENCER-DONE.md): SEQ-F02, SEQ-F03, SEQ-F04, SEQ-F05, SEQ-F06, SEQ-F07.
 
 ### [H] SEQ-F01 — Model finite, immediate and infinite gesture duration correctly
 
@@ -210,63 +210,6 @@ along is the Sequencer".
   Speed values on the bench and confirm they remain inside the calculated
   target-specific ranges. The implementation and formula-level tests are
   complete; this measurement is the only open acceptance check.
-
-### [ ] SEQ-F03 — Notify the UI when an audio filename changes
-
-- **Priority:** P1
-- **Problem:** `FileName` is derived from `FilePath` but receives no property
-  notification after Replace file.
-- **Depends on:** none.
-- **Acceptance:** replacing a path immediately updates the displayed basename and
-  related missing/error state.
-- **Validation:** model binding test plus manual replace check.
-
-### [ ] SEQ-F04 — Keep zero/unknown-duration audio clips visible and editable
-
-- **Priority:** P1
-- **Problem:** probe failure returns duration 0, producing a zero-width clip with
-  no useful error affordance.
-- **Depends on:** SEQ-F05.
-- **Acceptance:** unknown-duration clips have a minimum selectable width, a clear
-  warning badge/tooltip, and do not silently define an invalid sequence end.
-- **Validation:** missing, corrupt, unsupported, and valid zero-length files.
-
-### [ ] SEQ-F05 — Add bounded audio probing and actionable errors
-
-- **Priority:** P1
-- **Problem:** duration probing has no timeout/cancellation and collapses every
-  failure to 0; media decoding depends on installed Windows codecs.
-- **Depends on:** SEQ-E01 for a testable service boundary.
-- **Acceptance:** probe returns a typed success/failure result, closes resources
-  on every path, supports timeout/cancellation, and surfaces codec/file errors
-  without blocking the UI.
-- **Validation:** success, failure event, thrown URI/open error, timeout, cancel,
-  and file removed during probe.
-
-### [ ] SEQ-F06 — Prevent stale waveform assignment and cache invalidation bugs
-
-- **Priority:** P1
-- **Problem:** an old decode can finish after Replace and overwrite the new
-  waveform; the permanent path-only cache survives file replacement and caches
-  failures indefinitely.
-- **Depends on:** SEQ-E01.
-- **Acceptance:** assignments verify clip generation/path; cache keys include
-  stable file metadata or support invalidation; failed/cancelled tasks can retry;
-  cache growth is bounded.
-- **Validation:** rapid replace, same-path content change, missing-then-created
-  file, cancellation, and repeated-file cases.
-
-### [ ] SEQ-F07 — Manage MediaPlayer lifecycle and playback failures
-
-- **Priority:** P1
-- **Problem:** completed non-looping players remain open until global Stop and
-  playback failures are silent.
-- **Depends on:** SEQ-E01.
-- **Acceptance:** ended/failed players detach handlers, close, and leave the
-  active set; failures identify the clip; Pause/Resume touches only genuinely
-  active players; StopAll remains idempotent.
-- **Validation:** concurrent clips, natural end, loop, failure, pause after one
-  clip ended, and repeated Stop tests.
 
 ### [ ] SEQ-F08 — Define audio-loop duration against the sequence endpoint
 
@@ -634,7 +577,7 @@ along is the Sequencer".
   every failure.
 - **Validation:** fixture suite passes on a clean machine path.
 
-### [ ] SEQ-H05 — Cover audio and waveform services
+### [~] SEQ-H05 — Cover audio and waveform services
 
 - **Priority:** P1
 - **Depends on:** SEQ-F03 through SEQ-F08, SEQ-H01.
@@ -642,6 +585,21 @@ along is the Sequencer".
   players, stale waveform prevention, cache invalidation, missing files, and
   audio loop endpoint behavior.
 - **Validation:** service suite plus a Windows Media Foundation smoke test.
+- **Implemented:** 37 tests in `console.tests/AudioServiceTests.cs` covering every
+  probe outcome (success, missing, empty path, decode failure, no timespan, valid
+  zero length, timeout, cancellation before and during, throwing Open, file removed
+  after the check), the playback lifecycle (natural end, loop, failure reported
+  once, missing file, throwing start, concurrent clips, resume after one clip
+  ended, resume without pause, idempotent Stop, pause/stop/resume) and the waveform
+  cache (single decode, same-path content change, missing file, retry after
+  failure, retry after the file appears, bounded capacity, empty path), plus the
+  stale-assignment race driven through the view model. A committed MP3 fixture is
+  decoded by NAudio for real, asserting a rising envelope so a broken bucket
+  mapping fails the suite. `tools/self-test.ps1` gained an audio invariant check
+  and a Media Foundation presence check.
+- **Remaining:** audio loop endpoint coverage, which cannot exist before SEQ-F08
+  defines that endpoint. The MediaPlayer half of the smoke test needs a dispatcher
+  and stays in `self-test.ps1` rather than the headless suite.
 
 ### [ ] SEQ-H06 — Add UI interaction smoke tests/checklists
 
@@ -761,8 +719,10 @@ sequential. Unless a test seam must be introduced first, follow this order:
     [SEQUENCER-IDEAS.md](SEQUENCER-IDEAS.md), remain deferred until the M1–M4
     reliability baseline is complete and their shared design is approved.
 
-Steps 1 through 7 are complete; their items are in
-[SEQUENCER-DONE.md](SEQUENCER-DONE.md). Live work starts at step 8.
+Steps 1 through 7 are complete and step 8 is most of the way there — only SEQ-F08
+(blocked on SEQ-E05) and SEQ-F01's bench measurement remain. Closed items are in
+[SEQUENCER-DONE.md](SEQUENCER-DONE.md); live work is now step 9, preflight and
+ergonomics.
 
 ### Immediate implementation batches
 

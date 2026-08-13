@@ -73,19 +73,22 @@ design reference and is never loaded at runtime.
 | `Services/ProtocolClient.cs` | central state: parses incoming `evt` JSON, builds outgoing `cmd` JSON |
 | `Services/UpdateService.cs` · `FlashService.cs` · `LibraryService.cs` · `SettingsService.cs` | GitHub updates (per-train tag filtering, semantic maximum), espflash flashing, Scene library, `settings.json` |
 | `Services/OtaService.cs` | drives an OTA session one slave at a time: reads the `.bin`, computes the MD5, sends one fragment per `evt:otaChunkAck` |
-| `Services/AudioPlaybackService.cs` | console-side Sequencer audio, the only audio source since the DFPlayer was retired in fw 1.6.0: several concurrent `MediaPlayer`s, `PauseAll`/`ResumeAll`, and a one-off duration probe |
+| `Services/AudioPlaybackService.cs` | console-side Sequencer audio, the only audio source since the DFPlayer was retired in fw 1.6.0: one media handle per clip, retired as soon as it ends or fails, with failures reported per clip |
+| `Services/AudioAbstractions.cs` | audio seams and result types: `IAudioProbe`, `IWaveformDecoder`, `IMediaHandle`/factory, `AudioProbeResult`, `AudioPlaybackFailure` |
+| `Services/AudioProbe.cs` | bounded duration probe — typed outcome, timeout, cancellation, handle released on every path |
+| `Services/MediaPlayerHandle.cs` | the real `IMediaHandle` over WPF `MediaPlayer`. Its events only fire on a thread with a running dispatcher, which is why callers reach it from the UI thread |
 | `Services/SequencerAbstractions.cs` | the test seams: injectable monotonic clock, timer, protocol sender, audio player and dialog boundaries — what lets `console.tests` run playback headlessly |
 | `Services/SequencerEditHistory.cs` | begin/commit/cancel edit transactions plus bounded newest-first Undo/Redo (50 each), with no WPF or playback dependency |
 | `Services/SequenceImportService.cs` · `SequencerPersistenceServices.cs` | side-effect-free strict parser/migrator for `b1-sequence` v1–v5, and atomic sibling-temp-plus-rename writing |
 | `Services/AnimationDurationProvider.cs` | single source for each gesture's kind (immediate/finite/infinite), effective tail, target-speed-aware range, provisional state and inspector text |
-| `Services/PlaybackGeneration.cs` · `WaveformService.cs` | per-pass generation and cancellation identity; audio waveform peak decoding |
+| `Services/PlaybackGeneration.cs` · `WaveformService.cs` | per-pass generation and cancellation identity; audio waveform peak decoding with a metadata-keyed, bounded cache |
 | `Services/DarkTitleBar.cs` | recolors the native Win32 title bar (`DwmSetWindowAttribute`, Windows 11 22H2+) on all 7 app-owned windows |
 | `Services/InstallationVerifier.cs` | backs `--verify-install`, the self-check the NSIS installer runs against the installed binaries |
 | `Services/TraceLog.cs` | optional serial trace to `%LOCALAPPDATA%\B1ChatConsole\serial-trace.log` |
 | `Converters/` | binding converters: boolean/visibility/brush/text, `StrengthToBrushConverter` (mesh link color by RSSI), the timeline set (`TimelineGeometryConverter`, `TimelineActiveConverter`, `AnimFamilyToBrushConverter`, `WaveformToGeometryConverter`, `TrackMutedConverter`), firmware status, and `MarkdownToFlowDocumentConverter` for Help |
 | `Help/manifest.json` + `Help/docs/**/*.md` | in-app Help content, sections → pages, copied to the output directory as Content rather than embedded |
 | `b1-chat-console.csproj` | auto-incremented build number, version from `VersionPrefix`, `IncludeNativeLibrariesForSelfExtract`, `tools/` (espflash plus the app-local VC143 x64 runtime) excluded from the single file but copied on publish |
-| `console.tests/` (repo root, `b1-chat-console.Tests.csproj`) | headless xUnit suite: playback plan and integration, transport state boundaries, edit history, import/persistence, Scene library, duration provider, plus `Fixtures/Sequences/sequence-v1..v4.json` golden files. Runs without WPF or hardware and must not bump `console/build.number` |
+| `console.tests/` (repo root, `b1-chat-console.Tests.csproj`) | headless xUnit suite: playback plan and integration, transport state boundaries, edit history, import/persistence, Scene library, duration provider, audio probe/lifecycle/waveform, plus `Fixtures/Sequences/sequence-v1..v4.json` golden files and `Fixtures/Audio/probe-tone-1500ms.mp3`. Runs without WPF or hardware and must not bump `console/build.number` |
 | `installer/b1-chat-console.nsi` + `release.ps1` | NSIS installer and the GitHub release script (tag `vX.Y.Z`) |
 
 Main grid layout (`MainWindow.xaml`): Droids (left column) · Mesh Topology

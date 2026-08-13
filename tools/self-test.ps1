@@ -269,6 +269,29 @@ Invoke-Test "Debounces snapshot their target" {
     "target snapshots + load suppression detected"
 }
 
+Invoke-Test "Audio failures are bounded and typed" {
+    Assert-Source "console/Services/AudioProbe.cs" "AudioProbeStatus\.Timeout" "duration probe has no timeout outcome"
+    Assert-Source "console/Services/AudioProbe.cs" "handle\?\.Dispose\(\)" "duration probe does not release its media handle"
+    Assert-Source "console/Services/AudioPlaybackService.cs" "PlaybackFailed" "playback failures are not surfaced"
+    Assert-Source "console/Services/WaveformService.cs" "LastWriteTimeUtc" "waveform cache key ignores file changes"
+    Assert-Source "console/ViewModels/SequencerViewModel.cs" "clip\.WaveformToken != token" "stale waveform assignment is not rejected"
+    "typed probe + bounded cache + reported playback failures detected"
+}
+
+# The headless suite covers the NAudio decode path with a committed MP3 fixture. This check is the
+# other half of SEQ-H05: MediaPlayer needs Media Foundation, which Windows N/KN editions can omit
+# entirely — the same component the installer warns about at setup time.
+Invoke-Test "Media Foundation smoke check" {
+    $fixture = Join-Path $repo "console.tests/Fixtures/Audio/probe-tone-1500ms.mp3"
+    if (-not (Test-Path $fixture)) { throw "audio fixture missing: $fixture" }
+    $mfplat = Join-Path $env:WINDIR "System32/mfplat.dll"
+    if (-not (Test-Path $mfplat)) {
+        throw "mfplat.dll not found — Sequencer audio playback will not work on this machine (Windows N/KN needs the Media Feature Pack)"
+    }
+    $size = (Get-Item $fixture).Length
+    "Media Foundation present; audio fixture $([math]::Round($size / 1KB, 1)) KB"
+}
+
 if (-not $SkipSerial) {
     $device = Find-B1Master
     if ($null -eq $device) {

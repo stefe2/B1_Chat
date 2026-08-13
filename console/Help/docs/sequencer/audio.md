@@ -17,6 +17,17 @@ fail to render even when the rest of the console continues working.
 Use unprotected, locally stored files for the most reliable show setup. Test the
 exact PC, output device, volume, and files before a performance.
 
+## When a file cannot be read
+
+A clip whose duration cannot be read — missing file, missing codec, unreadable
+stream — is still added to the timeline. It keeps a minimum width so you can
+select and replace it, and it carries a **⚠ badge with an orange border**; the
+tooltip states the reason. Such a clip counts as zero length, so it never silently
+changes where the sequence ends.
+
+If a clip fails during playback, the Sequencer names the file and the reason
+instead of failing silently, and the rest of the pass continues.
+
 ## Add and arrange audio
 
 - Choose **+ Add audio lane** for another named row.
@@ -43,9 +54,9 @@ separate transport option that restarts the complete pass.
 ## Pause and resume
 
 Pause retains the position of audio that is already playing. Resume continues
-that audio and schedules future clips. Stop closes all active players. Pressing
-Play during an active pass first stops existing audio to avoid stacking duplicate
-players.
+that audio and schedules future clips; a clip that already finished before the
+Pause is not restarted. Stop closes all active players. Pressing Play during an
+active pass first stops existing audio to avoid stacking duplicate players.
 
 ## Files are linked, not embedded
 

@@ -464,7 +464,6 @@
                                                         <Border Canvas.Top="5" Height="42" CornerRadius="5" BorderThickness="1"
                                                                 BorderBrush="#80FF9D2E"
                                                                 Cursor="SizeAll"
-                                                                ToolTip="Drag to change the start time or move this clip to another audio lane. Right-click for Replace, Loop, and Delete."
                                                                 Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=ItemsControl, AncestorLevel=2}}"
                                                                 MouseLeftButtonDown="AudioClip_MouseLeftButtonDown"
                                                                 MouseMove="AudioClip_MouseMove"
@@ -485,11 +484,18 @@
                                                             <Border.Style>
                                                                 <Style TargetType="Border">
                                                                     <Setter Property="Opacity" Value="1" />
+                                                                    <Setter Property="ToolTip" Value="Drag to change the start time or move this clip to another audio lane. Right-click for Replace, Loop, and Delete." />
                                                                     <Style.Triggers>
                                                                         <!-- Dimmed while "in hand" (same convention as gesture clips) —
                                                                              the clip itself glides with the cursor, no ghost. -->
                                                                         <DataTrigger Binding="{Binding Dragging}" Value="True">
                                                                             <Setter Property="Opacity" Value="0.55" />
+                                                                        </DataTrigger>
+                                                                        <!-- Unreadable duration: the tooltip explains the badge instead
+                                                                             of repeating the drag instructions (SEQ-F04). -->
+                                                                        <DataTrigger Binding="{Binding HasDurationWarning}" Value="True">
+                                                                            <Setter Property="ToolTip" Value="{Binding StatusTooltip}" />
+                                                                            <Setter Property="BorderBrush" Value="#E0FFB347" />
                                                                         </DataTrigger>
                                                                     </Style.Triggers>
                                                                 </Style>
@@ -516,8 +522,12 @@
                                                                     <Binding Path="DataContext.PxPerMs" RelativeSource="{RelativeSource AncestorType=ItemsControl, AncestorLevel=2}" />
                                                                 </MultiBinding>
                                                             </Canvas.Left>
+                                                            <!-- AudioWidth (not Duration): keeps a clip whose duration is
+                                                                 unknown or zero wide enough to select and right-click. The
+                                                                 floor is visual only — DurationMs stays 0 so an unreadable
+                                                                 file never defines the sequence end (SEQ-F04). -->
                                                             <Border.Width>
-                                                                <MultiBinding Converter="{StaticResource TimelineGeometryConv}" ConverterParameter="Duration">
+                                                                <MultiBinding Converter="{StaticResource TimelineGeometryConv}" ConverterParameter="AudioWidth">
                                                                     <Binding Path="DurationMs" />
                                                                     <Binding Path="DataContext.PxPerMs" RelativeSource="{RelativeSource AncestorType=ItemsControl, AncestorLevel=2}" />
                                                                 </MultiBinding>
@@ -530,6 +540,10 @@
                                                                 </Viewbox>
                                                                 <StackPanel Orientation="Horizontal" IsHitTestVisible="False"
                                                                             VerticalAlignment="Top" Margin="7,3,0,0">
+                                                                    <!-- Unreadable duration: the clip says so instead of silently
+                                                                         collapsing to a zero-width sliver (SEQ-F04). -->
+                                                                    <TextBlock Text="⚠" FontSize="9" Margin="0,0,3,0" Foreground="#FFB347"
+                                                                               Visibility="{Binding HasDurationWarning, Converter={StaticResource BoolToVisConv}}" />
                                                                     <TextBlock Text="🔁" FontSize="9" Margin="0,0,3,0"
                                                                                Visibility="{Binding Loop, Converter={StaticResource BoolToVisConv}}" />
                                                                     <TextBlock Text="{Binding FileName}" FontSize="9.5" FontWeight="Bold"

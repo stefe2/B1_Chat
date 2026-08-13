@@ -145,6 +145,35 @@ broadcast plus targeted overlap is serialized but flagged because mesh arrival
 remains ambiguous. The transport displays a hoverable SCHEDULE warning for those
 conflicts.
 
+## Audio robustness
+
+Everything below runs console-side; the droids have no audio hardware.
+
+**Duration probing.** `AudioProbe` returns a typed `AudioProbeResult`
+(`Ok`, `FileMissing`, `DecodeFailed`, `Timeout`, `Cancelled`), is bounded by a
+10 s default timeout, accepts a cancellation token, and disposes its media handle
+on every exit path including timeout and exception. A file that opens but reports
+no timespan is a `DecodeFailed`; a valid but empty file is an `Ok` at 0 ms.
+
+**Unreadable clips stay visible.** A failed probe still inserts the clip. It
+renders at a minimum width, shows a ⚠ badge and an orange border, and its tooltip
+carries the reason. Its `DurationMs` remains 0, so it never defines the end of the
+sequence — the width floor is presentation only.
+
+**Playback lifecycle.** Each clip owns one media handle. A non-looping clip that
+ends, or any clip that fails, detaches its handlers, closes and leaves the active
+set immediately; a looping clip rewinds and stays. `PauseAll`/`ResumeAll`
+therefore touch only genuinely active clips, and Resume cannot restart something
+that already finished. `StopAll` is idempotent. A playback failure is reported
+once, naming the clip, and the rest of the pass continues.
+
+**Waveforms.** The decode cache is keyed on path plus file size and last-write
+time, so replacing a file's contents under the same name invalidates it. Failed
+and cancelled decodes are not cached, so they can retry. The cache is bounded
+(64 entries, least-recently-used evicted). Each clip carries a waveform token
+bumped whenever its source changes; a decode that finishes after the clip moved on
+is discarded rather than overwriting the current envelope.
+
 ## Editing policy during playback
 
 Persistent editing is permitted only in `Stopped`: timeline content, Loop,

@@ -18,12 +18,18 @@ namespace b1_chat_console.Converters;
 ///   "ClipTop" — same inputs as "Top", plus a vertical inset (ClipInsetY) so a clip floats
 ///             centered inside its contiguous 52px row (mockup's .clip top:5/bottom:5) while
 ///             the row background itself still starts at the raw row top.
-///   "Duration" — {durationMs (int), pxPerMs (double)} -> double. Same math as "Left" (a
-///             duration is just "a span of ms" at bind time) — used for the audio bar's width.
+///   "AudioWidth" — {durationMs (int), pxPerMs (double)} -> double. Audio clip width, with its
+///             own floor so a clip whose duration is unknown (failed probe) or genuinely zero
+///             stays visible, selectable and right-clickable instead of collapsing to nothing
+///             (SEQ-F04). The floor is purely visual: the clip's DurationMs stays 0, so an
+///             unreadable file never silently defines the end of the sequence.
 /// </summary>
 public class TimelineGeometryConverter : IMultiValueConverter
 {
     private const double MinWidth = 18;
+    // Wider than a gesture clip's floor: an audio clip in this state also shows a warning badge
+    // next to its (trimmed) filename.
+    public const double MinAudioWidth = 26;
     // Vertical breathing room of a clip inside its row (row height 52 - 2×5 = 42px clip).
     public const double ClipInsetY = 5;
 
@@ -35,7 +41,7 @@ public class TimelineGeometryConverter : IMultiValueConverter
             "Width" => ConvertWidth(values),
             "Top" => ConvertTop(values),
             "ClipTop" => ConvertTop(values) + ClipInsetY,
-            "Duration" => ConvertLeft(values),
+            "AudioWidth" => ConvertAudioWidth(values),
             _ => 0.0,
         };
     }
@@ -54,6 +60,12 @@ public class TimelineGeometryConverter : IMultiValueConverter
         var durationMs = ToDouble(values[0]);
         var pxPerMs = ToDouble(values[1]);
         return Math.Max(MinWidth, durationMs * pxPerMs);
+    }
+
+    private static double ConvertAudioWidth(object[] values)
+    {
+        if (values.Length < 2) return MinAudioWidth;
+        return Math.Max(MinAudioWidth, ToDouble(values[0]) * ToDouble(values[1]));
     }
 
     private static double ConvertTop(object[] values)

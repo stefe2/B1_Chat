@@ -692,6 +692,88 @@ For what the shipped behavior actually does at runtime, read
   1500 ms and explicitly labeled provisional; the former independent 800 ms
   converter fallbacks were removed.
 
+### [x] SEQ-F03 — Notify the UI when an audio filename changes
+
+- **Priority:** P1
+- **Problem:** `FileName` is derived from `FilePath` but receives no property
+  notification after Replace file.
+- **Depends on:** none.
+- **Acceptance:** replacing a path immediately updates the displayed basename and
+  related missing/error state.
+- **Validation:** model binding test plus manual replace check.
+- **Implemented:** `FilePath` carries `[NotifyPropertyChangedFor(nameof(FileName))]`,
+  so Replace file… updates the displayed basename immediately. The probe status,
+  warning flag and tooltip are notified from the same source change.
+
+### [x] SEQ-F04 — Keep zero/unknown-duration audio clips visible and editable
+
+- **Priority:** P1
+- **Problem:** probe failure returns duration 0, producing a zero-width clip with
+  no useful error affordance.
+- **Depends on:** SEQ-F05.
+- **Acceptance:** unknown-duration clips have a minimum selectable width, a clear
+  warning badge/tooltip, and do not silently define an invalid sequence end.
+- **Validation:** missing, corrupt, unsupported, and valid zero-length files.
+- **Implemented:** a failed probe still inserts the clip. The new `AudioWidth`
+  converter mode floors its rendered width at 26 px and it shows a ⚠ badge, an
+  orange border and the reason in its tooltip. The floor is presentation only —
+  `DurationMs` stays 0, so an unreadable file never defines the sequence end. A
+  valid but empty file is a success at 0 ms and carries no warning.
+
+### [x] SEQ-F05 — Add bounded audio probing and actionable errors
+
+- **Priority:** P1
+- **Problem:** duration probing has no timeout/cancellation and collapses every
+  failure to 0; media decoding depends on installed Windows codecs.
+- **Depends on:** SEQ-E01 for a testable service boundary.
+- **Acceptance:** probe returns a typed success/failure result, closes resources
+  on every path, supports timeout/cancellation, and surfaces codec/file errors
+  without blocking the UI.
+- **Validation:** success, failure event, thrown URI/open error, timeout, cancel,
+  and file removed during probe.
+- **Implemented:** `AudioProbe` returns a typed `AudioProbeResult`
+  (`Ok`/`FileMissing`/`DecodeFailed`/`Timeout`/`Cancelled`), bounded by a 10 s
+  default timeout and a cancellation token. The media handle is disposed on every
+  exit path, including timeout and a throwing Open. A source that opens but reports
+  no timespan is a decode failure naming a possibly missing codec.
+
+### [x] SEQ-F06 — Prevent stale waveform assignment and cache invalidation bugs
+
+- **Priority:** P1
+- **Problem:** an old decode can finish after Replace and overwrite the new
+  waveform; the permanent path-only cache survives file replacement and caches
+  failures indefinitely.
+- **Depends on:** SEQ-E01.
+- **Acceptance:** assignments verify clip generation/path; cache keys include
+  stable file metadata or support invalidation; failed/cancelled tasks can retry;
+  cache growth is bounded.
+- **Validation:** rapid replace, same-path content change, missing-then-created
+  file, cancellation, and repeated-file cases.
+- **Implemented:** the cache key is path plus file size and last-write time, so
+  replacing a file's contents under the same name invalidates it. Failed and
+  cancelled decodes are not cached and can retry; the cache is bounded at 64
+  entries with least-recently-used eviction. Each clip carries a waveform token
+  bumped on every source change, and a decode that lands after the clip moved on is
+  discarded instead of overwriting the current envelope.
+
+### [x] SEQ-F07 — Manage MediaPlayer lifecycle and playback failures
+
+- **Priority:** P1
+- **Problem:** completed non-looping players remain open until global Stop and
+  playback failures are silent.
+- **Depends on:** SEQ-E01.
+- **Acceptance:** ended/failed players detach handlers, close, and leave the
+  active set; failures identify the clip; Pause/Resume touches only genuinely
+  active players; StopAll remains idempotent.
+- **Validation:** concurrent clips, natural end, loop, failure, pause after one
+  clip ended, and repeated Stop tests.
+- **Implemented:** one media handle per clip, behind an `IMediaHandle` seam. A
+  non-looping clip that ends, or any clip that fails, detaches its handlers, closes
+  and leaves the active set; a looping clip rewinds and stays. Pause/Resume touch
+  only active clips, so Resume can no longer restart something that already
+  finished. `StopAll` is idempotent, and a failure is reported once with the clip
+  that caused it.
+
 ## EPIC H — Automated and hardware validation
 
 ### [x] SEQ-H01 — Create a Sequencer-focused test project and fixtures
@@ -711,6 +793,8 @@ Append concise evidence when closing items; do not paste full build logs.
 
 | Date | Items | Evidence |
 |---|---|---|
+| 2026-08-13 | SEQ-F03, SEQ-F04, SEQ-F05, SEQ-F06, SEQ-F07 | Audio robustness batch. Probe, waveform decoding and media lifecycle moved behind `IAudioProbe`, `IWaveformDecoder` and `IMediaHandle`; typed probe results with timeout and cancellation; unreadable clips stay visible and badged without affecting sequence length; metadata-keyed bounded waveform cache with stale-assignment rejection; per-clip media handles retired on end or failure with the failure reported. Console build clean, 0 warnings.
+| 2026-08-13 | SEQ-H05 (in progress) | Sequencer suite 181 to 218 tests, all passing (`dotnet test`, 304 ms). New `AudioServiceTests.cs` drives probe, lifecycle and cache policy through fakes, plus a real NAudio decode of the committed `probe-tone-1500ms.mp3` fixture asserting a rising envelope. `tools/self-test.ps1 -SkipSerial`: 21 passed, 0 failed (19 before), report `b1-self-test-20260813-011856.json`. Audio loop endpoint coverage still blocked on SEQ-F08.
 | 2026-08-11 | Planning baseline | Static review complete; console build previously clean; implementation not started. |
 | 2026-08-11 | SEQ-A01, SEQ-A02, SEQ-A04, SEQ-A05, SEQ-A07, SEQ-E01 | Immutable pass records, generation cancellation, dispatch-time mute, disconnect/shutdown cleanup, monotonic clock and injected protocol/audio/timer/clock seams; 12 tests passed. |
 | 2026-08-11 | SEQ-H01 | Headless xUnit project, reusable document/JSON fixtures and fake protocol/audio/timer/clock added; default self-test runs the suite without changing the product build number. |

@@ -43,7 +43,25 @@ enables/disables a servo, previews a position, or starts an animation.
 - verifies that the installer checks Windows/CPU compatibility, warns when the
   optional Windows media stack is absent, and executes both installed binaries;
 - verifies that animation/calibration debounces snapshot their target and that
-  calibration loads suppress write-back callbacks.
+  calibration loads suppress write-back callbacks;
+- verifies that the audio duration probe is typed and bounded, that playback
+  failures are surfaced, that the waveform cache key follows file changes and
+  that stale waveform assignments are rejected;
+- verifies that Media Foundation (`mfplat.dll`) is present on this machine and
+  that the audio test fixture is in place. This check fails on a Windows N/KN
+  edition without the Media Feature Pack — the same condition the installer warns
+  about — because Sequencer audio playback would not work there.
+
+The Sequencer suite also covers the audio services: every probe outcome
+(success, missing file, decode failure, source without a timespan, valid
+zero-length file, timeout, cancellation before and during the probe, throwing
+open, file removed after the existence check), the media lifecycle (natural end,
+loop restart, failure reported once, concurrent clips, resume after a clip ended,
+idempotent Stop) and the waveform cache (single decode, same-path content change,
+retry after failure, bounded capacity), plus the stale-decode race driven through
+the view model. One test decodes a committed MP3 fixture with NAudio for real and
+asserts a rising envelope, so a broken bucket mapping or a missing MP3 decoder
+fails the suite rather than producing a silently flat waveform.
 
 ### Safe serial integration checks
 

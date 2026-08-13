@@ -10,8 +10,8 @@ in the same commit as the behavior it describes.
 | [PROTOCOL-REFERENCE.md](PROTOCOL-REFERENCE.md) | Current mesh message types and USB JSON bridge | Checking a message type or JSON command |
 | [FIRMWARE-CONTRACT.md](FIRMWARE-CONTRACT.md) | Historical console ↔ firmware contract and why fields were renamed | Understanding the rationale behind a protocol decision |
 | [SEQUENCER-BEHAVIOR.md](SEQUENCER-BEHAVIOR.md) | What the Sequencer currently does at runtime | Changing transport, scheduling, editing or Scene behavior |
-| [SEQUENCER-HARDENING.md](SEQUENCER-HARDENING.md) | The 40 actionable Sequencer items, dashboard, decision log, execution order | Picking up Sequencer work or checking what is still open |
-| [SEQUENCER-DONE.md](SEQUENCER-DONE.md) | The 36 closed items with acceptance criteria and evidence log | Proving an item shipped, or preparing the SEQ-H08 release gate |
+| [SEQUENCER-HARDENING.md](SEQUENCER-HARDENING.md) | The 35 actionable Sequencer items, dashboard, decision log, execution order | Picking up Sequencer work or checking what is still open |
+| [SEQUENCER-DONE.md](SEQUENCER-DONE.md) | The 41 closed items with acceptance criteria and evidence log | Proving an item shipped, or preparing the SEQ-H08 release gate |
 | [SEQUENCER-IDEAS.md](SEQUENCER-IDEAS.md) | EPIC I and K: 30 deferred design ideas | Designing something structural that those ideas must stay compatible with |
 | [KNOWN-PITFALLS.md](KNOWN-PITFALLS.md) | Implementation traps: flash/NVS, OTA, concurrency, timing, WPF | Touching firmware storage, OTA, timing, or WPF layout and input |
 | [TEST-PROTOCOL.md](TEST-PROTOCOL.md) | Validation scope, what is covered and what is deliberately excluded | Running or adding tests |

@@ -24,6 +24,8 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     private readonly ISequencerSettings _settings;
     private readonly ISequenceLibraryService _library;
     private readonly ISequencerAudioPlayer _audioPlayer;
+    private readonly IAudioProbe _audioProbe;
+    private readonly IWaveformDecoder _waveformDecoder;
     private readonly IPlaybackWakeScheduler _timerScheduler;
     private readonly IPlaybackTimerScheduler _executionTimerScheduler;
     private readonly IPlaybackClock _playbackClock;
@@ -248,6 +250,12 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         Environment.NewLine,
         _scheduleWarnings.Select(warning => $"{FormatTimecode(warning.StartMs)} — {warning.Message}"));
 
+    // Audio clips that failed to play during the current pass (SEQ-F07). A failure no longer
+    // passes in silence; it names the clip and survives until the next pass starts.
+    private readonly List<string> _audioFailures = new();
+    public bool HasAudioFailures => _audioFailures.Count > 0;
+    public string AudioFailureText => string.Join(Environment.NewLine, _audioFailures);
+
     private readonly record struct GestureTargetState(uint RequestId, int AnimId)
     {
         public bool IsInfinite => AnimId is 16 or 17;
@@ -345,11 +353,16 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         IPlaybackTimerScheduler? executionTimerScheduler = null,
         ISequencerPersistenceDialogs? persistenceDialogs = null,
         IAtomicTextFileWriter? atomicFileWriter = null,
-        ISequenceLibraryService? library = null)
+        ISequenceLibraryService? library = null,
+        IAudioProbe? audioProbe = null,
+        IWaveformDecoder? waveformDecoder = null)
     {
         _protocol = protocol;
         _settings = settings;
         _audioPlayer = audioPlayer ?? new AudioPlaybackService();
+        _audioProbe = audioProbe ?? new AudioProbe();
+        _waveformDecoder = waveformDecoder ?? WaveformService.Shared;
+        _audioPlayer.PlaybackFailed += OnAudioPlaybackFailed;
         _timerScheduler = timerScheduler ?? new ThreadPoolPlaybackTimerScheduler();
         _executionTimerScheduler = executionTimerScheduler ?? new ThreadPoolPlaybackTimerScheduler();
         _playbackClock = playbackClock ?? new StopwatchPlaybackClock();
@@ -782,6 +795,8 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         _protocol.AnimMasterAccepted -= OnAnimMasterAccepted;
         _protocol.AnimExecutionReceived -= OnAnimExecutionReceived;
         _protocol.LinkClosed -= OnProtocolLinkClosed;
+        _audioPlayer.PlaybackFailed -= OnAudioPlaybackFailed;
+        (_audioPlayer as IDisposable)?.Dispose();
     }
 
     // --- Timeline: tracks, ruler, zoom, playhead --------------------------------
@@ -1116,15 +1131,19 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         if (lane == null) return;
         var dlg = new OpenFileDialog { Filter = AudioFileFilter };
         if (dlg.ShowDialog() != true) return;
-        var durationMs = await AudioPlaybackService.ProbeDurationMsAsync(dlg.FileName);
+        var probe = await _audioProbe.ProbeAsync(dlg.FileName);
         // The duration probe yields to WPF. Playback may have started while it was open; in that
         // case the edit lock wins and the picked file is simply not inserted into the active pass.
         if (!CanEditSequence || !AudioLanes.Contains(lane)) return;
+        // A failed probe still inserts the clip: the operator sees it, badged with the reason,
+        // and can replace the file. Dropping it silently was the old behavior (SEQ-F04/F05).
         var clip = new AudioClip
         {
             FilePath = dlg.FileName,
-            DurationMs = durationMs,
+            DurationMs = probe.DurationMs,
             StartMs = Math.Max(0, RoundToGrid(PlayheadMs)),
+            ProbeStatus = probe.Status,
+            ProbeMessage = probe.Ok ? null : probe.Describe(),
         };
         InsertAudioClip(lane, clip);
         _ = LoadWaveformAsync(clip);
@@ -1137,9 +1156,9 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         var dlg = new OpenFileDialog { Filter = AudioFileFilter };
         if (dlg.ShowDialog() != true) return;
         var replacementPath = dlg.FileName;
-        var replacementDurationMs = await AudioPlaybackService.ProbeDurationMsAsync(replacementPath);
+        var probe = await _audioProbe.ProbeAsync(replacementPath);
         if (!CanEditSequence || !AudioLanes.Any(l => l.Clips.Contains(clip))) return;
-        ReplaceAudioClipSource(clip, replacementPath, replacementDurationMs);
+        ReplaceAudioClipSource(clip, replacementPath, probe.DurationMs, probe);
         _ = LoadWaveformAsync(clip);
     }
 
@@ -1150,7 +1169,8 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         return ExecuteSequenceEdit(() => lane.Clips.Add(clip));
     }
 
-    internal bool ReplaceAudioClipSource(AudioClip clip, string path, int durationMs)
+    internal bool ReplaceAudioClipSource(
+        AudioClip clip, string path, int durationMs, AudioProbeResult? probe = null)
     {
         if (!CanEditSequence || !AudioLanes.Any(lane => lane.Clips.Contains(clip))) return false;
         return ExecuteSequenceEdit(() =>
@@ -1158,15 +1178,43 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
             clip.FilePath = path;
             clip.Peaks = null; // stale for the new file until the fresh decode below completes
             clip.DurationMs = durationMs;
+            clip.ProbeStatus = probe?.Status ?? AudioProbeStatus.Ok;
+            clip.ProbeMessage = probe is { Ok: false } result ? result.Describe() : null;
+            // Invalidate any decode still in flight for the previous file (SEQ-F06).
+            clip.NextWaveformToken();
         });
     }
 
     // Fire-and-forget from every clip-creation path (Add/Replace/load) — decoding happens off
-    // the UI thread in WaveformService; only the final property write is marshalled back.
-    private async Task LoadWaveformAsync(AudioClip clip)
+    // the UI thread in the waveform decoder; only the final property write is marshalled back.
+    // The token check is what stops a slow decode of a replaced file from overwriting the new
+    // clip's envelope, including when both files share the same path (SEQ-F06).
+    internal async Task LoadWaveformAsync(AudioClip clip)
     {
-        var peaks = await WaveformService.GetPeaksAsync(clip.FilePath);
-        RunOnUiThread(() => clip.Peaks = peaks);
+        var token = clip.WaveformToken;
+        var peaks = await _waveformDecoder.GetPeaksAsync(clip.FilePath);
+        RunOnUiThread(() =>
+        {
+            if (clip.WaveformToken != token) return;
+            clip.Peaks = peaks;
+        });
+    }
+
+    private void OnAudioPlaybackFailed(AudioPlaybackFailure failure) => RunOnUiThread(() =>
+    {
+        var message = $"{failure.FileName} — {failure.Message}";
+        if (_audioFailures.Contains(message)) return;
+        _audioFailures.Add(message);
+        OnPropertyChanged(nameof(HasAudioFailures));
+        OnPropertyChanged(nameof(AudioFailureText));
+    });
+
+    private void ClearAudioFailures()
+    {
+        if (_audioFailures.Count == 0) return;
+        _audioFailures.Clear();
+        OnPropertyChanged(nameof(HasAudioFailures));
+        OnPropertyChanged(nameof(AudioFailureText));
     }
 
     [RelayCommand(CanExecute = nameof(CanEditSequence))]
@@ -1205,6 +1253,14 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
             foreach (var c in dto.Clips)
             {
                 var clip = new AudioClip { FilePath = c.FilePath, DurationMs = c.DurationMs, StartMs = c.StartMs, Loop = c.Loop };
+                // A Scene stores paths, not audio. Flag a file that has since moved or been
+                // deleted right away, rather than letting the operator discover it at Play
+                // time — a cheap existence check, no decoding (SEQ-F04).
+                if (!string.IsNullOrWhiteSpace(c.FilePath) && !File.Exists(c.FilePath))
+                {
+                    clip.ProbeStatus = AudioProbeStatus.FileMissing;
+                    clip.ProbeMessage = $"File not found: {clip.FileName}";
+                }
                 lane.Clips.Add(clip);
                 _ = LoadWaveformAsync(clip);
             }
@@ -1892,6 +1948,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
             Steps, AudioLanes, AnimDurationMsLookup, Loop,
             resolveDurationMs: step => step.ResolvedDurationMs);
         SetScheduleWarnings(_activePlaybackPlan.Warnings);
+        ClearAudioFailures(); // a new pass starts with a clean audio report
         _dispatchedPlaybackEvents.Clear();
         // At the natural end, Play behaves like a conventional transport and starts a new pass.
         // At every other retained cursor position it is an explicit play-from-cursor rehearsal.
@@ -2056,7 +2113,9 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
                 TerminateInfiniteGesture(termination);
                 break;
             case AudioPlaybackEvent audio:
-                _audioPlayer.Play(audio.FilePath, audio.Loop);
+                // SourceOrder is the clip's identity in this plan, so a playback failure can name
+                // the offending clip instead of reporting an anonymous audio error (SEQ-F07).
+                _audioPlayer.Play(audio.FilePath, audio.Loop, audio.SourceOrder);
                 break;
         }
     }
