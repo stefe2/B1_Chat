@@ -15,7 +15,7 @@ public sealed class SequencerStateBoundaryTests
             .OrderBy(name => name);
 
         Assert.Equal(
-            new[] { "AudioLanes", "Loop", "Name", "Steps" },
+            new[] { "AudioLanes", "EndMs", "Loop", "Name", "Steps" },
             publicProperties);
     }
 
@@ -52,6 +52,7 @@ public sealed class SequencerStateBoundaryTests
 
         Assert.False(CreateSnapshot().DocumentEquals(CreateSnapshot() with { Name = "Changed" }));
         Assert.False(CreateSnapshot().DocumentEquals(CreateSnapshot() with { Loop = false }));
+        Assert.False(CreateSnapshot().DocumentEquals(CreateSnapshot() with { EndMs = 9_000 }));
         foreach (var mutate in mutations)
         {
             var baseline = CreateSnapshot();
@@ -160,5 +161,6 @@ public sealed class SequencerStateBoundaryTests
         Steps: new List<SequenceStepDto>
         {
             new() { AnimId = 2, Target = 0x1234, StartMs = 500 },
-        });
+        },
+        EndMs: 4_000);
 }

@@ -22,7 +22,7 @@
              only inside the nested item DataTemplates below). -->
         <Border Grid.Row="0" Margin="0,0,0,8" Padding="10,7" CornerRadius="7"
                 Background="{StaticResource RecessBrush}" BorderBrush="{StaticResource BorderLoBrush}" BorderThickness="1">
-            <StackPanel Orientation="Horizontal">
+            <WrapPanel Orientation="Horizontal">
                 <!-- The primary button exposes its next action. Restart and return-to-start are
                      deliberately separate from normal Play and Stop. -->
                 <Button Style="{StaticResource IconTransportButtonStyle}" Command="{Binding PlayCommand}" ToolTip="{Binding PrimaryTransportToolTip}"
@@ -63,6 +63,20 @@
                         BorderThickness="1" CornerRadius="4" Padding="10,4" Margin="0,0,10,0" VerticalAlignment="Center"
                         ToolTip="Current playhead position followed by the total sequence duration.">
                     <TextBlock FontFamily="{StaticResource MonoFont}" FontSize="12.5" FontWeight="Bold"><Run Text="{Binding TimecodeNowText, Mode=OneWay}" Foreground="{StaticResource AccentBrush}" /><Run Text="{Binding TimecodeTotalText, Mode=OneWay}" Foreground="{StaticResource MutedBrush}" FontWeight="Normal" /></TextBlock>
+                </Border>
+
+                <Button Content="Set End" Style="{StaticResource MiniButtonStyle}"
+                        Command="{Binding SetSequenceEndAtPlayheadCommand}" Margin="0,0,4,0"
+                        ToolTip="Set a manual Scene endpoint at the playhead. Existing content is never truncated."
+                        ToolTipService.ShowOnDisabled="True" />
+                <Button Content="Auto" Style="{StaticResource MiniButtonStyle}"
+                        Command="{Binding UseAutomaticSequenceEndCommand}" Margin="0,0,4,0"
+                        ToolTip="Return the Scene endpoint to the automatically calculated content tail."
+                        ToolTipService.ShowOnDisabled="True" />
+                <Border Style="{StaticResource ValuePillStyle}" BorderBrush="#FF5BC0EB"
+                        ToolTip="{Binding SequenceEndToolTip}" Margin="0,0,10,0">
+                    <TextBlock Text="{Binding SequenceEndModeText}" Foreground="#FF5BC0EB"
+                               FontFamily="{StaticResource MonoFont}" FontWeight="Bold" FontSize="9.5" />
                 </Border>
 
                 <Rectangle Width="1" Fill="{StaticResource BorderHiBrush}" Opacity="0.5" Margin="0,2,10,2" />
@@ -131,7 +145,7 @@
                     <TextBlock Text="⚠ AUDIO" Foreground="{StaticResource BadBrush}"
                                FontFamily="{StaticResource MonoFont}" FontWeight="Bold" FontSize="10.5" />
                 </Border>
-            </StackPanel>
+            </WrapPanel>
         </Border>
 
         <!-- Body: one recessed rounded container (mockup's .body) holding the track rail,
@@ -398,6 +412,30 @@
                             </ItemsControl>
                             <Rectangle Canvas.Top="29" Height="1" Fill="#59000000" IsHitTestVisible="False"
                                        Width="{Binding TimelineWidthPx}" />
+                            <!-- Authoritative Scene endpoint: automatic at the calculated content
+                                 tail, or user-set from the playhead. Distinct cyan avoids confusing
+                                 it with the orange playhead. -->
+                            <Line Y1="0" Y2="30" Stroke="#FF5BC0EB" StrokeThickness="2"
+                                  StrokeDashArray="3,2" IsHitTestVisible="False">
+                                <Canvas.Left>
+                                    <MultiBinding Converter="{StaticResource TimelineGeometryConv}" ConverterParameter="Left">
+                                        <Binding Path="TotalDurationMsValue" />
+                                        <Binding Path="PxPerMs" />
+                                    </MultiBinding>
+                                </Canvas.Left>
+                            </Line>
+                            <Border Background="#FF17384A" BorderBrush="#FF5BC0EB" BorderThickness="1"
+                                    CornerRadius="3" Padding="4,1" Canvas.Top="2" IsHitTestVisible="False">
+                                <Border.RenderTransform><TranslateTransform X="3" /></Border.RenderTransform>
+                                <Canvas.Left>
+                                    <MultiBinding Converter="{StaticResource TimelineGeometryConv}" ConverterParameter="Left">
+                                        <Binding Path="TotalDurationMsValue" />
+                                        <Binding Path="PxPerMs" />
+                                    </MultiBinding>
+                                </Canvas.Left>
+                                <TextBlock Text="END" Foreground="#FFBDEBFF" FontFamily="{StaticResource MonoFont}"
+                                           FontWeight="Bold" FontSize="8" />
+                            </Border>
                             <!-- Playhead flag (mockup's clipped pentagon), glowing accent. -->
                             <Polygon Points="0,0 13,0 13,8 6.5,13 0,8" Fill="{StaticResource AccentBrush}" IsHitTestVisible="False">
                                 <Polygon.Effect>
@@ -460,6 +498,15 @@
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
+                                        <Line Y1="0" Y2="52" Stroke="#FF5BC0EB" StrokeThickness="1.5"
+                                              StrokeDashArray="3,2" Opacity="0.9" IsHitTestVisible="False">
+                                            <Canvas.Left>
+                                                <MultiBinding Converter="{StaticResource TimelineGeometryConv}" ConverterParameter="Left">
+                                                    <Binding Path="DataContext.TotalDurationMsValue" RelativeSource="{RelativeSource AncestorType=ItemsControl}" />
+                                                    <Binding Path="DataContext.PxPerMs" RelativeSource="{RelativeSource AncestorType=ItemsControl}" />
+                                                </MultiBinding>
+                                            </Canvas.Left>
+                                        </Line>
                                         <ItemsControl ItemsSource="{Binding Clips}">
                                             <ItemsControl.ItemsPanel>
                                                 <ItemsPanelTemplate><Canvas /></ItemsPanelTemplate>
@@ -815,6 +862,16 @@
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
+
+                            <Line X1="0" X2="0" Y1="0" Y2="{Binding TracksHeightPx}" IsHitTestVisible="False"
+                                  Stroke="#FF5BC0EB" StrokeThickness="1.5" StrokeDashArray="3,2" Opacity="0.9">
+                                <Canvas.Left>
+                                    <MultiBinding Converter="{StaticResource TimelineGeometryConv}" ConverterParameter="Left">
+                                        <Binding Path="TotalDurationMsValue" />
+                                        <Binding Path="PxPerMs" />
+                                    </MultiBinding>
+                                </Canvas.Left>
+                            </Line>
 
                             <Line X1="0" X2="0" Y1="0" Y2="{Binding TracksHeightPx}" IsHitTestVisible="False"
                                   Stroke="{StaticResource AccentBrush}" StrokeThickness="1.5">

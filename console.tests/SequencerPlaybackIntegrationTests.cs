@@ -377,6 +377,24 @@ public sealed class SequencerPlaybackIntegrationTests
     }
 
     [Fact]
+    public void EmptyDocument_WithManualEndpointRunsOneSilentTimedPass()
+    {
+        var scheduler = new FakePlaybackTimerScheduler();
+        using var vm = CreateViewModel(new FakeSequencerProtocol(), scheduler);
+        vm.PlayheadMs = 750;
+        vm.SetSequenceEndAtPlayheadCommand.Execute(null);
+        vm.ReturnToStartCommand.Execute(null);
+
+        vm.PlayCommand.Execute(null);
+
+        Assert.True(vm.IsPlaying);
+        Assert.Equal(750, Assert.Single(scheduler.Entries).DueTimeMs);
+        scheduler.Entries[0].Invoke();
+        Assert.False(vm.IsPlaying);
+        Assert.Equal(750, vm.PlayheadMs);
+    }
+
+    [Fact]
     public void AudioOnlyPass_DispatchesCapturedPathAndLoopValue()
     {
         var protocol = new FakeSequencerProtocol();
@@ -404,6 +422,99 @@ public sealed class SequencerPlaybackIntegrationTests
         Assert.Equal(@"C:\fixtures\original.wav", played.Path);
         Assert.True(played.Loop);
         vm.StopCommand.Execute(null);
+    }
+
+    [Fact]
+    public void LoopingAudioRunsUntilManualSceneEndpointThenStopsExactlyOnce()
+    {
+        var scheduler = new FakePlaybackTimerScheduler();
+        var audio = new FakeAudioPlayer();
+        using var vm = CreateViewModel(new FakeSequencerProtocol(), scheduler, audio: audio);
+        Assert.True(vm.InsertAudioClip(vm.AudioLanes[0], new AudioClip
+        {
+            StartMs = 100,
+            DurationMs = 500,
+            FilePath = "ambient.wav",
+            Loop = true,
+        }));
+        vm.PlayheadMs = 2_000;
+        vm.SetSequenceEndAtPlayheadCommand.Execute(null);
+        vm.ReturnToStartCommand.Execute(null);
+
+        vm.PlayCommand.Execute(null);
+        Assert.Equal(100, scheduler.Entries[0].DueTimeMs);
+        scheduler.Entries[0].Invoke();
+
+        var played = Assert.Single(audio.Actions, action => action.Kind == "Play");
+        Assert.True(played.Loop);
+        Assert.Equal(1_900, scheduler.Entries[1].DueTimeMs);
+        scheduler.Entries[1].Invoke();
+
+        Assert.False(vm.IsPlaying);
+        Assert.Equal(2_000, vm.PlayheadMs);
+        Assert.Equal(2, audio.Actions.Count(action => action.Kind == "StopAll"));
+    }
+
+    [Fact]
+    public void WholePassLoopStopsOldAudioAtEndpointBeforeRearmingFromZero()
+    {
+        var scheduler = new FakePlaybackTimerScheduler();
+        var audio = new FakeAudioPlayer();
+        using var vm = CreateViewModel(new FakeSequencerProtocol(), scheduler, audio: audio);
+        Assert.True(vm.InsertAudioClip(vm.AudioLanes[0], new AudioClip
+        {
+            StartMs = 100,
+            DurationMs = 500,
+            FilePath = "ambient.wav",
+            Loop = true,
+        }));
+        vm.PlayheadMs = 1_500;
+        vm.SetSequenceEndAtPlayheadCommand.Execute(null);
+        vm.EditableLoop = true;
+        vm.ReturnToStartCommand.Execute(null);
+
+        vm.PlayCommand.Execute(null);
+        scheduler.Entries[0].Invoke();
+        scheduler.Entries[1].Invoke();
+
+        Assert.True(vm.IsPlaying);
+        Assert.Equal(100, scheduler.Entries[2].DueTimeMs);
+        Assert.Single(audio.Actions, action => action.Kind == "Play");
+        Assert.Equal(2, audio.Actions.Count(action => action.Kind == "StopAll"));
+        vm.StopCommand.Execute(null);
+    }
+
+    [Fact]
+    public void PauseResumePreservesLoopingAudioAndRemainingExplicitEndpointTime()
+    {
+        var scheduler = new FakePlaybackTimerScheduler();
+        var clock = new FakePlaybackClock();
+        var audio = new FakeAudioPlayer();
+        using var vm = CreateViewModel(
+            new FakeSequencerProtocol(), scheduler, audio: audio, clock: clock);
+        Assert.True(vm.InsertAudioClip(vm.AudioLanes[0], new AudioClip
+        {
+            StartMs = 100,
+            DurationMs = 500,
+            FilePath = "ambient.wav",
+            Loop = true,
+        }));
+        vm.PlayheadMs = 2_000;
+        vm.SetSequenceEndAtPlayheadCommand.Execute(null);
+        vm.ReturnToStartCommand.Execute(null);
+
+        vm.PlayCommand.Execute(null);
+        scheduler.Entries[0].Invoke();
+        clock.SetElapsed(TimeSpan.FromMilliseconds(600));
+        vm.PauseCommand.Execute(null);
+        vm.PlayCommand.Execute(null);
+
+        Assert.Equal(1_400, scheduler.Entries[^1].DueTimeMs);
+        Assert.Contains(audio.Actions, action => action.Kind == "PauseAll");
+        Assert.Contains(audio.Actions, action => action.Kind == "ResumeAll");
+        scheduler.Entries[^1].Invoke();
+        Assert.False(vm.IsPlaying);
+        Assert.Equal(2_000, vm.PlayheadMs);
     }
 
     [Fact]
@@ -693,6 +804,8 @@ public sealed class SequencerPlaybackIntegrationTests
         var audio = new AudioClip { StartMs = 500, DurationMs = 100, FilePath = "fixture.wav" };
         sourceLane.Clips.Add(audio);
         var libraryItem = new SequenceLibraryItem();
+        vm.PlayheadMs = 2_000;
+        vm.SetSequenceEndAtPlayheadCommand.Execute(null);
 
         void AssertPersistentCommands(bool expected)
         {
@@ -710,6 +823,8 @@ public sealed class SequencerPlaybackIntegrationTests
             Assert.Equal(expected, vm.DeleteFromLibraryCommand.CanExecute(libraryItem));
             Assert.Equal(expected, vm.SaveSceneCommand.CanExecute(null));
             Assert.Equal(expected, vm.SaveSceneAsCommand.CanExecute(null));
+            Assert.Equal(expected, vm.SetSequenceEndAtPlayheadCommand.CanExecute(null));
+            Assert.Equal(expected, vm.UseAutomaticSequenceEndCommand.CanExecute(null));
         }
 
         void AssertInspectionAndRuntimeControlsRemainAvailable()
@@ -797,13 +912,18 @@ public sealed class SequencerPlaybackIntegrationTests
             var steps = string.Join(";", vm.Steps.Select(s => $"{s.AnimId},{s.Target},{s.StartMs},{s.EndAfterMs}"));
             var lanes = string.Join(";", vm.AudioLanes.Select(l =>
                 $"{l.Label}[{string.Join("/", l.Clips.Select(c => $"{c.FilePath},{c.DurationMs},{c.StartMs},{c.Loop}"))}]"));
-            return $"{vm.Name}|{vm.Loop}|{steps}|{lanes}";
+            return $"{vm.Name}|{vm.Loop}|{vm.SequenceEndMs}|{steps}|{lanes}";
         }
 
         var cases = new (string Name, Action<SequencerViewModel> Arrange, Action<SequencerViewModel> Edit)[]
         {
             ("sequence name", _ => { }, vm => Assert.True(vm.SetSequenceName("Scene A"))),
             ("sequence loop", _ => { }, vm => vm.EditableLoop = true),
+            ("sequence end", _ => { }, vm =>
+            {
+                vm.PlayheadMs = 2_500;
+                vm.SetSequenceEndAtPlayheadCommand.Execute(null);
+            }),
             ("insert gesture", _ => { }, vm => vm.InsertGestureAt(2, vm.Tracks[0], 100)),
             ("gesture animation", vm =>
             {

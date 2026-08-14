@@ -226,6 +226,7 @@ internal static class SequenceExportSerializer
             ["version"] = SequenceImportService.CurrentVersion,
             ["name"] = document.Name,
             ["loop"] = document.Loop,
+            ["endMs"] = document.EndMs,
             ["tracks"] = new JsonArray(tracks.Select(track => (JsonNode)new JsonObject
             {
                 ["id"] = track.Id,

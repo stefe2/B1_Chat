@@ -121,6 +121,25 @@ retained cursor: earlier gesture events remain skipped, while audio clips that
 overlap the cursor seek to their matching source offsets (modulo their duration
 when looping). At the natural end Play starts a fresh pass from zero.
 
+## Scene endpoint and loop boundaries
+
+Every Scene has one authoritative endpoint, drawn as a cyan dashed `END` line
+and shown by the total timecode. `END AUTO` follows the latest effective gesture
+or audio tail. **Set End** changes it to `END SET` at the stopped playhead; it may
+extend the Scene but never truncate existing content. Moving content later in the
+same edit advances a fixed endpoint with it. **Auto** returns to the calculated
+tail. Endpoint mode/value are persistent document state, participate in
+Dirty/Undo/Redo, and are locked during Play/Pause.
+
+A looping audio clip repeats its natural media cycle until this Scene endpoint;
+it no longer needs an unrelated later clip merely to keep the pass alive. At the
+endpoint, non-Loop playback stops every audio handle and retains the endpoint
+cursor. Whole-pass Loop first stops the old audio generation and completes any
+scheduled infinite-gesture termination at that boundary, then starts exactly one
+fresh pass from t = 0. Generation checks prevent stale boundary callbacks from
+rearming an older pass. An automatic empty Scene remains a Play no-op; a Scene
+with a fixed non-zero endpoint may intentionally run as a silent timed pass.
+
 ## Timeline navigation (`SequenceTimelineView.xaml.cs`)
 
 A visible `Follow` toggle keeps the playhead inside a 15–72 % viewport comfort
@@ -146,6 +165,10 @@ batches. A monotonic cursor drains every due batch in source order, catches up
 late host wakes without drift accumulation, then rearms the same timer for the
 next batch/end boundary. Pause/Stop/generation replacement disposes the timer
 completely.
+
+The final wake is always armed against the immutable pass endpoint, independently
+of the last event timestamp. This makes empty timed passes, extended audio loops
+and whole-pass Loop share the same deterministic boundary.
 
 Same-target gestures retain editor order with last-received-wins semantics;
 broadcast plus targeted overlap is serialized but flagged because mesh arrival
@@ -182,6 +205,12 @@ that already finished. `StopAll` is idempotent. A playback failure is reported
 once per clip, naming the file in a visible `⚠ AUDIO` transport badge and tooltip,
 and the rest of the pass continues.
 
+**Audio-loop endpoint.** A clip's natural duration remains its seek/modulo cycle;
+its `Loop` flag never fabricates an unbounded document tail. Once started, the
+player repeats until the immutable Scene endpoint and is stopped exactly once at
+that pass boundary. Pause/Resume retains its media position, while whole-pass Loop
+closes the old handle before starting the next pass.
+
 **Play from cursor.** Starting a stopped pass inside an audio clip opens that
 clip and seeks to the elapsed source position before playback. Looping clips use
 the matching modulo phase. Earlier gesture clips are not reconstructed because
@@ -197,7 +226,7 @@ is discarded rather than overwriting the current envelope.
 ## Editing policy during playback
 
 Persistent editing is permitted only in `Stopped`: timeline content, Loop,
-inspector fields, audio lanes/clips, Undo/Redo, Clear, and Scene
+Scene endpoint, inspector fields, audio lanes/clips, Undo/Redo, Clear, and Scene
 Save/Save As/Trash all lock during Play and Pause. Selection/inspection, track
 arming, runtime track mute, zoom/Snap/Fit/scroll/Follow, and Export remain
 available because they do not change the immutable pass being performed.
@@ -219,8 +248,8 @@ Clip drags use a 5 px threshold before opening a transaction. Escape, lost mouse
 capture, view unload and window deactivation restore the pre-edit snapshot and
 clear gesture/audio drag state, library ghosts and ruler capture; cancelled
 ruler scrubbing restores its starting playhead. Inspector properties,
-sequence/audio Loop, lane labels/order and sequence name share the same
-transaction path. Undo and Redo are newest-first bounded lists retaining exactly
+sequence/audio Loop, Scene endpoint, lane labels/order and sequence name share
+the same transaction path. Undo and Redo are newest-first bounded lists retaining exactly
 50 snapshots; document snapshots exclude every transient editor/telemetry field.
 
 ## Type boundaries
@@ -234,19 +263,22 @@ transient selection, viewport, drag visuals, waveform and execution telemetry.
 ## Import and schema versions
 
 File import is validate-then-apply. `SequenceImportService` strictly parses
-`b1-sequence` schemas 1–5 into a temporary `ImportedSequenceDocument`, checks
+`b1-sequence` schemas 1–6 into a temporary `ImportedSequenceDocument`, checks
 identities, bounded counts/strings/timing and target/gesture ranges, and runs
 named migrations before the ViewModel mutates. V1 `delayMs` values are
 cumulative waits after the current gesture, producing absolute starts from the
 sum of prior delays. Retired numeric DFPlayer `audioTrack` metadata is validated
 but intentionally discarded; it cannot identify a console-side audio file.
 
-**Schema v5** (`SequenceImportService.CurrentVersion`, also the version Export
-writes) adds `endAfterMs`: POWER_DOWN/TALK persist a real user-visible endpoint
+**Schema v5** adds `endAfterMs`: POWER_DOWN/TALK persist a real user-visible endpoint
 (default/migration 2 s, edited in 100 ms steps in the inspector) instead of a
 purely indicative clip width. A v5 document containing an infinite gesture
 without that field is rejected rather than silently re-guessed; older schemas
 migrate to the default.
+
+**Schema v6** (`SequenceImportService.CurrentVersion`, also the version Export
+writes) adds root `endMs`: JSON `null` means automatic content-tail mode; a
+bounded integer is the user-set endpoint. Versions 1–5 migrate to automatic mode.
 
 ## Dirty state and atomic persistence
 

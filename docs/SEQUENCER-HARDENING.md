@@ -6,14 +6,14 @@ Scope: WPF console Sequencer, console-side audio, serial/mesh animation dispatch
 and the small firmware changes needed to give playback safe stop semantics.
 
 This document is the persistent source of truth for making the Animation
-Sequencer reliable. It carries **only actionable work** — the 35 items that are
+Sequencer reliable. It carries **only actionable work** — the 28 items that are
 open, in progress or awaiting hardware validation.
 
 Three companion documents hold the rest, so this one stays cheap to read:
 
 - [SEQUENCER-BEHAVIOR.md](SEQUENCER-BEHAVIOR.md) — what currently *ships*, at
   runtime. Read it before changing Sequencer behavior.
-- [SEQUENCER-DONE.md](SEQUENCER-DONE.md) — the 42 closed items with their
+- [SEQUENCER-DONE.md](SEQUENCER-DONE.md) — the 49 closed items with their
   acceptance criteria and the completion evidence log.
 - [SEQUENCER-IDEAS.md](SEQUENCER-IDEAS.md) — EPIC I and EPIC K, 30 deferred
   design ideas gated behind the M1–M4 baseline.
@@ -88,10 +88,10 @@ along is the Sequencer".
 | B | Infinite gestures and Stop/Pause semantics | 6 / 6 | 0 / 1 |
 | C | Dirty, Undo/Redo and editing transactions | 8 / 8 | 0 / 1 |
 | D | Import, export and local library | 8 / 8 | 0 / 1 |
-| E | Deterministic scheduler and performance | 5 / 6 | 0 / 1 |
-| F | Duration and audio robustness | 6 / 8 | — |
+| E | Deterministic scheduler and performance | 6 / 6 | 0 / 1 |
+| F | Duration and audio robustness | 7 / 8 | — |
 | G | Preflight and ergonomics | 5 / 14 | 0 / 5 |
-| H | Automated and hardware validation | 1 / 8 | — |
+| H | Automated and hardware validation | 2 / 8 | — |
 | I | Scene & Show System (future) | — | 0 / 22 |
 | J | Commissioning and servo configuration safety | 0 / 2 | — |
 | K | Project workspace (future) | — | 0 / 8 |
@@ -160,19 +160,7 @@ along is the Sequencer".
 
 ## EPIC E — Deterministic scheduler and performance
 
-5 completed items moved to [SEQUENCER-DONE.md](SEQUENCER-DONE.md): SEQ-E01, SEQ-E02, SEQ-E03, SEQ-E04, SEQ-E06.
-
-### [ ] SEQ-E05 — Make sequence end and whole-pass Loop explicit
-
-- **Priority:** P1
-- **Problem:** the end is inferred from natural clip tails; a looping audio clip
-  alone ends after one natural duration, and infinite gestures use fake tails.
-- **Depends on:** SEQ-B04, SEQ-F01, SEQ-F08.
-- **Acceptance:** define an explicit calculated/user end marker and loop region
-  semantics. At a loop boundary, players and hardware state transition once,
-  without stacking or gaps caused by stale callbacks.
-- **Validation:** empty, audio-only loop, infinite-gesture, mixed, zero-duration,
-  and whole-pass Loop cases.
+6 completed items moved to [SEQUENCER-DONE.md](SEQUENCER-DONE.md): SEQ-E01, SEQ-E02, SEQ-E03, SEQ-E04, SEQ-E05, SEQ-E06.
 
 ### [D] SEQ-E07 — Add master-side scheduled execution
 
@@ -187,7 +175,7 @@ along is the Sequencer".
 
 ## EPIC F — Duration and audio robustness
 
-6 completed items moved to [SEQUENCER-DONE.md](SEQUENCER-DONE.md): SEQ-F02, SEQ-F03, SEQ-F04, SEQ-F05, SEQ-F06, SEQ-F07.
+7 completed items moved to [SEQUENCER-DONE.md](SEQUENCER-DONE.md): SEQ-F02, SEQ-F03, SEQ-F04, SEQ-F05, SEQ-F06, SEQ-F07, SEQ-F08.
 
 ### [H] SEQ-F01 — Model finite, immediate and infinite gesture duration correctly
 
@@ -210,17 +198,6 @@ along is the Sequencer".
   Speed values on the bench and confirm they remain inside the calculated
   target-specific ranges. The implementation and formula-level tests are
   complete; this measurement is the only open acceptance check.
-
-### [ ] SEQ-F08 — Define audio-loop duration against the sequence endpoint
-
-- **Priority:** P1
-- **Problem:** a looping clip does not extend the pass beyond its natural end, so
-  it needs unrelated later content to repeat.
-- **Depends on:** SEQ-E05.
-- **Acceptance:** looping audio runs until an explicit sequence/clip endpoint;
-  timeline representation and export schema make that endpoint clear.
-- **Validation:** loop-only, loop-with-end-marker, whole-pass Loop, Pause/Resume,
-  and Stop cases.
 
 ## EPIC G — Preflight and ergonomics
 
@@ -408,7 +385,7 @@ along is the Sequencer".
 
 ## EPIC H — Automated and hardware validation
 
-1 completed item moved to [SEQUENCER-DONE.md](SEQUENCER-DONE.md): SEQ-H01.
+2 completed items moved to [SEQUENCER-DONE.md](SEQUENCER-DONE.md): SEQ-H01, SEQ-H05.
 
 ### [ ] SEQ-H02 — Cover edit transactions, Dirty and history
 
@@ -436,8 +413,9 @@ along is the Sequencer".
   natural end, repeated Stop, disconnect in Play/Pause, disposal and cleanup;
   one-timer 10,000-event resource bounds, monotonic late-wake catch-up,
   timestamp batching, repeated stable ordering, infinite leases, three Stop
-  levels and arming invalidation are also covered. Exact lifecycle/duration end
-  semantics remain open with SEQ-A08, SEQ-B04 and SEQ-E05.
+  levels and arming invalidation are also covered. Endpoint and B04 duration-end
+  semantics are complete; the explicit Ready/Armed lifecycle remains open with
+  SEQ-A08.
 
 ### [ ] SEQ-H04 — Cover persistence validation and migrations
 
@@ -447,32 +425,6 @@ along is the Sequencer".
   overflow, unsupported and failed-write cases; current document is preserved on
   every failure.
 - **Validation:** fixture suite passes on a clean machine path.
-
-### [~] SEQ-H05 — Cover audio and waveform services
-
-- **Priority:** P1
-- **Depends on:** SEQ-F03 through SEQ-F08, SEQ-H01.
-- **Acceptance:** tests cover probe result types, timeout, lifecycle, concurrent
-  players, stale waveform prevention, cache invalidation, missing files, and
-  audio loop endpoint behavior.
-- **Validation:** service suite plus a Windows Media Foundation smoke test.
-- **Implemented:** 43 tests in `console.tests/AudioServiceTests.cs` covering every
-  probe outcome (success, missing, empty path, decode failure, no timespan, valid
-  zero length, timeout, cancellation before and during, throwing Open, file removed
-  after the check), the playback lifecycle (natural end, loop, failure reported
-  once, missing file, throwing start, concurrent clips, resume after one clip
-  ended, resume without pause, idempotent Stop, pause/stop/resume) and the waveform
-  cache (single decode, same-path content change, missing file, retry after
-  failure, retry after the file appears, bounded capacity, empty path), plus the
-  stale-assignment race driven through the view model. A committed MP3 fixture is
-  decoded by NAudio for real, asserting a rising envelope so a broken bucket
-  mapping fails the suite. WPF `MediaPlayer` opens the same fixture on a real STA
-  dispatcher, verifies its duration and dispatcher-owned close. Restoration tests
-  cover missing/corrupt Scene and Undo/Redo state plus zero effective tails, and a
-  source invariant requires the visible `⚠ AUDIO` binding. `tools/self-test.ps1`
-  retains a separate Media Foundation prerequisite check for actionable diagnosis.
-- **Remaining:** audio loop endpoint coverage, which cannot exist before SEQ-F08
-  defines that endpoint. The service and real MediaPlayer smoke paths are complete.
 
 ### [ ] SEQ-H06 — Add UI interaction smoke tests/checklists
 
@@ -592,8 +544,8 @@ sequential. Unless a test seam must be introduced first, follow this order:
     [SEQUENCER-IDEAS.md](SEQUENCER-IDEAS.md), remain deferred until the M1–M4
     reliability baseline is complete and their shared design is approved.
 
-Steps 1 through 7 are complete and step 8 is most of the way there — only SEQ-F08
-(blocked on SEQ-E05) and SEQ-F01's bench measurement remain. Closed items are in
+Steps 1 through 7 are complete. Step 8 is code-complete; only SEQ-F01's bench
+measurement remains. Closed items are in
 [SEQUENCER-DONE.md](SEQUENCER-DONE.md); live work is now step 9, preflight and
 ergonomics.
 
@@ -614,8 +566,8 @@ detailed commit after its full regression passes.
 
 SEQ-D09 remains deferred. The Play/Pause control and the complete transport,
 Follow, wheel-navigation and Scene-document workflow batch (SEQ-G14 through
-SEQ-G18) are closed. The next implementation batch resolves sequence/audio end
-semantics (SEQ-F08 and SEQ-E05 together).
+SEQ-G18) are closed. Sequence/audio end semantics (SEQ-E05 and SEQ-F08) and their
+audio-service coverage (SEQ-H05) are also closed after rendered Release validation.
 
 ## Decision log
 

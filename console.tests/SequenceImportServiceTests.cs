@@ -12,6 +12,8 @@ public sealed class SequenceImportServiceTests
     [InlineData("sequence-v2.json", 2)]
     [InlineData("sequence-v3.json", 3)]
     [InlineData("sequence-v4.json", 4)]
+    [InlineData("sequence-v5.json", 5)]
+    [InlineData("sequence-v6.json", 6)]
     public void GoldenSchemaFixtures_MigrateToTheCurrentDocumentShape(
         string fileName,
         int expectedVersion)
@@ -49,6 +51,17 @@ public sealed class SequenceImportServiceTests
                 Assert.Equal(new[] { "AMBIENT", "VOICE" }, document.AudioLanes.Select(lane => lane.Label));
                 Assert.Equal(new[] { 7, 8 }, document.Steps.Select(step => step.AnimId));
                 break;
+            case 5:
+                Assert.Equal("Infinite endpoint", document.Name);
+                Assert.Equal(2_250, Assert.Single(document.Steps).EndAfterMs);
+                Assert.Null(document.EndMs);
+                break;
+            case 6:
+                Assert.Equal("Explicit scene end", document.Name);
+                Assert.True(document.Loop);
+                Assert.Equal(5_000, document.EndMs);
+                Assert.True(Assert.Single(document.AudioLanes[0].Clips).Loop);
+                break;
         }
     }
 
@@ -70,7 +83,7 @@ public sealed class SequenceImportServiceTests
     }
 
     [Fact]
-    public void Version5InfiniteGesture_RequiresItsExplicitEndpoint()
+    public void CurrentSchemaInfiniteGesture_RequiresItsExplicitEndpoint()
     {
         var root = ValidCurrentDocument();
         root["steps"]![0]!["animId"] = 17;
@@ -79,6 +92,33 @@ public sealed class SequenceImportServiceTests
             SequenceImportService.Parse(root.ToJsonString()));
 
         Assert.Equal("$.steps[0].endAfterMs", error.FieldPath);
+    }
+
+    [Fact]
+    public void Version5MigratesToAutomaticSceneEnd()
+    {
+        var root = ValidCurrentDocument();
+        root["version"] = 5;
+        root.Remove("endMs");
+
+        var document = SequenceImportService.Parse(root.ToJsonString());
+
+        Assert.Equal(5, document.SourceVersion);
+        Assert.Null(document.EndMs);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(0)]
+    [InlineData(12345)]
+    public void Version6AcceptsAutomaticOrBoundedExplicitSceneEnd(int? endMs)
+    {
+        var root = ValidCurrentDocument();
+        root["endMs"] = endMs;
+
+        var document = SequenceImportService.Parse(root.ToJsonString());
+
+        Assert.Equal(endMs, document.EndMs);
     }
 
     [Theory]
@@ -98,6 +138,9 @@ public sealed class SequenceImportServiceTests
     [InlineData("too-many-lanes", "$.audioLanes")]
     [InlineData("too-many-clips", "$.audioLanes[0].clips")]
     [InlineData("missing-steps", "$.steps")]
+    [InlineData("missing-end", "$.endMs")]
+    [InlineData("invalid-end", "$.endMs")]
+    [InlineData("negative-end", "$.endMs")]
     public void SchemaValidation_RejectsUnsafeOrUnboundedDocuments(
         string scenario,
         string expectedPath)
@@ -298,6 +341,9 @@ public sealed class SequenceImportServiceTests
                     });
                 break;
             case "missing-steps": root.Remove("steps"); break;
+            case "missing-end": root.Remove("endMs"); break;
+            case "invalid-end": root["endMs"] = "late"; break;
+            case "negative-end": root["endMs"] = -1; break;
             default: throw new ArgumentOutOfRangeException(nameof(scenario));
         }
         return root;
@@ -312,6 +358,7 @@ public sealed class SequenceImportServiceTests
         ["version"] = SequenceImportService.CurrentVersion,
         ["name"] = "Valid",
         ["loop"] = false,
+        ["endMs"] = null,
         ["tracks"] = new JsonArray(
             new JsonObject { ["id"] = 0x4001, ["name"] = "R2-D2" }),
         ["audioLanes"] = new JsonArray(

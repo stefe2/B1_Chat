@@ -25,6 +25,9 @@ enables/disables a servo, previews a position, or starts an animation.
   dispatch failures, correlated master acceptance, and targeted cleanup of
   infinite gestures across broadcast overrides, Stop, restart, natural end and
   Loop boundaries;
+- validates the explicit Scene endpoint across automatic/manual mode, empty timed
+  passes, content-tail clamping, looping audio, Pause/Resume, Stop and whole-pass
+  Loop without stacked players or stale boundary rearming;
 - runs `git diff --check`;
 - verifies that the callback-to-loop mesh inbox is present;
 - verifies the per-droid animation-parameter store and targeted protocol;
@@ -72,6 +75,9 @@ tails. One test decodes a committed MP3 fixture with NAudio for real and asserts
 a rising envelope; another opens it with WPF `MediaPlayer` on a real dispatcher.
 A broken bucket mapping, missing MP3 decoder or cross-thread media teardown
 therefore fails the suite.
+
+Persistence fixtures cover every `b1-sequence` schema from v1 through v6. V6
+round trips nullable/manual `endMs`; v1–v5 migrate to automatic endpoint mode.
 
 ### Safe serial integration checks
 

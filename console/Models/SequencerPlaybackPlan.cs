@@ -16,13 +16,15 @@ public sealed class SequencerPlaybackPlan
         IReadOnlyList<SequencerPlaybackBatch> batches,
         IReadOnlyList<SequencerScheduleWarning> warnings,
         int totalDurationMs,
-        bool loop)
+        bool loop,
+        int? explicitEndMs)
     {
         Events = events;
         Batches = batches;
         Warnings = warnings;
         TotalDurationMs = totalDurationMs;
         Loop = loop;
+        ExplicitEndMs = explicitEndMs;
     }
 
     public IReadOnlyList<SequencerPlaybackEvent> Events { get; }
@@ -30,6 +32,7 @@ public sealed class SequencerPlaybackPlan
     public IReadOnlyList<SequencerScheduleWarning> Warnings { get; }
     public int TotalDurationMs { get; }
     public bool Loop { get; }
+    public int? ExplicitEndMs { get; }
 
     public static SequencerPlaybackPlan Capture(
         IEnumerable<SequenceStep> steps,
@@ -37,7 +40,8 @@ public sealed class SequencerPlaybackPlan
         IReadOnlyDictionary<int, int> animationDurationsMs,
         bool loop,
         Func<uint>? nextSeed = null,
-        Func<SequenceStep, int>? resolveDurationMs = null)
+        Func<SequenceStep, int>? resolveDurationMs = null,
+        int? sequenceEndMs = null)
     {
         ArgumentNullException.ThrowIfNull(steps);
         ArgumentNullException.ThrowIfNull(audioLanes);
@@ -85,7 +89,9 @@ public sealed class SequencerPlaybackPlan
             .OrderBy(e => e.StartMs)
             .ThenBy(e => e.SourceOrder)
             .ToArray();
-        var total = ordered.Length == 0 ? 0 : ordered.Max(EventEndMs);
+        var contentEnd = ordered.Length == 0 ? 0 : ordered.Max(EventEndMs);
+        var explicitEnd = sequenceEndMs.HasValue ? Math.Max(0, sequenceEndMs.Value) : (int?)null;
+        var total = Math.Max(contentEnd, explicitEnd ?? 0);
         var batches = ordered
             .GroupBy(playbackEvent => playbackEvent.StartMs)
             .Select(group => new SequencerPlaybackBatch(
@@ -99,7 +105,8 @@ public sealed class SequencerPlaybackPlan
             new ReadOnlyCollection<SequencerPlaybackBatch>(batches),
             new ReadOnlyCollection<SequencerScheduleWarning>(warnings),
             total,
-            loop);
+            loop,
+            explicitEnd);
     }
 
     private static SequencerScheduleWarning[] FindScheduleWarnings(

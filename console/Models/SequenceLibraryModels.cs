@@ -8,6 +8,7 @@ public class SequenceLibraryItem
     public string Id { get; set; } = "";
     public string Name { get; set; } = "";
     public bool Loop { get; set; }
+    public int? EndMs { get; set; }
     public List<SequenceTrackDto> Tracks { get; set; } = new();
     public List<AudioLaneDto> AudioLanes { get; set; } = new();
     public List<SequenceStepDto> Steps { get; set; } = new();

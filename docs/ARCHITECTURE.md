@@ -66,7 +66,7 @@ design reference and is never loaded at runtime.
 | `App.xaml(.cs)` | composition root: converters and merged resource dictionaries |
 | `Themes/Theme.xaml` | palette, button/LED/mesh-node gradients — ported from the reference page's CSS custom properties |
 | `Themes/Effects.xaml` | shared styles: `CardBorderStyle`, `BeveledButtonStyle`, `HaloBadge*Style`, `MetalSliderStyle`, `DarkComboBoxStyle`, `CardIconBoxStyle`, `MeshNodeEllipseStyle`, app-wide dark `ScrollBar`. `Themes/HelpStyles.xaml` holds the Help window's `FlowDocument` styling |
-| `Models/` | view-bound objects (`Droid`, mesh visuals, `HelpDoc`, `UpdateInfo`) and the Sequencer's explicit type boundaries: `SequenceSnapshot` (persistent document only), `SequencerPlaybackPlan` (immutable runtime pass), `AnimationDurationMetadata`, `SequenceLibraryModels` |
+| `Models/` | view-bound objects (`Droid`, mesh visuals, `HelpDoc`, `UpdateInfo`) and the Sequencer's explicit type boundaries: `SequenceSnapshot` (persistent document including nullable explicit Scene endpoint), `SequencerPlaybackPlan` (immutable runtime pass and resolved endpoint), `AnimationDurationMetadata`, `SequenceLibraryModels` |
 | `ViewModels/` | `MainViewModel` plus one per card (`DroidsViewModel`, `CalibrationViewModel`, `AnimationViewModel`, `FirmwareViewModel`, `MeshTopologyViewModel`, `SequencerViewModel`) and `HelpViewModel`, which has no `ProtocolClient` dependency because Help is local-only |
 | `Views/` | one XAML `UserControl` per card, plus `SequenceTimelineView` |
 | `Services/SerialLinkService.cs` | native serial port (`System.IO.Ports`) with 3 s auto-reconnect |
@@ -89,7 +89,7 @@ design reference and is never loaded at runtime.
 | `Converters/` | binding converters: boolean/visibility/brush/text, `StrengthToBrushConverter` (mesh link color by RSSI), the timeline set (`TimelineGeometryConverter`, `TimelineActiveConverter`, `AnimFamilyToBrushConverter`, `WaveformToGeometryConverter`, `TrackMutedConverter`), firmware status, and `MarkdownToFlowDocumentConverter` for Help |
 | `Help/manifest.json` + `Help/docs/**/*.md` | in-app Help content, sections → pages, copied to the output directory as Content rather than embedded |
 | `b1-chat-console.csproj` | auto-incremented build number, version from `VersionPrefix`, `IncludeNativeLibrariesForSelfExtract`, `tools/` (espflash plus the app-local VC143 x64 runtime) excluded from the single file but copied on publish |
-| `console.tests/` (repo root, `b1-chat-console.Tests.csproj`) | headless xUnit suite: playback plan and integration, transport state boundaries, edit history, import/persistence, Scene library, duration provider, audio probe/lifecycle/waveform, native-pixel window-placement geometry, plus `Fixtures/Sequences/sequence-v1..v4.json` golden files and `Fixtures/Audio/probe-tone-1500ms.mp3`. Runs without WPF or hardware and must not bump `console/build.number` |
+| `console.tests/` (repo root, `b1-chat-console.Tests.csproj`) | headless xUnit suite: playback plan and integration, transport/endpoint boundaries, edit history, import/persistence, Scene library, duration provider, audio probe/lifecycle/waveform, native-pixel window-placement geometry, plus `Fixtures/Sequences/sequence-v1..v6.json` golden files and `Fixtures/Audio/probe-tone-1500ms.mp3`. Runs without WPF or hardware and must not bump `console/build.number` |
 | `installer/b1-chat-console.nsi` + `release.ps1` | NSIS installer and the GitHub release script (tag `vX.Y.Z`) |
 
 Main grid layout (`MainWindow.xaml`): Droids (left column) · Mesh Topology

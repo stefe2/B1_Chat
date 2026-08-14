@@ -11,7 +11,7 @@ namespace b1_chat_console.Services;
 internal static class SequenceImportService
 {
     internal const string SchemaType = "b1-sequence";
-    internal const int CurrentVersion = 5;
+    internal const int CurrentVersion = 6;
     internal const int MaxSequenceNameLength = 128;
     internal const int MaxTrackNameLength = 128;
     internal const int MaxLaneLabelLength = 64;
@@ -67,6 +67,7 @@ internal static class SequenceImportService
                 3 => MigrateVersion3(root, name, loop),
                 4 => ReadVersion4(root, name, loop),
                 5 => ReadVersion5(root, name, loop),
+                6 => ReadVersion6(root, name, loop),
                 _ => throw Error("$.version", $"unsupported schema version {version}"),
             };
         }
@@ -117,6 +118,17 @@ internal static class SequenceImportService
         var lanes = ReadAudioLanes(root);
         var steps = ReadSteps(root, relativeDelays: false, explicitInfiniteEnds: true);
         return new ImportedSequenceDocument(5, name, loop, tracks, lanes, steps);
+    }
+
+    // Version 6 makes the Scene endpoint explicit. Null retains the calculated content tail;
+    // an integer is a user-authored endpoint that may extend (but never truncate) that tail.
+    private static ImportedSequenceDocument ReadVersion6(JsonElement root, string name, bool loop)
+    {
+        var tracks = ReadTracks(root);
+        var lanes = ReadAudioLanes(root);
+        var steps = ReadSteps(root, relativeDelays: false, explicitInfiniteEnds: true);
+        var endMs = ReadNullableInt(root, "endMs", "$", 0, MaxTimelineMs);
+        return new ImportedSequenceDocument(6, name, loop, tracks, lanes, steps, endMs);
     }
 
     private static List<SequenceTrackDto> ReadTracks(JsonElement root)
@@ -225,7 +237,7 @@ internal static class SequenceImportService
                 if (element.TryGetProperty("endAfterMs", out _))
                     endAfterMs = ReadInt(element, "endAfterMs", path, 100, MaxTimelineMs);
                 else if (animId is 16 or 17)
-                    throw Error($"{path}.endAfterMs", "infinite gestures require an explicit endpoint in schema version 5");
+                    throw Error($"{path}.endAfterMs", "infinite gestures require an explicit endpoint in schema version 5 or newer");
             }
             if ((long)startMs + endAfterMs > MaxTimelineMs && animId is 16 or 17)
                 throw Error($"{path}.endAfterMs", "infinite gesture end exceeds the timeline limit");
@@ -295,6 +307,23 @@ internal static class SequenceImportService
         return number;
     }
 
+    private static int? ReadNullableInt(
+        JsonElement parent,
+        string property,
+        string parentPath,
+        int minimum,
+        int maximum)
+    {
+        var value = Required(parent, property, parentPath);
+        if (value.ValueKind == JsonValueKind.Null) return null;
+        var path = $"{parentPath}.{property}";
+        if (value.ValueKind != JsonValueKind.Number || !value.TryGetInt32(out var number))
+            throw Error(path, "expected a 32-bit integer or null");
+        if (number < minimum || number > maximum)
+            throw Error(path, $"expected a value from {minimum} to {maximum}, or null; found {number}");
+        return number;
+    }
+
     private static bool ReadBoolean(
         JsonElement parent,
         string property,
@@ -356,7 +385,8 @@ internal sealed record ImportedSequenceDocument(
     bool Loop,
     List<SequenceTrackDto> Tracks,
     List<AudioLaneDto> AudioLanes,
-    List<SequenceStepDto> Steps);
+    List<SequenceStepDto> Steps,
+    int? EndMs = null);
 
 internal sealed class SequenceImportException : Exception
 {

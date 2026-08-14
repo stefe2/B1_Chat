@@ -52,10 +52,11 @@ gesture commands.
 ## Looping an audio clip
 
 A clip marked Loop restarts while sequence playback continues beyond that file's
-natural end. Sequence duration is calculated from the natural ends of gesture
-and audio clips, so a looping audio file needs some later/longer timeline content
-if you expect to hear it repeat before the pass ends. Whole-sequence Loop is a
-separate transport option that restarts the complete pass.
+natural end. It repeats until the cyan Scene **END** marker. In automatic mode,
+END follows the natural content tail; to hear additional repetitions, move the
+stopped playhead later and choose **Set End**. **Auto** restores the calculated
+tail. Whole-sequence Loop is separate: at END it closes the old audio pass, then
+restarts the complete Scene from zero without stacking players.
 
 ## Pause and resume
 

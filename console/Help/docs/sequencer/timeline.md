@@ -116,7 +116,10 @@ edit that leaves the persistent document unchanged creates no Undo entry and
 does not mark the sequence dirty.
 
 Gesture/target inspector changes, audio-lane names and order, clip Loop, and the
-whole-sequence Loop setting use the same history rules. Undo and Redo retain the
+whole-sequence Loop setting use the same history rules. The cyan dashed **END**
+line is also document state: **END AUTO** follows content, **Set End** fixes it
+at the stopped playhead without truncating content, and **Auto** clears that
+override. Undo and Redo retain the
 newest 50 edits; once that capacity is exceeded, the oldest snapshots are
 discarded first. Selection, armed track, droid-track mute, zoom, Snap, waveform
 peaks, execution reports, and drag visuals remain transient and create no

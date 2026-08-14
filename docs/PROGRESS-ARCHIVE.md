@@ -1042,6 +1042,19 @@ Sequencer backlog item by item.
       headless geometry tests cover those cases; full suite 235/235 and Release build clean
       (0 warnings). The user then relaunched the Release console on the smaller secondary
       monitor and confirmed that the complete window and title bar remained reachable.
+- [x] Sequencer explicit Scene endpoint and audio-loop boundary (2026-08-14).
+      Automatic mode follows the effective content tail; Set End persists a manual extension
+      at the stopped playhead and Auto clears it. The cyan dashed END marker, total timecode
+      and END AUTO/END SET badge expose the authoritative boundary. Schema v6 adds nullable
+      root `endMs`, with v1–v5 migrating to automatic mode; endpoint state participates in
+      Dirty, Undo/Redo, Local Library and external export. `SequencerPlaybackPlan` resolves the
+      immutable final wake independently of the last event, so looping audio repeats to END,
+      Pause/Resume retains it, Stop closes it, and whole-pass Loop closes the old generation
+      before starting exactly one new pass. Eighteen focused cases brought the suite to
+      253/253. Offline self-test passed 21/21, including clean firmware/WPF builds and the real
+      Media Foundation MP3 smoke (`b1-self-test-20260814-003311.json`); build number remained
+      359. The operator then confirmed the rendered endpoint controls and audible
+      repeat-to-END behavior in the Release console, closing SEQ-E05, SEQ-F08 and SEQ-H05.
 
 ## Incidents (full narratives)
 

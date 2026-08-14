@@ -1,0 +1,13 @@
+{
+  "type": "b1-sequence",
+  "version": 5,
+  "name": "Infinite endpoint",
+  "loop": false,
+  "tracks": [
+    { "id": 16385, "name": "R2-D2" }
+  ],
+  "audioLanes": [],
+  "steps": [
+    { "animId": 17, "target": 16385, "startMs": 250, "endAfterMs": 2250 }
+  ]
+}

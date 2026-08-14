@@ -80,12 +80,21 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     public IReadOnlyDictionary<int, int> AnimDurationMsLookup => _protocol.AnimDurationMs;
     private double _totalDurationMs;
     public double TotalDurationMsValue => _totalDurationMs;
+    private int _calculatedContentEndMs;
+    public int CalculatedContentEndMs => _calculatedContentEndMs;
 
     [ObservableProperty] private TimelineTrack? _armedTrack;
     [ObservableProperty] private double _pxPerSecond = 80;
     [ObservableProperty] private bool _snapToGrid = true;
     [ObservableProperty] private bool _followPlayhead = true;
     [ObservableProperty] private double _playheadMs;
+    [ObservableProperty] private int? _sequenceEndMs;
+
+    public bool HasManualSequenceEnd => SequenceEndMs.HasValue;
+    public string SequenceEndModeText => HasManualSequenceEnd ? "END SET" : "END AUTO";
+    public string SequenceEndToolTip => HasManualSequenceEnd
+        ? $"Manual Scene endpoint: {FormatTimecode(TotalDurationMsValue)}. Content is never truncated; Auto returns to the calculated tail."
+        : $"Automatic Scene endpoint follows the calculated content tail: {FormatTimecode(TotalDurationMsValue)}.";
 
     private SequencerTransportState _transportState = SequencerTransportState.Stopped;
     public SequencerTransportState TransportState => _transportState;
@@ -117,6 +126,15 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(TimecodeNowText));
         OnPropertyChanged(nameof(TimecodeTotalText));
         ReturnToStartCommand.NotifyCanExecuteChanged();
+        SetSequenceEndAtPlayheadCommand.NotifyCanExecuteChanged();
+    }
+
+    partial void OnSequenceEndMsChanged(int? value)
+    {
+        OnPropertyChanged(nameof(HasManualSequenceEnd));
+        OnPropertyChanged(nameof(SequenceEndModeText));
+        OnPropertyChanged(nameof(SequenceEndToolTip));
+        UseAutomaticSequenceEndCommand.NotifyCanExecuteChanged();
     }
 
     private static string FormatTimecode(double ms)
@@ -345,6 +363,8 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         SaveSceneCommand.NotifyCanExecuteChanged();
         SaveSceneAsCommand.NotifyCanExecuteChanged();
         ToggleAudioLoopCommand.NotifyCanExecuteChanged();
+        SetSequenceEndAtPlayheadCommand.NotifyCanExecuteChanged();
+        UseAutomaticSequenceEndCommand.NotifyCanExecuteChanged();
     }
 
     public SequencerViewModel(
@@ -965,8 +985,11 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         var audioEnd = AudioLanes.SelectMany(lane => lane.Clips)
             .Select(clip => (long)Math.Max(0, clip.StartMs) + Math.Max(0, clip.EffectiveDurationMs))
             .DefaultIfEmpty(0).Max();
-        _totalDurationMs = Math.Min(int.MaxValue, Math.Max(stepsEnd, audioEnd));
+        _calculatedContentEndMs = (int)Math.Min(int.MaxValue, Math.Max(stepsEnd, audioEnd));
+        _totalDurationMs = Math.Max(_calculatedContentEndMs, SequenceEndMs ?? 0);
+        OnPropertyChanged(nameof(CalculatedContentEndMs));
         OnPropertyChanged(nameof(TotalDurationMsValue));
+        OnPropertyChanged(nameof(SequenceEndToolTip));
     }
 
     private void RebuildRulerTicks()
@@ -1437,7 +1460,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
             Target = s.Target,
             StartMs = s.StartMs,
             EndAfterMs = s.EndAfterMs,
-        }).ToList());
+        }).ToList(), SequenceEndMs);
 
     private bool BeginSequenceEdit()
     {
@@ -1446,6 +1469,12 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
 
     private bool CommitSequenceEdit()
     {
+        // A fixed endpoint may extend a Scene but must never cut off content. Resolve the
+        // current tails before the history snapshot so moving content later advances the
+        // endpoint inside the same Undo transaction.
+        ResolveGestureDurationsAndExtent();
+        if (SequenceEndMs.HasValue && SequenceEndMs.Value < CalculatedContentEndMs)
+            SequenceEndMs = CalculatedContentEndMs;
         if (!_editHistory.Commit(Snapshot())) return false;
 
         RefreshDirtyFromCheckpoint();
@@ -1501,6 +1530,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         {
             Name = snap.Name;
             Loop = snap.Loop;
+            SequenceEndMs = snap.EndMs;
             ApplyAudioLanesFromDto(snap.AudioLanes, seedDefaultsWhenEmpty: false);
             Steps.Clear();
             foreach (var s in snap.Steps)
@@ -1575,6 +1605,22 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
 
     internal bool SetSequenceLoop(bool value) =>
         ExecuteSequenceEdit(() => Loop = value);
+
+    private bool CanSetSequenceEndAtPlayhead() =>
+        CanEditSequence && PlayheadMs >= 0 && PlayheadMs <= SequenceImportService.MaxTimelineMs;
+
+    [RelayCommand(CanExecute = nameof(CanSetSequenceEndAtPlayhead))]
+    private void SetSequenceEndAtPlayhead()
+    {
+        var requested = (int)Math.Clamp(
+            Math.Round(PlayheadMs), 0, SequenceImportService.MaxTimelineMs);
+        ExecuteSequenceEdit(() => SequenceEndMs = Math.Max(requested, CalculatedContentEndMs));
+    }
+
+    private bool CanUseAutomaticSequenceEnd() => CanEditSequence && SequenceEndMs.HasValue;
+
+    [RelayCommand(CanExecute = nameof(CanUseAutomaticSequenceEnd))]
+    private void UseAutomaticSequenceEnd() => ExecuteSequenceEdit(() => SequenceEndMs = null);
 
     internal bool SetStepAnimId(SequenceStep step, int value)
     {
@@ -1685,6 +1731,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         {
             Name = "";
             Loop = false;
+            SequenceEndMs = null;
             _fileTracks.Clear();
             ApplyAudioLanesFromDto(null);
             Steps.Clear();
@@ -1773,6 +1820,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
                 Id = id,
                 Name = sceneName,
                 Loop = document.Loop,
+                EndMs = document.EndMs,
                 Tracks = Tracks.Where(track => !track.IsBroadcast)
                     .Select(track => new SequenceTrackDto { Id = track.Id, Name = track.Label })
                     .ToList(),
@@ -1809,6 +1857,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     {
         Name = item.Name;
         Loop = item.Loop;
+        SequenceEndMs = item.EndMs;
         _fileTracks.Clear();
         _fileTracks.AddRange(item.Tracks);
         ApplyAudioLanesFromDto(item.AudioLanes);
@@ -1992,6 +2041,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     {
         Name = imported.Name;
         Loop = imported.Loop;
+        SequenceEndMs = imported.EndMs;
         _fileTracks.Clear();
         _fileTracks.AddRange(imported.Tracks);
         ApplyAudioLanesFromDto(
@@ -2046,7 +2096,8 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
 
     private void StartNewPlaybackPass(int requestedFromMs)
     {
-        if (Steps.Count == 0 && AudioLanes.All(l => l.Clips.Count == 0)) return;
+        if (Steps.Count == 0 && AudioLanes.All(l => l.Clips.Count == 0) &&
+            (SequenceEndMs ?? 0) == 0) return;
         _playbackGeneration.Cancel();
         DisposePlaybackScheduler();
         _audioPlayer.StopAll();
@@ -2054,7 +2105,8 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         ResetExecutionTracking();
         _activePlaybackPlan = SequencerPlaybackPlan.Capture(
             Steps, AudioLanes, AnimDurationMsLookup, Loop,
-            resolveDurationMs: step => step.ResolvedDurationMs);
+            resolveDurationMs: step => step.ResolvedDurationMs,
+            sequenceEndMs: SequenceEndMs);
         SetScheduleWarnings(_activePlaybackPlan.Warnings);
         ClearAudioFailures(); // a new pass starts with a clean audio report
         _dispatchedPlaybackEvents.Clear();

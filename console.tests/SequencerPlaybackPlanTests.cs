@@ -15,6 +15,41 @@ public sealed class SequencerPlaybackPlanTests
     }
 
     [Fact]
+    public void Capture_ExplicitEndpointCanDefineAnEmptyTimedPass()
+    {
+        var plan = new SequencerDocumentBuilder().Capture(loop: true, endMs: 4_000);
+
+        Assert.Empty(plan.Events);
+        Assert.Equal(4_000, plan.TotalDurationMs);
+        Assert.Equal(4_000, plan.ExplicitEndMs);
+        Assert.True(plan.Loop);
+    }
+
+    [Fact]
+    public void Capture_ExplicitEndpointExtendsLoopingAudioWithoutChangingItsNaturalCycle()
+    {
+        var plan = new SequencerDocumentBuilder()
+            .WithAudio(250, 500, "ambient.wav", loop: true)
+            .Capture(endMs: 3_000);
+
+        var audio = Assert.IsType<AudioPlaybackEvent>(Assert.Single(plan.Events));
+        Assert.Equal(500, audio.DurationMs);
+        Assert.True(audio.Loop);
+        Assert.Equal(3_000, plan.TotalDurationMs);
+    }
+
+    [Fact]
+    public void Capture_ExplicitEndpointCannotTruncateContent()
+    {
+        var plan = new SequencerDocumentBuilder()
+            .WithAudio(500, 1_000, "voice.wav")
+            .Capture(endMs: 600);
+
+        Assert.Equal(1_500, plan.TotalDurationMs);
+        Assert.Equal(600, plan.ExplicitEndMs);
+    }
+
+    [Fact]
     public void Capture_AudioOnlyDocumentPreservesPlaybackValuesAndTail()
     {
         var plan = new SequencerDocumentBuilder()

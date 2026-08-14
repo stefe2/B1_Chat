@@ -32,6 +32,7 @@ public sealed class SceneLibraryTests
         Assert.Equal(id, loaded.Id);
         Assert.Equal((3, (ushort)0x1234, 250),
             (Assert.Single(loaded.Steps).AnimId, loaded.Steps[0].Target, loaded.Steps[0].StartMs));
+        Assert.Equal(4_000, loaded.EndMs);
     }
 
     [Fact]
@@ -120,6 +121,7 @@ public sealed class SceneLibraryTests
         var saved = Assert.Single(library.Saved);
         Assert.True(Guid.TryParse(saved.Id, out _));
         Assert.Equal("Opening Scene", saved.Name);
+        Assert.Equal(vm.SequenceEndMs, saved.EndMs);
         Assert.Equal(saved.Id, vm.CurrentSceneId);
         Assert.Equal(SequencerDocumentOrigin.LocalLibrary, vm.DocumentOrigin);
         Assert.False(vm.Dirty);
@@ -437,6 +439,7 @@ public sealed class SceneLibraryTests
         Id = id,
         Name = name,
         Loop = false,
+        EndMs = 4_000,
         Tracks = new List<SequenceTrackDto> { new() { Id = 0x1234, Name = "R2-D2" } },
         AudioLanes = new List<AudioLaneDto>(),
         Steps = new List<SequenceStepDto> { new() { AnimId = 3, Target = 0x1234, StartMs = 250 } },

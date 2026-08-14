@@ -226,7 +226,8 @@ public sealed class LibraryService : ISequenceLibraryService
         item.Name,
         item.Loop,
         item.AudioLanes,
-        item.Steps);
+        item.Steps,
+        item.EndMs);
 
     private static SequenceLibraryItem FromImported(
         string id,
@@ -236,6 +237,7 @@ public sealed class LibraryService : ISequenceLibraryService
         Id = id,
         Name = document.Name,
         Loop = document.Loop,
+        EndMs = document.EndMs,
         Tracks = document.Tracks,
         AudioLanes = document.AudioLanes,
         Steps = document.Steps,

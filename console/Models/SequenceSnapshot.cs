@@ -9,7 +9,8 @@ public record SequenceSnapshot(
     string Name,
     bool Loop,
     List<AudioLaneDto> AudioLanes,
-    List<SequenceStepDto> Steps)
+    List<SequenceStepDto> Steps,
+    int? EndMs = null)
 {
     /// <summary>
     /// Structural document equality. The generated record equality cannot be used because
@@ -20,6 +21,7 @@ public record SequenceSnapshot(
         if (other == null ||
             !string.Equals(Name, other.Name, StringComparison.Ordinal) ||
             Loop != other.Loop ||
+            EndMs != other.EndMs ||
             Steps.Count != other.Steps.Count ||
             AudioLanes.Count != other.AudioLanes.Count)
             return false;

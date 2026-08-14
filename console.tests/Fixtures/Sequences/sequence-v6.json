@@ -1,0 +1,22 @@
+{
+  "type": "b1-sequence",
+  "version": 6,
+  "name": "Explicit scene end",
+  "loop": true,
+  "endMs": 5000,
+  "tracks": [],
+  "audioLanes": [
+    {
+      "label": "AMBIENT",
+      "clips": [
+        {
+          "filePath": "C:\\fixtures\\ambient.wav",
+          "durationMs": 1000,
+          "startMs": 0,
+          "loop": true
+        }
+      ]
+    }
+  ],
+  "steps": []
+}

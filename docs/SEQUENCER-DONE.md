@@ -648,6 +648,29 @@ For what the shipped behavior actually does at runtime, read
   dispatch identity. Consumed identities survive Pause/Resume, reset on fresh
   Play/Stop/Loop, and overdue-but-unfired events resume immediately.
 
+### [x] SEQ-E05 — Make sequence end and whole-pass Loop explicit
+
+- **Priority:** P1
+- **Problem:** the end is inferred from natural clip tails; a looping audio clip
+  alone ends after one natural duration, and infinite gestures use fake tails.
+- **Depends on:** SEQ-B04, SEQ-F01, SEQ-F08.
+- **Acceptance:** define an explicit calculated/user end marker and loop region
+  semantics. At a loop boundary, players and hardware state transition once,
+  without stacking or gaps caused by stale callbacks.
+- **Validation:** empty, audio-only loop, infinite-gesture, mixed, zero-duration,
+  and whole-pass Loop cases.
+- **Implemented:** every immutable pass now resolves one authoritative endpoint.
+  Automatic mode follows the effective content tail; `Set End` persists a manual
+  extension and `Auto` clears it. A cyan dashed END marker and mode badge expose
+  the boundary. The one scheduler timer always rearms against that endpoint;
+  whole-pass Loop stops old audio before starting one new generation, while
+  existing termination and generation guards prevent hardware stacking and
+  stale callback rearming. Schema v6 persists nullable `endMs`; v1–v5 migrate to
+  automatic mode.
+- **Evidence:** 18 focused endpoint/schema/playback tests passed within the
+  253/253 suite; the operator validated END AUTO/END SET, Set End, Auto,
+  Undo/Redo and the whole-pass Loop boundary in the rendered Release console.
+
 ### [x] SEQ-E06 — Cache derived duration and control UI update cost
 
 - **Priority:** P2
@@ -781,6 +804,24 @@ For what the shipped behavior actually does at runtime, read
   tooltip names the file and reason; duplicate notifications are suppressed per
   clip identity, not merely per error string.
 
+### [x] SEQ-F08 — Define audio-loop duration against the sequence endpoint
+
+- **Priority:** P1
+- **Problem:** a looping clip does not extend the pass beyond its natural end, so
+  it needs unrelated later content to repeat.
+- **Depends on:** SEQ-E05.
+- **Acceptance:** looping audio runs until an explicit sequence/clip endpoint;
+  timeline representation and export schema make that endpoint clear.
+- **Validation:** loop-only, loop-with-end-marker, whole-pass Loop, Pause/Resume,
+  and Stop cases.
+- **Implemented:** a looping clip retains its natural media duration as the
+  seek/modulo cycle but stays active until the immutable Scene endpoint. At the
+  boundary Stop closes it; whole-pass Loop closes the old player before the new
+  pass opens one. Empty/manual, audio-only, endpoint extension/clamping,
+  Pause/Resume, Stop and whole-pass Loop paths are covered headlessly.
+- **Evidence:** the operator heard the short fixture repeat beyond its natural
+  duration and stop at the cyan END marker in the rendered Release console.
+
 ## EPIC G — Preflight and ergonomics
 
 ### [x] SEQ-G14 — Redesign Play as an unambiguous Play/Pause control
@@ -875,12 +916,40 @@ For what the shipped behavior actually does at runtime, read
   and does not increment the release build number unexpectedly.
 - **Validation:** clean test run from a fresh build environment.
 
+### [x] SEQ-H05 — Cover audio and waveform services
+
+- **Priority:** P1
+- **Depends on:** SEQ-F03 through SEQ-F08, SEQ-H01.
+- **Acceptance:** tests cover probe result types, timeout, lifecycle, concurrent
+  players, stale waveform prevention, cache invalidation, missing files, and
+  audio loop endpoint behavior.
+- **Validation:** service suite plus a Windows Media Foundation smoke test.
+- **Implemented:** 43 tests in `console.tests/AudioServiceTests.cs` covering every
+  probe outcome (success, missing, empty path, decode failure, no timespan, valid
+  zero length, timeout, cancellation before and during, throwing Open, file removed
+  after the check), the playback lifecycle (natural end, loop, failure reported
+  once, missing file, throwing start, concurrent clips, resume after one clip
+  ended, resume without pause, idempotent Stop, pause/stop/resume) and the waveform
+  cache (single decode, same-path content change, missing file, retry after
+  failure, retry after the file appears, bounded capacity, empty path), plus the
+  stale-assignment race driven through the view model. A committed MP3 fixture is
+  decoded by NAudio for real, asserting a rising envelope so a broken bucket
+  mapping fails the suite. WPF `MediaPlayer` opens the same fixture on a real STA
+  dispatcher, verifies its duration and dispatcher-owned close. Restoration tests
+  cover missing/corrupt Scene and Undo/Redo state plus zero effective tails, and a
+  source invariant requires the visible `⚠ AUDIO` binding. `tools/self-test.ps1`
+  retains a separate Media Foundation prerequisite check for actionable diagnosis.
+- **Endpoint coverage:** the F08/E05 integration matrix covers loop-only, manual
+  extension, endpoint clamping, empty timed pass, Pause/Resume, Stop and
+  whole-pass Loop without stacking. The rendered endpoint/audio check passed.
+
 ## Completion evidence log
 
 Append concise evidence when closing items; do not paste full build logs.
 
 | Date | Items | Evidence |
 |---|---|---|
+| 2026-08-14 | SEQ-E05, SEQ-F08, SEQ-H05 | Added automatic/manual Scene endpoint, cyan END marker, schema v6 nullable `endMs`, deterministic final scheduler wake and audio-loop lifetime bounded by the immutable endpoint. Eighteen new plan/import/persistence/library/transport cases expand the WPF suite from 235 to 253, all passing. `tools/self-test.ps1 -SkipSerial`: 21 passed, 0 failed, including clean master/slave/WPF builds, real Media Foundation/MP3 smoke and preserved build number 359; report `b1-self-test-20260814-003311.json`. The operator confirmed the rendered controls and audible repeat-to-END behavior in Release build 359. |
 | 2026-08-14 | SEQ-G15, SEQ-G16, SEQ-G17, SEQ-G18 | Closed after final rendered Release build 359 validation. Stop/Pause cursor moves restart overlapping audio at the requested offset; an unchanged paused click resumes; releasing the horizontal scrollbar restores Follow automatically. Earlier checks in the same pass confirmed wheel navigation and the complete Scene browser/document workflow. Automated evidence remains green through the 231-test transport suite and the current 235/235 repository suite. |
 | 2026-08-14 | SEQ-G15 (in progress) | Moving the playhead during Pause now abandons the retained pass through normal Stop cleanup, while a sub-millisecond unchanged click preserves seamless Resume. Three focused tests prove stopped transition with audio re-seek, unchanged Resume and targeted IDLE cleanup for an infinite gesture. Full WPF suite: 231/231; Release build clean with 0 warnings/errors. Rendered confirmation remains. |
 | 2026-08-13 | SEQ-G15 (reopened) | Initial Release build 359 validation confirmed retained Stop, play-from-cursor, Return to start and Restart, then the longer-timeline pass exposed that an audio clip overlapping the retained cursor stayed silent. The follow-up seeks normal audio to its elapsed offset and looping audio to its modulo phase while continuing to skip prior gestures. Four focused service/integration/real-WPF cases expanded the suite from 224 to 228, all passing; Release build clean with 0 warnings/errors. Rendered audio confirmation remains before re-closing the item. |

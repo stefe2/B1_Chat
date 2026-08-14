@@ -9,7 +9,7 @@ namespace b1_chat_console.Tests;
 public sealed class SequencerPersistenceTests
 {
     [Fact]
-    public void InfiniteEndpoint_RoundTripsThroughV5ExportImportAndUndoRedo()
+    public void InfiniteEndpoint_RoundTripsThroughV6ExportImportAndUndoRedo()
     {
         using var fixture = new TemporaryJsonFixture();
         var path = Path.Combine(fixture.DirectoryPath, "infinite.b1seq.json");
@@ -26,13 +26,71 @@ public sealed class SequencerPersistenceTests
 
         vm.ExportTo(path);
         var json = JsonNode.Parse(File.ReadAllText(path))!.AsObject();
-        Assert.Equal(5, json["version"]!.GetValue<int>());
+        Assert.Equal(6, json["version"]!.GetValue<int>());
+        Assert.True(json.ContainsKey("endMs"));
+        Assert.Null(json["endMs"]);
         Assert.Equal(2_200, json["steps"]![0]!["endAfterMs"]!.GetValue<int>());
 
         using var reopened = CreateViewModel();
         reopened.ImportFrom(path);
         Assert.Equal(2_200, Assert.Single(reopened.Steps).EndAfterMs);
         Assert.Equal(2_200, reopened.Steps[0].ResolvedDurationMs);
+    }
+
+    [Fact]
+    public void SceneEndpoint_RoundTripsAndParticipatesInDirtyUndoRedo()
+    {
+        using var fixture = new TemporaryJsonFixture();
+        var path = Path.Combine(fixture.DirectoryPath, "manual-end.b1seq.json");
+        using var vm = CreateViewModel(writer: new AtomicTextFileWriter());
+        vm.PlayheadMs = 4_250;
+
+        vm.SetSequenceEndAtPlayheadCommand.Execute(null);
+
+        Assert.Equal(4_250, vm.SequenceEndMs);
+        Assert.Equal(4_250, vm.TotalDurationMsValue);
+        Assert.True(vm.Dirty);
+        vm.UndoCommand.Execute(null);
+        Assert.Null(vm.SequenceEndMs);
+        Assert.Equal(0, vm.TotalDurationMsValue);
+        vm.RedoCommand.Execute(null);
+        Assert.Equal(4_250, vm.SequenceEndMs);
+
+        vm.ExportTo(path);
+        var exported = JsonNode.Parse(File.ReadAllText(path))!.AsObject();
+        Assert.True(exported.ContainsKey("endMs"));
+        Assert.Equal(4_250, exported["endMs"]!.GetValue<int>());
+
+        using var reopened = CreateViewModel();
+        reopened.ImportFrom(path);
+        Assert.Equal(4_250, reopened.SequenceEndMs);
+        Assert.Equal(4_250, reopened.TotalDurationMsValue);
+        Assert.False(reopened.Dirty);
+    }
+
+    [Fact]
+    public void ManualSceneEndpointAdvancesWithLaterContentInsideTheSameUndoTransaction()
+    {
+        using var vm = CreateViewModel();
+        vm.PlayheadMs = 1_000;
+        vm.SetSequenceEndAtPlayheadCommand.Execute(null);
+        var clip = new AudioClip
+        {
+            FilePath = "later.wav",
+            StartMs = 2_000,
+            DurationMs = 500,
+        };
+
+        Assert.True(vm.InsertAudioClip(vm.AudioLanes[0], clip));
+
+        Assert.Equal(2_500, vm.SequenceEndMs);
+        Assert.Equal(2_500, vm.TotalDurationMsValue);
+        vm.UndoCommand.Execute(null);
+        Assert.Equal(1_000, vm.SequenceEndMs);
+        Assert.Empty(vm.AudioLanes[0].Clips);
+        vm.RedoCommand.Execute(null);
+        Assert.Equal(2_500, vm.SequenceEndMs);
+        Assert.Single(vm.AudioLanes[0].Clips);
     }
 
     [Fact]

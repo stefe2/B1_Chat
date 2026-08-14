@@ -336,8 +336,9 @@ internal sealed class SequencerDocumentBuilder
         return this;
     }
 
-    public SequencerPlaybackPlan Capture(bool loop = false, uint seed = 1) =>
-        SequencerPlaybackPlan.Capture(Steps, AudioLanes, Durations, loop, () => seed);
+    public SequencerPlaybackPlan Capture(bool loop = false, uint seed = 1, int? endMs = null) =>
+        SequencerPlaybackPlan.Capture(
+            Steps, AudioLanes, Durations, loop, () => seed, sequenceEndMs: endMs);
 }
 
 internal sealed class TemporaryJsonFixture : IDisposable

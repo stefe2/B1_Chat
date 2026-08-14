@@ -67,7 +67,11 @@ Muted or offline rows do not create a queue for missed commands.*
   torque, unsupported mechanics may fall; re-enable Servos deliberately from
   the Droids card after inspecting the hardware. It retains the last playhead
   position diagnostically.
-- **Loop** starts a new pass when the calculated sequence duration ends. A
+- The cyan dashed **END** line is the authoritative Scene endpoint. **END AUTO**
+  follows the calculated content tail. Move the stopped playhead and choose
+  **Set End** to extend the Scene; **Auto** returns to the calculated tail.
+  Existing content is never truncated, and endpoint edits support Undo/Redo.
+- **Loop** starts a new pass when the Scene endpoint is reached. A
   `POWER_DOWN`/`TALK` clip first reaches its authored endpoint and sends IDLE;
   the next pass then starts cleanly at t = 0. Without Loop, natural completion
   stops at the calculated end so the finished position remains visible.
@@ -172,6 +176,7 @@ always needs the console and active serial connection.
 **Export** atomically writes a `.b1seq.json` snapshot containing:
 
 - sequence name and whole-sequence Loop setting;
+- automatic or user-set Scene endpoint;
 - gesture clips, target IDs, and explicit `POWER_DOWN`/`TALK` endpoints;
 - saved droid track names/order for offline layout;
 - audio lane names, clip timing, Loop flags, and local file paths.
@@ -195,7 +200,7 @@ the document as a Local Library Scene. Import never silently adds a Scene to the
 library.
 
 Before replacing the editor, Import reads and validates the entire file. It
-accepts sequence schema versions 1 through 5 and migrates their historical
+accepts sequence schema versions 1 through 6 and migrates their historical
 timing/audio/track layouts. Versions 1–4 give legacy looping gestures a real 2 s
 endpoint matching their former displayed width. Version 1 relative gesture
 delays are converted cumulatively so their original order and timing are preserved. A file
@@ -211,6 +216,10 @@ starts with empty Undo/Redo history.
 Legacy numeric DFPlayer `audioTrack` values cannot identify a sound file on the
 PC and are not imported as audio clips. Add or replace the corresponding audio
 file manually after importing an old version 1 or 2 document.
+
+Schema version 6 stores `endMs`: `null` selects automatic content-tail mode and
+an integer stores the user-set Scene endpoint. Versions 1–5 migrate to automatic
+mode.
 
 ## Scene names and the Local Library
 
