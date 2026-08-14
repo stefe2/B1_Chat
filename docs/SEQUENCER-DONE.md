@@ -808,6 +808,60 @@ For what the shipped behavior actually does at runtime, read
   confirmed that a second Play does not restart, that explicit Restart returns
   to zero, and that the complete workflow behaves as expected.
 
+### [x] SEQ-G15 — Separate Stop from playhead navigation and rewind
+
+- **Priority:** P2
+- **Acceptance:** Stop safety cleanup and cursor navigation are independent;
+  Play from a retained cursor seeks overlapping audio without reconstructing
+  prior gestures, and moving a paused cursor abandons the old pass safely.
+- **Implemented:** Stop, Safe Stop, E-STOP and natural end retain the cursor;
+  `Return to start` and Restart provide explicit rewind paths. Normal and looping
+  audio seek to the retained offset. A real paused move performs normal Stop
+  cleanup, while an unchanged click preserves seamless Resume.
+- **Evidence:** seven focused seek/transport/cleanup cases passed in the 231/231
+  suite. The operator confirmed both stopped and paused move-cursor workflows in
+  Release build 359, including audible restart from the requested audio offset.
+
+### [x] SEQ-G16 — Add an operator-controlled Follow Playhead mode
+
+- **Priority:** P2
+- **Acceptance:** visible Follow keeps long playback in view without fighting
+  deliberate navigation and behaves consistently across Play/Pause/Resume,
+  scrollbar drag, zoom, Fit, Loop, Restart and natural end.
+- **Implemented:** Follow uses a 15–72% comfort corridor, defaults on for new
+  Play/Restart, freezes during Pause and suspends only for the duration of a
+  scrollbar drag. Deliberate Fit/zoom/pan leaves it off until re-enabled.
+- **Evidence:** navigation/restoration policy tests passed in the full suite;
+  the operator confirmed that releasing the horizontal thumb automatically
+  restores Follow and catches up without a second click.
+
+### [x] SEQ-G17 — Add pointer-centered timeline wheel zoom
+
+- **Priority:** P2
+- **Acceptance:** Ctrl+wheel preserves the time beneath the pointer while
+  zooming, Shift+wheel pans, plain wheel stays native, and navigation does not
+  mutate the Scene or transport state.
+- **Implemented:** multiplicative 1.15-per-notch zoom is clamped to 20–300 px/s,
+  high-resolution deltas accumulate, and modified timeline wheel events bypass
+  the main window's vertical-scroll interception.
+- **Evidence:** boundary, fractional-delta, pointer-anchor, routing and Follow
+  tests passed; the operator confirmed physical wheel interaction in Release
+  build 359.
+
+### [x] SEQ-G18 — Replace the exposed library list with a Scene document workflow
+
+- **Priority:** P1
+- **Acceptance:** New/Open/Save are primary, secondary Scene operations remain
+  discoverable, Open is searchable, replacement protects unsaved work and active
+  playback, and conventional shortcuts behave normally.
+- **Implemented:** the raw library rows were replaced with a document bar,
+  secondary menu and themed searchable browser. Save/discard/cancel and explicit
+  stop-and-continue paths preserve the current Scene until every cancellation
+  point succeeds.
+- **Evidence:** nine focused browser/replacement tests passed in the 181/181
+  suite; the operator validated the rendered browser, menu, search, double-click,
+  shortcuts, empty-state/narrow layout and Play/Pause replacement paths.
+
 ## EPIC H — Automated and hardware validation
 
 ### [x] SEQ-H01 — Create a Sequencer-focused test project and fixtures
@@ -827,6 +881,7 @@ Append concise evidence when closing items; do not paste full build logs.
 
 | Date | Items | Evidence |
 |---|---|---|
+| 2026-08-14 | SEQ-G15, SEQ-G16, SEQ-G17, SEQ-G18 | Closed after final rendered Release build 359 validation. Stop/Pause cursor moves restart overlapping audio at the requested offset; an unchanged paused click resumes; releasing the horizontal scrollbar restores Follow automatically. Earlier checks in the same pass confirmed wheel navigation and the complete Scene browser/document workflow. Automated evidence remains green through the 231-test transport suite and the current 235/235 repository suite. |
 | 2026-08-14 | SEQ-G15 (in progress) | Moving the playhead during Pause now abandons the retained pass through normal Stop cleanup, while a sub-millisecond unchanged click preserves seamless Resume. Three focused tests prove stopped transition with audio re-seek, unchanged Resume and targeted IDLE cleanup for an infinite gesture. Full WPF suite: 231/231; Release build clean with 0 warnings/errors. Rendered confirmation remains. |
 | 2026-08-13 | SEQ-G15 (reopened) | Initial Release build 359 validation confirmed retained Stop, play-from-cursor, Return to start and Restart, then the longer-timeline pass exposed that an audio clip overlapping the retained cursor stayed silent. The follow-up seeks normal audio to its elapsed offset and looping audio to its modulo phase while continuing to skip prior gestures. Four focused service/integration/real-WPF cases expanded the suite from 224 to 228, all passing; Release build clean with 0 warnings/errors. Rendered audio confirmation remains before re-closing the item. |
 | 2026-08-13 | SEQ-G14 | Closed after rendered Release build 359 validation: state-dependent Play/Pause/Resume glyph and tooltip, click and `Space` interaction, no implicit restart on a second Play, and explicit Restart from zero all behaved as expected. Automated transport coverage had already passed in the 172/172 suite; the current full WPF suite remains 224/224. |
