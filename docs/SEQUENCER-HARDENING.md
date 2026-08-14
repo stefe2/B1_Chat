@@ -396,24 +396,31 @@ along is the Sequencer".
   available and cannot be confused with a safety stop. When the retained cursor
   is inside an audio clip, that clip seeks to its matching source offset; prior
   gestures remain skipped because reconstructing a past mechanical state would
-  be unsafe and ambiguous.
+  be unsafe and ambiguous. Moving the cursor while Paused abandons the retained
+  pass through normal Stop cleanup and changes transport to Stopped; an
+  unchanged click preserves resumable Pause.
 - **Validation:** tests cover Stop from Play/Pause, repeated Stop, return to
   start, Play after retained Stop, audio seek within normal and looping clips,
-  natural end, Safe/Emergency Stop and Loop.
+  paused seek/no-op click, infinite-gesture cleanup, natural end,
+  Safe/Emergency Stop and Loop.
 - **Implemented:** normal, Safe and Emergency Stop retain the measured cursor;
   non-looping natural completion retains the calculated end. A distinct
   return-to-start button/`Ctrl+Home` is enabled only while stopped. Play starts
   from a retained cursor, skips older gesture events and seeks every overlapping
   audio clip to the correct offset; looping audio uses its current modulo phase.
   At the natural end Play starts a new pass from zero. Restart remains the
-  always-explicit performance-from-zero path.
-- **Automated evidence:** four focused cases cover service-level seek,
+  always-explicit performance-from-zero path. A real playhead move during Pause
+  now invokes the same Stop cleanup before setting the requested position; a
+  sub-millisecond no-op retains the paused pass for seamless Resume.
+- **Automated evidence:** seven focused cases cover service-level seek,
   non-looping and modulo-loop cursor starts, no gesture reconstruction and a
-  real pending-open WPF `MediaPlayer` seek. Full suite: 228/228; Release build
-  clean with 0 warnings and 0 errors.
+  real pending-open WPF `MediaPlayer` seek, plus paused seek, unchanged click and
+  targeted infinite-gesture cleanup. Full suite: 231/231; Release build clean
+  with 0 warnings and 0 errors.
 - **Remaining validation:** repeat the rendered Stop/move-cursor/Play workflow
-  in the Release console and confirm that overlapping audio resumes audibly at
-  the expected position.
+  and the Pause/move-cursor/Play variant in the Release console. Confirm that
+  transport becomes Stopped on the paused move and overlapping audio resumes
+  audibly at the expected position.
 
 ### [~] SEQ-G16 — Add an operator-controlled Follow Playhead mode
 
@@ -783,7 +790,7 @@ options.
 | DEC-016 | Open | Mechanical policy for Safe Stop versus Emergency Stop and servo power? |
 | DEC-017 | Resolved 2026-08-11 | Target execution is the required success signal. Missing reports warn but do not gate playback; serial-write/master-relay stages may be added diagnostically. |
 | DEC-018 | Deferred | Published Show revision naming, retention and rollback policy? |
-| DEC-019 | Resolved 2026-08-12; refined 2026-08-13 | Primary Play is a Play/Pause/Resume toggle (`Space`), while Restart (`Ctrl+Enter`) is the explicit clean from-zero action. Stop/Safe/Emergency retain the playhead; Return to start (`Ctrl+Home`) is separate. Stopped Play begins at the retained cursor: prior gestures are skipped, overlapping audio seeks to its matching offset, and Play at natural end begins from zero. |
+| DEC-019 | Resolved 2026-08-12; refined 2026-08-14 | Primary Play is a Play/Pause/Resume toggle (`Space`), while Restart (`Ctrl+Enter`) is the explicit clean from-zero action. Stop/Safe/Emergency retain the playhead; Return to start (`Ctrl+Home`) is separate. Stopped Play begins at the retained cursor: prior gestures are skipped, overlapping audio seeks to its matching offset, and Play at natural end begins from zero. Moving the playhead during Pause performs normal Stop cleanup and leaves transport Stopped at the new time; an unchanged click preserves Resume. |
 | DEC-020 | Resolved 2026-08-12; refined 2026-08-13 | Follow defaults on for each new Play/Restart and uses a 15–72% viewport comfort corridor. Pause freezes it; Resume preserves its state. A horizontal scrollbar drag suspends Follow only while held and catches up on release; Fit or deliberate zoom/pan suspends it until the visible toggle re-enables it. |
 | DEC-021 | Resolved 2026-08-12 | Ctrl+wheel zooms continuously and multiplicatively around the pointer within 20–300 px/s; Shift+wheel pans horizontally and plain wheel remains native. Slider/Fit/wheel navigation suspends Follow until the operator re-enables it. |
 | DEC-022 | Resolved 2026-08-12 | Treat Scenes like conventional editor documents: New/Open/Save are primary, Local Library storage stays behind a searchable Open browser, Save As/rename/import/export/trash are secondary, and replacement explicitly handles active playback plus save/discard/cancel. The browser is reusable by the future Show editor. |

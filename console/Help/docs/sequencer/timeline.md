@@ -63,6 +63,11 @@ released. While held, a clip moves freely at pixel precision. Disable Snap to
 retain the unsnapped millisecond position. The inspector's −0.1 s and +0.1 s
 buttons always nudge by 100 ms.
 
+The ruler can be scrubbed while Stopped or Paused, but not while Playing. Moving
+it during Pause ends the retained pass like normal Stop, including audio and
+infinite-gesture cleanup, then leaves the transport Stopped at the new cursor.
+A click that does not move the paused cursor keeps Resume available.
+
 A clip drag starts only after 5 pixels of pointer movement, so selecting a clip
 does not create an edit. **Escape**, lost mouse capture, window deactivation, or
 leaving the Sequencer cancels an active gesture/audio drag and restores its

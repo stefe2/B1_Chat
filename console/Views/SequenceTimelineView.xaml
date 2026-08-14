@@ -361,7 +361,7 @@
                              ticks (tall for major, short for minor), labels above, playhead flag. -->
                         <Canvas x:Name="RulerCanvas" Height="30" Background="{StaticResource Recess2Brush}" Cursor="SizeWE"
                                 Width="{Binding TimelineWidthPx}"
-                                ToolTip="Click or drag along the ruler to move the playhead. Scrubbing is disabled while playback is running."
+                                ToolTip="Click or drag along the ruler to move the playhead. Scrubbing is disabled during Play; moving it during Pause ends the paused pass like Stop."
                                 MouseLeftButtonDown="Ruler_MouseLeftButtonDown"
                                 MouseMove="Ruler_MouseMove"
                                 MouseLeftButtonUp="Ruler_MouseLeftButtonUp"

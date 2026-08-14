@@ -1372,7 +1372,16 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     public void SetPlayheadFromPixel(double x)
     {
         if (IsLiveTracking || PxPerMs <= 0) return;
-        PlayheadMs = Math.Max(0, x / PxPerMs);
+        var requestedMs = Math.Max(0, x / PxPerMs);
+        if (IsPaused && Math.Abs(requestedMs - PlayheadMs) > 0.5)
+        {
+            // A paused pass retains live audio handles, scheduler consumption state and
+            // potentially leased infinite gestures at the old time. Once the operator seeks,
+            // that state no longer represents the visible cursor. Abandon it through the normal
+            // Stop path before moving; the next Play creates a fresh play-from-cursor pass.
+            Stop();
+        }
+        PlayheadMs = requestedMs;
     }
 
     // Anchors the playhead ticker at fromElapsedMs and starts advancing it — used by the

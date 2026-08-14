@@ -95,7 +95,11 @@ running under their renewed lease, and their execution reports may update while
 paused. Play resumes undispatched events and audio without resending gestures
 that continued. The transport shows `PAUSED · DROID MOTION CONTINUES` so this
 behavior is never implied to be a physical freeze; use Stop, SAFE or E-STOP for
-their distinct policies above.
+their distinct policies above. Clicking the unchanged paused playhead preserves
+this resumable state. Moving the playhead during Pause instead abandons the old
+pass through normal Stop cleanup, changes transport to Stopped and leaves the
+cursor at the requested time; the next Play creates a fresh play-from-cursor
+pass there.
 
 ## Transport state and controls
 

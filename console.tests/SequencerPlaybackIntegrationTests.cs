@@ -210,6 +210,102 @@ public sealed class SequencerPlaybackIntegrationTests
     }
 
     [Fact]
+    public void MovingThePausedPlayheadStopsTheRetainedPassAndNextPlaySeeksAudio()
+    {
+        var protocol = new FakeSequencerProtocol();
+        var scheduler = new FakePlaybackTimerScheduler();
+        var clock = new FakePlaybackClock();
+        var audio = new FakeAudioPlayer();
+        using var vm = CreateViewModel(protocol, scheduler, clock, audio);
+        vm.AudioLanes[0].Clips.Add(new AudioClip
+        {
+            StartMs = 0,
+            DurationMs = 1_000,
+            FilePath = "seek-after-pause.wav",
+        });
+
+        vm.PlayCommand.Execute(null);
+        scheduler.Entries[0].Invoke();
+        clock.SetElapsed(TimeSpan.FromMilliseconds(250));
+        vm.PlayCommand.Execute(null);
+        Assert.True(vm.IsPaused);
+
+        vm.SetPlayheadFromPixel(600 * vm.PxPerMs);
+
+        Assert.False(vm.IsPaused);
+        Assert.False(vm.IsPlaying);
+        Assert.Equal(600, vm.PlayheadMs);
+        Assert.Equal("StopAll", audio.Actions[^1].Kind);
+
+        vm.PlayCommand.Execute(null);
+        var plays = audio.Actions.Where(action => action.Kind == "Play").ToArray();
+        Assert.Equal(2, plays.Length);
+        Assert.Equal(600, plays[1].StartOffsetMs);
+        Assert.DoesNotContain(audio.Actions, action => action.Kind == "ResumeAll");
+        vm.StopCommand.Execute(null);
+    }
+
+    [Fact]
+    public void ClickingTheUnchangedPausedPositionKeepsThePassResumable()
+    {
+        var protocol = new FakeSequencerProtocol();
+        var scheduler = new FakePlaybackTimerScheduler();
+        var clock = new FakePlaybackClock();
+        var audio = new FakeAudioPlayer();
+        using var vm = CreateViewModel(protocol, scheduler, clock, audio);
+        vm.AudioLanes[0].Clips.Add(new AudioClip
+        {
+            StartMs = 0,
+            DurationMs = 1_000,
+            FilePath = "unchanged-pause.wav",
+        });
+
+        vm.PlayCommand.Execute(null);
+        scheduler.Entries[0].Invoke();
+        clock.SetElapsed(TimeSpan.FromMilliseconds(250));
+        vm.PlayCommand.Execute(null);
+
+        vm.SetPlayheadFromPixel(vm.PlayheadMs * vm.PxPerMs);
+
+        Assert.True(vm.IsPaused);
+        vm.PlayCommand.Execute(null);
+        Assert.True(vm.IsPlaying);
+        Assert.Equal("ResumeAll", audio.Actions[^1].Kind);
+        vm.StopCommand.Execute(null);
+    }
+
+    [Fact]
+    public void MovingThePausedPlayheadUsesNormalStopCleanupForAnInfiniteGesture()
+    {
+        var protocol = new FakeSequencerProtocol();
+        protocol.Droids.Add(new Droid { Id = 0x1234, Online = true });
+        var scheduler = new FakePlaybackTimerScheduler();
+        var clock = new FakePlaybackClock();
+        using var vm = CreateViewModel(protocol, scheduler, clock);
+        vm.Steps.Add(new SequenceStep
+        {
+            StartMs = 0,
+            Target = 0x1234,
+            AnimId = 16,
+            EndAfterMs = 2_000,
+        });
+
+        vm.PlayCommand.Execute(null);
+        scheduler.Entries[0].Invoke();
+        clock.SetElapsed(TimeSpan.FromMilliseconds(250));
+        vm.PlayCommand.Execute(null);
+        Assert.True(vm.IsPaused);
+
+        vm.SetPlayheadFromPixel(600 * vm.PxPerMs);
+
+        Assert.False(vm.IsPaused);
+        Assert.Equal(2, protocol.Sent.Count);
+        Assert.Equal(16, protocol.Sent[0].AnimId);
+        Assert.Equal(0, protocol.Sent[1].AnimId);
+        Assert.Equal((ushort)0x1234, protocol.Sent[1].Target);
+    }
+
+    [Fact]
     public void FollowDefaultsOnForANewPassButManualSuspensionSurvivesPauseResume()
     {
         var protocol = new FakeSequencerProtocol();

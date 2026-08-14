@@ -51,6 +51,9 @@ Muted or offline rows do not create a queue for missed commands.*
   future scheduled sends. It sends no pause/stop command to the droids: every
   finite gesture already received continues to its natural completion, and a
   running `TALK`/`POWER_DOWN` continues while its safety lease is renewed.
+  Moving the timeline playhead while paused abandons that retained pass through
+  normal Stop cleanup and changes the transport to Stopped at the new position;
+  clicking without moving preserves ordinary Resume.
 - **Stop** cancels future sends, stops local audio, sends targeted `IDLE` cleanup
   to droids whose latest Sequencer gesture is `TALK` or `POWER_DOWN`, and retains
   the playhead for inspection. **Return to start** (`Ctrl+Home`) is a separate
