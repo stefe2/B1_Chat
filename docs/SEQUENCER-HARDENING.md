@@ -13,7 +13,7 @@ Three companion documents hold the rest, so this one stays cheap to read:
 
 - [SEQUENCER-BEHAVIOR.md](SEQUENCER-BEHAVIOR.md) — what currently *ships*, at
   runtime. Read it before changing Sequencer behavior.
-- [SEQUENCER-DONE.md](SEQUENCER-DONE.md) — the 43 closed items with their
+- [SEQUENCER-DONE.md](SEQUENCER-DONE.md) — the 42 closed items with their
   acceptance criteria and the completion evidence log.
 - [SEQUENCER-IDEAS.md](SEQUENCER-IDEAS.md) — EPIC I and EPIC K, 30 deferred
   design ideas gated behind the M1–M4 baseline.
@@ -90,7 +90,7 @@ along is the Sequencer".
 | D | Import, export and local library | 8 / 8 | 0 / 1 |
 | E | Deterministic scheduler and performance | 5 / 6 | 0 / 1 |
 | F | Duration and audio robustness | 6 / 8 | — |
-| G | Preflight and ergonomics | 2 / 14 | 0 / 5 |
+| G | Preflight and ergonomics | 1 / 14 | 0 / 5 |
 | H | Automated and hardware validation | 1 / 8 | — |
 | I | Scene & Show System (future) | — | 0 / 22 |
 | J | Commissioning and servo configuration safety | 0 / 2 | — |
@@ -224,8 +224,7 @@ along is the Sequencer".
 
 ## EPIC G — Preflight and ergonomics
 
-2 completed items moved to [SEQUENCER-DONE.md](SEQUENCER-DONE.md): SEQ-G14,
-SEQ-G15.
+1 completed item moved to [SEQUENCER-DONE.md](SEQUENCER-DONE.md): SEQ-G14.
 
 ### [ ] SEQ-G01 — Add a preflight result model and Play gate
 
@@ -383,6 +382,39 @@ SEQ-G15.
 - **Validation:** device removal/change, mute, unsupported media, battery/power,
   sleep-policy warning, low-space and successful show-PC checklist.
 
+### [~] SEQ-G15 — Separate Stop from playhead navigation and rewind
+
+- **Priority:** P2
+- **Problem:** normal Stop ended playback and always returned the playhead to
+  zero. Transport safety cleanup and timeline navigation are different
+  intentions, and forcing both made inspection and rehearsal awkward.
+- **Depends on:** SEQ-A06, SEQ-B07, SEQ-G14.
+- **Acceptance:** define and expose the post-Stop playhead policy separately from
+  hardware/audio cleanup. Specify normal Stop, Safe Stop, Emergency Stop,
+  natural end and Loop boundaries, plus whether Play while stopped begins at
+  zero or at the retained cursor. A dedicated return-to-start action is always
+  available and cannot be confused with a safety stop. When the retained cursor
+  is inside an audio clip, that clip seeks to its matching source offset; prior
+  gestures remain skipped because reconstructing a past mechanical state would
+  be unsafe and ambiguous.
+- **Validation:** tests cover Stop from Play/Pause, repeated Stop, return to
+  start, Play after retained Stop, audio seek within normal and looping clips,
+  natural end, Safe/Emergency Stop and Loop.
+- **Implemented:** normal, Safe and Emergency Stop retain the measured cursor;
+  non-looping natural completion retains the calculated end. A distinct
+  return-to-start button/`Ctrl+Home` is enabled only while stopped. Play starts
+  from a retained cursor, skips older gesture events and seeks every overlapping
+  audio clip to the correct offset; looping audio uses its current modulo phase.
+  At the natural end Play starts a new pass from zero. Restart remains the
+  always-explicit performance-from-zero path.
+- **Automated evidence:** four focused cases cover service-level seek,
+  non-looping and modulo-loop cursor starts, no gesture reconstruction and a
+  real pending-open WPF `MediaPlayer` seek. Full suite: 228/228; Release build
+  clean with 0 warnings and 0 errors.
+- **Remaining validation:** repeat the rendered Stop/move-cursor/Play workflow
+  in the Release console and confirm that overlapping audio resumes audibly at
+  the expected position.
+
 ### [~] SEQ-G16 — Add an operator-controlled Follow Playhead mode
 
 - **Priority:** P2
@@ -398,21 +430,26 @@ SEQ-G15.
   timeline content or create a per-tick layout stall.
 - **Recommendation:** default Follow on when playback begins, but use a comfort
   corridor rather than permanent centering: let the playhead move across roughly
-  the first 65–75% of the viewport, then smoothly advance the window. Manual
-  horizontal scroll disables/suspends Follow; a visible button re-enables it and
-  catches up. Pause freezes auto-scroll while leaving inspection free.
+  the first 65–75% of the viewport, then smoothly advance the window. Dragging
+  the horizontal scrollbar suspends Follow only while held and catches up when
+  released. Deliberate Fit/zoom/wheel navigation keeps Follow off until the
+  visible button re-enables it. Pause freezes auto-scroll while leaving
+  inspection free.
 - **Validation:** long-timeline UI tests and manual checks cover every zoom,
   manual-scroll, Pause/Resume, Loop/restart and end-boundary combination.
 - **Implemented:** a visible transient Follow toggle uses a 15–72% viewport
   comfort corridor and changes horizontal offset only. New Play/Restart enables
-  it; manual scroll/zoom/pan suspends it, re-enabling catches up, Pause freezes
-  it and Resume preserves a suspension. Automatic scroll destinations remain
-  tagged until WPF's deferred `ScrollChanged` observes them; this prevents
-  Follow from mistaking its own movement for manual navigation and turning
-  itself off at the corridor boundary. Pure navigation and scroll-correlation
-  math is unit-tested.
-- **Remaining validation:** manual long-timeline smoothness and scrollbar test
-  in the Release console.
+  it. A horizontal scrollbar drag suspends it while held and restores it after
+  the final deferred `ScrollChanged`; Fit and deliberate zoom/pan still suspend
+  it until the operator opts back in. Pause freezes it and Resume preserves its
+  state. Automatic scroll destinations remain tagged until WPF observes them,
+  preventing Follow from mistaking its own movement for manual navigation. Pure
+  navigation, scroll-correlation and restoration policy are unit-tested.
+- **Automated evidence:** the restoration policy is included in the 228/228
+  WPF suite; Release build clean with 0 warnings and 0 errors.
+- **Remaining validation:** repeat the rendered horizontal-scrollbar test and
+  confirm that releasing the thumb automatically catches up without a jump or
+  a second click.
 
 ### [~] SEQ-G17 — Add pointer-centered timeline wheel zoom
 
@@ -502,8 +539,9 @@ SEQ-G15.
   full-Scene playback. The range is editor-session state only: it does not alter
   clips or the authoritative Scene endpoint, is excluded from Dirty, Undo/Redo,
   Save and Export, and resets when the document is replaced. Playback from `IN`
-  follows the existing play-from-cursor rule: earlier events are skipped, with
-  no hidden reconstruction of gestures or audio that began before `IN`.
+  follows the existing play-from-cursor rule: prior gestures are skipped, while
+  an audio clip overlapping `IN` seeks to the matching source offset. No past
+  mechanical state is reconstructed implicitly.
 - **Validation:** drag and keyboard operation, snapping/minimum width, boundaries
   near the start/middle/end, Play/Restart/Pause/Stop/Loop, clear/document replace,
   and gesture/audio clips that overlap `IN` or `OUT`.
@@ -714,9 +752,9 @@ detailed commit after its full regression passes.
 | S1 — Single deterministic scheduler | SEQ-E02, SEQ-E03 | **Complete.** One rearmable timer drains monotonic timestamp batches in immutable source order, compensates late wakes, warns about same-target/broadcast overlap and releases completely on cancellation. |
 | T1 — Coherent duration and infinite ends | SEQ-F01, SEQ-F02, SEQ-C06, SEQ-B04 | **Code complete; F01 hardware measurement pending.** Structured firmware timing metadata feeds one target-aware provider and cached extent; schema v5 promotes looping-gesture width into a persisted endpoint with ownership-safe IDLE termination. |
 
-SEQ-D09 remains deferred. The Play/Pause control (SEQ-G14) is complete;
-the Stop/navigation control (SEQ-G15) is complete; Follow and wheel navigation
-(SEQ-G16 and SEQ-G17) and the Scene document workflow (SEQ-G18) are implemented
+SEQ-D09 remains deferred. The Play/Pause control (SEQ-G14) is complete. The
+Stop/navigation audio-seek follow-up (SEQ-G15), Follow and wheel navigation
+(SEQ-G16 and SEQ-G17), and the Scene document workflow (SEQ-G18) are implemented
 with rendered validation pending, followed by sequence/audio end semantics
 (SEQ-F08 then SEQ-E05).
 
@@ -745,8 +783,8 @@ options.
 | DEC-016 | Open | Mechanical policy for Safe Stop versus Emergency Stop and servo power? |
 | DEC-017 | Resolved 2026-08-11 | Target execution is the required success signal. Missing reports warn but do not gate playback; serial-write/master-relay stages may be added diagnostically. |
 | DEC-018 | Deferred | Published Show revision naming, retention and rollback policy? |
-| DEC-019 | Resolved 2026-08-12 | Primary Play is a Play/Pause/Resume toggle (`Space`), while Restart (`Ctrl+Enter`) is the explicit clean from-zero action. Stop/Safe/Emergency retain the playhead; Return to start (`Ctrl+Home`) is separate. Stopped Play begins at the retained cursor and skips prior events, except Play at natural end begins from zero. |
-| DEC-020 | Resolved 2026-08-12 | Follow defaults on for each new Play/Restart and uses a 15–72% viewport comfort corridor. Pause freezes it; Resume preserves its state. Manual horizontal scroll, Fit or zoom/pan suspends it, and the visible Follow toggle re-enables it with immediate catch-up. |
+| DEC-019 | Resolved 2026-08-12; refined 2026-08-13 | Primary Play is a Play/Pause/Resume toggle (`Space`), while Restart (`Ctrl+Enter`) is the explicit clean from-zero action. Stop/Safe/Emergency retain the playhead; Return to start (`Ctrl+Home`) is separate. Stopped Play begins at the retained cursor: prior gestures are skipped, overlapping audio seeks to its matching offset, and Play at natural end begins from zero. |
+| DEC-020 | Resolved 2026-08-12; refined 2026-08-13 | Follow defaults on for each new Play/Restart and uses a 15–72% viewport comfort corridor. Pause freezes it; Resume preserves its state. A horizontal scrollbar drag suspends Follow only while held and catches up on release; Fit or deliberate zoom/pan suspends it until the visible toggle re-enables it. |
 | DEC-021 | Resolved 2026-08-12 | Ctrl+wheel zooms continuously and multiplicatively around the pointer within 20–300 px/s; Shift+wheel pans horizontally and plain wheel remains native. Slider/Fit/wheel navigation suspends Follow until the operator re-enables it. |
 | DEC-022 | Resolved 2026-08-12 | Treat Scenes like conventional editor documents: New/Open/Save are primary, Local Library storage stays behind a searchable Open browser, Save As/rename/import/export/trash are secondary, and replacement explicitly handles active playback plus save/discard/cancel. The browser is reusable by the future Show editor. |
 | DEC-023 | Direction recorded 2026-08-12; details deferred | Add a Project mode as the mutable working boundary for one production: manifest, Scenes, Shows and managed assets live under one movable folder with relative references. A Project remains distinct from the immutable portable package created by Publish; Show mode must arm the published package, not mutable Project drafts. |

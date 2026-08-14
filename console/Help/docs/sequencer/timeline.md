@@ -52,10 +52,11 @@ pointer; `Shift+mouse wheel` pans horizontally, while an unmodified wheel keeps
 its normal WPF behavior.
 
 **Follow** keeps a running playhead inside a comfort corridor instead of pinning
-it permanently to the center. A new Play or Restart enables Follow. Manual
-horizontal scrolling, Fit, slider zoom, pointer zoom, or Shift-wheel panning
-turns it off so the view never fights inspection. Click Follow to catch up;
-Pause freezes automatic scrolling, and Resume preserves a manual suspension.
+it permanently to the center. A new Play or Restart enables Follow. Dragging the
+horizontal scrollbar suspends it while held, then releasing the scrollbar
+automatically catches up. Fit, slider zoom, pointer zoom, or Shift-wheel panning
+turns it off for deliberate inspection; click Follow to catch up. Pause freezes
+automatic scrolling, and Resume preserves the current Follow state.
 
 With **Snap** enabled, inserted or dragged clips round to the nearest 100 ms when
 released. While held, a clip moves freely at pixel precision. Disable Snap to

@@ -113,17 +113,20 @@ explicit clean from-zero performance path. Normal Stop, Safe Stop and E-STOP all
 **retain** the measured playhead for inspection; a non-looping natural end
 retains the calculated end. `Return to start` (`Ctrl+Home`, enabled only while
 stopped) is the separate navigation action. Play while stopped resumes from the
-retained cursor and skips earlier events, except at the natural end where it
-starts a fresh pass from zero.
+retained cursor: earlier gesture events remain skipped, while audio clips that
+overlap the cursor seek to their matching source offsets (modulo their duration
+when looping). At the natural end Play starts a fresh pass from zero.
 
 ## Timeline navigation (`SequenceTimelineView.xaml.cs`)
 
 A visible `Follow` toggle keeps the playhead inside a 15–72 % viewport comfort
-corridor, changing horizontal offset only. New Play/Restart re-enables it;
-manual scroll, Fit, zoom or pan suspends it; Pause freezes it and Resume
-preserves the suspension. Automatic scroll destinations stay tagged until WPF's
-deferred `ScrollChanged` observes them, otherwise Follow mistakes its own
-movement for manual navigation and turns itself off at the corridor boundary.
+corridor, changing horizontal offset only. New Play/Restart re-enables it. A
+horizontal scrollbar drag suspends Follow while the pointer is held and restores
+it after the final deferred `ScrollChanged`; Fit, slider zoom, pointer zoom and
+Shift-wheel pan suspend it until the operator opts back in. Pause freezes it and
+Resume preserves its state. Automatic scroll destinations stay tagged until WPF
+observes them, otherwise Follow mistakes its own movement for manual navigation
+and turns itself off at the corridor boundary.
 
 `Ctrl+wheel` zooms multiplicatively (1.15 per notch, clamped 20–300 px/s) around
 the pointer's content time, `Shift+wheel` pans horizontally, plain wheel stays
@@ -174,6 +177,11 @@ therefore touch only genuinely active clips, and Resume cannot restart something
 that already finished. `StopAll` is idempotent. A playback failure is reported
 once per clip, naming the file in a visible `⚠ AUDIO` transport badge and tooltip,
 and the rest of the pass continues.
+
+**Play from cursor.** Starting a stopped pass inside an audio clip opens that
+clip and seeks to the elapsed source position before playback. Looping clips use
+the matching modulo phase. Earlier gesture clips are not reconstructed because
+their mechanical state cannot be inferred safely from timeline position alone.
 
 **Waveforms.** The decode cache is keyed on path plus file size and last-write
 time, so replacing a file's contents under the same name invalidates it. Failed

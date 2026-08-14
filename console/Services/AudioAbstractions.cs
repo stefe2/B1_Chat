@@ -83,6 +83,9 @@ public interface IMediaHandle : IDisposable
     void Pause();
     void Stop();
 
+    /// <summary>Seeks to a non-negative position within the opened source.</summary>
+    void Seek(int positionMs);
+
     /// <summary>Seeks back to the start, used to restart a looping clip.</summary>
     void Rewind();
 }

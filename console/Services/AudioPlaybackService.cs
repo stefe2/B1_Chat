@@ -43,8 +43,9 @@ public sealed class AudioPlaybackService : ISequencerAudioPlayer, IDisposable
     /// <summary>
     /// Starts an independent playback. <paramref name="clipId"/> is the plan's source order, used
     /// only to name the clip in a failure report — 0 when the caller has no identity to give.
+    /// <paramref name="startOffsetMs"/> is applied before playback for play-from-cursor rehearsal.
     /// </summary>
-    public void Play(string? path, bool loop = false, int clipId = 0)
+    public void Play(string? path, bool loop = false, int clipId = 0, int startOffsetMs = 0)
     {
         if (string.IsNullOrEmpty(path)) return;
         if (!_fileExists(path))
@@ -63,6 +64,8 @@ public sealed class AudioPlaybackService : ISequencerAudioPlayer, IDisposable
         try
         {
             entry.Handle.Open(path);
+            if (startOffsetMs > 0)
+                entry.Handle.Seek(startOffsetMs);
             entry.Handle.Play();
         }
         catch (Exception ex)

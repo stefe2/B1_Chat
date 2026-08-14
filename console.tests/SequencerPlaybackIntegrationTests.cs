@@ -159,6 +159,57 @@ public sealed class SequencerPlaybackIntegrationTests
     }
 
     [Fact]
+    public void PlayFromCursorSeeksOverlappingAudioButDoesNotRecreatePastGestures()
+    {
+        var protocol = new FakeSequencerProtocol();
+        protocol.Durations[2] = 1_000;
+        var scheduler = new FakePlaybackTimerScheduler();
+        var audio = new FakeAudioPlayer();
+        using var vm = CreateViewModel(protocol, scheduler, audio: audio);
+        vm.Steps.Add(new SequenceStep { StartMs = 100, Target = 0xFFFF, AnimId = 2 });
+        vm.AudioLanes[0].Clips.Add(new AudioClip
+        {
+            StartMs = 100,
+            DurationMs = 1_000,
+            FilePath = "overlap.wav",
+        });
+        vm.PlayheadMs = 450;
+
+        vm.PlayCommand.Execute(null);
+
+        var played = Assert.Single(audio.Actions, action => action.Kind == "Play");
+        Assert.Equal("overlap.wav", played.Path);
+        Assert.Equal(350, played.StartOffsetMs);
+        Assert.Empty(protocol.Sent);
+        vm.StopCommand.Execute(null);
+    }
+
+    [Fact]
+    public void PlayFromCursorSeeksLoopingAudioToItsCurrentCycle()
+    {
+        var protocol = new FakeSequencerProtocol();
+        var scheduler = new FakePlaybackTimerScheduler();
+        var audio = new FakeAudioPlayer();
+        using var vm = CreateViewModel(protocol, scheduler, audio: audio);
+        vm.AudioLanes[0].Clips.Add(new AudioClip
+        {
+            StartMs = 100,
+            DurationMs = 500,
+            FilePath = "loop.wav",
+            Loop = true,
+        });
+        vm.Steps.Add(new SequenceStep { StartMs = 2_000, Target = 0xFFFF, AnimId = 2 });
+        vm.PlayheadMs = 1_350;
+
+        vm.PlayCommand.Execute(null);
+
+        var played = Assert.Single(audio.Actions, action => action.Kind == "Play");
+        Assert.Equal(250, played.StartOffsetMs);
+        Assert.True(played.Loop);
+        vm.StopCommand.Execute(null);
+    }
+
+    [Fact]
     public void FollowDefaultsOnForANewPassButManualSuspensionSurvivesPauseResume()
     {
         var protocol = new FakeSequencerProtocol();
@@ -202,6 +253,12 @@ public sealed class SequencerPlaybackIntegrationTests
         Assert.True(SequenceTimelineView.MatchesAutomaticScrollTarget(212, 212.5));
         Assert.False(SequenceTimelineView.MatchesAutomaticScrollTarget(212, 215));
         Assert.False(SequenceTimelineView.MatchesAutomaticScrollTarget(null, 212));
+        Assert.True(SequenceTimelineView.ShouldRestoreFollowAfterScrollbarInteraction(
+            followWasEnabled: true, isPlaying: true));
+        Assert.False(SequenceTimelineView.ShouldRestoreFollowAfterScrollbarInteraction(
+            followWasEnabled: false, isPlaying: true));
+        Assert.False(SequenceTimelineView.ShouldRestoreFollowAfterScrollbarInteraction(
+            followWasEnabled: true, isPlaying: false));
         Assert.Equal(0, SequenceTimelineView.CalculateFollowOffset(
             currentOffset: 500, playheadContentX: 0, viewportWidth: 400, scrollableWidth: 1_000));
     }

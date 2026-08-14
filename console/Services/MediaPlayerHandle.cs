@@ -19,6 +19,8 @@ public sealed class MediaPlayerHandle : IMediaHandle
     private readonly MediaPlayer _player = new();
     private readonly Dispatcher _dispatcher;
     private bool _disposed;
+    private bool _opened;
+    private int? _pendingPositionMs;
 
     public event Action? Opened;
     public event Action? Ended;
@@ -40,6 +42,8 @@ public sealed class MediaPlayerHandle : IMediaHandle
     public void Open(string path)
     {
         if (_disposed) return;
+        _opened = false;
+        _pendingPositionMs = null;
         _player.Open(new Uri(path));
     }
 
@@ -58,12 +62,35 @@ public sealed class MediaPlayerHandle : IMediaHandle
         if (!_disposed) _player.Stop();
     }
 
+    public void Seek(int positionMs)
+    {
+        if (_disposed) return;
+        var clamped = Math.Max(0, positionMs);
+        if (!_opened)
+        {
+            // MediaPlayer opens asynchronously. Retain the request so MediaOpened applies the
+            // offset before notifying subscribers and before queued playback becomes audible.
+            _pendingPositionMs = clamped;
+            return;
+        }
+        _player.Position = TimeSpan.FromMilliseconds(clamped);
+    }
+
     public void Rewind()
     {
         if (!_disposed) _player.Position = TimeSpan.Zero;
     }
 
-    private void OnMediaOpened(object? sender, EventArgs e) => Opened?.Invoke();
+    private void OnMediaOpened(object? sender, EventArgs e)
+    {
+        _opened = true;
+        if (_pendingPositionMs is { } positionMs)
+        {
+            _player.Position = TimeSpan.FromMilliseconds(positionMs);
+            _pendingPositionMs = null;
+        }
+        Opened?.Invoke();
+    }
 
     private void OnMediaEnded(object? sender, EventArgs e) => Ended?.Invoke();
 

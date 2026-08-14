@@ -46,7 +46,8 @@ enables/disables a servo, previews a position, or starts an animation.
   calibration loads suppress write-back callbacks;
 - verifies that the audio duration probe is typed and bounded, that playback
   failures are surfaced, that the waveform cache key follows file changes and
-  that stale waveform assignments are rejected;
+  that stale waveform assignments are rejected, and that play-from-cursor seeks
+  overlapping normal/looping clips without reconstructing prior gestures;
 - verifies that Media Foundation (`mfplat.dll`) is present on this machine and
   that the audio test fixture is in place. The unit suite then opens that real MP3
   through WPF `MediaPlayer` on an STA dispatcher, checks its duration and verifies
@@ -59,9 +60,10 @@ The Sequencer suite also covers the audio services: every probe outcome
 zero-length file, timeout, cancellation before and during the probe, throwing
 open, file removed after the existence check), the media lifecycle (natural end,
 loop restart, failure reported once, concurrent clips, resume after a clip ended,
-idempotent Stop) and the waveform cache (single decode, same-path content change,
-retry after failure, bounded capacity), plus the stale-decode race driven through
-the view model. Scene and Undo/Redo restoration tests cover corrupt/missing asset
+idempotent Stop, pending-open seek) and the waveform cache (single decode,
+same-path content change, retry after failure, bounded capacity), plus the
+stale-decode race driven through the view model. Scene and Undo/Redo restoration
+tests cover corrupt/missing asset
 warnings and exclusion of their stale duration tails. One test decodes a committed
 MP3 fixture with NAudio for real and asserts a rising envelope; another opens it
 with WPF `MediaPlayer` on a real dispatcher. A broken bucket mapping, missing MP3

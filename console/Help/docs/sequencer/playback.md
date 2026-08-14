@@ -38,8 +38,10 @@ Muted or offline rows do not create a queue for missed commands.*
 ## Play, Pause, Stop, and Loop
 
 - **Play** (`Space`) starts from the current playhead. At the natural end it
-  starts a new pass from t = 0. Events before a manually retained cursor are
-  skipped; their droid state and an already-started audio clip are not recreated.
+  starts a new pass from t = 0. Prior gesture events are skipped because their
+  droid state cannot be reconstructed safely. An audio clip that overlaps the
+  cursor instead seeks to its matching source offset; a looping clip seeks to
+  the corresponding point in its current cycle.
 - The same primary button becomes **Pause** while running and **Resume** while
   paused. A rapid second press therefore pauses; it never silently restarts the
   Scene.

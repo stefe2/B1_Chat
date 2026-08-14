@@ -50,6 +50,8 @@ public partial class SequenceTimelineView : UserControl
     // therefore already false when the event arrives and makes Follow disable itself. Retain
     // the requested destination until that exact automatic change is observed instead.
     private double? _automaticHorizontalScrollTarget;
+    private bool _horizontalScrollbarInteraction;
+    private bool _restoreFollowAfterScrollbarInteraction;
 
     private const double FollowCorridorLeftRatio = 0.15;
     private const double FollowCorridorRightRatio = 0.72;
@@ -100,6 +102,9 @@ public partial class SequenceTimelineView : UserControl
 
     internal static bool MatchesAutomaticScrollTarget(double? requestedOffset, double observedOffset) =>
         requestedOffset is { } requested && Math.Abs(requested - observedOffset) <= 0.75;
+
+    internal static bool ShouldRestoreFollowAfterScrollbarInteraction(
+        bool followWasEnabled, bool isPlaying) => followWasEnabled && isPlaying;
 
     private void SequenceTimelineView_Loaded(object sender, RoutedEventArgs e)
     {
@@ -234,6 +239,47 @@ public partial class SequenceTimelineView : UserControl
         // layout coercion), so discard a stale automatic request and yield control.
         _automaticHorizontalScrollTarget = null;
         if (Vm is { } vm) vm.FollowPlayhead = false;
+    }
+
+    private void ScrollArea_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (!OriginatesInHorizontalScrollbar(e.OriginalSource as DependencyObject)) return;
+        _horizontalScrollbarInteraction = true;
+        _restoreFollowAfterScrollbarInteraction = Vm is { } vm &&
+            ShouldRestoreFollowAfterScrollbarInteraction(vm.FollowPlayhead, vm.IsPlaying);
+    }
+
+    private void ScrollArea_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (!_horizontalScrollbarInteraction) return;
+        _horizontalScrollbarInteraction = false;
+        var restore = _restoreFollowAfterScrollbarInteraction;
+        _restoreFollowAfterScrollbarInteraction = false;
+        if (!restore) return;
+
+        // The thumb's final ScrollChanged can be deferred until after MouseUp. Restore on the
+        // dispatcher only after that notification has had a chance to mark the manual offset.
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background, () =>
+        {
+            if (Vm is { IsPlaying: true } vm)
+                vm.FollowPlayhead = true;
+        });
+    }
+
+    private static bool OriginatesInHorizontalScrollbar(DependencyObject? source)
+    {
+        while (source != null)
+        {
+            if (source is ScrollBar scrollBar)
+                return scrollBar.Orientation == Orientation.Horizontal;
+            source = source is ContentElement content
+                ? ContentOperations.GetParent(content) ??
+                  (content as FrameworkContentElement)?.Parent
+                : source is Visual
+                    ? VisualTreeHelper.GetParent(source)
+                    : LogicalTreeHelper.GetParent(source);
+        }
+        return false;
     }
 
     private void ScrollArea_PreviewMouseWheel(object sender, MouseWheelEventArgs e)

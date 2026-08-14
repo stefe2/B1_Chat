@@ -2132,6 +2132,8 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
             TransitionTransportTo(SequencerTransportState.Playing);
             if (resumeAudio)
                 _audioPlayer.ResumeAll(); // continues from each clip's retained position, no seek math
+            else if (skipEventsBeforeStart && fromMs > 0)
+                StartAudioOverlappingCursor(plan, fromMs);
             StartPlayheadTicker(fromMs);
             StartPlaybackScheduler(plan, fromMs, generation, skipEventsBeforeStart);
         }
@@ -2140,6 +2142,21 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
             // A partial timer/audio start must never leave the UI claiming that transport is live.
             StopTransportCore();
             throw;
+        }
+    }
+
+    private void StartAudioOverlappingCursor(SequencerPlaybackPlan plan, int fromMs)
+    {
+        foreach (var audio in plan.Events.OfType<AudioPlaybackEvent>())
+        {
+            if (audio.StartMs >= fromMs || audio.DurationMs <= 0) continue;
+            var elapsedMs = fromMs - audio.StartMs;
+            if (!audio.Loop && elapsedMs >= audio.DurationMs) continue;
+            if (!_dispatchedPlaybackEvents.Add(audio.SourceOrder)) continue;
+
+            var offsetMs = audio.Loop ? elapsedMs % audio.DurationMs : elapsedMs;
+            _audioPlayer.Play(
+                audio.FilePath, audio.Loop, audio.SourceOrder, startOffsetMs: offsetMs);
         }
     }
 

@@ -82,7 +82,7 @@
                         ToolTip="Adjust zoom so the complete sequence fits in the visible timeline." />
                 <ToggleButton Content="Follow" Style="{StaticResource HaloToggleButtonStyle}"
                               IsChecked="{Binding FollowPlayhead}" Margin="0,0,10,0" VerticalAlignment="Center"
-                              ToolTip="Keep the running playhead inside a comfort corridor. Manual horizontal scroll, Fit, slider zoom, Ctrl+wheel zoom, or Shift+wheel pan turns Follow off; click to catch up." />
+                              ToolTip="Keep the running playhead inside a comfort corridor. Dragging the horizontal scrollbar suspends Follow until release; Fit, slider zoom, Ctrl+wheel zoom, or Shift+wheel pan turns it off until you re-enable it." />
 
                 <Rectangle Width="1" Fill="{StaticResource BorderHiBrush}" Opacity="0.5" Margin="0,2,10,2" />
 
@@ -348,7 +348,9 @@
                 <!-- Ruler + audio lanes + tracks, scrolling together horizontally -->
                 <ScrollViewer x:Name="ScrollArea" Grid.Column="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"
                               Background="Transparent" SizeChanged="ScrollArea_SizeChanged"
-                              ScrollChanged="ScrollArea_ScrollChanged" PreviewMouseWheel="ScrollArea_PreviewMouseWheel">
+                              ScrollChanged="ScrollArea_ScrollChanged" PreviewMouseWheel="ScrollArea_PreviewMouseWheel"
+                              PreviewMouseLeftButtonDown="ScrollArea_PreviewMouseLeftButtonDown"
+                              PreviewMouseLeftButtonUp="ScrollArea_PreviewMouseLeftButtonUp">
                     <!-- HorizontalAlignment="Left" is load-bearing: without it, when the sequence is
                          short/zoomed out (content narrower than the viewport), ScrollViewer's default
                          content stretching centers this StackPanel instead of pinning it flush against

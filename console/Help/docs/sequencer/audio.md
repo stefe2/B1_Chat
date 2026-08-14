@@ -62,7 +62,10 @@ separate transport option that restarts the complete pass.
 Pause retains the position of audio that is already playing. Resume continues
 that audio and schedules future clips; a clip that already finished before the
 Pause is not restarted. Stop closes all active players. Pressing Play during an
-active pass first stops existing audio to avoid stacking duplicate players.
+active pass first stops existing audio to avoid stacking duplicate players. If
+you move the stopped playhead inside an audio clip and press Play, that clip
+starts at the matching source offset; looping audio uses the corresponding point
+in its current cycle.
 
 ## Files are linked, not embedded
 

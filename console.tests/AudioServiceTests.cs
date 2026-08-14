@@ -204,6 +204,19 @@ public class AudioPlaybackLifecycleTests
     }
 
     [Fact]
+    public void Play_from_an_offset_seeks_before_starting_the_clip()
+    {
+        var factory = new FakeMediaHandleFactory(_ => { });
+        using var service = Build(factory);
+
+        service.Play("a.mp3", startOffsetMs: 425);
+
+        var handle = factory.Created.Single();
+        Assert.Equal(new[] { 425 }, handle.SeekPositions);
+        Assert.Equal(1, handle.PlayCount);
+    }
+
+    [Fact]
     public void A_finished_non_looping_clip_leaves_the_active_set_and_closes()
     {
         var factory = new FakeMediaHandleFactory(_ => { });
@@ -832,6 +845,26 @@ public class AudioCodecSmokeTests
         });
     }
 
+    [Fact]
+    public async Task Wpf_MediaPlayer_applies_a_seek_requested_while_the_source_is_opening()
+    {
+        await RunOnDispatcherThread(async () =>
+        {
+            using var handle = new MediaPlayerHandle();
+            var opened = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            handle.Opened += () => opened.TrySetResult();
+
+            handle.Open(FixturePath);
+            handle.Seek(650);
+            await opened.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+            var playerField = typeof(MediaPlayerHandle).GetField(
+                "_player", BindingFlags.Instance | BindingFlags.NonPublic);
+            var player = Assert.IsType<MediaPlayer>(playerField!.GetValue(handle));
+            Assert.InRange(player.Position.TotalMilliseconds, 600, 700);
+        });
+    }
+
     private static async Task RunOnDispatcherThread(Func<Task> action)
     {
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -892,6 +925,7 @@ internal sealed class FakeMediaHandle : IMediaHandle
     public int PauseCount { get; private set; }
     public int StopCount { get; private set; }
     public int RewindCount { get; private set; }
+    public List<int> SeekPositions { get; } = new();
 
     public void Open(string path)
     {
@@ -903,6 +937,7 @@ internal sealed class FakeMediaHandle : IMediaHandle
     public void Play() => PlayCount++;
     public void Pause() => PauseCount++;
     public void Stop() => StopCount++;
+    public void Seek(int positionMs) => SeekPositions.Add(positionMs);
     public void Rewind() => RewindCount++;
 
     public void RaiseOpened() => Opened?.Invoke();
