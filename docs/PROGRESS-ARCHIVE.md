@@ -1040,8 +1040,8 @@ Sequencer backlog item by item.
       12-DIP margin is scaled with the window DPI so the title bar and resize edges remain
       reachable on mixed-DPI, negative-coordinate and vertically offset monitor layouts. Four
       headless geometry tests cover those cases; full suite 235/235 and Release build clean
-      (0 warnings). Rendered confirmation on the user's smaller secondary monitor remains the
-      final operator check.
+      (0 warnings). The user then relaunched the Release console on the smaller secondary
+      monitor and confirmed that the complete window and title bar remained reachable.
 
 ## Incidents (full narratives)
 
