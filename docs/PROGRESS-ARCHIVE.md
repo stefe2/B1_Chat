@@ -1029,6 +1029,19 @@ Sequencer backlog item by item.
       bar text/buttons legible on dark, scrollbar thumb visible-but-unobtrusive, no default
       light-chrome bleeding through anywhere) across the resized main window. `dotnet build`
       clean (0 warnings) throughout.
+- [x] Main-window startup constrained to its actual monitor (2026-08-14). The previous
+      constructor mixed `SystemParameters.WorkArea.Height` (which can describe the primary
+      display) with WPF `CenterScreen` placement (which can select another display). On a
+      smaller secondary monitor this could center a primary-sized window with its native title
+      bar completely above the visible work area. New `Services/WindowPlacement.cs` waits for
+      the HWND, selects its nearest monitor with `MonitorFromWindow`, reads that monitor's
+      taskbar-excluding `rcWork`, and clamps/centers the window in physical pixels. The normal
+      1500-DIP width is preserved when it fits; both dimensions shrink when necessary, and a
+      12-DIP margin is scaled with the window DPI so the title bar and resize edges remain
+      reachable on mixed-DPI, negative-coordinate and vertically offset monitor layouts. Four
+      headless geometry tests cover those cases; full suite 235/235 and Release build clean
+      (0 warnings). Rendered confirmation on the user's smaller secondary monitor remains the
+      final operator check.
 
 ## Incidents (full narratives)
 

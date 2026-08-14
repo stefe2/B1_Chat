@@ -44,6 +44,8 @@ enables/disables a servo, previews a position, or starts an animation.
   optional Windows media stack is absent, and executes both installed binaries;
 - verifies that animation/calibration debounces snapshot their target and that
   calibration loads suppress write-back callbacks;
+- verifies main-window startup placement against large, smaller/offset, left-of-primary
+  and pathologically tiny monitor work areas, including clamping and positive bounds;
 - verifies that the audio duration probe is typed and bounded, that playback
   failures are surfaced, that the waveform cache key follows file changes and
   that stale waveform assignments are rejected, and that play-from-cursor seeks

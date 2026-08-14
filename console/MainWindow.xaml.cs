@@ -18,9 +18,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
-        // Keep the established width, but fit the window to the full usable
-        // screen height at startup. WorkArea excludes the taskbar.
-        Height = SystemParameters.WorkArea.Height;
+        WindowPlacement.FitMainWindowToCurrentMonitor(this);
 
         DarkTitleBar.Apply(this);
         var vm = new MainViewModel();

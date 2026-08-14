@@ -58,7 +58,7 @@ design reference and is never loaded at runtime.
 
 | Folder / file | Role |
 | --- | --- |
-| `MainWindow.xaml(.cs)` | header (logo, connection status, unsaved auto-commit badge, Firmware and Help buttons) plus the card grid |
+| `MainWindow.xaml(.cs)` | header (logo, connection status, unsaved auto-commit badge, Firmware and Help buttons) plus the card grid; startup placement is delegated to `WindowPlacement` so the complete window remains reachable on the selected monitor |
 | `FirmwareWindow.xaml(.cs)` | separate window hosting `Views/FirmwareCardView` — espflash flashing and GitHub updates |
 | `HelpWindow.xaml(.cs)` | separate window: table-of-contents sidebar plus one continuous `FlowDocumentScrollViewer` assembled from `Help/docs/*.md` through `Markdig.Wpf` (deliberately not WebView2); menu clicks jump to sections and scrolling syncs the active page |
 | `CalibrationWindow.xaml(.cs)` | separate window hosting `Views/CalibrationCardView`, opened from each Droids row's ⛭ button and pre-targeted at that droid before the window shows |
@@ -83,12 +83,13 @@ design reference and is never loaded at runtime.
 | `Services/AnimationDurationProvider.cs` | single source for each gesture's kind (immediate/finite/infinite), effective tail, target-speed-aware range, provisional state and inspector text |
 | `Services/PlaybackGeneration.cs` · `WaveformService.cs` | per-pass generation and cancellation identity; audio waveform peak decoding with a metadata-keyed, bounded cache |
 | `Services/DarkTitleBar.cs` | recolors the native Win32 title bar (`DwmSetWindowAttribute`, Windows 11 22H2+) on all 7 app-owned windows |
+| `Services/WindowPlacement.cs` | fits and centers the main window inside the Win32 work area of the monitor where WPF created it, with DPI-scaled margins and mixed-monitor coordinates handled in native pixels |
 | `Services/InstallationVerifier.cs` | backs `--verify-install`, the self-check the NSIS installer runs against the installed binaries |
 | `Services/TraceLog.cs` | optional serial trace to `%LOCALAPPDATA%\B1ChatConsole\serial-trace.log` |
 | `Converters/` | binding converters: boolean/visibility/brush/text, `StrengthToBrushConverter` (mesh link color by RSSI), the timeline set (`TimelineGeometryConverter`, `TimelineActiveConverter`, `AnimFamilyToBrushConverter`, `WaveformToGeometryConverter`, `TrackMutedConverter`), firmware status, and `MarkdownToFlowDocumentConverter` for Help |
 | `Help/manifest.json` + `Help/docs/**/*.md` | in-app Help content, sections → pages, copied to the output directory as Content rather than embedded |
 | `b1-chat-console.csproj` | auto-incremented build number, version from `VersionPrefix`, `IncludeNativeLibrariesForSelfExtract`, `tools/` (espflash plus the app-local VC143 x64 runtime) excluded from the single file but copied on publish |
-| `console.tests/` (repo root, `b1-chat-console.Tests.csproj`) | headless xUnit suite: playback plan and integration, transport state boundaries, edit history, import/persistence, Scene library, duration provider, audio probe/lifecycle/waveform, plus `Fixtures/Sequences/sequence-v1..v4.json` golden files and `Fixtures/Audio/probe-tone-1500ms.mp3`. Runs without WPF or hardware and must not bump `console/build.number` |
+| `console.tests/` (repo root, `b1-chat-console.Tests.csproj`) | headless xUnit suite: playback plan and integration, transport state boundaries, edit history, import/persistence, Scene library, duration provider, audio probe/lifecycle/waveform, native-pixel window-placement geometry, plus `Fixtures/Sequences/sequence-v1..v4.json` golden files and `Fixtures/Audio/probe-tone-1500ms.mp3`. Runs without WPF or hardware and must not bump `console/build.number` |
 | `installer/b1-chat-console.nsi` + `release.ps1` | NSIS installer and the GitHub release script (tag `vX.Y.Z`) |
 
 Main grid layout (`MainWindow.xaml`): Droids (left column) · Mesh Topology

@@ -69,6 +69,13 @@ relevant behavior.
 
 ## WPF layout and input
 
+- Do not combine `SystemParameters.WorkArea` with `WindowStartupLocation="CenterScreen"`:
+  the former can describe the primary monitor while WPF centers the window on a
+  different one, pushing its title bar off a smaller display. Once the HWND exists,
+  select its monitor with `MonitorFromWindow`, use that monitor's `rcWork`, and keep
+  the clamp/centering calculation in native pixels. Scale only the desired DIP margin
+  with `GetDpiForWindow`; this also handles different DPI settings and monitors with
+  negative or vertically offset desktop coordinates.
 - In a repeated `DataTemplate`, animate named `Transform`s from
   `DataTemplate.Triggers`; do not animate an unnamed compound property path.
   `Style.Triggers` has no usable template `NameScope` for this case.
