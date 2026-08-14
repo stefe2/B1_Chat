@@ -808,6 +808,31 @@ For what the shipped behavior actually does at runtime, read
   confirmed that a second Play does not restart, that explicit Restart returns
   to zero, and that the complete workflow behaves as expected.
 
+### [x] SEQ-G15 — Separate Stop from playhead navigation and rewind
+
+- **Priority:** P2
+- **Problem:** normal Stop ended playback and always returned the playhead to
+  zero. Transport safety cleanup and timeline navigation are different
+  intentions, and forcing both made inspection and rehearsal awkward.
+- **Depends on:** SEQ-A06, SEQ-B07, SEQ-G14.
+- **Acceptance:** define and expose the post-Stop playhead policy separately from
+  hardware/audio cleanup. Specify normal Stop, Safe Stop, Emergency Stop,
+  natural end and Loop boundaries, plus whether Play while stopped begins at
+  zero or at the retained cursor. A dedicated return-to-start action is always
+  available and cannot be confused with a safety stop.
+- **Validation:** tests cover Stop from Play/Pause, repeated Stop, return to
+  start, Play after retained Stop, natural end, Safe/Emergency Stop and Loop.
+- **Implemented:** normal, Safe and Emergency Stop retain the measured cursor;
+  non-looping natural completion retains the calculated end. A distinct
+  return-to-start button/`Ctrl+Home` is enabled only while stopped. Play starts
+  from a retained cursor and skips older events; at the natural end it starts a
+  new pass from zero. Restart is the always-explicit performance-from-zero path.
+- **Evidence:** automated transport coverage passed in the 172/172 WPF suite,
+  followed by the current 224/224 full suite. In Release build 359, the operator
+  confirmed that Stop retains the cursor, Play resumes from that retained
+  position, `Return to start` moves it to zero and explicit Restart begins from
+  zero. The rendered control ordering and rehearsal workflow behaved correctly.
+
 ## EPIC H — Automated and hardware validation
 
 ### [x] SEQ-H01 — Create a Sequencer-focused test project and fixtures
@@ -827,6 +852,7 @@ Append concise evidence when closing items; do not paste full build logs.
 
 | Date | Items | Evidence |
 |---|---|---|
+| 2026-08-13 | SEQ-G15 | Closed after rendered Release build 359 validation: Stop retained the playhead, Play resumed from the retained position without replaying earlier content, Return to start moved to zero and explicit Restart began from zero. Automated Stop/Pause/Safe/Emergency/natural-end/Loop coverage had already passed in the 172/172 suite; the current full WPF suite remains 224/224. |
 | 2026-08-13 | SEQ-G14 | Closed after rendered Release build 359 validation: state-dependent Play/Pause/Resume glyph and tooltip, click and `Space` interaction, no implicit restart on a second Play, and explicit Restart from zero all behaved as expected. Automated transport coverage had already passed in the 172/172 suite; the current full WPF suite remains 224/224. |
 | 2026-08-13 | SEQ-F03, SEQ-F04, SEQ-F05, SEQ-F07 follow-up | Audit corrections: `MediaPlayer` teardown now returns to its owner dispatcher; the transport binds a visible per-clip `⚠ AUDIO` failure badge; unavailable or pending assets have zero effective duration while retaining serialized recovery metadata; Scene and Undo/Redo restoration revalidate present assets. Six focused tests add binding notification, restored corrupt/missing/pending state, effective playback-plan duration and a real WPF dispatcher/MediaPlayer open-close smoke path. Full suite: 224/224. Offline self-test: 21/21, clean WPF/master/slave builds, build number preserved at 359, report `b1-self-test-20260813-225837.json`. Operator rendered validation passed with a text payload renamed `.mp3`: narrow warning clip, orange border, reason tooltip and visible playback `⚠ AUDIO` report all behaved correctly. |
 | 2026-08-13 | SEQ-F03, SEQ-F04, SEQ-F05, SEQ-F06, SEQ-F07 | Audio robustness batch. Probe, waveform decoding and media lifecycle moved behind `IAudioProbe`, `IWaveformDecoder` and `IMediaHandle`; typed probe results with timeout and cancellation; unreadable clips stay visible and badged without affecting sequence length; metadata-keyed bounded waveform cache with stale-assignment rejection; per-clip media handles retired on end or failure with the failure reported. Console build clean, 0 warnings.

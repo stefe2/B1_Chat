@@ -13,7 +13,7 @@ Three companion documents hold the rest, so this one stays cheap to read:
 
 - [SEQUENCER-BEHAVIOR.md](SEQUENCER-BEHAVIOR.md) — what currently *ships*, at
   runtime. Read it before changing Sequencer behavior.
-- [SEQUENCER-DONE.md](SEQUENCER-DONE.md) — the 42 closed items with their
+- [SEQUENCER-DONE.md](SEQUENCER-DONE.md) — the 43 closed items with their
   acceptance criteria and the completion evidence log.
 - [SEQUENCER-IDEAS.md](SEQUENCER-IDEAS.md) — EPIC I and EPIC K, 30 deferred
   design ideas gated behind the M1–M4 baseline.
@@ -90,7 +90,7 @@ along is the Sequencer".
 | D | Import, export and local library | 8 / 8 | 0 / 1 |
 | E | Deterministic scheduler and performance | 5 / 6 | 0 / 1 |
 | F | Duration and audio robustness | 6 / 8 | — |
-| G | Preflight and ergonomics | 1 / 14 | 0 / 5 |
+| G | Preflight and ergonomics | 2 / 14 | 0 / 5 |
 | H | Automated and hardware validation | 1 / 8 | — |
 | I | Scene & Show System (future) | — | 0 / 22 |
 | J | Commissioning and servo configuration safety | 0 / 2 | — |
@@ -224,7 +224,8 @@ along is the Sequencer".
 
 ## EPIC G — Preflight and ergonomics
 
-1 completed item moved to [SEQUENCER-DONE.md](SEQUENCER-DONE.md): SEQ-G14.
+2 completed items moved to [SEQUENCER-DONE.md](SEQUENCER-DONE.md): SEQ-G14,
+SEQ-G15.
 
 ### [ ] SEQ-G01 — Add a preflight result model and Play gate
 
@@ -381,33 +382,6 @@ along is the Sequencer".
   silently changing system-wide settings.
 - **Validation:** device removal/change, mute, unsupported media, battery/power,
   sleep-policy warning, low-space and successful show-PC checklist.
-
-### [~] SEQ-G15 — Separate Stop from playhead navigation and rewind
-
-- **Priority:** P2
-- **Problem:** normal Stop currently ends playback and always returns the
-  playhead to zero. Transport safety cleanup and timeline navigation are two
-  different intentions, and forcing both makes inspection/rehearsal awkward.
-- **Depends on:** SEQ-A06, SEQ-B07, SEQ-G14.
-- **Acceptance:** define and expose the post-Stop playhead policy separately from
-  hardware/audio cleanup. Specify normal Stop, Safe Stop, Emergency Stop,
-  natural end and Loop boundaries, plus whether Play while stopped begins at
-  zero or at the retained cursor. A dedicated return-to-start action is always
-  available and cannot be confused with a safety stop.
-- **Recommendation:** normal Stop should cancel/clean up immediately but retain
-  the current playhead for inspection. Add a distinct `Return to start` button.
-  Keep performance-mode GO-from-zero and rehearsal Play-from-cursor as explicit
-  choices instead of inferring them from the cursor position. Safe/Emergency
-  Stop should prioritize safety and may retain the last position diagnostically.
-- **Validation:** tests cover Stop from Play/Pause, repeated Stop, return to
-  start, Play after retained Stop, natural end, Safe/Emergency Stop and Loop.
-- **Implemented:** normal, Safe and Emergency Stop retain the measured cursor;
-  non-looping natural completion retains the calculated end. A distinct
-  return-to-start button/`Ctrl+Home` is enabled only while stopped. Play starts
-  from a retained cursor and skips older events; at the natural end it starts a
-  new pass from zero. Restart is the always-explicit performance-from-zero path.
-- **Remaining validation:** rendered control ordering and rehearsal workflow
-  check in the Release console.
 
 ### [~] SEQ-G16 — Add an operator-controlled Follow Playhead mode
 
@@ -741,9 +715,10 @@ detailed commit after its full regression passes.
 | T1 — Coherent duration and infinite ends | SEQ-F01, SEQ-F02, SEQ-C06, SEQ-B04 | **Code complete; F01 hardware measurement pending.** Structured firmware timing metadata feeds one target-aware provider and cached extent; schema v5 promotes looping-gesture width into a persisted endpoint with ownership-safe IDLE termination. |
 
 SEQ-D09 remains deferred. The Play/Pause control (SEQ-G14) is complete;
-transport/navigation UX (SEQ-G15 through SEQ-G17) and the Scene document
-workflow (SEQ-G18) are implemented with rendered validation pending, followed
-by sequence/audio end semantics (SEQ-F08 then SEQ-E05).
+the Stop/navigation control (SEQ-G15) is complete; Follow and wheel navigation
+(SEQ-G16 and SEQ-G17) and the Scene document workflow (SEQ-G18) are implemented
+with rendered validation pending, followed by sequence/audio end semantics
+(SEQ-F08 then SEQ-E05).
 
 ## Decision log
 
