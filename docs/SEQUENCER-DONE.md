@@ -781,6 +781,33 @@ For what the shipped behavior actually does at runtime, read
   tooltip names the file and reason; duplicate notifications are suppressed per
   clip identity, not merely per error string.
 
+## EPIC G — Preflight and ergonomics
+
+### [x] SEQ-G14 — Redesign Play as an unambiguous Play/Pause control
+
+- **Priority:** P1
+- **Problem:** pressing Play while already playing restarted the Scene from zero
+  and resent its first commands. This was surprising for a conventional
+  transport and could cause an accidental motion restart.
+- **Depends on:** SEQ-A06, SEQ-E04.
+- **Acceptance:** the primary control always exposes the action that will happen
+  next. A second ordinary Play press must not silently restart; restart from zero
+  remains available through a separate, unmistakable action. Tooltips, keyboard
+  shortcuts, disabled states and Help all match Stopped/Playing/Paused.
+- **Validation:** state/command/UI tests cover stopped Play, playing Pause,
+  paused Resume, explicit Restart, rapid double-click, failure to start and Loop.
+- **Implemented:** the primary button and `Space` expose Play/Pause/Resume
+  through a state-dependent glyph and tooltip. A second Play pauses rather than
+  resending choreography; `Restart`/`Ctrl+Enter` owns the explicit clean restart
+  path. Existing generation and Loop safety tests use that separate action. The
+  safety hierarchy is visually explicit: E-STOP uses a permanent filled-red
+  treatment, while Loop is a neutral editing mode that turns orange when active.
+- **Evidence:** automated transport coverage passed in the 172/172 WPF suite,
+  followed by the current 224/224 full suite. In Release build 359, the operator
+  validated the rendered glyphs/tooltips, click and `Space` Play/Pause/Resume,
+  confirmed that a second Play does not restart, that explicit Restart returns
+  to zero, and that the complete workflow behaves as expected.
+
 ## EPIC H — Automated and hardware validation
 
 ### [x] SEQ-H01 — Create a Sequencer-focused test project and fixtures
@@ -800,6 +827,7 @@ Append concise evidence when closing items; do not paste full build logs.
 
 | Date | Items | Evidence |
 |---|---|---|
+| 2026-08-13 | SEQ-G14 | Closed after rendered Release build 359 validation: state-dependent Play/Pause/Resume glyph and tooltip, click and `Space` interaction, no implicit restart on a second Play, and explicit Restart from zero all behaved as expected. Automated transport coverage had already passed in the 172/172 suite; the current full WPF suite remains 224/224. |
 | 2026-08-13 | SEQ-F03, SEQ-F04, SEQ-F05, SEQ-F07 follow-up | Audit corrections: `MediaPlayer` teardown now returns to its owner dispatcher; the transport binds a visible per-clip `⚠ AUDIO` failure badge; unavailable or pending assets have zero effective duration while retaining serialized recovery metadata; Scene and Undo/Redo restoration revalidate present assets. Six focused tests add binding notification, restored corrupt/missing/pending state, effective playback-plan duration and a real WPF dispatcher/MediaPlayer open-close smoke path. Full suite: 224/224. Offline self-test: 21/21, clean WPF/master/slave builds, build number preserved at 359, report `b1-self-test-20260813-225837.json`. Operator rendered validation passed with a text payload renamed `.mp3`: narrow warning clip, orange border, reason tooltip and visible playback `⚠ AUDIO` report all behaved correctly. |
 | 2026-08-13 | SEQ-F03, SEQ-F04, SEQ-F05, SEQ-F06, SEQ-F07 | Audio robustness batch. Probe, waveform decoding and media lifecycle moved behind `IAudioProbe`, `IWaveformDecoder` and `IMediaHandle`; typed probe results with timeout and cancellation; unreadable clips stay visible and badged without affecting sequence length; metadata-keyed bounded waveform cache with stale-assignment rejection; per-clip media handles retired on end or failure with the failure reported. Console build clean, 0 warnings.
 | 2026-08-13 | SEQ-H05 (in progress) | Sequencer suite 181 to 218 tests, all passing (`dotnet test`, 304 ms). New `AudioServiceTests.cs` drives probe, lifecycle and cache policy through fakes, plus a real NAudio decode of the committed `probe-tone-1500ms.mp3` fixture asserting a rising envelope. `tools/self-test.ps1 -SkipSerial`: 21 passed, 0 failed (19 before), report `b1-self-test-20260813-011856.json`. Audio loop endpoint coverage still blocked on SEQ-F08.

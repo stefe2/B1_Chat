@@ -13,7 +13,7 @@ Three companion documents hold the rest, so this one stays cheap to read:
 
 - [SEQUENCER-BEHAVIOR.md](SEQUENCER-BEHAVIOR.md) — what currently *ships*, at
   runtime. Read it before changing Sequencer behavior.
-- [SEQUENCER-DONE.md](SEQUENCER-DONE.md) — the 41 closed items with their
+- [SEQUENCER-DONE.md](SEQUENCER-DONE.md) — the 42 closed items with their
   acceptance criteria and the completion evidence log.
 - [SEQUENCER-IDEAS.md](SEQUENCER-IDEAS.md) — EPIC I and EPIC K, 30 deferred
   design ideas gated behind the M1–M4 baseline.
@@ -90,7 +90,7 @@ along is the Sequencer".
 | D | Import, export and local library | 8 / 8 | 0 / 1 |
 | E | Deterministic scheduler and performance | 5 / 6 | 0 / 1 |
 | F | Duration and audio robustness | 6 / 8 | — |
-| G | Preflight and ergonomics | 0 / 14 | 0 / 4 |
+| G | Preflight and ergonomics | 1 / 14 | 0 / 5 |
 | H | Automated and hardware validation | 1 / 8 | — |
 | I | Scene & Show System (future) | — | 0 / 22 |
 | J | Commissioning and servo configuration safety | 0 / 2 | — |
@@ -223,6 +223,8 @@ along is the Sequencer".
   and Stop cases.
 
 ## EPIC G — Preflight and ergonomics
+
+1 completed item moved to [SEQUENCER-DONE.md](SEQUENCER-DONE.md): SEQ-G14.
 
 ### [ ] SEQ-G01 — Add a preflight result model and Play gate
 
@@ -380,32 +382,6 @@ along is the Sequencer".
 - **Validation:** device removal/change, mute, unsupported media, battery/power,
   sleep-policy warning, low-space and successful show-PC checklist.
 
-### [~] SEQ-G14 — Redesign Play as an unambiguous Play/Pause control
-
-- **Priority:** P1
-- **Problem:** pressing Play while already playing currently restarts the Scene
-  from zero and resends its first commands. This is surprising for a conventional
-  transport and can cause an accidental motion restart.
-- **Depends on:** SEQ-A06, SEQ-E04.
-- **Acceptance:** the primary control always exposes the action that will happen
-  next. Decide whether it is a two-state Play/Pause button or two adjacent
-  controls, but a second ordinary Play press must not silently restart. Restart
-  from zero remains available through a separate, unmistakable action. Tooltips,
-  keyboard shortcuts, disabled states and Help all match Stopped/Playing/Paused.
-- **Recommendation:** use one large Play/Pause toggle: Play becomes Pause while
-  running and becomes Resume while paused. Add a separate `Restart`/`From start`
-  control rather than hiding restart behind a second Play press.
-- **Validation:** state/command/UI tests cover stopped Play, playing Pause,
-  paused Resume, explicit Restart, rapid double-click, failure to start and Loop.
-- **Implemented:** the primary button and `Space` now expose Play/Pause/Resume
-  through a state-dependent glyph and tooltip. A second Play pauses rather than
-  resending choreography; `Restart`/`Ctrl+Enter` owns the explicit clean restart
-  path. Existing generation and Loop safety tests now use that separate action.
-  The safety hierarchy is visually explicit: E-STOP uses a permanent filled-red
-  treatment, while Loop is a neutral editing mode that turns orange when active.
-- **Remaining validation:** rendered toolbar/glyph/keyboard interaction check in
-  the Release console.
-
 ### [~] SEQ-G15 — Separate Stop from playhead navigation and rewind
 
 - **Priority:** P2
@@ -534,6 +510,29 @@ along is the Sequencer".
   dedicated themed Scene-name window. Native Windows file pickers remain native.
 - **Remaining validation:** rendered browser, menu, shortcuts, double-click,
   search/empty state and Play/Pause replacement check in the Release console.
+
+### [D] SEQ-G19 — Add a temporary In/Out playback range
+
+- **Priority:** P3
+- **Problem:** rehearsing a short excerpt requires moving the playhead manually
+  and stopping at the desired boundary. The authored Scene endpoint and the
+  future persistent marker/loop-region model in SEQ-G07 should not be changed
+  merely to audition part of a Scene.
+- **Depends on:** SEQ-E05, SEQ-G14, SEQ-G15.
+- **Acceptance:** two clearly labelled, draggable vertical handles define `IN`
+  and `OUT`, with the selected playback range shaded without hiding clips. The
+  operator can set either boundary at the playhead, drag it with existing snap
+  rules, clear the range and operate it by keyboard. Play and Restart begin at
+  `IN`; natural range completion stops at `OUT`, or repeats `IN → OUT` when the
+  existing whole-pass Loop mode is active. Clearing the range restores normal
+  full-Scene playback. The range is editor-session state only: it does not alter
+  clips or the authoritative Scene endpoint, is excluded from Dirty, Undo/Redo,
+  Save and Export, and resets when the document is replaced. Playback from `IN`
+  follows the existing play-from-cursor rule: earlier events are skipped, with
+  no hidden reconstruction of gestures or audio that began before `IN`.
+- **Validation:** drag and keyboard operation, snapping/minimum width, boundaries
+  near the start/middle/end, Play/Restart/Pause/Stop/Loop, clear/document replace,
+  and gesture/audio clips that overlap `IN` or `OUT`.
 
 ## EPIC H — Automated and hardware validation
 
@@ -741,9 +740,10 @@ detailed commit after its full regression passes.
 | S1 — Single deterministic scheduler | SEQ-E02, SEQ-E03 | **Complete.** One rearmable timer drains monotonic timestamp batches in immutable source order, compensates late wakes, warns about same-target/broadcast overlap and releases completely on cancellation. |
 | T1 — Coherent duration and infinite ends | SEQ-F01, SEQ-F02, SEQ-C06, SEQ-B04 | **Code complete; F01 hardware measurement pending.** Structured firmware timing metadata feeds one target-aware provider and cached extent; schema v5 promotes looping-gesture width into a persisted endpoint with ownership-safe IDLE termination. |
 
-SEQ-D09 remains deferred. Transport/navigation UX (SEQ-G14 through SEQ-G17) and
-the Scene document workflow (SEQ-G18) are implemented with rendered validation
-pending, followed by sequence/audio end semantics (SEQ-F08 then SEQ-E05).
+SEQ-D09 remains deferred. The Play/Pause control (SEQ-G14) is complete;
+transport/navigation UX (SEQ-G15 through SEQ-G17) and the Scene document
+workflow (SEQ-G18) are implemented with rendered validation pending, followed
+by sequence/audio end semantics (SEQ-F08 then SEQ-E05).
 
 ## Decision log
 
