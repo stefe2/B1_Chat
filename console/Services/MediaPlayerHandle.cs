@@ -1,4 +1,5 @@
 using System.Windows.Media;
+using System.Windows.Threading;
 
 namespace b1_chat_console.Services;
 
@@ -16,6 +17,7 @@ namespace b1_chat_console.Services;
 public sealed class MediaPlayerHandle : IMediaHandle
 {
     private readonly MediaPlayer _player = new();
+    private readonly Dispatcher _dispatcher;
     private bool _disposed;
 
     public event Action? Opened;
@@ -24,6 +26,7 @@ public sealed class MediaPlayerHandle : IMediaHandle
 
     public MediaPlayerHandle()
     {
+        _dispatcher = _player.Dispatcher;
         _player.MediaOpened += OnMediaOpened;
         _player.MediaEnded += OnMediaEnded;
         _player.MediaFailed += OnMediaFailed;
@@ -69,6 +72,32 @@ public sealed class MediaPlayerHandle : IMediaHandle
 
     public void Dispose()
     {
+        // AudioProbe deliberately does not retain the caller's SynchronizationContext while it
+        // waits for a bounded result. MediaPlayer is dispatcher-affine, though: closing it from
+        // that continuation throws and used to leave the native media resource alive until GC.
+        // Marshal the complete teardown back to the owner rather than swallowing that failure.
+        if (!_dispatcher.CheckAccess())
+        {
+            if (_dispatcher.HasShutdownStarted || _dispatcher.HasShutdownFinished)
+            {
+                // Dispatcher shutdown owns the remaining WPF resources. Managed subscribers must
+                // still be released so the abandoned handle cannot retain its Sequencer owner.
+                Opened = null;
+                Ended = null;
+                Failed = null;
+                _disposed = true;
+                return;
+            }
+
+            _dispatcher.Invoke(DisposeCore, DispatcherPriority.Send);
+            return;
+        }
+
+        DisposeCore();
+    }
+
+    private void DisposeCore()
+    {
         if (_disposed) return;
         _disposed = true;
         _player.MediaOpened -= OnMediaOpened;
@@ -77,16 +106,12 @@ public sealed class MediaPlayerHandle : IMediaHandle
         Opened = null;
         Ended = null;
         Failed = null;
-        try
-        {
-            _player.Stop();
-            _player.Close();
-        }
-        catch
-        {
-            // A player that never opened can throw on Close; nothing useful is left to report
-            // and the handle is being discarded either way.
-        }
+        // Stop and Close are separate so an unopened/failed player's Stop cannot prevent Close
+        // from releasing the underlying Media Foundation resource.
+        try { _player.Stop(); }
+        catch (InvalidOperationException) { }
+        try { _player.Close(); }
+        catch (InvalidOperationException) { }
     }
 }
 

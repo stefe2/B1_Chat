@@ -73,7 +73,7 @@ public sealed class SequencerPlaybackPlan
             {
                 captured.Add(new AudioPlaybackEvent(
                     Math.Max(0, clip.StartMs), sourceOrder++, clip.FilePath,
-                    Math.Max(0, clip.DurationMs), clip.Loop));
+                    Math.Max(0, clip.EffectiveDurationMs), clip.Loop));
             }
         }
 

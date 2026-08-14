@@ -152,20 +152,28 @@ Everything below runs console-side; the droids have no audio hardware.
 **Duration probing.** `AudioProbe` returns a typed `AudioProbeResult`
 (`Ok`, `FileMissing`, `DecodeFailed`, `Timeout`, `Cancelled`), is bounded by a
 10 s default timeout, accepts a cancellation token, and disposes its media handle
-on every exit path including timeout and exception. A file that opens but reports
-no timespan is a `DecodeFailed`; a valid but empty file is an `Ok` at 0 ms.
+on every exit path including timeout and exception. Disposal is marshalled to the
+handle's owning WPF dispatcher even when the bounded wait resumes on a worker
+thread. A file that opens but reports no timespan is a `DecodeFailed`; a valid but
+empty file is an `Ok` at 0 ms.
 
 **Unreadable clips stay visible.** A failed probe still inserts the clip. It
 renders at a minimum width, shows a ⚠ badge and an orange border, and its tooltip
-carries the reason. Its `DurationMs` remains 0, so it never defines the end of the
-sequence — the width floor is presentation only.
+carries the reason. Its effective duration is 0, so it never contributes a stale
+tail to the sequence end — the width floor is presentation only. A Scene retains
+the last serialized duration for recovery, but playback and geometry ignore it
+while the asset is missing or unreadable. Scene load and Undo/Redo re-probe each
+distinct present asset; those clips remain warning-badged with zero effective tail
+until validation completes, while missing files are flagged immediately by
+existence check.
 
 **Playback lifecycle.** Each clip owns one media handle. A non-looping clip that
 ends, or any clip that fails, detaches its handlers, closes and leaves the active
 set immediately; a looping clip rewinds and stays. `PauseAll`/`ResumeAll`
 therefore touch only genuinely active clips, and Resume cannot restart something
 that already finished. `StopAll` is idempotent. A playback failure is reported
-once, naming the clip, and the rest of the pass continues.
+once per clip, naming the file in a visible `⚠ AUDIO` transport badge and tooltip,
+and the rest of the pass continues.
 
 **Waveforms.** The decode cache is keyed on path plus file size and last-write
 time, so replacing a file's contents under the same name invalidates it. Failed

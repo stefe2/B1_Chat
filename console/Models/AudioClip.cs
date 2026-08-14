@@ -10,10 +10,12 @@ public partial class AudioClip : ObservableObject
     // without this, "Replace file…" left the previous basename on the clip (SEQ-F03).
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(FileName))]
+    [NotifyPropertyChangedFor(nameof(StatusTooltip))]
     private string _filePath = "";
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasKnownDuration))]
+    [NotifyPropertyChangedFor(nameof(EffectiveDurationMs))]
     private int _durationMs;
 
     [ObservableProperty] private int _startMs;
@@ -29,12 +31,22 @@ public partial class AudioClip : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasDurationWarning))]
     [NotifyPropertyChangedFor(nameof(HasKnownDuration))]
+    [NotifyPropertyChangedFor(nameof(EffectiveDurationMs))]
     [NotifyPropertyChangedFor(nameof(StatusTooltip))]
     private AudioProbeStatus _probeStatus = AudioProbeStatus.Ok;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(StatusTooltip))]
     private string? _probeMessage;
+
+    // A restored Scene/Undo clip is conservatively zero-tail until its present file has been
+    // re-probed. This closes the small window where Play could otherwise trust stale metadata.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasDurationWarning))]
+    [NotifyPropertyChangedFor(nameof(HasKnownDuration))]
+    [NotifyPropertyChangedFor(nameof(EffectiveDurationMs))]
+    [NotifyPropertyChangedFor(nameof(StatusTooltip))]
+    private bool _validationPending;
 
     // Transient, not persisted: true while this clip is held/dragged (dimmed "in hand", same
     // idea as SequenceStep.Dragging) — see SequenceTimelineView.xaml.cs.
@@ -57,15 +69,24 @@ public partial class AudioClip : ObservableObject
     public string FileName => System.IO.Path.GetFileName(FilePath);
 
     /// <summary>The probe failed: the clip is drawn with a warning badge and a reason.</summary>
-    public bool HasDurationWarning => ProbeStatus != AudioProbeStatus.Ok;
+    public bool HasDurationWarning => ValidationPending || ProbeStatus != AudioProbeStatus.Ok;
 
     /// <summary>
-    /// A usable, non-zero duration. False both for a failed probe and for a valid but empty file,
-    /// because in either case the clip must not define the end of the sequence on its own.
+    /// A usable, validated non-zero duration. False while validation is pending, after a failed
+    /// probe, and for a valid empty file, because none may add a tail to the sequence end.
     /// </summary>
-    public bool HasKnownDuration => ProbeStatus == AudioProbeStatus.Ok && DurationMs > 0;
+    public bool HasKnownDuration => !ValidationPending &&
+        ProbeStatus == AudioProbeStatus.Ok && DurationMs > 0;
 
-    public string StatusTooltip => ProbeStatus == AudioProbeStatus.Ok
+    /// <summary>
+    /// Runtime/timeline duration. Keep the last serialized duration available for recovery, but
+    /// never let a currently missing or unreadable asset extend the pass or its visual width.
+    /// </summary>
+    public int EffectiveDurationMs => HasKnownDuration ? DurationMs : 0;
+
+    public string StatusTooltip => ValidationPending
+        ? $"{FileName} — checking the audio file…"
+        : ProbeStatus == AudioProbeStatus.Ok
         ? FileName
         : $"{FileName} — {ProbeMessage ?? "the duration could not be read."}";
 
@@ -77,5 +98,6 @@ public partial class AudioClip : ObservableObject
         Loop = Loop,
         ProbeStatus = ProbeStatus,
         ProbeMessage = ProbeMessage,
+        ValidationPending = ValidationPending,
     };
 }

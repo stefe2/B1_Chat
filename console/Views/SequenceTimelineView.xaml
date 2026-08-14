@@ -125,6 +125,12 @@
                     <TextBlock Text="⚠ SCHEDULE" Foreground="{StaticResource WarnBrush}"
                                FontFamily="{StaticResource MonoFont}" FontWeight="Bold" FontSize="10.5" />
                 </Border>
+                <Border Style="{StaticResource ValuePillStyle}" BorderBrush="{StaticResource BadBrush}"
+                        Visibility="{Binding HasAudioFailures, Converter={StaticResource BoolToVisConv}}"
+                        ToolTip="{Binding AudioFailureText}" Margin="6,0,0,0">
+                    <TextBlock Text="⚠ AUDIO" Foreground="{StaticResource BadBrush}"
+                               FontFamily="{StaticResource MonoFont}" FontWeight="Bold" FontSize="10.5" />
+                </Border>
             </StackPanel>
         </Border>
 
@@ -522,13 +528,13 @@
                                                                     <Binding Path="DataContext.PxPerMs" RelativeSource="{RelativeSource AncestorType=ItemsControl, AncestorLevel=2}" />
                                                                 </MultiBinding>
                                                             </Canvas.Left>
-                                                            <!-- AudioWidth (not Duration): keeps a clip whose duration is
-                                                                 unknown or zero wide enough to select and right-click. The
-                                                                 floor is visual only — DurationMs stays 0 so an unreadable
-                                                                 file never defines the sequence end (SEQ-F04). -->
+                                                            <!-- AudioWidth keeps a clip whose duration is unknown or zero
+                                                                 wide enough to select and right-click. It binds the effective
+                                                                 duration, so pending/unreadable assets ignore any serialized
+                                                                 recovery tail when defining the sequence end (SEQ-F04). -->
                                                             <Border.Width>
                                                                 <MultiBinding Converter="{StaticResource TimelineGeometryConv}" ConverterParameter="AudioWidth">
-                                                                    <Binding Path="DurationMs" />
+                                                                    <Binding Path="EffectiveDurationMs" />
                                                                     <Binding Path="DataContext.PxPerMs" RelativeSource="{RelativeSource AncestorType=ItemsControl, AncestorLevel=2}" />
                                                                 </MultiBinding>
                                                             </Border.Width>

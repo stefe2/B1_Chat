@@ -48,9 +48,11 @@ enables/disables a servo, previews a position, or starts an animation.
   failures are surfaced, that the waveform cache key follows file changes and
   that stale waveform assignments are rejected;
 - verifies that Media Foundation (`mfplat.dll`) is present on this machine and
-  that the audio test fixture is in place. This check fails on a Windows N/KN
-  edition without the Media Feature Pack — the same condition the installer warns
-  about — because Sequencer audio playback would not work there.
+  that the audio test fixture is in place. The unit suite then opens that real MP3
+  through WPF `MediaPlayer` on an STA dispatcher, checks its duration and verifies
+  dispatcher-owned teardown. These checks fail on a Windows N/KN edition without
+  the Media Feature Pack — the same condition the installer warns about — because
+  Sequencer audio playback would not work there.
 
 The Sequencer suite also covers the audio services: every probe outcome
 (success, missing file, decode failure, source without a timespan, valid
@@ -59,9 +61,11 @@ open, file removed after the existence check), the media lifecycle (natural end,
 loop restart, failure reported once, concurrent clips, resume after a clip ended,
 idempotent Stop) and the waveform cache (single decode, same-path content change,
 retry after failure, bounded capacity), plus the stale-decode race driven through
-the view model. One test decodes a committed MP3 fixture with NAudio for real and
-asserts a rising envelope, so a broken bucket mapping or a missing MP3 decoder
-fails the suite rather than producing a silently flat waveform.
+the view model. Scene and Undo/Redo restoration tests cover corrupt/missing asset
+warnings and exclusion of their stale duration tails. One test decodes a committed
+MP3 fixture with NAudio for real and asserts a rising envelope; another opens it
+with WPF `MediaPlayer` on a real dispatcher. A broken bucket mapping, missing MP3
+decoder or cross-thread media teardown therefore fails the suite.
 
 ### Safe serial integration checks
 

@@ -702,8 +702,9 @@ For what the shipped behavior actually does at runtime, read
   related missing/error state.
 - **Validation:** model binding test plus manual replace check.
 - **Implemented:** `FilePath` carries `[NotifyPropertyChangedFor(nameof(FileName))]`,
-  so Replace file… updates the displayed basename immediately. The probe status,
-  warning flag and tooltip are notified from the same source change.
+  so Replace file… updates the displayed basename immediately. `StatusTooltip`
+  is notified from the same source change, while probe status/message changes
+  notify the warning flag and error tooltip.
 
 ### [x] SEQ-F04 — Keep zero/unknown-duration audio clips visible and editable
 
@@ -717,8 +718,11 @@ For what the shipped behavior actually does at runtime, read
 - **Implemented:** a failed probe still inserts the clip. The new `AudioWidth`
   converter mode floors its rendered width at 26 px and it shows a ⚠ badge, an
   orange border and the reason in its tooltip. The floor is presentation only —
-  `DurationMs` stays 0, so an unreadable file never defines the sequence end. A
-  valid but empty file is a success at 0 ms and carries no warning.
+  effective duration stays 0, so an unreadable file never contributes a stale tail
+  to the sequence end. The last serialized duration may be retained for recovery
+  but is ignored until the asset is readable. Scene and Undo/Redo restoration
+  revalidate distinct present assets; a valid empty file remains a success at 0 ms
+  and carries no warning.
 
 ### [x] SEQ-F05 — Add bounded audio probing and actionable errors
 
@@ -734,8 +738,9 @@ For what the shipped behavior actually does at runtime, read
 - **Implemented:** `AudioProbe` returns a typed `AudioProbeResult`
   (`Ok`/`FileMissing`/`DecodeFailed`/`Timeout`/`Cancelled`), bounded by a 10 s
   default timeout and a cancellation token. The media handle is disposed on every
-  exit path, including timeout and a throwing Open. A source that opens but reports
-  no timespan is a decode failure naming a possibly missing codec.
+  exit path, including timeout and a throwing Open; teardown is marshalled to the
+  WPF handle's owning dispatcher after a worker-thread continuation. A source that
+  opens but reports no timespan is a decode failure naming a possibly missing codec.
 
 ### [x] SEQ-F06 — Prevent stale waveform assignment and cache invalidation bugs
 
@@ -772,7 +777,9 @@ For what the shipped behavior actually does at runtime, read
   and leaves the active set; a looping clip rewinds and stays. Pause/Resume touch
   only active clips, so Resume can no longer restart something that already
   finished. `StopAll` is idempotent, and a failure is reported once with the clip
-  that caused it.
+  that caused it. The ViewModel exposes it through a visible `⚠ AUDIO` badge whose
+  tooltip names the file and reason; duplicate notifications are suppressed per
+  clip identity, not merely per error string.
 
 ## EPIC H — Automated and hardware validation
 
@@ -793,6 +800,7 @@ Append concise evidence when closing items; do not paste full build logs.
 
 | Date | Items | Evidence |
 |---|---|---|
+| 2026-08-13 | SEQ-F03, SEQ-F04, SEQ-F05, SEQ-F07 follow-up | Audit corrections: `MediaPlayer` teardown now returns to its owner dispatcher; the transport binds a visible per-clip `⚠ AUDIO` failure badge; unavailable or pending assets have zero effective duration while retaining serialized recovery metadata; Scene and Undo/Redo restoration revalidate present assets. Six focused tests add binding notification, restored corrupt/missing/pending state, effective playback-plan duration and a real WPF dispatcher/MediaPlayer open-close smoke path. Full suite: 224/224. Offline self-test: 21/21, clean WPF/master/slave builds, build number preserved at 359, report `b1-self-test-20260813-225837.json`. Operator rendered validation passed with a text payload renamed `.mp3`: narrow warning clip, orange border, reason tooltip and visible playback `⚠ AUDIO` report all behaved correctly. |
 | 2026-08-13 | SEQ-F03, SEQ-F04, SEQ-F05, SEQ-F06, SEQ-F07 | Audio robustness batch. Probe, waveform decoding and media lifecycle moved behind `IAudioProbe`, `IWaveformDecoder` and `IMediaHandle`; typed probe results with timeout and cancellation; unreadable clips stay visible and badged without affecting sequence length; metadata-keyed bounded waveform cache with stale-assignment rejection; per-clip media handles retired on end or failure with the failure reported. Console build clean, 0 warnings.
 | 2026-08-13 | SEQ-H05 (in progress) | Sequencer suite 181 to 218 tests, all passing (`dotnet test`, 304 ms). New `AudioServiceTests.cs` drives probe, lifecycle and cache policy through fakes, plus a real NAudio decode of the committed `probe-tone-1500ms.mp3` fixture asserting a rising envelope. `tools/self-test.ps1 -SkipSerial`: 21 passed, 0 failed (19 before), report `b1-self-test-20260813-011856.json`. Audio loop endpoint coverage still blocked on SEQ-F08.
 | 2026-08-11 | Planning baseline | Static review complete; console build previously clean; implementation not started. |

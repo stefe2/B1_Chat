@@ -25,8 +25,14 @@ select and replace it, and it carries a **⚠ badge with an orange border**; the
 tooltip states the reason. Such a clip counts as zero length, so it never silently
 changes where the sequence ends.
 
+When a Scene is opened or an Undo/Redo restores its audio clips, present files are
+checked again and missing files are flagged immediately. A clip being checked is
+temporarily badged and counts as zero length. The last saved duration is retained
+for recovery, but is ignored while the file is pending, unavailable or unreadable.
+
 If a clip fails during playback, the Sequencer names the file and the reason
-instead of failing silently, and the rest of the pass continues.
+in a **⚠ AUDIO** badge above the timeline instead of failing silently, and the
+rest of the pass continues.
 
 ## Add and arrange audio
 

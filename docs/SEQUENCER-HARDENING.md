@@ -585,7 +585,7 @@ along is the Sequencer".
   players, stale waveform prevention, cache invalidation, missing files, and
   audio loop endpoint behavior.
 - **Validation:** service suite plus a Windows Media Foundation smoke test.
-- **Implemented:** 37 tests in `console.tests/AudioServiceTests.cs` covering every
+- **Implemented:** 43 tests in `console.tests/AudioServiceTests.cs` covering every
   probe outcome (success, missing, empty path, decode failure, no timespan, valid
   zero length, timeout, cancellation before and during, throwing Open, file removed
   after the check), the playback lifecycle (natural end, loop, failure reported
@@ -595,11 +595,13 @@ along is the Sequencer".
   failure, retry after the file appears, bounded capacity, empty path), plus the
   stale-assignment race driven through the view model. A committed MP3 fixture is
   decoded by NAudio for real, asserting a rising envelope so a broken bucket
-  mapping fails the suite. `tools/self-test.ps1` gained an audio invariant check
-  and a Media Foundation presence check.
+  mapping fails the suite. WPF `MediaPlayer` opens the same fixture on a real STA
+  dispatcher, verifies its duration and dispatcher-owned close. Restoration tests
+  cover missing/corrupt Scene and Undo/Redo state plus zero effective tails, and a
+  source invariant requires the visible `⚠ AUDIO` binding. `tools/self-test.ps1`
+  retains a separate Media Foundation prerequisite check for actionable diagnosis.
 - **Remaining:** audio loop endpoint coverage, which cannot exist before SEQ-F08
-  defines that endpoint. The MediaPlayer half of the smoke test needs a dispatcher
-  and stays in `self-test.ps1` rather than the headless suite.
+  defines that endpoint. The service and real MediaPlayer smoke paths are complete.
 
 ### [ ] SEQ-H06 — Add UI interaction smoke tests/checklists
 

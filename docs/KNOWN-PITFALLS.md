@@ -87,6 +87,10 @@ relevant behavior.
   every model used as a `ComboBox.ItemsSource` needs an appropriate override.
 - Debounced sliders must snapshot target ID and values and cancel on selection
   changes; programmatic loads must suppress write-back hooks.
+- WPF `MediaPlayer` teardown is dispatcher-affine. A probe may await without a
+  synchronization context, but `Stop`, `Close` and event detachment must be
+  marshalled back to the player's owning dispatcher; catching the cross-thread
+  exception only hides a live native media resource.
 
 ## Historical decisions retained for safety
 

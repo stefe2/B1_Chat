@@ -253,6 +253,9 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     // Audio clips that failed to play during the current pass (SEQ-F07). A failure no longer
     // passes in silence; it names the clip and survives until the next pass starts.
     private readonly List<string> _audioFailures = new();
+    private readonly HashSet<(int ClipId, string FilePath)> _audioFailureKeys = new();
+    private CancellationTokenSource? _audioAssetValidationCancellation;
+    private int _audioAssetValidationGeneration;
     public bool HasAudioFailures => _audioFailures.Count > 0;
     public string AudioFailureText => string.Join(Environment.NewLine, _audioFailures);
 
@@ -785,6 +788,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        CancelAudioAssetValidation();
         Stop();
         foreach (var tracker in _executionTrackers.Values)
             DisposeExecutionDeadlines(tracker);
@@ -959,7 +963,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
             stepsEnd = Math.Max(stepsEnd, (long)Math.Max(0, step.StartMs) + resolved.EffectiveMs);
         }
         var audioEnd = AudioLanes.SelectMany(lane => lane.Clips)
-            .Select(clip => (long)Math.Max(0, clip.StartMs) + Math.Max(0, clip.DurationMs))
+            .Select(clip => (long)Math.Max(0, clip.StartMs) + Math.Max(0, clip.EffectiveDurationMs))
             .DefaultIfEmpty(0).Max();
         _totalDurationMs = Math.Min(int.MaxValue, Math.Max(stepsEnd, audioEnd));
         OnPropertyChanged(nameof(TotalDurationMsValue));
@@ -1202,8 +1206,9 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
 
     private void OnAudioPlaybackFailed(AudioPlaybackFailure failure) => RunOnUiThread(() =>
     {
+        var key = (failure.ClipId, failure.FilePath);
+        if (!_audioFailureKeys.Add(key)) return;
         var message = $"{failure.FileName} — {failure.Message}";
-        if (_audioFailures.Contains(message)) return;
         _audioFailures.Add(message);
         OnPropertyChanged(nameof(HasAudioFailures));
         OnPropertyChanged(nameof(AudioFailureText));
@@ -1213,6 +1218,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     {
         if (_audioFailures.Count == 0) return;
         _audioFailures.Clear();
+        _audioFailureKeys.Clear();
         OnPropertyChanged(nameof(HasAudioFailures));
         OnPropertyChanged(nameof(AudioFailureText));
     }
@@ -1239,6 +1245,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         List<AudioLaneDto>? dtos,
         bool seedDefaultsWhenEmpty = true)
     {
+        CancelAudioAssetValidation();
         AudioLanes.Clear();
         if (dtos == null || (seedDefaultsWhenEmpty && dtos.Count == 0))
         {
@@ -1247,6 +1254,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
             return;
         }
         var row = 0;
+        var clipsToValidate = new List<AudioClip>();
         foreach (var dto in dtos)
         {
             var lane = new AudioLane { Label = dto.Label, RowIndex = row++ };
@@ -1256,15 +1264,106 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
                 // A Scene stores paths, not audio. Flag a file that has since moved or been
                 // deleted right away, rather than letting the operator discover it at Play
                 // time — a cheap existence check, no decoding (SEQ-F04).
-                if (!string.IsNullOrWhiteSpace(c.FilePath) && !File.Exists(c.FilePath))
+                if (string.IsNullOrWhiteSpace(c.FilePath))
+                {
+                    clip.ProbeStatus = AudioProbeStatus.FileMissing;
+                    clip.ProbeMessage = "No audio file selected.";
+                }
+                else if (!File.Exists(c.FilePath))
                 {
                     clip.ProbeStatus = AudioProbeStatus.FileMissing;
                     clip.ProbeMessage = $"File not found: {clip.FileName}";
+                }
+                else
+                {
+                    clip.ValidationPending = true;
+                    clipsToValidate.Add(clip);
                 }
                 lane.Clips.Add(clip);
                 _ = LoadWaveformAsync(clip);
             }
             AudioLanes.Add(lane);
+        }
+        QueueAudioAssetValidation(clipsToValidate);
+    }
+
+    private void CancelAudioAssetValidation()
+    {
+        _audioAssetValidationGeneration++;
+        _audioAssetValidationCancellation?.Cancel();
+        _audioAssetValidationCancellation?.Dispose();
+        _audioAssetValidationCancellation = null;
+    }
+
+    private void QueueAudioAssetValidation(IReadOnlyCollection<AudioClip> clips)
+    {
+        if (clips.Count == 0 || _disposed) return;
+        var cancellation = new CancellationTokenSource();
+        _audioAssetValidationCancellation = cancellation;
+        var generation = _audioAssetValidationGeneration;
+        _ = RevalidateAudioAssetsAsync(clips, generation, cancellation.Token);
+    }
+
+    private async Task RevalidateAudioAssetsAsync(
+        IReadOnlyCollection<AudioClip> clips,
+        int generation,
+        CancellationToken cancellationToken)
+    {
+        // Probe each distinct asset once. Sequential probing avoids opening an unbounded number
+        // of Media Foundation handles when a large Scene reuses many files; it never blocks WPF.
+        var groups = clips
+            .GroupBy(clip => clip.FilePath, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        foreach (var group in groups)
+        {
+            AudioProbeResult result;
+            try
+            {
+                result = await _audioProbe.ProbeAsync(group.Key, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+            catch (Exception ex)
+            {
+                result = AudioProbeResult.Failure(AudioProbeStatus.DecodeFailed, ex.Message);
+            }
+
+            if (cancellationToken.IsCancellationRequested ||
+                result.Status == AudioProbeStatus.Cancelled)
+                return;
+
+            RunOnUiThread(() =>
+            {
+                if (_disposed || generation != _audioAssetValidationGeneration) return;
+                var durationChanged = false;
+                var runtimeChanged = false;
+                foreach (var clip in group)
+                {
+                    if (!AudioLanes.Any(lane => lane.Clips.Contains(clip)) ||
+                        !string.Equals(clip.FilePath, group.Key, StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    var message = result.Ok ? null : result.Describe();
+                    runtimeChanged |= clip.ValidationPending ||
+                        clip.ProbeStatus != result.Status || clip.ProbeMessage != message;
+                    clip.ProbeStatus = result.Status;
+                    clip.ProbeMessage = message;
+                    if (result.Ok && clip.DurationMs != result.DurationMs)
+                    {
+                        clip.DurationMs = result.DurationMs;
+                        durationChanged = true;
+                    }
+                    clip.ValidationPending = false;
+                }
+
+                if (runtimeChanged || durationChanged)
+                    RefreshDerivedTimelineState();
+                if (durationChanged)
+                    RefreshDirtyFromCheckpoint();
+            });
         }
     }
 

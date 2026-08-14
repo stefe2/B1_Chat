@@ -1,4 +1,7 @@
 using System.IO;
+using System.Reflection;
+using System.Windows.Media;
+using System.Windows.Threading;
 using b1_chat_console.Models;
 using b1_chat_console.Services;
 using b1_chat_console.ViewModels;
@@ -550,6 +553,19 @@ public class WaveformStalenessTests
     }
 
     [Fact]
+    public void Changing_a_path_notifies_every_derived_filename_surface()
+    {
+        var clip = new AudioClip { FilePath = "old.wav" };
+        var notifications = new List<string?>();
+        clip.PropertyChanged += (_, args) => notifications.Add(args.PropertyName);
+
+        clip.FilePath = "new.wav";
+
+        Assert.Contains(nameof(AudioClip.FileName), notifications);
+        Assert.Contains(nameof(AudioClip.StatusTooltip), notifications);
+    }
+
+    [Fact]
     public void A_failed_probe_marks_the_clip_without_hiding_it()
     {
         var protocol = new FakeSequencerProtocol();
@@ -592,6 +608,8 @@ public class WaveformStalenessTests
             new FakeSequencerProtocol(), new FakeSequencerSettings(),
             library: new FakeSequenceLibraryService(),
             persistenceDialogs: new FakeSequencerPersistenceDialogs(),
+            audioProbe: new DelegateAudioProbe(path => Task.FromResult(
+                AudioProbeResult.Success(path == present ? 100 : 0))),
             // Load fires waveform decoding per clip; a real decoder would still hold the file
             // open when this fixture's directory is deleted at teardown.
             waveformDecoder: new DelegateWaveformDecoder(_ => Task.FromResult<float[]?>(null)));
@@ -602,6 +620,132 @@ public class WaveformStalenessTests
         Assert.True(clips[1].HasDurationWarning);
         Assert.Equal(AudioProbeStatus.FileMissing, clips[1].ProbeStatus);
         Assert.Contains("gone.wav", clips[1].StatusTooltip);
+        Assert.Equal(0, clips[1].EffectiveDurationMs);
+        Assert.Equal(200, viewModel.TotalDurationMsValue); // event time remains; stale 100 ms tail does not
+    }
+
+    [Fact]
+    public void Reopening_a_present_but_corrupt_asset_restores_its_warning_and_zero_effective_tail()
+    {
+        using var fixture = new TemporaryJsonFixture();
+        var corrupt = Path.Combine(fixture.DirectoryPath, "corrupt.mp3");
+        File.WriteAllText(corrupt, "not audio");
+        var json = $$"""
+        {"type":"b1-sequence","version":5,"name":"Loaded","loop":false,"tracks":[],
+         "audioLanes":[{"label":"AUDIO","clips":[
+           {"filePath":{{System.Text.Json.JsonSerializer.Serialize(corrupt)}},"durationMs":9000,"startMs":500,"loop":false}]}],
+         "steps":[]}
+        """;
+        var failed = AudioProbeResult.Failure(AudioProbeStatus.DecodeFailed, "unsupported stream");
+
+        using var viewModel = new SequencerViewModel(
+            new FakeSequencerProtocol(), new FakeSequencerSettings(),
+            library: new FakeSequenceLibraryService(),
+            persistenceDialogs: new FakeSequencerPersistenceDialogs(),
+            audioProbe: new DelegateAudioProbe(_ => Task.FromResult(failed)),
+            waveformDecoder: new DelegateWaveformDecoder(_ => Task.FromResult<float[]?>(null)));
+
+        viewModel.ImportFrom(fixture.Write("corrupt.b1seq.json", json));
+
+        var clip = viewModel.AudioLanes.Single().Clips.Single();
+        Assert.True(clip.HasDurationWarning);
+        Assert.Contains("unsupported stream", clip.StatusTooltip);
+        Assert.Equal(9000, clip.DurationMs);       // retained for recovery/save compatibility
+        Assert.Equal(0, clip.EffectiveDurationMs); // never extends the current pass
+        Assert.Equal(500, viewModel.TotalDurationMsValue);
+    }
+
+    [Fact]
+    public async Task A_restored_asset_has_zero_effective_tail_while_revalidation_is_pending()
+    {
+        using var fixture = new TemporaryJsonFixture();
+        var path = Path.Combine(fixture.DirectoryPath, "pending.wav");
+        File.WriteAllText(path, "audio");
+        var json = $$"""
+        {"type":"b1-sequence","version":5,"name":"Loaded","loop":false,"tracks":[],
+         "audioLanes":[{"label":"AUDIO","clips":[
+           {"filePath":{{System.Text.Json.JsonSerializer.Serialize(path)}},"durationMs":9000,"startMs":500,"loop":false}]}],
+         "steps":[]}
+        """;
+        var probeCompletion = new TaskCompletionSource<AudioProbeResult>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        using var viewModel = new SequencerViewModel(
+            new FakeSequencerProtocol(), new FakeSequencerSettings(),
+            library: new FakeSequenceLibraryService(),
+            persistenceDialogs: new FakeSequencerPersistenceDialogs(),
+            audioProbe: new DelegateAudioProbe(_ => probeCompletion.Task),
+            waveformDecoder: new DelegateWaveformDecoder(_ => Task.FromResult<float[]?>(null)));
+
+        viewModel.ImportFrom(fixture.Write("pending.b1seq.json", json));
+        var clip = viewModel.AudioLanes.Single().Clips.Single();
+
+        Assert.True(clip.ValidationPending);
+        Assert.True(clip.HasDurationWarning);
+        Assert.Equal(0, clip.EffectiveDurationMs);
+        Assert.Equal(500, viewModel.TotalDurationMsValue);
+
+        var validated = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        clip.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(AudioClip.ValidationPending) && !clip.ValidationPending)
+                validated.TrySetResult();
+        };
+        probeCompletion.SetResult(AudioProbeResult.Success(9000));
+        await validated.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        Assert.False(clip.HasDurationWarning);
+        Assert.Equal(9000, clip.EffectiveDurationMs);
+        Assert.Equal(9500, viewModel.TotalDurationMsValue);
+    }
+
+    [Fact]
+    public void Undo_restore_revalidates_a_corrupt_audio_clip()
+    {
+        var path = WriteTemp();
+        var failed = AudioProbeResult.Failure(AudioProbeStatus.DecodeFailed, "bad codec");
+        using var viewModel = new SequencerViewModel(
+            new FakeSequencerProtocol(), new FakeSequencerSettings(),
+            library: new FakeSequenceLibraryService(),
+            persistenceDialogs: new FakeSequencerPersistenceDialogs(),
+            audioProbe: new DelegateAudioProbe(_ => Task.FromResult(failed)),
+            waveformDecoder: new DelegateWaveformDecoder(_ => Task.FromResult<float[]?>(null)));
+        var lane = viewModel.AudioLanes.First();
+        viewModel.InsertAudioClip(lane, new AudioClip
+        {
+            FilePath = path,
+            DurationMs = 0,
+            ProbeStatus = AudioProbeStatus.DecodeFailed,
+            ProbeMessage = "bad codec",
+        });
+        viewModel.SetAudioLaneLabel(lane, "RENAMED");
+
+        viewModel.UndoCommand.Execute(null);
+
+        var restored = viewModel.AudioLanes.First().Clips.Single();
+        Assert.True(restored.HasDurationWarning);
+        Assert.Contains("bad codec", restored.StatusTooltip);
+        File.Delete(path);
+    }
+
+    [Fact]
+    public void An_unreadable_clip_has_no_runtime_duration_in_the_playback_plan()
+    {
+        var lane = new AudioLane { Label = "AUDIO" };
+        lane.Clips.Add(new AudioClip
+        {
+            FilePath = "broken.mp3",
+            StartMs = 250,
+            DurationMs = 5000,
+            ProbeStatus = AudioProbeStatus.DecodeFailed,
+            ProbeMessage = "broken",
+        });
+
+        var plan = SequencerPlaybackPlan.Capture(
+            Array.Empty<SequenceStep>(), new[] { lane }, new Dictionary<int, int>(), loop: false);
+
+        var audio = Assert.IsType<AudioPlaybackEvent>(Assert.Single(plan.Events));
+        Assert.Equal(0, audio.DurationMs);
+        Assert.Equal(250, plan.TotalDurationMs);
     }
 
     [Fact]
@@ -623,6 +767,9 @@ public class WaveformStalenessTests
 
         player.RaiseFailure(2, @"C:\music\theme.mp3", "decoder unavailable");
         Assert.Single(viewModel.AudioFailureText.Split(Environment.NewLine));
+
+        player.RaiseFailure(3, @"C:\music\theme.mp3", "decoder unavailable");
+        Assert.Equal(2, viewModel.AudioFailureText.Split(Environment.NewLine).Length);
     }
 }
 
@@ -664,6 +811,60 @@ public class AudioCodecSmokeTests
         Assert.True(closing > opening + 0.25f,
             $"expected a rising envelope, got opening={opening:F3} closing={closing:F3}");
         Assert.True(closing > 0.5f, $"expected an audible tone, peaked at {closing:F3}");
+    }
+
+    [Fact]
+    public async Task Wpf_MediaPlayer_opens_the_fixture_and_closes_on_its_owner_dispatcher()
+    {
+        await RunOnDispatcherThread(async () =>
+        {
+            var factory = new CapturingMediaPlayerHandleFactory();
+            var probe = new AudioProbe(factory);
+
+            var result = await probe.ProbeAsync(FixturePath);
+
+            Assert.Equal(AudioProbeStatus.Ok, result.Status);
+            Assert.InRange(result.DurationMs, 1200, 2000);
+            var playerField = typeof(MediaPlayerHandle).GetField(
+                "_player", BindingFlags.Instance | BindingFlags.NonPublic);
+            var player = Assert.IsType<MediaPlayer>(playerField!.GetValue(factory.Handle));
+            Assert.Null(player.Source); // Close ran; the old cross-thread teardown left it set.
+        });
+    }
+
+    private static async Task RunOnDispatcherThread(Func<Task> action)
+    {
+        var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var thread = new Thread(() =>
+        {
+            var dispatcher = Dispatcher.CurrentDispatcher;
+            dispatcher.BeginInvoke(new Action(async () =>
+            {
+                try
+                {
+                    await action();
+                    completion.TrySetResult();
+                }
+                catch (Exception ex)
+                {
+                    completion.TrySetException(ex);
+                }
+                finally
+                {
+                    dispatcher.BeginInvokeShutdown(DispatcherPriority.Background);
+                }
+            }));
+            Dispatcher.Run();
+        })
+        {
+            IsBackground = true,
+            Name = "B1 Audio MediaPlayer smoke test",
+        };
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+
+        await completion.Task.WaitAsync(TimeSpan.FromSeconds(15));
+        Assert.True(thread.Join(TimeSpan.FromSeconds(2)), "Audio smoke-test dispatcher did not stop.");
     }
 }
 
@@ -742,4 +943,25 @@ internal sealed class DelegateWaveformDecoder : IWaveformDecoder
 
     public Task<float[]?> GetPeaksAsync(string? path, CancellationToken cancellationToken = default) =>
         string.IsNullOrWhiteSpace(path) ? Task.FromResult<float[]?>(null) : _decode(path);
+}
+
+internal sealed class DelegateAudioProbe : IAudioProbe
+{
+    private readonly Func<string, Task<AudioProbeResult>> _probe;
+
+    public DelegateAudioProbe(Func<string, Task<AudioProbeResult>> probe) => _probe = probe;
+
+    public Task<AudioProbeResult> ProbeAsync(
+        string? path, CancellationToken cancellationToken = default) =>
+        string.IsNullOrWhiteSpace(path)
+            ? Task.FromResult(AudioProbeResult.Failure(
+                AudioProbeStatus.FileMissing, "No audio file selected."))
+            : _probe(path);
+}
+
+internal sealed class CapturingMediaPlayerHandleFactory : IMediaHandleFactory
+{
+    public MediaPlayerHandle? Handle { get; private set; }
+
+    public IMediaHandle Create() => Handle = new MediaPlayerHandle();
 }
