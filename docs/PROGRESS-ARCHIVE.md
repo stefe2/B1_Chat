@@ -1082,6 +1082,19 @@ Sequencer backlog item by item.
       real Media Foundation smoke and build number 359 preserved
       (`b1-self-test-20260814-222604.json`); Release built with zero warnings and
       rendered the complete status/library layout cleanly, closing G03/G05/G06.
+- [x] Advisory Preflight policy and Console 0.12.0 release (2026-08-15).
+      Preflight is now an optional Scene-content assistant rather than a transport
+      gate: it ignores connection/roster state, never intercepts Play/Restart/Resume,
+      has no persistent toolbar result badge, stays open and refreshes findings in
+      place while the timeline changes, and closes only through a second click on
+      Preflight. Runtime link/execution failures remain attached to gesture clips.
+      The final suite passed 279/279 and the non-destructive self-test passed 21/21
+      with clean master/slave/WPF builds, real Media Foundation smoke and build 359
+      preserved (`b1-self-test-20260815-000802.json`). Console `v0.12.0` was then
+      published from commit `5b2387a`: the verified self-contained x64 installer is
+      55,604,999 bytes with SHA-256
+      `3b5242e53affe81901609be4201857271becd720e295164165709166eff3fee1`;
+      the publish build is 360. No firmware or protocol release was required.
 
 ## Incidents (full narratives)
 

@@ -73,3 +73,9 @@ firmware or serial/mesh protocol and requires no droid update.
 
 The installer is self-contained for Windows x64 and includes the application,
 .NET desktop runtime, Help payload, `espflash`, and its local Visual C++ runtime.
+
+## Download verification
+
+SHA-256 for `b1-chat-console-setup-0.12.0.exe`:
+
+`3b5242e53affe81901609be4201857271becd720e295164165709166eff3fee1`
