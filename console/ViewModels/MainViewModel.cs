@@ -170,6 +170,20 @@ public partial class MainViewModel : ObservableObject
             .Select(droid =>
                 $"{droid.Id}:{droid.IsMaster}:{droid.Online}:{droid.Adopted}:{droid.FwVersion}:{droid.BuildId}"));
 
+    public bool TryRequestFleetUpdateWindow()
+    {
+        if (Firmware.LatestFirmwareInfo is not { } firmware) return false;
+
+        var plan = FleetUpdatePlanner.Create(Protocol.Droids, firmware);
+        if (!plan.HasTargets) return false;
+
+        CancelPendingFleetUpdateOffer();
+        _fleetUpdateOfferShown = true;
+        _evaluatedFleetUpdateFingerprint = BuildFleetUpdateFingerprint(Protocol.Droids, firmware);
+        FleetUpdatePromptRequested?.Invoke(new FleetUpdateViewModel(plan, Protocol, _link, Sequencer));
+        return true;
+    }
+
     private async Task OfferFleetUpdateAfterRosterSettlesAsync(
         CancellationTokenSource debounce,
         string fingerprint)
@@ -194,8 +208,7 @@ public partial class MainViewModel : ObservableObject
             _evaluatedFleetUpdateFingerprint = fingerprint;
             if (!plan.HasTargets) return;
 
-            _fleetUpdateOfferShown = true;
-            FleetUpdatePromptRequested?.Invoke(new FleetUpdateViewModel(plan, Protocol, _link, Sequencer));
+            TryRequestFleetUpdateWindow();
         }
         catch (OperationCanceledException)
         {

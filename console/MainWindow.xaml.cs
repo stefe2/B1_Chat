@@ -49,6 +49,15 @@ public partial class MainWindow : Window
 
     private void OpenFirmwareWindow_Click(object sender, RoutedEventArgs e) => OpenFirmwareWindow();
 
+    private void OpenAvailableUpdate_Click(object sender, RoutedEventArgs e)
+    {
+        var vm = (MainViewModel)DataContext;
+        // The shared badge also reports console application updates. Prefer the supervised
+        // fleet plan when eligible droids exist; otherwise retain access to the Firmware
+        // window where a console-only update can be installed.
+        if (!vm.TryRequestFleetUpdateWindow()) OpenFirmwareWindow();
+    }
+
     private void OpenFirmwareWindow()
     {
         if (_firmwareWindow is { IsVisible: true })

@@ -41,6 +41,9 @@ Update** offers one supervised batch. **Update all** processes adopted slaves
 one at a time, displays acknowledged-chunk and overall progress, verifies the
 reported version and official Build ID after every reboot, then updates the USB
 master last. **Later** dismisses the offer for the current console session.
+The green **update available** badge in the main header opens the same Fleet
+plan again whenever eligible online droids remain. If the badge represents only
+a console application update, it opens the regular Firmware window instead.
 
 Offline/pending droids are omitted rather than blocking the batch. Newer
 firmware and same-version local builds are never replaced automatically. The

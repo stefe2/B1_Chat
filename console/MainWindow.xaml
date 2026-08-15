@@ -49,12 +49,14 @@
 
                     <!-- Cluster 2: manual/dev firmware entry point (always available, unlike the
                          per-droid row buttons which hide once a droid is confirmed up to date). -->
-                    <Border Style="{StaticResource HaloBadgeOkStyle}"
+                    <Button Style="{StaticResource HaloBadgeButtonStyle}"
                             Visibility="{Binding HasAnyUpdateAvailable, Converter={StaticResource BoolToVisConv}}"
+                            Click="OpenAvailableUpdate_Click"
                             Margin="0,0,16,0" VerticalAlignment="Center"
-                            ToolTip="{Binding Firmware.UpdateStatus}">
+                            ToolTip="Open the fleet update plan"
+                            AutomationProperties.Name="Open available updates">
                         <TextBlock Text="● update available" FontSize="11" Foreground="White" />
-                    </Border>
+                    </Button>
                     <Button Style="{StaticResource MiniButtonStyle}" Click="OpenFirmwareWindow_Click"
                             Margin="0,0,8,0" VerticalAlignment="Center" ToolTip="Open the firmware flash and update window">
                         <StackPanel Orientation="Horizontal">

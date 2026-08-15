@@ -56,7 +56,9 @@ enables/disables a servo, previews a position, or starts an animation.
   droids, orders OTA slaves before the USB master, carries the release Build ID,
   and leaves newer, unknown and same-version custom builds untouched; its roster
   fingerprint ignores recurring RSSI/time telemetry while reacting to online,
-  role, adoption and firmware-identity changes;
+  role, adoption and firmware-identity changes; the header's update badge is a
+  real button that opens this Fleet plan, with Firmware retained as the fallback
+  for a console-only update;
 - verifies that Help files are forced into the published payload, checked before
   installer creation, and handled safely at runtime if an image is absent;
 - verifies that the installer checks Windows/CPU compatibility, warns when the

@@ -1126,7 +1126,13 @@ Sequencer backlog item by item.
       RSSI/time-only refreshes, and restarts only when identity or eligibility
       changes. Regression coverage brought the suite to 289/289; the final
       non-destructive self-test passed 21/21 with build 360 preserved
-      (`b1-self-test-20260815-010955.json`).
+      (`b1-self-test-20260815-010955.json`). The main-header **update available**
+      badge is now a keyboard-accessible button: it opens or reopens the same
+      supervised Fleet plan when eligible online droids remain, and falls back
+      to Firmware when the badge represents only a console update. The XAML
+      interaction contract brought the suite to 290/290; the non-destructive
+      self-test remained 21/21 with build 360 preserved
+      (`b1-self-test-20260815-013502.json`).
 
 ## Incidents (full narratives)
 

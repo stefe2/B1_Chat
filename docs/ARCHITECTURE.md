@@ -58,7 +58,7 @@ design reference and is never loaded at runtime.
 
 | Folder / file | Role |
 | --- | --- |
-| `MainWindow.xaml(.cs)` | header (logo, connection status, unsaved auto-commit badge, Firmware and Help buttons) plus the card grid; startup placement is delegated to `WindowPlacement` so the complete window remains reachable on the selected monitor |
+| `MainWindow.xaml(.cs)` | header (logo, connection status, unsaved auto-commit badge, clickable update badge, Firmware and Help buttons) plus the card grid; the update badge opens the eligible Fleet plan and falls back to Firmware for a console-only update; startup placement is delegated to `WindowPlacement` so the complete window remains reachable on the selected monitor |
 | `FirmwareWindow.xaml(.cs)` | separate window hosting `Views/FirmwareCardView` — espflash flashing and GitHub updates; full-chip erase remains hidden under Advanced options, confirmation uses the app-owned dark dialog, and completion is reported by a prominent success/failure panel with an explicit window-close action |
 | `FleetUpdateWindow.xaml(.cs)` | startup, app-owned modal that presents the immutable online-fleet update plan, then shows per-droid and overall progress while slaves update sequentially by OTA and the USB master updates last |
 | `HelpWindow.xaml(.cs)` | separate window: table-of-contents sidebar plus one continuous `FlowDocumentScrollViewer` assembled from `Help/docs/*.md` through `Markdig.Wpf` (deliberately not WebView2); menu clicks jump to sections and scrolling syncs the active page |

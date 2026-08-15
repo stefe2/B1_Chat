@@ -249,6 +249,39 @@
         <Setter Property="BorderBrush" Value="{StaticResource BadBrush}" />
     </Style>
 
+    <!-- Clickable counterpart of the green status badge. Keep the same compact chrome while
+         exposing real Button keyboard/click semantics for the header update entry point. -->
+    <Style x:Key="HaloBadgeButtonStyle" TargetType="Button">
+        <Setter Property="Foreground" Value="White" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="Padding" Value="9,4" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bd" CornerRadius="10" Padding="{TemplateBinding Padding}"
+                            BorderThickness="1.5" BorderBrush="{StaticResource OkBrush}"
+                            Background="{StaticResource RecessBrush}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource PanelBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Bd" Property="RenderTransform">
+                                <Setter.Value><TranslateTransform Y="1" /></Setter.Value>
+                            </Setter>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="Bd" Property="Opacity" Value="0.45" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- Toggle button (Servos / Auto anims): checked = Ok, unchecked = Bad, with crisp borders. -->
     <Style x:Key="HaloToggleButtonStyle" TargetType="ToggleButton">
         <Setter Property="Padding" Value="9,5" />
