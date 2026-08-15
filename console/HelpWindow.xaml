@@ -79,7 +79,8 @@
                                                 <Button Content="{Binding Title}" Style="{StaticResource HelpNavButtonStyle}"
                                                         HorizontalAlignment="Stretch"
                                                         Command="{Binding DataContext.SelectPageCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                        CommandParameter="{Binding}" />
+                                                        CommandParameter="{Binding}"
+                                                        ToolTip="{Binding Title, StringFormat='Open the {0} Help page.'}" />
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>

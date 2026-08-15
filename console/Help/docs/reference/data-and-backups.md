@@ -11,7 +11,8 @@ complete fleet backup.
 | Frequency/amplitude/speed | Target droid NVS plus master configuration | Yes | Yes, when known to the console |
 | Servo calibration | Target droid NVS | Yes | **No** |
 | Adoption | Master NVS | Yes on the master | **No** |
-| Servos / Auto anims / Locate state | Runtime/transient behavior | Do not rely on it | No |
+| Servos / Auto anims state | Target droid NVS after the operator changes it; virgin/full-erased boards default off | Yes | No |
+| Locate state | Target droid runtime only | No; restart clears it | No |
 | Scene gesture/audio layout | PC Local Library and exported `.b1seq.json` copies | Not applicable | No |
 | Actual audio bytes | Original files on the PC | Not applicable | No |
 | Last COM port and last Scene identity/external path | PC `settings.json` | Not applicable | No |
@@ -59,10 +60,12 @@ For another PC, copy both the sequence JSON and every audio file. Import the JSO
 then use Replace file on any clip whose old absolute path is invalid.
 
 Sequence Import validates the complete document before replacing the editor.
-Versions 1–4 are supported and migrated explicitly; unknown future versions and
-invalid fields are refused with a field-specific error, leaving the open
-sequence unchanged. Very old DFPlayer track numbers do not contain PC file paths
-and therefore cannot restore their original sound automatically.
+Versions 1–6 are supported and migrated explicitly; version 5 introduced real
+endpoints for looping gestures and version 6 added the optional Scene END marker.
+Unknown future versions and invalid fields are refused with a field-specific
+error, leaving the open sequence unchanged. Very old DFPlayer track numbers do
+not contain PC file paths and therefore cannot restore their original sound
+automatically.
 
 ## Console-local files
 

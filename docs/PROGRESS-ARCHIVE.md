@@ -1133,6 +1133,36 @@ Sequencer backlog item by item.
       interaction contract brought the suite to 290/290; the non-destructive
       self-test remained 21/21 with build 360 preserved
       (`b1-self-test-20260815-013502.json`).
+- [x] In-app Help content and screenshot refresh (2026-08-15).
+      All 16 manifest pages were checked against the current WPF controls,
+      ViewModels and firmware/storage behavior. The guide now reflects the
+      standalone Calibration window, last-port auto-connect, version plus Build
+      ID identity, Advanced-only full erase, persistent flash result panel,
+      supervised Fleet prompt/header-badge flow, authoritative Scene endpoint,
+      current Play-from-end behavior, schema v1–v6 import, and the distinct
+      persistence of Servos/Auto anims versus transient Locate. Nine stale UI
+      captures were replaced from the running build and one Fleet-plan capture
+      was added. All local Help links/images resolve, the rendered continuous
+      Help document was visually checked at the Timeline and Fleet-update
+      sections, tests passed 290/290, and the non-destructive self-test passed
+      21/21 with build 360 preserved
+      (`b1-self-test-20260815-015423.json`).
+- [x] Console-wide tooltip contract audit (2026-08-15).
+      All 113 operator-facing buttons, toggles, checkboxes, combo boxes, text
+      fields, sliders, menu items and selectable lists now expose an action
+      tooltip; 22 missing surfaces were filled across connection, Fleet update,
+      Help navigation, Scene dialogs, Firmware results and Sequencer context
+      menus. Existing wording was checked against current command paths and
+      corrected for broadcast Animation behavior, looping TALK/POWER_DOWN,
+      calibration's 1.2-second save delay, solid Locate LED state, optional
+      support images for local firmware, Scene endpoint clamping, and the real
+      0.2-second duplicate-clip offset. Shared
+      styles keep help visible on disabled controls, with focused regression
+      tests enforcing coverage and high-risk wording. Rendered WPF checks
+      confirmed both an enabled Disconnect tooltip and the disabled Auto
+      endpoint tooltip. Tests passed 293/293; the non-destructive self-test
+      passed 21/21 with build 360 preserved
+      (`b1-self-test-20260815-111238.json`).
 
 ## Incidents (full narratives)
 

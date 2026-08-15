@@ -61,6 +61,10 @@ enables/disables a servo, previews a position, or starts an animation.
   for a console-only update;
 - verifies that Help files are forced into the published payload, checked before
   installer creation, and handled safely at runtime if an image is absent;
+- parses every operator-facing XAML view and fails if a button, toggle, checkbox,
+  combo box, text box, slider, menu item or selectable list lacks a tooltip;
+  focused assertions also protect high-risk safety/timing wording and ensure the
+  shared interactive styles keep tooltips visible while controls are disabled;
 - verifies that the installer checks Windows/CPU compatibility, warns when the
   optional Windows media stack is absent, and executes both installed binaries;
 - verifies that animation/calibration debounces snapshot their target and that

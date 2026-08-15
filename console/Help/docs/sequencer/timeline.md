@@ -5,11 +5,13 @@ is entirely console-driven: no sequence is uploaded to a droid or master slot.
 
 ![Sequencer transport controls](../images/sequencer-transport.png)
 
-*Figure: Start with the transport, timecode, zoom, Snap, and editing controls;
-the entire Add audio lane button remains visible at the right.*
+*Figure: The current toolbar separates Play/Pause, Restart, Stop, return to
+start, Safe Stop and E-STOP, followed by the endpoint, Preflight, navigation and
+editing controls. Scene file actions remain in the document bar above it.*
 
-*Transport, timecode, zoom, Snap, editing, import/export, Clear, and audio-lane
-controls stay together above the timeline.*
+*The Scene document bar and transport/editing toolbar keep timecode, endpoint,
+Preflight, zoom, Snap, import/export, Clear, and audio-lane controls together
+above the timeline.*
 
 ## A first sequence in six steps
 
@@ -32,8 +34,8 @@ controls stay together above the timeline.*
 *Figure: Audio lanes sit above the broadcast, master, and slave gesture tracks.
 Every visible clip is contained completely inside the capture.*
 
-*This real sequence contains two audio lanes, a broadcast lane, and offline
-droid lanes preserved from its saved roster.*
+*This real sequence contains two audio lanes plus broadcast and per-droid
+gesture lanes. Saved droids that are absent would remain here as OFFLINE.*
 
 - **All droids** is a broadcast track. One clip sends one fleet-wide command.
 - Each known droid receives its own track with its name and role.
@@ -95,7 +97,9 @@ audio-synchronized Talk loop.*
   identifies the target.
 - **Move:** drag a clip horizontally in time or vertically to retarget it.
 - **Select:** click a clip to open its inspector.
-- **Duplicate/Delete:** right-click the clip or use the inspector buttons.
+- **Duplicate/Delete:** right-click the clip or use the inspector buttons. A
+  duplicate is selected and placed on the same target 0.2 seconds after the
+  original so the copy does not remain hidden underneath it.
 - **Inspector:** choose a different gesture or target, view its exact start and
   duration estimate, and use the ±0.1 s buttons. For `POWER_DOWN`/`TALK`, a
   second pair of buttons edits the real endpoint. Displayed values are not
@@ -125,8 +129,8 @@ does not mark the sequence dirty.
 Gesture/target inspector changes, audio-lane names and order, clip Loop, and the
 whole-sequence Loop setting use the same history rules. The cyan dashed **END**
 line is also document state: **END AUTO** follows content, **Set End** fixes it
-at the stopped playhead without truncating content, and **Auto** clears that
-override. Undo and Redo retain the
+at the stopped playhead or, when content extends later, at that content tail;
+**Auto** clears the override. Existing content is never truncated. Undo and Redo retain the
 newest 50 edits; once that capacity is exceeded, the oldest snapshots are
 discarded first. Selection, armed track, droid-track mute, zoom, Snap, waveform
 peaks, execution reports, and drag visuals remain transient and create no

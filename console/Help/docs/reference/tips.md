@@ -15,6 +15,8 @@ before clicking a chip, or drag it when target and timing must be explicit.*
   tuning change.
 - After calibration, wait 1.2 seconds and reselect the droid to verify the values.
 - Hover over controls for a concise tooltip.
+- Select the green **update available** header badge to reopen the eligible
+  Fleet plan, or the Firmware window when only the console app is newer.
 
 ## Sequencer editing
 
@@ -37,6 +39,9 @@ before clicking a chip, or drag it when target and timing must be explicit.*
   moves it back to the beginning.
 - The timecode shows current position / authoritative Scene endpoint (automatic
   content tail or manual **END SET**).
+- Open **Preflight** for advisory Scene-content hints. Leave it open while
+  correcting clips: its findings refresh automatically until you press the
+  button again to close it.
 - Use **Ctrl+S** to save the open Scene often and **Ctrl+O** to switch Scenes
   through the browser. Export external copies from the **…** menu only for
   backup or transfer. Undo history and unsaved edits do not survive an

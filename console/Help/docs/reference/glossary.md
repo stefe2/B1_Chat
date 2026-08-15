@@ -57,6 +57,11 @@ parameters, adoption, and OTA guard state use it according to the board's role.
 has not been committed to persistent storage. It does not report calibration or
 sequence save state.
 
+**Build ID** — deterministic eight-character identity derived from the firmware
+source, PlatformIO configuration, and role. It distinguishes two binaries that
+carry the same human-readable firmware version and lets an update verify the
+exact image that rebooted.
+
 **OTA** — over-the-air slave firmware transfer through the master and mesh.
 
 **App-only flash** — writes the application image without erasing bootloader,
@@ -68,6 +73,10 @@ and application. It permanently deletes that board's NVS.
 
 **Rollback** — the OTA guard returns to the previous image after the new image
 fails early boot or does not report a changed version.
+
+**Fleet update** — supervised console workflow that offers semantic upgrades to
+eligible online adopted droids, updates slaves sequentially by OTA, and flashes
+the USB master app-only last. It never chooses full erase automatically.
 
 ## Sequencer terms
 

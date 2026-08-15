@@ -15,6 +15,10 @@ button appears here only when a newer console release is available.*
 When a newer console version exists, the **Updates (GitHub)** area shows it with
 an **Install** button.
 
+The green **update available** badge in the main header is also clickable. When
+the console is the only available update, that badge opens this Firmware window;
+when eligible online droids are behind, it opens their supervised Fleet plan.
+
 1. Stop sequence playback.
 2. Save any timeline edits you need to keep. Export an external copy if desired;
    timeline work is not autosaved.

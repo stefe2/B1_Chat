@@ -101,6 +101,12 @@ relevant behavior.
   child must respect its own `Dock`.
 - A nested `ButtonBase` handles its click before an ancestor `MouseBinding`;
   use a real `Button` for an intentional second click target.
+- Treat tooltips as part of the interaction contract, not decorative copy. Every
+  operator-facing interactive control needs a concise action/consequence tooltip;
+  keep safety, persistence and timing claims synchronized with the command path.
+  Shared control styles set `ToolTipService.ShowOnDisabled=True` so a disabled
+  action can still explain itself; custom or unstyled disabled controls must do
+  the same explicitly.
 - `DarkComboBoxStyle` displays the closed selection through `ToString()`, so
   every model used as a `ComboBox.ItemsSource` needs an appropriate override.
 - Debounced sliders must snapshot target ID and values and cancel on selection

@@ -57,13 +57,15 @@ from other serial devices.
 2. Select **Master**. Only one board in a fleet should use this role.
 3. Choose the board's **Flash Port**.
 4. Choose **From GitHub** for the current verified release.
-5. For a blank/new board, enable **New / erased board (full erase + flash)**.
+5. For a blank/new board, open **Advanced options**, then enable
+   **New / erased board (full erase + flash)**.
 6. Choose **Flash MASTER**, confirm, and do not disconnect power or USB.
 
 ![Firmware role, port, source, and erase controls](images/firmware-source-options.png)
 
 *Figure: Confirm all four choices before enabling Flash. Full erase is intended
-for a new board or a deliberate recovery and removes saved board data.*
+for a new board or a deliberate recovery, is kept under Advanced options, and
+removes saved board data.*
 
 A full flash erases all saved data on that board and writes the bootloader,
 partition table, and application. See [Flashing over USB](firmware/flashing.md)
@@ -87,14 +89,16 @@ calibrate a fleet when the intended role and droid are unambiguous.
 
 ## Step 5 — Connect the running master
 
-Close the Firmware window if desired, choose the master's port in the main
-header, and select **Connect**. The green status should include the firmware
-version after the handshake. The master itself appears in the Droids card.
+After the prominent **FLASH COMPLETED** result appears, use **Close window**.
+Choose the master's port in the main header and select **Connect**. On later
+launches, the console tries the last connected port automatically. The green
+status should include the firmware version and Build ID after the handshake.
+The master itself appears in the Droids card.
 
 ![Connected master controls in the console header](images/connection-controls.png)
 
-*Figure: A successful connection shows a green status, the firmware version,
-the selected COM port, and a complete Disconnect button.*
+*Figure: A successful connection shows a green status, the firmware version and
+Build ID, the selected COM port, and a complete Disconnect button.*
 
 If the port opens but the status remains at **handshake**, confirm that the
 board has master firmware and no serial monitor owns the same port.

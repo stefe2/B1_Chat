@@ -106,13 +106,16 @@
                 <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
                     <Button Content="Later" Style="{StaticResource MiniButtonStyle}" Command="{Binding CloseCommand}"
                             MinWidth="90" Margin="0,0,8,0"
-                            Visibility="{Binding ShowConfirmation, Converter={StaticResource BoolToVisConv}}" />
+                            Visibility="{Binding ShowConfirmation, Converter={StaticResource BoolToVisConv}}"
+                            ToolTip="Close this plan without updating. You can reopen it from the update-available badge." />
                     <Button Content="Update all" Style="{StaticResource AccentButtonStyle}" Command="{Binding StartUpdateCommand}"
                             MinWidth="120"
-                            Visibility="{Binding ShowConfirmation, Converter={StaticResource BoolToVisConv}}" />
+                            Visibility="{Binding ShowConfirmation, Converter={StaticResource BoolToVisConv}}"
+                            ToolTip="Update every listed online droid in order: slaves by OTA first, then the USB-connected master. Saved settings are preserved." />
                     <Button Content="Close" Style="{StaticResource PrimaryButtonStyle}" Command="{Binding CloseCommand}"
                             MinWidth="100"
-                            Visibility="{Binding IsComplete, Converter={StaticResource BoolToVisConv}}" />
+                            Visibility="{Binding IsComplete, Converter={StaticResource BoolToVisConv}}"
+                            ToolTip="Close the completed fleet update report." />
                 </StackPanel>
             </Grid>
         </Border>

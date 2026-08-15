@@ -45,6 +45,12 @@ The green **update available** badge in the main header opens the same Fleet
 plan again whenever eligible online droids remain. If the badge represents only
 a console application update, it opens the regular Firmware window instead.
 
+![Fleet Firmware Update confirmation with per-droid plan](../images/fleet-update.png)
+
+*Figure: The confirmation lists each version/Build ID transition, exclusions as
+notices, and the exact slave-first/master-last order. Per-droid bars and the
+overall progress bar activate after Update all.*
+
 Offline/pending droids are omitted rather than blocking the batch. Newer
 firmware and same-version local builds are never replaced automatically. The
 batch uses app-only USB flashing for the master and never arms full erase. A

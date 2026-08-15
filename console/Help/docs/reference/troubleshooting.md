@@ -87,6 +87,18 @@ unless the documented recovery case actually requires it.*
 
 There is no Save Log button in the current Firmware window. Take a screenshot of
 the visible flash output before closing it if you need to report a failure.
+The separate result panel above the log should remain visible after completion
+and state **FLASH COMPLETED** or **FLASH FAILED** with a **Close window** button.
+
+## “Update available” appears, but no fleet prompt opens
+
+- The startup offer waits for the release check and a stable online roster.
+- Only adopted, online droids running an older semantic firmware version enter
+  the automatic plan. Offline/pending droids, newer development firmware, and a
+  same-version build with another Build ID are deliberately left alone.
+- Select the green **update available** badge to reopen an eligible plan after
+  choosing Later. If only the Windows console is newer, the badge opens the
+  regular Firmware window instead.
 
 ## OTA failed, rolled back, or became unreachable
 

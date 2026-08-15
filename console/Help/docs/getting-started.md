@@ -13,7 +13,7 @@ calibration, sequencing, and local audio stay on your PC and local mesh.
 > It covers Windows requirements, hardware power, the first master/slave flash,
 > connection, adoption, and safe calibration in the right order.
 
-This guide describes **B1 Chat Console 0.12.0** with **firmware 1.11.0,
+This guide describes **B1 Chat Console 0.12.1** with **firmware 1.11.0,
 protocol 5**. Use matching current console and firmware releases whenever
 possible; older firmware may omit controls that depend on newer capabilities.
 
@@ -24,11 +24,15 @@ possible; older firmware may omit controls that depend on newer capabilities.
 ![Connection controls in the console header](images/connection-controls.png)
 
 *Figure: Select the master's COM port and Connect. Once connected, the button
-changes to Disconnect and the green status includes the firmware version.*
+changes to Disconnect and the green status includes the firmware version and
+Build ID.*
 
 1. Power the master and connect it to the PC with a **USB data cable**.
-2. Pick its **Port** in the top-right list. Choose **Rescan** if it is missing.
-3. Select **Connect**. A successful connection changes the status to green and
+2. On the first run, pick its **Port** in the top-right list. Choose **Rescan**
+   if it is missing. On later runs, the console remembers the last port and
+   tries to connect to it automatically when that port is present.
+3. Select **Connect** if it did not connect automatically. A successful
+   connection changes the status to green and
    shows the master's firmware version.
 4. If the board resets or its cable is briefly unplugged, leave the console
    open: it retries the same port every 3 seconds. Choosing **Disconnect** stops
@@ -50,9 +54,10 @@ Topology.
 
 ### 3. Calibrate before playing gestures
 
-Open the gear button on a droid row or use the Servo Calibration card. Set
-conservative min/center/max values before using large-amplitude gestures. Keep
-hands and loose parts clear while previewing motion. See
+Open the gear button on a droid row. Calibration now lives in its own window,
+already targeted to that droid. Set conservative min/center/max values before
+using large-amplitude gestures. Keep hands and loose parts clear while
+previewing motion. See
 [Servo Calibration](calibration.md) for the safety checklist and save timing.
 
 ![Servo Calibration window](images/calibration-window.png)
@@ -70,7 +75,7 @@ must remain active.
 ## What each card does
 
 - **[Droids](droids.md)** — adoption, identity, live state, per-droid toggles,
-  configuration backup/restore, versions, and OTA entry points.
+  configuration backup/restore, firmware version/Build ID, and OTA entry points.
 - **[Servo Calibration](calibration.md)** — safe pan/tilt limits, neutral centers,
   and live position preview.
 - **[Mesh Topology](mesh-topology.md)** — direct radio neighbors, relayed paths,
@@ -80,7 +85,12 @@ must remain active.
 - **[Sequencer](sequencer/timeline.md)** — multi-droid gesture tracks, local audio,
   editing, playback, and `.b1seq.json` import/export.
 - **Firmware** — [USB recovery and flashing](firmware/flashing.md),
-  [slave OTA](firmware/ota.md), and [console updates](firmware/console-updates.md).
+  [supervised fleet/individual slave OTA](firmware/ota.md), and
+  [console updates](firmware/console-updates.md).
+
+When the green **update available** badge appears in the header, select it. It
+opens the supervised Fleet plan when eligible online droids need firmware; if
+only the Windows console needs an update, it opens the regular Firmware window.
 
 ## Know where your changes are saved
 

@@ -29,7 +29,7 @@
                 <Button Content="From GitHub" Style="{StaticResource MiniButtonStyle}" Command="{Binding PrepareFromGithubCommand}" Margin="0,0,8,0"
                         ToolTip="Downloads and verifies (SHA-256) the latest release for the role selected above, plus the shared bootloader + partition table so a fresh board can be fully flashed." />
                 <Button Content="Local file…" Style="{StaticResource MiniButtonStyle}" Command="{Binding PickBinCommand}"
-                        ToolTip="Pick any .bin (e.g. a local pio run build) — unverified. If bootloader.bin + partitions.bin sit beside it, a full flash (fresh-board OK) is armed automatically." />
+                        ToolTip="Pick an unverified .bin file, such as a local pio run build. Nearby bootloader.bin and partitions.bin make full flash available but do not select it automatically." />
             </StackPanel>
 
             <Border Background="{StaticResource RecessBrush}" CornerRadius="4" Padding="8,6" Margin="0,0,0,8">
@@ -104,7 +104,8 @@
                     </StackPanel>
                     <Button Grid.Row="1" Grid.Column="1" Content="Close window"
                             Style="{StaticResource PrimaryButtonStyle}" Command="{Binding CloseFirmwareWindowCommand}"
-                            HorizontalAlignment="Right" Margin="0,10,0,0" />
+                            HorizontalAlignment="Right" Margin="0,10,0,0"
+                            ToolTip="Close the Firmware window after reviewing the completed flash result." />
                 </Grid>
             </Border>
 

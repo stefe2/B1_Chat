@@ -68,7 +68,7 @@
 
                 <Button Content="Set End" Style="{StaticResource MiniButtonStyle}"
                         Command="{Binding SetSequenceEndAtPlayheadCommand}" Margin="0,0,4,0"
-                        ToolTip="Set a manual Scene endpoint at the playhead. Existing content is never truncated."
+                        ToolTip="Set a manual Scene endpoint at the playhead, clamped to the current content tail so existing content is never truncated."
                         ToolTipService.ShowOnDisabled="True" />
                 <Button Content="Auto" Style="{StaticResource MiniButtonStyle}"
                         Command="{Binding UseAutomaticSequenceEndCommand}" Margin="0,0,4,0"
@@ -250,7 +250,8 @@
                                             <ContextMenu Style="{StaticResource DarkContextMenuStyle}">
                                                 <MenuItem Header="Delete lane" Style="{StaticResource DarkMenuItemStyle}"
                                                           Command="{Binding PlacementTarget.Tag.DeleteAudioLaneCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                                                          CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                                          CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                          ToolTip="Delete this audio lane. If it contains clips, confirmation appears first." />
                                             </ContextMenu>
                                         </Border.ContextMenu>
                                         <Grid>
@@ -624,16 +625,19 @@
                                                                 <ContextMenu Style="{StaticResource DarkContextMenuStyle}">
                                                                     <MenuItem Header="Replace file…" Style="{StaticResource DarkMenuItemStyle}"
                                                                               Command="{Binding PlacementTarget.Tag.ReplaceAudioClipCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                                                                              CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                                                              CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                                              ToolTip="Choose a different audio file while keeping this clip's lane, start time, and Loop setting." />
                                                                     <MenuItem Header="Loop" IsCheckable="True" Style="{StaticResource DarkMenuItemStyle}"
                                                                               IsEnabled="{Binding PlacementTarget.Tag.CanEditSequence, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                                                               IsChecked="{Binding PlacementTarget.DataContext.Loop, RelativeSource={RelativeSource AncestorType=ContextMenu}, Mode=OneWay}"
                                                                               Command="{Binding PlacementTarget.Tag.ToggleAudioLoopCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                                                                              CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                                                              CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                                              ToolTip="Repeat this audio file until the Scene endpoint. Stop playback before changing this setting." />
                                                                     <Separator />
                                                                     <MenuItem Header="Delete" Style="{StaticResource DarkMenuItemStyle}"
                                                                               Command="{Binding PlacementTarget.Tag.DeleteAudioClipCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                                                                              CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                                                              CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                                              ToolTip="Delete this audio clip from the Scene." />
                                                                 </ContextMenu>
                                                             </Border.ContextMenu>
                                                             <Canvas.Left>
@@ -778,11 +782,13 @@
                                                     <ContextMenu Style="{StaticResource DarkContextMenuStyle}">
                                                         <MenuItem Header="Duplicate" Style="{StaticResource DarkMenuItemStyle}"
                                                                   Command="{Binding PlacementTarget.Tag.DuplicateStepCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                                                                  CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                                                  CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                                  ToolTip="Duplicate this gesture clip on the same target, 0.2 seconds after the original, and select the copy." />
                                                         <Separator />
                                                         <MenuItem Header="Delete" Style="{StaticResource DarkMenuItemStyle}"
                                                                   Command="{Binding PlacementTarget.Tag.DeleteStepCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                                                                  CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                                                  CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                                  ToolTip="Delete this gesture clip from the Scene." />
                                                     </ContextMenu>
                                                 </Border.ContextMenu>
                                                 <Canvas.Left>
@@ -1020,7 +1026,7 @@
                         <UniformGrid Columns="2">
                             <Button Content="Duplicate" Style="{StaticResource MiniButtonStyle}" Margin="0,0,2,0"
                                     Command="{Binding DuplicateStepCommand}" CommandParameter="{Binding SelectedStep}"
-                                    ToolTip="Duplicate the selected clip on the same target and time." />
+                                    ToolTip="Duplicate the selected clip on the same target, 0.2 seconds after the original, and select the copy." />
                             <Button Content="Delete" Style="{StaticResource MiniButtonStyle}" Margin="2,0,0,0"
                                     Foreground="#FFB3AE"
                                     Command="{Binding DeleteStepCommand}" CommandParameter="{Binding SelectedStep}"

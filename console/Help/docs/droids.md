@@ -40,13 +40,13 @@ of repeatedly appearing for adoption.
 | Column | Meaning |
 | --- | --- |
 | Name | Editable identity. Commit with Enter or by leaving the field. The name is sent to the droid and also cached by the master. |
-| Version | Firmware reported by that board. Its color/tooltip indicates whether it matches the latest discovered release. |
+| FW / Build | Semantic firmware version plus its deterministic eight-character Build ID. The color/tooltip indicates whether the version matches the latest discovered release; the Build ID distinguishes an official role-specific image from another build carrying the same version. |
 | RSSI | Last signal strength in dBm. The master shows its local COM port; a lost slave shows `-`. Values closer to zero are stronger. |
 | State | **online** or **lost**. Lost means 4 seconds without a heartbeat, not forgotten or unadopted. |
 | Role | The USB-connected fleet coordinator is master; mesh members are slaves. |
 | Servos | Enables or cuts that board's servo output. Use this first if motion is unsafe. |
 | Auto anims | Allows or suppresses spontaneous idle gestures on that droid. Manual Play and Sequencer commands still work. |
-| Locate | Temporarily overrides the onboard LED with a solid on/off state for physical identification. |
+| Locate | Temporarily overrides the onboard LED with solid on for physical identification; switching Locate off resumes the normal activity blink. |
 | Update | Opens USB flashing for the master or starts OTA for an adopted slave when a newer release is available. |
 | Gear | Opens Servo Calibration already targeted to that row. |
 | ✕ | Forgets an adopted slave. |
@@ -112,3 +112,9 @@ build. Accepting stops Sequencer playback, downloads and verifies each required
 image, updates slaves one at a time by OTA, then app-only flashes the connected
 master by USB last. The window shows each droid plus one overall progress bar and
 stops at the first failure. Full erase is never selected by this assistant.
+
+![Supervised fleet firmware update plan](images/fleet-update.png)
+
+*Figure: Review the immutable online-only plan before Update all. Slaves are
+listed before the USB master; omitted or custom-version droids remain notices
+instead of being changed automatically.*

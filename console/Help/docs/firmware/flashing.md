@@ -3,7 +3,8 @@
 ![Firmware window](../images/firmware-window.png)
 
 *Figure: The complete Firmware window keeps role, USB source, flash log, and
-GitHub update status in one place. The Flash Port is independent of the main
+GitHub update status in one dark, app-themed window. Destructive controls stay
+hidden under Advanced options. The Flash Port is independent of the main
 connection.*
 
 USB flashing is the recovery path for a blank board, a master, or firmware that
@@ -53,7 +54,8 @@ and origin of the build.
 ![Firmware source and full-erase choices](../images/firmware-source-options.png)
 
 *Figure: Role, port, binary source, and erase mode are separate decisions.
-Review each highlighted section before confirming a write.*
+Open Advanced options only when the normal address or app-only update is not
+appropriate, then review each highlighted section before confirming a write.*
 
 ## App-only versus full erase + flash
 
@@ -99,7 +101,10 @@ partition-table writing to full erase.
 4. Read the confirmation, especially the role, COM port, and erase state.
 5. Choose **Flash MASTER** or **Flash SLAVE**.
 6. Do not unplug the board until the log reports completion.
-7. For the master, wait for automatic reconnection and verify the reported
+7. Read the separate **FLASH COMPLETED** or **FLASH FAILED** result panel. It
+   names the role and port and remains visible above the log; use its explicit
+   **Close window** button when finished.
+8. For the master, wait for automatic reconnection and verify the reported
    firmware version. For a slave, power it with the fleet and confirm its row.
 
 Some ESP32 boards need manual bootloader entry. If the flasher cannot connect,
@@ -108,9 +113,11 @@ only if the board's manufacturer requires it.
 
 ## The visible flash log
 
-Progress and `espflash` output appear in the dark log area. The current release
-does **not** include a Save Log button. If a flash fails, take a screenshot of
-the visible log before closing the window. The separate serial diagnostic trace
+Progress and `espflash` output appear in the dark log area. Completion is also
+summarized in the prominent success/failure panel above that log, so the final
+result is not hidden at the bottom of scrolling text. The current release does
+**not** include a Save Log button. If a flash fails, take a screenshot of the
+visible log before closing the window. The separate serial diagnostic trace
 does not contain all redirected `espflash` output.
 
 Continue with [Troubleshooting](../reference/troubleshooting.md) for connection,

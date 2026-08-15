@@ -18,11 +18,14 @@
             <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button Content="{Binding SecondaryLabel}" Style="{StaticResource MiniButtonStyle}"
                         Visibility="{Binding ShowSecondary, Converter={StaticResource BoolToVisConv}}"
-                        Click="Secondary_Click" Margin="0,0,8,0" MinWidth="130" />
+                        Click="Secondary_Click" Margin="0,0,8,0" MinWidth="130"
+                        ToolTip="Choose the secondary action shown on this button and continue." />
                 <Button Content="Cancel" Style="{StaticResource MiniButtonStyle}"
-                        IsCancel="True" Margin="0,0,8,0" MinWidth="82" />
+                        IsCancel="True" Margin="0,0,8,0" MinWidth="82"
+                        ToolTip="Cancel this operation and leave the current state unchanged." />
                 <Button Content="{Binding PrimaryLabel}" Style="{StaticResource AccentButtonStyle}"
-                        IsDefault="True" Click="Primary_Click" MinWidth="130" />
+                        IsDefault="True" Click="Primary_Click" MinWidth="130"
+                        ToolTip="Choose the primary action shown on this button and continue." />
             </StackPanel>
         </Grid>
     </Border>

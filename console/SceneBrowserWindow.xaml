@@ -64,6 +64,7 @@
                 <ListBox x:Name="SceneList" Background="Transparent" BorderThickness="0"
                          ItemsSource="{Binding Scenes}" SelectionChanged="SceneList_SelectionChanged"
                          MouseDoubleClick="SceneList_MouseDoubleClick"
+                         ToolTip="Select a Scene, then choose Open; double-clicking a row opens it immediately."
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                     <ListBox.ItemTemplate>
                         <DataTemplate>
@@ -114,9 +115,11 @@
             <TextBlock Text="{Binding LibraryStatus}" Style="{StaticResource MetaTextStyle}"
                        VerticalAlignment="Center" ToolTip="{Binding LibraryIssueText}" />
             <StackPanel Grid.Column="1" Orientation="Horizontal">
-                <Button Content="Cancel" Style="{StaticResource MiniButtonStyle}" IsCancel="True" MinWidth="82" Margin="0,0,8,0" />
+                <Button Content="Cancel" Style="{StaticResource MiniButtonStyle}" IsCancel="True" MinWidth="82" Margin="0,0,8,0"
+                        ToolTip="Close the Scene browser without changing the current Scene." />
                 <Button x:Name="OpenButton" Content="Open" Style="{StaticResource AccentButtonStyle}"
-                        IsDefault="True" IsEnabled="False" MinWidth="82" Click="OpenScene_Click" />
+                        IsDefault="True" IsEnabled="False" MinWidth="82" Click="OpenScene_Click"
+                        ToolTip="Open the selected Local Library Scene. Unsaved changes and active playback are handled explicitly." />
             </StackPanel>
         </Grid>
     </Grid>

@@ -2,9 +2,9 @@
 
 ![Sequencer transport and file controls](../images/sequencer-transport.png)
 
-*Figure: Playback is controlled from the left; Snap, Fit, Undo/Redo, Clear, and
-audio-lane creation follow in the same toolbar. Scene file actions now live in
-the document bar above the timeline.*
+*Figure: Playback and the two safety stops are on the left; the authoritative
+END controls and advisory Preflight sit before zoom, Snap, Fit, Follow and the
+editing controls. Scene file actions live in the document bar above.*
 
 ## What Play actually does
 
@@ -72,11 +72,12 @@ Muted or offline rows do not create a queue for missed commands.*
 
 ## Play, Pause, Stop, and Loop
 
-- **Play** (`Space`) starts from the current playhead. At the natural end it
-  starts a new pass from t = 0. Prior gesture events are skipped because their
-  droid state cannot be reconstructed safely. An audio clip that overlaps the
-  cursor instead seeks to its matching source offset; a looping clip seeks to
-  the corresponding point in its current cycle.
+- **Play** (`Space`) starts from the current playhead. If the stopped playhead is
+  already at the authoritative Scene endpoint, pressing Play starts a new pass
+  from t = 0. When starting anywhere else, prior gesture events are skipped
+  because their droid state cannot be reconstructed safely. An audio clip that
+  overlaps the cursor instead seeks to its matching source offset; a looping
+  clip seeks to the corresponding point in its current cycle.
 - The same primary button becomes **Pause** while running and **Resume** while
   paused. A rapid second press therefore pauses; it never silently restarts the
   Scene.
@@ -104,12 +105,14 @@ Muted or offline rows do not create a queue for missed commands.*
   position diagnostically.
 - The cyan dashed **END** line is the authoritative Scene endpoint. **END AUTO**
   follows the calculated content tail. Move the stopped playhead and choose
-  **Set End** to extend the Scene; **Auto** returns to the calculated tail.
-  Existing content is never truncated, and endpoint edits support Undo/Redo.
+  **Set End** to extend the Scene; if the cursor is earlier than existing
+  content, END remains at that content tail instead of truncating it. **Auto**
+  returns to the calculated tail, and endpoint edits support Undo/Redo.
 - **Loop** starts a new pass when the Scene endpoint is reached. A
   `POWER_DOWN`/`TALK` clip first reaches its authored endpoint and sends IDLE;
   the next pass then starts cleanly at t = 0. Without Loop, natural completion
-  stops at the calculated end so the finished position remains visible.
+  stops at the authoritative Scene endpoint so the finished position remains
+  visible.
 
 Persistent timeline editing is locked during both Play and Pause. Press
 **Stop** before inserting, moving, duplicating, deleting, using the inspector,
