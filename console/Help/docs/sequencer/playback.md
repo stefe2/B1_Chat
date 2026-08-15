@@ -23,12 +23,17 @@ one batch: gesture clips are sent in editor order, followed by audio clips in
 lane/clip order. They are serialized, not latched by every droid on one hardware
 clock edge.
 
+Preflight warns before Play when represented gesture durations overlap on an
+effective target. It distinguishes same-target overlaps, duplicate timestamps,
+and broadcast/target intersections, then **Go to** selects the later clip where
+the interruption or ambiguity begins. These warnings do not block playback.
+
 Two gestures for the same target at one timestamp are both sent in editor order;
 the last command received by that droid wins. Mixing broadcast and targeted
-gestures at one timestamp is also ambiguous because mesh arrival can differ from
-console send order. The **SCHEDULE** warning appears after Play; hover it for the
-exact timestamp and conflict description. Separate those clips in time when the
-final physical pose matters.
+gestures is also ambiguous because mesh arrival can differ from console send
+order. The runtime **SCHEDULE** badge remains as an additional same-timestamp
+reminder after Play. Separate conflicting clips when the final physical pose
+matters.
 
 ## Preflight before Play
 
@@ -42,13 +47,16 @@ the stopped playhead to that finding and selects its gesture when applicable.
 
 The scan checks the serial port and handshake only when active gesture clips need
 droids. It then checks for an online master, offline targeted droids, broadcasts
-with no recipients, missing/unreadable audio, pending or unknown audio duration,
-and `TALK`/`POWER_DOWN` clips without a valid represented endpoint. Muted gesture
-tracks are ignored; an audio-only Scene is allowed without a master. The scan
-does not send commands, alter the Scene, probe media or change Windows settings.
-Play, Restart and Resume refresh it against the current environment. Muting an
-offline target is the explicit rehearsal choice to run without that droid;
-missed commands are never queued or replayed after reconnection.
+with no recipients, overlapping/duplicate/ambiguous gestures,
+missing/unreadable audio, pending or unknown audio duration, and
+`TALK`/`POWER_DOWN` clips without a valid represented endpoint. Muted gesture
+tracks are ignored, including conflict analysis; an audio-only Scene is allowed
+without a master. Conflict warnings remain useful for offline targeted clips so
+they can be repaired before that droid reconnects. The scan does not send
+commands, alter the Scene, probe media or change Windows settings. Play, Restart
+and Resume refresh it against the current environment. Muting an offline target
+is the explicit rehearsal choice to run without that droid; missed commands are
+never queued or replayed after reconnection.
 
 ![Audio and per-droid gesture tracks](../images/sequencer-tracks.png)
 
@@ -176,7 +184,9 @@ interrupts them, the firmware rejects the command, or the lease expires
 animation engine, not physical servo motion.
 
 A muted droid track is skipped when its scheduled start arrives. If the command
-was already sent before you mute or pause, the target continues it.
+was already sent before you mute or pause, the target continues it. Mute is a
+runtime rehearsal control rather than saved Scene data; it also removes that
+track from preflight routing and conflict checks.
 
 ## Offline droids and missed events
 

@@ -861,6 +861,25 @@ For what the shipped behavior actually does at runtime, read
   transport gate. The operator confirmed all six rendered workflows, including
   that an audio-only Scene remains playable while disconnected.
 
+### [x] SEQ-G03 — Detect overlapping and ambiguous gesture commands
+
+- **Priority:** P1
+- **Problem:** a later gesture interrupts the previous one, and simultaneous
+  broadcast plus per-target events have order-dependent outcomes.
+- **Depends on:** SEQ-F01, SEQ-G01.
+- **Acceptance:** analyze effective target intersections and duration spans;
+  flag same-target overlaps, same-time duplicates, and broadcast/target conflicts;
+  link warnings to clips.
+- **Validation:** finite, infinite, broadcast, muted, and offline combinations.
+- **Implemented:** the side-effect-free preflight performs a linear ordered scan
+  of unmuted represented gesture spans. It emits bounded, source-linked warnings
+  for same-target interruption, duplicate timestamps and broadcast/target
+  ambiguity; touching endpoints do not conflict. Offline conflicts remain useful
+  for repair and every warning navigates to the later clip.
+- **Evidence:** seven focused span/target cases cover finite, immediate, infinite,
+  both broadcast orders, different/muted targets, touching endpoints and offline
+  repair. Warnings remain non-blocking within the 287/287 suite.
+
 ### [x] SEQ-G04 — Detect unterminated infinite gestures
 
 - **Priority:** P0
@@ -878,6 +897,46 @@ For what the shipped behavior actually does at runtime, read
 - **Evidence:** invalid endpoints are structurally impossible through normal UI
   and import bounds; focused headless cases force the raw invalid state and prove
   Play is blocked for TALK and POWER_DOWN while valid endpoints remain ready.
+
+### [x] SEQ-G05 — Remove implicit broadcast insertion risk
+
+- **Priority:** P1
+- **Problem:** clicking a gesture with no armed track falls back to the first
+  `All droids` row.
+- **Depends on:** none.
+- **Acceptance:** insertion requires an explicitly armed track, or presents an
+  unmistakable confirmation for broadcast. The armed target is always prominent
+  and keyboard insertion follows the same rule.
+- **Validation:** fresh startup, lost/rebuilt armed track, offline track, and
+  explicit broadcast cases.
+- **Implemented:** click insertion and its command require a non-null explicit
+  armed track; direct drops require the lane supplied by the drop and never
+  synthesize broadcast. The library header continuously renders `NO TRACK ARMED`
+  or `ARMED · target`, including explicit `All droids`. Roster rebuild preserves
+  a matching armed ID and clears one whose row disappears.
+- **Evidence:** four focused cases cover fresh startup, offline and broadcast
+  arming, rebuild/loss and null direct drop. Release build 359 visibly renders
+  the new status pill without clipping at the full gesture library.
+
+### [x] SEQ-G06 — Keep UI text and control availability synchronized
+
+- **Priority:** P2
+- **Problem:** current tooltips and Help contain known caveats that can drift from
+  the fixes, and some controls remain available when their result is unsafe or a
+  no-op.
+- **Depends on:** all behavior-changing P0/P1 items.
+- **Acceptance:** final content audit covers transport, mute, Pause, Stop, loops,
+  Import/Export, library, audio portability, preflight, and offline behavior.
+- **Validation:** checklist review of XAML tooltips and all Sequencer Help pages.
+- **Implemented:** timeline/Scene XAML and all three Sequencer Help pages were
+  checked against the versioned UI audit in `TEST-PROTOCOL.md`. Stale audio Play
+  wording, Mute terminology, endpoint timecode text, insertion guidance,
+  preflight conflict coverage and Scene-menu portability/lock tooltips were
+  corrected. Preflight Go to now disables outside Stopped instead of silently
+  doing nothing.
+- **Evidence:** compiled XAML and the stopped/active command test pass; Release
+  inspection confirms the complete toolbar, tracks, library and armed-target
+  status render coherently.
 
 ### [x] SEQ-G14 — Redesign Play as an unambiguous Play/Pause control
 
@@ -1004,6 +1063,7 @@ Append concise evidence when closing items; do not paste full build logs.
 
 | Date | Items | Evidence |
 |---|---|---|
+| 2026-08-14 | SEQ-G03, SEQ-G05, SEQ-G06 | Added bounded span/target conflict warnings linked to the later clip, removed every implicit broadcast insertion fallback, exposed the armed target continuously and completed the versioned XAML/Help/control audit. Twelve focused cases expand the WPF suite from 275 to 287, all passing. Offline self-test passed 21/21 with clean master/slave/WPF builds and real Media Foundation smoke (`b1-self-test-20260814-222604.json`); Release build 359 has 0 warnings/errors and the complete Sequencer/library status rendered cleanly. |
 | 2026-08-14 | SEQ-G01, SEQ-G02, SEQ-G04 | Added side-effect-free readiness findings, expandable toolbar panel and source-linked navigation. Play/Restart/Resume now fail closed on connection/master/target routing, missing/unreadable audio and invalid infinite endpoints while warnings and audio-only offline Scenes remain playable. Twenty-two focused cases expand the WPF suite from 253 to 275, all passing. Offline self-test passed 21/21 with clean master/slave/WPF builds and real Media Foundation smoke (`b1-self-test-20260814-012815.json`); Release built with zero warnings and build number 359 remained preserved. The operator confirmed all six rendered workflows. |
 | 2026-08-14 | SEQ-E05, SEQ-F08, SEQ-H05 | Added automatic/manual Scene endpoint, cyan END marker, schema v6 nullable `endMs`, deterministic final scheduler wake and audio-loop lifetime bounded by the immutable endpoint. Eighteen new plan/import/persistence/library/transport cases expand the WPF suite from 235 to 253, all passing. `tools/self-test.ps1 -SkipSerial`: 21 passed, 0 failed, including clean master/slave/WPF builds, real Media Foundation/MP3 smoke and preserved build number 359; report `b1-self-test-20260814-003311.json`. The operator confirmed the rendered controls and audible repeat-to-END behavior in Release build 359. |
 | 2026-08-14 | SEQ-G15, SEQ-G16, SEQ-G17, SEQ-G18 | Closed after final rendered Release build 359 validation. Stop/Pause cursor moves restart overlapping audio at the requested offset; an unchanged paused click resumes; releasing the horizontal scrollbar restores Follow automatically. Earlier checks in the same pass confirmed wheel navigation and the complete Scene browser/document workflow. Automated evidence remains green through the 231-test transport suite and the current 235/235 repository suite. |

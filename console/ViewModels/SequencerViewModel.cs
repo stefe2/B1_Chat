@@ -85,6 +85,16 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     public int CalculatedContentEndMs => _calculatedContentEndMs;
 
     [ObservableProperty] private TimelineTrack? _armedTrack;
+    public bool HasArmedTrack => ArmedTrack != null;
+    public bool CanClickInsertGesture => CanEditSequence && HasArmedTrack;
+    public string ArmedTrackStatusText => ArmedTrack == null
+        ? "NO TRACK ARMED"
+        : $"ARMED · {ArmedTrack.Label}";
+    public string ArmedTrackStatusToolTip => ArmedTrack == null
+        ? "Click a target track before clicking a gesture. Direct drag-and-drop onto a track remains available."
+        : ArmedTrack.IsBroadcast
+            ? "Gesture-library clicks will explicitly broadcast to All droids."
+            : $"Gesture-library clicks will target {ArmedTrack.Label}.";
     [ObservableProperty] private double _pxPerSecond = 80;
     [ObservableProperty] private bool _snapToGrid = true;
     [ObservableProperty] private bool _followPlayhead = true;
@@ -344,6 +354,15 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     // keeps running would be misleading even though the snapshot itself is now race-free.
     public bool CanEditSequence => TransportState == SequencerTransportState.Stopped;
 
+    partial void OnArmedTrackChanged(TimelineTrack? value)
+    {
+        OnPropertyChanged(nameof(HasArmedTrack));
+        OnPropertyChanged(nameof(CanClickInsertGesture));
+        OnPropertyChanged(nameof(ArmedTrackStatusText));
+        OnPropertyChanged(nameof(ArmedTrackStatusToolTip));
+        InsertGestureCommand.NotifyCanExecuteChanged();
+    }
+
     private void TransitionTransportTo(SequencerTransportState next)
     {
         if (_transportState == next) return;
@@ -369,12 +388,14 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         // changes. Keep every transport-dependent command synchronized from this one source.
         PauseCommand.NotifyCanExecuteChanged();
         ReturnToStartCommand.NotifyCanExecuteChanged();
+        GoToPreflightIssueCommand.NotifyCanExecuteChanged();
         RefreshEditAvailability();
     }
 
     private void RefreshEditAvailability()
     {
         OnPropertyChanged(nameof(CanEditSequence));
+        OnPropertyChanged(nameof(CanClickInsertGesture));
         InsertGestureCommand.NotifyCanExecuteChanged();
         NudgeStartForwardCommand.NotifyCanExecuteChanged();
         NudgeStartBackwardCommand.NotifyCanExecuteChanged();
@@ -1093,18 +1114,21 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     public bool CompleteEditTransaction() => CommitSequenceEdit();
     public bool CancelEditTransaction() => CancelSequenceEdit();
 
-    [RelayCommand(CanExecute = nameof(CanEditSequence))]
-    private void InsertGesture(int animId) =>
-        InsertGestureAt(animId, ArmedTrack ?? Tracks.FirstOrDefault(), Math.Max(0, RoundToGrid(PlayheadMs)));
+    [RelayCommand(CanExecute = nameof(CanClickInsertGesture))]
+    private void InsertGesture(int animId)
+    {
+        if (!CanClickInsertGesture || ArmedTrack == null) return;
+        InsertGestureAt(animId, ArmedTrack, Math.Max(0, RoundToGrid(PlayheadMs)));
+    }
 
     // Called directly from code-behind (not bound in XAML) when a gesture-library chip is
     // dropped on a specific track+time cell instead of just clicked.
     public void InsertGestureAt(int animId, TimelineTrack? track, int startMs)
     {
-        if (!CanEditSequence) return;
+        if (!CanEditSequence || track == null) return;
         ExecuteSequenceEdit(() =>
         {
-            var step = new SequenceStep { AnimId = animId, Target = track?.Id ?? 0xFFFF, StartMs = Math.Max(0, startMs) };
+            var step = new SequenceStep { AnimId = animId, Target = track.Id, StartMs = Math.Max(0, startMs) };
             Steps.Add(step);
             SelectedStep = step;
         });
@@ -1586,6 +1610,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(HasPreflightWarnings));
         OnPropertyChanged(nameof(PreflightBadgeText));
         OnPropertyChanged(nameof(PreflightSummaryText));
+        GoToPreflightIssueCommand.NotifyCanExecuteChanged();
     }
 
     [RelayCommand]
@@ -1595,13 +1620,16 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         IsPreflightOpen = !IsPreflightOpen;
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanGoToPreflightIssue))]
     private void GoToPreflightIssue(SequencerPreflightIssue? issue)
     {
-        if (issue == null || TransportState != SequencerTransportState.Stopped) return;
-        if (issue.Step != null) SelectedStep = issue.Step;
+        if (!CanGoToPreflightIssue(issue)) return;
+        if (issue!.Step != null) SelectedStep = issue.Step;
         PlayheadMs = Math.Clamp(issue.StartMs, 0, TotalDurationMsValue);
     }
+
+    private bool CanGoToPreflightIssue(SequencerPreflightIssue? issue) =>
+        issue?.CanNavigate == true && TransportState == SequencerTransportState.Stopped;
 
     private bool PreflightAllowsPlayback()
     {

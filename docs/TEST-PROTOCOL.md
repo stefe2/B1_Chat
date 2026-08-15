@@ -31,9 +31,15 @@ enables/disables a servo, previews a position, or starts an animation.
 - validates the Sequencer preflight and Play gate across closed port, pending
   handshake, missing master, offline target, empty broadcast roster, muted
   tracks, audio-only offline playback, missing/unreadable/pending/unknown audio,
-  invalid/valid infinite-gesture endpoints, issue navigation and recovery after
-  connection repair. Errors intercept Play/Restart/Resume without replacing an
-  active or retained pass; warnings remain playable;
+  invalid/valid infinite-gesture endpoints, finite/infinite duration overlaps,
+  same-time duplicates, broadcast/target ambiguity, issue navigation and
+  recovery after connection repair. Muted tracks are excluded while offline
+  conflicts remain visible for repair. Errors intercept Play/Restart/Resume
+  without replacing an active or retained pass; warnings remain playable;
+- verifies gesture-library clicks require an explicitly armed target, including
+  fresh startup, offline and explicit broadcast tracks, roster rebuild/loss and
+  null direct-drop guards; preflight navigation is unavailable during an active
+  pass;
 - runs `git diff --check`;
 - verifies that the callback-to-loop mesh inbox is present;
 - verifies the per-droid animation-parameter store and targeted protocol;
@@ -81,6 +87,33 @@ tails. One test decodes a committed MP3 fixture with NAudio for real and asserts
 a rising envelope; another opens it with WPF `MediaPlayer` on a real dispatcher.
 A broken bucket mapping, missing MP3 decoder or cross-thread media teardown
 therefore fails the suite.
+
+### Sequencer UI content and availability audit
+
+When a behavior-changing Sequencer batch closes, review the compiled XAML
+tooltips and all three in-app Help pages (`timeline`, `playback`, `audio`) against
+this checklist:
+
+- Play/Pause/Resume, explicit Restart, retained Stop cursor and return-to-start
+  are described as separate actions;
+- Pause states that dispatched droid motion continues, while Normal/Safe/E-STOP
+  retain their distinct cleanup and torque policies;
+- droid-track Mute is runtime-only, excludes dispatch/preflight, affects no
+  audio lane, and never queues missed commands;
+- whole-Scene Loop, audio-clip Loop, infinite-gesture endpoints and the Scene
+  END boundary are not conflated;
+- New/Open/Import replacement and Save/Save As/Trash editing locks agree with
+  command availability; Export remains an available external snapshot;
+- Local Library identity, Dirty/checkpoint behavior and recoverable trash match
+  the document workflow;
+- audio formats/codecs, failure presentation and linked-not-embedded portability
+  limits remain explicit;
+- Preflight severities, Play gate, conflict warnings and stopped-only Go to
+  navigation agree with the implementation;
+- offline targets, broadcasts, muted rehearsal and audio-only disconnected Play
+  state exactly when commands will or will not be sent;
+- gesture-library clicks require the prominently displayed armed target, while
+  direct drag-and-drop supplies its own explicit target.
 
 Persistence fixtures cover every `b1-sequence` schema from v1 through v6. V6
 round trips nullable/manual `endMs`; v1–v5 migrate to automatic endpoint mode.

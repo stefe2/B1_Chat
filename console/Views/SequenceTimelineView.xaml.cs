@@ -35,10 +35,10 @@ public partial class SequenceTimelineView : UserControl
     private bool _scrubbing;
     private double _scrubStartPlayheadMs;
 
-    // Gesture-library click-vs-drag: MouseLeftButtonDown always captures and arms candidate
+    // Gesture-library click-vs-drag: MouseLeftButtonDown always captures a candidate
     // state; only once the mouse has moved past a small threshold does this become a real drag
     // (ghost shown, insertion deferred to MouseUp) — otherwise MouseUp falls back to today's
-    // plain-click behavior (insert on the armed track at the playhead).
+    // plain-click behavior (insert only on an explicitly armed track at the playhead).
     private const double DragThresholdPx = 5;
     private bool _chipCandidate;
     private bool _chipDragging;
@@ -546,7 +546,7 @@ public partial class SequenceTimelineView : UserControl
         ((UIElement)sender).ReleaseMouseCapture();
     }
 
-    // --- Gesture library: plain click inserts on the armed track at the playhead (unchanged);
+    // --- Gesture library: plain click requires an explicitly armed track at the playhead;
     // dragging past a small threshold instead drops the gesture on a specific droid+time cell. ---
 
     private void GestureChip_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -591,8 +591,9 @@ public partial class SequenceTimelineView : UserControl
 
         if (!_chipDragging)
         {
-            // Plain click — today's behavior, insert on the armed track at the playhead.
-            Vm?.InsertGestureCommand.Execute(_chipAnimId);
+            // Plain click never guesses a target. A direct drag remains target-explicit.
+            if (Vm?.InsertGestureCommand.CanExecute(_chipAnimId) == true)
+                Vm.InsertGestureCommand.Execute(_chipAnimId);
             return;
         }
 

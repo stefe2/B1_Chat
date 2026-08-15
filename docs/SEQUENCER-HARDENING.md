@@ -6,14 +6,14 @@ Scope: WPF console Sequencer, console-side audio, serial/mesh animation dispatch
 and the small firmware changes needed to give playback safe stop semantics.
 
 This document is the persistent source of truth for making the Animation
-Sequencer reliable. It carries **only actionable work** — the 25 items that are
+Sequencer reliable. It carries **only actionable work** — the 22 items that are
 open, in progress or awaiting hardware validation.
 
 Three companion documents hold the rest, so this one stays cheap to read:
 
 - [SEQUENCER-BEHAVIOR.md](SEQUENCER-BEHAVIOR.md) — what currently *ships*, at
   runtime. Read it before changing Sequencer behavior.
-- [SEQUENCER-DONE.md](SEQUENCER-DONE.md) — the 52 closed items with their
+- [SEQUENCER-DONE.md](SEQUENCER-DONE.md) — the 55 closed items with their
   acceptance criteria and the completion evidence log.
 - [SEQUENCER-IDEAS.md](SEQUENCER-IDEAS.md) — EPIC I and EPIC K, 30 deferred
   design ideas gated behind the M1–M4 baseline.
@@ -90,7 +90,7 @@ along is the Sequencer".
 | D | Import, export and local library | 8 / 8 | 0 / 1 |
 | E | Deterministic scheduler and performance | 6 / 6 | 0 / 1 |
 | F | Duration and audio robustness | 7 / 8 | — |
-| G | Preflight and ergonomics | 8 / 14 | 0 / 5 |
+| G | Preflight and ergonomics | 11 / 14 | 0 / 5 |
 | H | Automated and hardware validation | 2 / 8 | — |
 | I | Scene & Show System (future) | — | 0 / 22 |
 | J | Commissioning and servo configuration safety | 0 / 2 | — |
@@ -201,41 +201,9 @@ along is the Sequencer".
 
 ## EPIC G — Preflight and ergonomics
 
-8 completed items moved to [SEQUENCER-DONE.md](SEQUENCER-DONE.md): SEQ-G01, SEQ-G02, SEQ-G04, SEQ-G14, SEQ-G15, SEQ-G16, SEQ-G17, SEQ-G18.
-
-### [ ] SEQ-G03 — Detect overlapping and ambiguous gesture commands
-
-- **Priority:** P1
-- **Problem:** a later gesture interrupts the previous one, and simultaneous
-  broadcast plus per-target events have order-dependent outcomes.
-- **Depends on:** SEQ-F01, SEQ-G01.
-- **Acceptance:** analyze effective target intersections and duration spans;
-  flag same-target overlaps, same-time duplicates, and broadcast/target conflicts;
-  link warnings to clips.
-- **Validation:** finite, infinite, broadcast, muted, and offline combinations.
-
-### [ ] SEQ-G05 — Remove implicit broadcast insertion risk
-
-- **Priority:** P1
-- **Problem:** clicking a gesture with no armed track falls back to the first
-  `All droids` row.
-- **Depends on:** none.
-- **Acceptance:** insertion requires an explicitly armed track, or presents an
-  unmistakable confirmation for broadcast. The armed target is always prominent
-  and keyboard insertion follows the same rule.
-- **Validation:** fresh startup, lost/rebuilt armed track, offline track, and
-  explicit broadcast cases.
-
-### [ ] SEQ-G06 — Keep UI text and control availability synchronized
-
-- **Priority:** P2
-- **Problem:** current tooltips and Help contain known caveats that can drift from
-  the fixes, and some controls remain available when their result is unsafe or a
-  no-op.
-- **Depends on:** all behavior-changing P0/P1 items.
-- **Acceptance:** final content audit covers transport, mute, Pause, Stop, loops,
-  Import/Export, library, audio portability, preflight, and offline behavior.
-- **Validation:** checklist review of XAML tooltips and all Sequencer Help pages.
+11 completed items moved to [SEQUENCER-DONE.md](SEQUENCER-DONE.md): SEQ-G01,
+SEQ-G02, SEQ-G03, SEQ-G04, SEQ-G05, SEQ-G06, SEQ-G14, SEQ-G15, SEQ-G16,
+SEQ-G17, SEQ-G18.
 
 ### [D] SEQ-G07 — Add markers, explicit end marker and loop region editing
 
@@ -537,7 +505,9 @@ Follow, wheel-navigation and Scene-document workflow batch (SEQ-G14 through
 SEQ-G18) are closed. Sequence/audio end semantics (SEQ-E05 and SEQ-F08) and their
 audio-service coverage (SEQ-H05) are also closed after rendered Release validation.
 The first preflight batch (SEQ-G01, SEQ-G02 and SEQ-G04) is closed after its
-rendered operator pass.
+rendered operator pass. The conflict, explicit-target and final content/control
+batch (SEQ-G03, SEQ-G05 and SEQ-G06) is also closed after full regression and
+rendered Release inspection.
 
 ## Decision log
 

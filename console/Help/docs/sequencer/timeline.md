@@ -15,7 +15,7 @@ controls stay together above the timeline.*
 
 1. Connect the master so live droids populate their tracks.
 2. Click a track gutter to **arm** it. The highlighted track receives gesture
-   chips that you click.
+   chips that you click. Fresh startup deliberately has no armed target.
 3. Click the ruler to place the playhead at the desired time.
 4. Click a gesture in the bottom library, or drag it directly onto a track and
    time.
@@ -39,7 +39,10 @@ droid lanes preserved from its saved roster.*
 - Each known droid receives its own track with its name and role.
 - A droid saved in a file but currently absent remains as **OFFLINE**, preserving
   the arrangement until it reconnects.
-- Clicking a gutter arms that track for gesture-library clicks.
+- Clicking a gutter explicitly arms that track for gesture-library clicks. The
+  orange **ARMED · target** badge above the library always names it. With no
+  armed target, clicks do nothing rather than silently falling back to
+  **All droids**; direct drag-and-drop remains target-explicit.
 - The green switch mutes a droid track during console Play. It does not edit the
   sequence file and cannot retract a gesture already sent to the mesh.
 - Audio lanes are not controlled by these droid mute switches.
@@ -86,8 +89,10 @@ audio-synchronized Talk loop.*
 *The built-in gestures are grouped by purpose; loop badges identify
 `POWER_DOWN` and `TALK`.*
 
-- **Insert:** click a library chip to insert it on the armed track at the
-  playhead, or drag the chip to a specific track and time.
+- **Insert:** first arm a track, then click a library chip to insert it there at
+  the playhead. A click with **NO TRACK ARMED** inserts nothing. Dragging a chip
+  directly to a track and time does not require arming because the drop itself
+  identifies the target.
 - **Move:** drag a clip horizontally in time or vertically to retarget it.
 - **Select:** click a clip to open its inspector.
 - **Duplicate/Delete:** right-click the clip or use the inspector buttons.

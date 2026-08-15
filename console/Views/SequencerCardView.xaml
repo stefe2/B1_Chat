@@ -62,17 +62,22 @@
                         <ContextMenu Style="{StaticResource DarkContextMenuStyle}"
                                      DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
                             <MenuItem Header="Save As…" Style="{StaticResource DarkMenuItemStyle}"
-                                      Command="{Binding SaveSceneAsCommand}" InputGestureText="Ctrl+Shift+S" />
+                                      Command="{Binding SaveSceneAsCommand}" InputGestureText="Ctrl+Shift+S"
+                                      ToolTip="Create a separate Local Library Scene. Stop playback first." />
                             <MenuItem Header="Rename" Style="{StaticResource DarkMenuItemStyle}"
-                                      IsEnabled="{Binding CanEditSequence}" Click="RenameSceneMenuItem_Click" InputGestureText="F2" />
+                                      IsEnabled="{Binding CanEditSequence}" Click="RenameSceneMenuItem_Click" InputGestureText="F2"
+                                      ToolTip="Edit the current Scene name. Stop playback first." />
                             <Separator Margin="4,2" Background="{StaticResource BorderLoBrush}" />
                             <MenuItem Header="Import from file…" Style="{StaticResource DarkMenuItemStyle}"
-                                      Command="{Binding ImportCommand}" />
+                                      Command="{Binding ImportCommand}"
+                                      ToolTip="Validate and open a .b1seq.json file. Active playback must be stopped before replacement." />
                             <MenuItem Header="Export a copy…" Style="{StaticResource DarkMenuItemStyle}"
-                                      Command="{Binding ExportCommand}" />
+                                      Command="{Binding ExportCommand}"
+                                      ToolTip="Write an external JSON snapshot. Linked audio files are not copied." />
                             <Separator Margin="4,2" Background="{StaticResource BorderLoBrush}" />
                             <MenuItem Header="Move current Scene to Trash…" Style="{StaticResource DarkMenuItemStyle}"
-                                      Command="{Binding DeleteCurrentSceneCommand}" />
+                                      Command="{Binding DeleteCurrentSceneCommand}"
+                                      ToolTip="Move the current Local Library entry to recoverable trash. Stop playback first." />
                         </ContextMenu>
                     </Button.ContextMenu>
                 </Button>

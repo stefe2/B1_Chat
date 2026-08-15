@@ -149,6 +149,13 @@ invalid endpoint blocks Play because targeted IDLE cleanup would not be
 represented. Existing import/edit validation normally prevents that state, so
 this is a final fail-closed check.
 
+The same scan compares every unmuted gesture's represented half-open duration
+span and effective target intersection. Same-target overlaps, duplicate
+timestamps and broadcast/target intersections are warnings, not errors. Each
+finding links to the later clip where replacement or ambiguous delivery begins;
+touching endpoints do not overlap. Offline-target conflicts remain visible for
+repair before reconnection, while a muted track is excluded completely.
+
 ## Scene endpoint and loop boundaries
 
 Every Scene has one authoritative endpoint, drawn as a cyan dashed `END` line
@@ -185,6 +192,17 @@ native — and `MainWindow`'s tunneling wheel handler must keep yielding modifie
 wheel events that originate in the timeline viewport, or the nested handler
 never runs.
 
+## Explicit gesture insertion target
+
+Fresh startup has no armed gesture track. Clicking a library chip inserts only
+when a track was explicitly armed; it never falls back to the first `All droids`
+row. The library header continuously shows `NO TRACK ARMED` or
+`ARMED · <target>`, including an unmistakable `All droids` broadcast label.
+Direct drag-and-drop remains available without arming because the drop lane is
+itself the explicit target. The command and direct mutation guard enforce the
+same rule for mouse, keyboard and programmatic paths. Track rebuilds preserve an
+armed ID only while that row still exists.
+
 ## Scheduler
 
 Playback uses one rearmable OS timer per active pass, not one timer per event.
@@ -200,8 +218,10 @@ and whole-pass Loop share the same deterministic boundary.
 
 Same-target gestures retain editor order with last-received-wins semantics;
 broadcast plus targeted overlap is serialized but flagged because mesh arrival
-remains ambiguous. The transport displays a hoverable SCHEDULE warning for those
-conflicts.
+remains ambiguous. Preflight covers complete represented duration overlaps and
+links them to their source clips. The transport's hoverable SCHEDULE badge
+remains a runtime reminder for same-timestamp conflicts captured in the active
+plan.
 
 ## Audio robustness
 

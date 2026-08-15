@@ -32,7 +32,9 @@ for recovery, but is ignored while the file is pending, unavailable or unreadabl
 
 If a clip fails during playback, the Sequencer names the file and the reason
 in a **⚠ AUDIO** badge above the timeline instead of failing silently, and the
-rest of the pass continues.
+rest of the pass continues. Preflight blocks a new Play for a known missing or
+unreadable file; pending validation or an unknown/zero duration is a playable
+warning.
 
 ## Add and arrange audio
 
@@ -62,11 +64,13 @@ restarts the complete Scene from zero without stacking players.
 
 Pause retains the position of audio that is already playing. Resume continues
 that audio and schedules future clips; a clip that already finished before the
-Pause is not restarted. Stop closes all active players. Pressing Play during an
-active pass first stops existing audio to avoid stacking duplicate players. If
-you move the stopped playhead inside an audio clip and press Play, that clip
-starts at the matching source offset; looping audio uses the corresponding point
-in its current cycle.
+Pause is not restarted. Pressing the primary button during an active pass enters
+Pause; it does not restart. Stop closes all active players, while explicit
+**Restart** closes them before creating a clean pass from zero so players cannot
+stack. Moving the playhead during Pause performs normal Stop cleanup and leaves
+the transport stopped at the new position. If you move the stopped playhead
+inside an audio clip and press Play, that clip starts at the matching source
+offset; looping audio uses the corresponding point in its current cycle.
 
 ## Files are linked, not embedded
 

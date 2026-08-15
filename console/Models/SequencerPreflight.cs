@@ -21,6 +21,9 @@ public enum SequencerPreflightCode
     AudioValidationPending,
     AudioDurationUnknown,
     InfiniteGestureUnterminated,
+    GestureOverlap,
+    DuplicateGestureTimestamp,
+    BroadcastTargetConflict,
 }
 
 /// <summary>

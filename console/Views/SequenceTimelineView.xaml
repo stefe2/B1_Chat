@@ -82,7 +82,7 @@
 
                 <Button Content="Preflight" Style="{StaticResource MiniButtonStyle}"
                         Command="{Binding TogglePreflightCommand}" Margin="0,0,4,0"
-                        ToolTip="Analyze connection, target, audio, and infinite-gesture readiness before playback." />
+                        ToolTip="Analyze connection, targets, gesture conflicts, audio, and infinite-gesture readiness before playback." />
                 <Border Margin="0,0,10,0" ToolTip="{Binding PreflightSummaryText}">
                     <Border.Style>
                         <Style TargetType="Border" BasedOn="{StaticResource ValuePillStyle}">
@@ -258,7 +258,7 @@
                 </Grid.ColumnDefinitions>
 
                 <!-- Rail: audio lane headers (each with a "+" to add a clip to that lane), then
-                     one row per droid (click to arm — insertion target for the gesture library —
+                     one row per droid (click to arm explicitly — insertion target for library clicks —
                      plus a mute toggle, see CLAUDE.md's mute notes). Full-width contiguous 52px
                      rows over the rail background, separated by thin dark lines (mockup .rail). -->
                 <Border Grid.Column="0" Width="150" Background="{StaticResource BgBrush}"
@@ -328,7 +328,7 @@
                                 <DataTemplate>
                                     <Border Height="{x:Static Models:TimelineTrack.RowHeight}" BorderThickness="0,0,0,1"
                                             BorderBrush="#59000000" Cursor="Hand"
-                                            ToolTip="Click to arm this track. Clicking a gesture then inserts it here at the playhead; you can also drag a gesture directly onto any track.">
+                                            ToolTip="Click to explicitly arm this target. Gesture-library clicks never guess a target; direct drag-and-drop can still target any track.">
                                         <Border.InputBindings>
                                             <MouseBinding MouseAction="LeftClick"
                                                           Command="{Binding DataContext.ArmTrackCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
@@ -355,7 +355,7 @@
                                                     <DataTrigger Binding="{Binding Muted}" Value="True">
                                                         <Setter Property="Opacity" Value="0.4" />
                                                     </DataTrigger>
-                                                    <!-- Active/audible highlight: soft green glow on the whole row, echoing
+                                                    <!-- Active/unmuted highlight: soft green glow on the whole row, echoing
                                                          the toggle's own on=green state so it reads at a glance, not just
                                                          on the small switch. -->
                                                     <DataTrigger Binding="{Binding Muted}" Value="False">
@@ -434,12 +434,12 @@
                                             <!-- Real ToggleButton (not Border+MouseBinding like the row's own arm-click):
                                                  ButtonBase marks its Click handled, which stops it bubbling to the row's
                                                  MouseBinding — otherwise a click on the switch would also arm the track
-                                                 underneath it. IsChecked shows "audible" (inverse of Muted) so ON/green
+                                                 underneath it. IsChecked shows "active" (inverse of Muted) so ON/green
                                                  matches this app's existing on=green/active convention (Servos, Auto anims). -->
                                             <ToggleButton Grid.Column="3" Style="{StaticResource OnOffSwitchStyle}" Margin="0,0,8,0"
                                                           IsChecked="{Binding Muted, Converter={StaticResource BoolInvertConv}, Mode=OneWay}"
                                                           Command="{Binding DataContext.ToggleMuteCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                          CommandParameter="{Binding}" ToolTip="Audible during Play — off mutes this track"
+                                                          CommandParameter="{Binding}" ToolTip="Active during Play — switch off to omit this target from dispatch and preflight. Missed commands are not queued."
                                                           VerticalAlignment="Center">
                                                 <!-- LayoutTransform (not RenderTransform): shrinks the column's Auto-sized
                                                      allocation along with the visual, so nothing overlaps/leaves a gap.
@@ -1042,18 +1042,22 @@
                                        Margin="0,0,0,4" />
                             <UniformGrid Columns="2" Margin="0,0,0,10">
                                 <Button Content="−0.1s" Style="{StaticResource MiniButtonStyle}" Margin="0,0,2,0"
-                                        Command="{Binding NudgeEndShorterCommand}" />
+                                        Command="{Binding NudgeEndShorterCommand}"
+                                        ToolTip="End this TALK or POWER_DOWN clip 0.1 second earlier." />
                                 <Button Content="+0.1s" Style="{StaticResource MiniButtonStyle}" Margin="2,0,0,0"
-                                        Command="{Binding NudgeEndLongerCommand}" />
+                                        Command="{Binding NudgeEndLongerCommand}"
+                                        ToolTip="End this TALK or POWER_DOWN clip 0.1 second later." />
                             </UniformGrid>
                         </StackPanel>
 
                         <UniformGrid Columns="2">
                             <Button Content="Duplicate" Style="{StaticResource MiniButtonStyle}" Margin="0,0,2,0"
-                                    Command="{Binding DuplicateStepCommand}" CommandParameter="{Binding SelectedStep}" />
+                                    Command="{Binding DuplicateStepCommand}" CommandParameter="{Binding SelectedStep}"
+                                    ToolTip="Duplicate the selected clip on the same target and time." />
                             <Button Content="Delete" Style="{StaticResource MiniButtonStyle}" Margin="2,0,0,0"
                                     Foreground="#FFB3AE"
-                                    Command="{Binding DeleteStepCommand}" CommandParameter="{Binding SelectedStep}" />
+                                    Command="{Binding DeleteStepCommand}" CommandParameter="{Binding SelectedStep}"
+                                    ToolTip="Delete the selected gesture clip." />
                         </UniformGrid>
                     </StackPanel>
                 </Border>
@@ -1063,7 +1067,7 @@
         <!-- Gesture library drawer (mockup .drawer): bordered recess container with a header
              row, then one labeled family row per color family — labels tinted with the family
              color, chips as neutral pills with a colored left edge. Click a chip to insert on
-             the armed track at the playhead, or drag it straight onto a specific droid+time
+             an explicitly armed track at the playhead, or drag it straight onto a specific droid+time
              cell of the timeline. Grouping/colors come from AnimFamilyToBrushConverter.Families
              (single source of truth with every timeline clip). -->
         <Border Grid.Row="2" Margin="0,10,0,0" CornerRadius="7" BorderThickness="1"
@@ -1073,7 +1077,13 @@
                     <DockPanel LastChildFill="False">
                         <TextBlock DockPanel.Dock="Left" Text="GESTURES" FontSize="11" FontWeight="Bold"
                                    Foreground="{StaticResource TextBrush}" VerticalAlignment="Center" />
-                        <TextBlock DockPanel.Dock="Right" Text="drag onto a lane, or click to drop on the armed track at the playhead"
+                        <Border DockPanel.Dock="Right" Style="{StaticResource ValuePillStyle}"
+                                BorderBrush="{StaticResource AccentBrush}" Margin="10,0,0,0"
+                                ToolTip="{Binding ArmedTrackStatusToolTip}">
+                            <TextBlock Text="{Binding ArmedTrackStatusText}" Foreground="{StaticResource AccentBrush}"
+                                       FontFamily="{StaticResource MonoFont}" FontSize="9.5" FontWeight="Bold" />
+                        </Border>
+                        <TextBlock DockPanel.Dock="Right" Text="drag onto a lane, or arm a target before clicking"
                                    FontSize="10" Foreground="{StaticResource Muted2Brush}" VerticalAlignment="Center" />
                     </DockPanel>
                 </Border>
@@ -1098,7 +1108,7 @@
                                                 <Border Margin="0,0,7,4" Padding="9,5" CornerRadius="13" Cursor="Hand"
                                                         BorderThickness="3,1,1,1"
                                                         BorderBrush="{Binding Id, Converter={StaticResource AnimFamilyToBrushConv}}"
-                                                        ToolTip="Click to insert this gesture on the armed track at the playhead, or drag it directly onto a target track and time."
+                                                        ToolTip="Click to insert only on the explicitly armed target, or drag directly onto a target track and time. With no armed target, a click does nothing."
                                                         MouseLeftButtonDown="GestureChip_MouseLeftButtonDown"
                                                         MouseMove="GestureChip_MouseMove"
                                                         MouseLeftButtonUp="GestureChip_MouseLeftButtonUp"

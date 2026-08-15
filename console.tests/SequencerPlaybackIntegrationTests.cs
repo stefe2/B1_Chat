@@ -806,6 +806,7 @@ public sealed class SequencerPlaybackIntegrationTests
         var libraryItem = new SequenceLibraryItem();
         vm.PlayheadMs = 2_000;
         vm.SetSequenceEndAtPlayheadCommand.Execute(null);
+        vm.ArmedTrack = vm.Tracks[0];
 
         void AssertPersistentCommands(bool expected)
         {
@@ -872,6 +873,77 @@ public sealed class SequencerPlaybackIntegrationTests
         Assert.True(vm.CanEditSequence);
         AssertPersistentCommands(expected: true);
         AssertInspectionAndRuntimeControlsRemainAvailable();
+    }
+
+    [Fact]
+    public void GestureClickRequiresAnExplicitlyArmedTrack()
+    {
+        using var vm = CreateViewModel(new FakeSequencerProtocol(), new FakePlaybackTimerScheduler());
+
+        Assert.Null(vm.ArmedTrack);
+        Assert.False(vm.InsertGestureCommand.CanExecute(2));
+        vm.InsertGestureCommand.Execute(2);
+
+        Assert.Empty(vm.Steps);
+        Assert.Equal("NO TRACK ARMED", vm.ArmedTrackStatusText);
+    }
+
+    [Fact]
+    public void ExplicitlyArmedTargetAndBroadcastAcceptGestureClicks()
+    {
+        var protocol = new FakeSequencerProtocol();
+        protocol.Droids.Add(new Droid { Id = 0x1234, Name = "Offline droid", Online = false });
+        using var vm = CreateViewModel(protocol, new FakePlaybackTimerScheduler());
+        vm.PlayheadMs = 600;
+
+        var target = vm.Tracks.Single(track => track.Id == 0x1234);
+        vm.ArmTrackCommand.Execute(target);
+        Assert.True(vm.InsertGestureCommand.CanExecute(2));
+        vm.InsertGestureCommand.Execute(2);
+
+        var broadcast = vm.Tracks.Single(track => track.IsBroadcast);
+        vm.ArmTrackCommand.Execute(broadcast);
+        vm.InsertGestureCommand.Execute(3);
+
+        Assert.Collection(vm.Steps,
+            step =>
+            {
+                Assert.Equal((ushort)0x1234, step.Target);
+                Assert.Equal(600, step.StartMs);
+            },
+            step => Assert.Equal(ushort.MaxValue, step.Target));
+        Assert.Contains("All droids", vm.ArmedTrackStatusText);
+    }
+
+    [Fact]
+    public void ArmedTargetSurvivesRosterRebuildAndClearsWhenTheTrackDisappears()
+    {
+        var protocol = new FakeSequencerProtocol();
+        protocol.Droids.Add(new Droid { Id = 0x1234, Name = "Test droid", Online = true });
+        using var vm = CreateViewModel(protocol, new FakePlaybackTimerScheduler());
+        vm.ArmTrackCommand.Execute(vm.Tracks.Single(track => track.Id == 0x1234));
+
+        protocol.Droids[0].Name = "Renamed droid";
+        protocol.RaiseDroidsChanged();
+
+        Assert.Equal((ushort)0x1234, vm.ArmedTrack?.Id);
+        Assert.Equal("ARMED · Renamed droid", vm.ArmedTrackStatusText);
+
+        protocol.Droids.Clear();
+        protocol.RaiseDroidsChanged();
+
+        Assert.Null(vm.ArmedTrack);
+        Assert.False(vm.InsertGestureCommand.CanExecute(2));
+    }
+
+    [Fact]
+    public void DirectDropWithoutATrackNeverFallsBackToBroadcast()
+    {
+        using var vm = CreateViewModel(new FakeSequencerProtocol(), new FakePlaybackTimerScheduler());
+
+        vm.InsertGestureAt(2, track: null, startMs: 100);
+
+        Assert.Empty(vm.Steps);
     }
 
     [Fact]

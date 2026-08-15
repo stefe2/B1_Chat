@@ -36,6 +36,7 @@ public sealed class SequencerPreflightService : ISequencerPreflightService
         AnalyzeConnection(input, activeSteps, issues);
         AnalyzeGestureTargets(input, activeSteps, issues);
         AnalyzeInfiniteGestures(input, activeSteps, issues);
+        AnalyzeGestureConflicts(activeSteps, issues);
         AnalyzeAudio(input, issues);
 
         if (issues.Count == 0)
@@ -219,6 +220,121 @@ public sealed class SequencerPreflightService : ISequencerPreflightService
             }
         }
     }
+
+    private void AnalyzeGestureConflicts(
+        IReadOnlyList<SequenceStep> activeSteps,
+        ICollection<SequencerPreflightIssue> issues)
+    {
+        var ordered = activeSteps
+            .Select((step, sourceOrder) => new GestureSpan(
+                step,
+                sourceOrder,
+                Math.Max(0, step.StartMs),
+                GestureEndMs(step)))
+            .OrderBy(span => span.StartMs)
+            .ThenBy(span => span.SourceOrder)
+            .ToArray();
+
+        var longestByTarget = new Dictionary<ushort, GestureSpan>();
+        var lastByTarget = new Dictionary<ushort, GestureSpan>();
+        GestureSpan? longestTargeted = null;
+        GestureSpan? lastTargeted = null;
+        GestureSpan? longestBroadcast = null;
+        GestureSpan? lastBroadcast = null;
+
+        foreach (var later in ordered)
+        {
+            if (later.Step.Target == ushort.MaxValue)
+            {
+                AddGestureConflict(FindConflict(lastBroadcast, longestBroadcast, later), later,
+                    broadcastTarget: false, issues);
+                AddGestureConflict(FindConflict(lastTargeted, longestTargeted, later), later,
+                    broadcastTarget: true, issues);
+                lastBroadcast = later;
+                if (longestBroadcast == null || later.EndMs >= longestBroadcast.Value.EndMs)
+                    longestBroadcast = later;
+                continue;
+            }
+
+            lastByTarget.TryGetValue(later.Step.Target, out var lastSameTarget);
+            longestByTarget.TryGetValue(later.Step.Target, out var longestSameTarget);
+            AddGestureConflict(FindConflict(
+                    lastByTarget.ContainsKey(later.Step.Target) ? lastSameTarget : null,
+                    longestByTarget.ContainsKey(later.Step.Target) ? longestSameTarget : null,
+                    later),
+                later, broadcastTarget: false, issues);
+            AddGestureConflict(FindConflict(lastBroadcast, longestBroadcast, later), later,
+                broadcastTarget: true, issues);
+
+            lastByTarget[later.Step.Target] = later;
+            if (!longestByTarget.TryGetValue(later.Step.Target, out var currentLongest) ||
+                later.EndMs >= currentLongest.EndMs)
+                longestByTarget[later.Step.Target] = later;
+            lastTargeted = later;
+            if (longestTargeted == null || later.EndMs >= longestTargeted.Value.EndMs)
+                longestTargeted = later;
+        }
+    }
+
+    private static GestureSpan? FindConflict(
+        GestureSpan? last,
+        GestureSpan? longest,
+        GestureSpan later)
+    {
+        if (last is { } latest && latest.StartMs == later.StartMs) return latest;
+        return longest is { } spanning && spanning.EndMs > later.StartMs ? spanning : null;
+    }
+
+    private void AddGestureConflict(
+        GestureSpan? earlier,
+        GestureSpan later,
+        bool broadcastTarget,
+        ICollection<SequencerPreflightIssue> issues)
+    {
+        if (earlier == null) return;
+        var sameTime = earlier.Value.StartMs == later.StartMs;
+        var code = broadcastTarget
+            ? SequencerPreflightCode.BroadcastTargetConflict
+            : sameTime
+                ? SequencerPreflightCode.DuplicateGestureTimestamp
+                : SequencerPreflightCode.GestureOverlap;
+        var title = code switch
+        {
+            SequencerPreflightCode.BroadcastTargetConflict => "Broadcast and targeted gestures conflict",
+            SequencerPreflightCode.DuplicateGestureTimestamp => "Multiple gestures share one target and time",
+            _ => "Gesture overlaps an earlier command",
+        };
+        var behavior = broadcastTarget
+            ? "Broadcast and targeted delivery can reach the same droid in an order the mesh cannot guarantee."
+            : sameTime
+                ? "Both commands are sent in editor order; the last command received by the droid wins."
+                : "This later command can interrupt the earlier gesture before its represented duration ends.";
+        var detail = $"{behavior} Earlier clip: {GestureName(earlier.Value.Step.AnimId)} at {FormatTime(earlier.Value.StartMs)}.";
+
+        issues.Add(new SequencerPreflightIssue(
+            code,
+            SequencerPreflightSeverity.Warning,
+            title,
+            detail,
+            $"{TargetLabel(later.Step.Target)} · {GestureName(later.Step.AnimId)} · {FormatTime(later.StartMs)}",
+            later.StartMs,
+            Step: later.Step));
+    }
+
+    private static int GestureEndMs(SequenceStep step)
+    {
+        var duration = step.IsInfinite ? step.EndAfterMs : step.ResolvedDurationMs;
+        return (int)Math.Min(int.MaxValue, (long)Math.Max(0, step.StartMs) + Math.Max(0, duration));
+    }
+
+    private static string TargetLabel(ushort target) =>
+        target == ushort.MaxValue ? "All droids" : target.ToString("X4");
+
+    private readonly record struct GestureSpan(
+        SequenceStep Step,
+        int SourceOrder,
+        int StartMs,
+        int EndMs);
 
     private SequencerPreflightIssue GestureIssue(
         SequencerPreflightCode code,

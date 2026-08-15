@@ -2,8 +2,8 @@
 
 ![Complete gesture library organized by behavior](../images/gesture-library.png)
 
-*Figure: Color-coded categories make the library faster to scan. Click a chip
-for the armed track or drag it when target and timing must be explicit.*
+*Figure: Color-coded categories make the library faster to scan. Arm a target
+before clicking a chip, or drag it when target and timing must be explicit.*
 
 ## Everyday fleet work
 
@@ -18,8 +18,9 @@ for the armed track or drag it when target and timing must be explicit.*
 
 ## Sequencer editing
 
-- Click a gesture chip to place it on the armed track at the playhead. Drag it
-  when you want a specific track/time in one action.
+- Arm a target, then click a gesture chip to place it there at the playhead. A
+  click with **NO TRACK ARMED** inserts nothing; drag when you want a specific
+  track/time in one action.
 - With Snap selected, placement rounds to 100 ms on release; without Snap,
   dragged positions retain millisecond precision.
 - Drag a gesture vertically to retarget it. One Undo restores both time and
@@ -34,7 +35,8 @@ for the armed track or drag it when target and timing must be explicit.*
 - **Play** is a Play/Pause/Resume toggle. Use **Restart** for an explicit pass
   from zero; normal **Stop** retains the playhead, and the separate return button
   moves it back to the beginning.
-- The timecode shows current position / calculated total duration.
+- The timecode shows current position / authoritative Scene endpoint (automatic
+  content tail or manual **END SET**).
 - Use **Ctrl+S** to save the open Scene often and **Ctrl+O** to switch Scenes
   through the browser. Export external copies from the **…** menu only for
   backup or transfer. Undo history and unsaved edits do not survive an
@@ -47,7 +49,9 @@ for the armed track or drag it when target and timing must be explicit.*
 - Test the exact master USB port, audio output, and mesh layout in advance.
 - Start with all required droids online. Missed timeline events are not replayed
   when a droid reconnects.
-- Remember that Pause/Stop cannot cancel a gesture already running on a droid.
+- Remember that Pause cannot retract a gesture already sent. Normal Stop cleans
+  up Sequencer-owned `TALK`/`POWER_DOWN`, but finite gestures finish naturally;
+  use Safe Stop or E-STOP for their distinct fleet-wide safety policies.
 
 ## Firmware work
 

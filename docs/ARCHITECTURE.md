@@ -81,7 +81,7 @@ design reference and is never loaded at runtime.
 | `Services/SequencerEditHistory.cs` | begin/commit/cancel edit transactions plus bounded newest-first Undo/Redo (50 each), with no WPF or playback dependency |
 | `Services/SequenceImportService.cs` · `SequencerPersistenceServices.cs` | side-effect-free strict parser/migrator for `b1-sequence` v1–v6, and atomic sibling-temp-plus-rename writing |
 | `Services/AnimationDurationProvider.cs` | single source for each gesture's kind (immediate/finite/infinite), effective tail, target-speed-aware range, provisional state and inspector text |
-| `Services/SequencerPreflightService.cs` | side-effect-free readiness analyzer and injectable file-existence seam: connection/master/target routing, audio availability/duration, and fail-closed infinite-gesture endpoints |
+| `Services/SequencerPreflightService.cs` | side-effect-free readiness analyzer and injectable file-existence seam: connection/master/target routing, represented gesture-span/target conflicts, audio availability/duration, and fail-closed infinite-gesture endpoints |
 | `Services/PlaybackGeneration.cs` · `WaveformService.cs` | per-pass generation and cancellation identity; audio waveform peak decoding with a metadata-keyed, bounded cache |
 | `Services/DarkTitleBar.cs` | recolors the native Win32 title bar (`DwmSetWindowAttribute`, Windows 11 22H2+) on all 7 app-owned windows |
 | `Services/WindowPlacement.cs` | fits and centers the main window inside the Win32 work area of the monitor where WPF created it, with DPI-scaled margins and mixed-monitor coordinates handled in native pixels |

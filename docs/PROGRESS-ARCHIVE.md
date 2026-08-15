@@ -1069,6 +1069,19 @@ Sequencer backlog item by item.
       The operator confirmed the error panel, exact findings, Go to navigation,
       Play interception, audio-only offline playback and panel close behavior,
       closing G01/G02/G04.
+- [x] Sequencer conflict, explicit-target and UI consistency pass (2026-08-14).
+      Preflight now compares represented gesture spans and target intersections,
+      warning on same-target overlap, duplicate timestamps and broadcast/target
+      ambiguity while linking directly to the later clip. Gesture-library clicks
+      require an explicitly armed track and can no longer fall back to broadcast;
+      the rendered library continuously names that target or shows NO TRACK
+      ARMED, while direct drag remains target-explicit. The XAML/tooltips and all
+      Sequencer Help pages passed the versioned content/control audit, including
+      stopped-only Go to navigation. Twelve focused cases expanded the suite from
+      275 to 287. Offline self-test passed 21/21 with clean master/slave/WPF builds,
+      real Media Foundation smoke and build number 359 preserved
+      (`b1-self-test-20260814-222604.json`); Release built with zero warnings and
+      rendered the complete status/library layout cleanly, closing G03/G05/G06.
 
 ## Incidents (full narratives)
 

@@ -191,6 +191,132 @@ public sealed class SequencerPreflightServiceTests
     }
 
     [Fact]
+    public void FiniteSameTargetOverlap_WarnsAndLinksTheLaterClip()
+    {
+        var earlier = Step(0x1234, startMs: 100, durationMs: 1_000);
+        var later = Step(0x1234, startMs: 800, animId: 3, durationMs: 500);
+
+        var issues = Analyze(Input(
+            steps: new[] { earlier, later },
+            droids: new[] { Master(0x1234) }));
+
+        var issue = Assert.Single(issues, finding => finding.Code == SequencerPreflightCode.GestureOverlap);
+        Assert.Equal(SequencerPreflightSeverity.Warning, issue.Severity);
+        Assert.Same(later, issue.Step);
+        Assert.Equal(800, issue.StartMs);
+        Assert.Contains("earlier gesture", issue.Detail, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void GesturesThatOnlyTouchAtTheirEndpoints_DoNotConflict()
+    {
+        var issues = Analyze(Input(
+            steps: new[]
+            {
+                Step(0x1234, durationMs: 500),
+                Step(0x1234, startMs: 500, animId: 3, durationMs: 500),
+            },
+            droids: new[] { Master(0x1234) }));
+
+        Assert.DoesNotContain(issues, issue => issue.Code is
+            SequencerPreflightCode.GestureOverlap or
+            SequencerPreflightCode.DuplicateGestureTimestamp or
+            SequencerPreflightCode.BroadcastTargetConflict);
+    }
+
+    [Fact]
+    public void SameTimeImmediateCommands_AreStillFlaggedAsDuplicates()
+    {
+        var later = Step(0x1234, animId: 0, durationMs: 0);
+        var issues = Analyze(Input(
+            steps: new[]
+            {
+                Step(0x1234, animId: 1, durationMs: 0),
+                later,
+            },
+            droids: new[] { Master(0x1234) }));
+
+        var issue = Assert.Single(issues,
+            finding => finding.Code == SequencerPreflightCode.DuplicateGestureTimestamp);
+        Assert.Same(later, issue.Step);
+    }
+
+    [Fact]
+    public void BroadcastAndTargetedOverlap_WarnsEvenWhenStartsDiffer()
+    {
+        var targeted = Step(0x1234, startMs: 400, animId: 3, durationMs: 500);
+        var issues = Analyze(Input(
+            steps: new[]
+            {
+                Step(ushort.MaxValue, durationMs: 1_000),
+                targeted,
+            },
+            droids: new[] { Master(0x1234) }));
+
+        var issue = Assert.Single(issues,
+            finding => finding.Code == SequencerPreflightCode.BroadcastTargetConflict);
+        Assert.Same(targeted, issue.Step);
+        Assert.Equal(SequencerPreflightSeverity.Warning, issue.Severity);
+    }
+
+    [Fact]
+    public void TargetedThenBroadcastOverlap_IsDetectedInTheReverseOrder()
+    {
+        var broadcast = Step(ushort.MaxValue, startMs: 400, animId: 3, durationMs: 500);
+        var issues = Analyze(Input(
+            steps: new[]
+            {
+                Step(0x1234, durationMs: 1_000),
+                broadcast,
+            },
+            droids: new[] { Master(0x1234) }));
+
+        var issue = Assert.Single(issues,
+            finding => finding.Code == SequencerPreflightCode.BroadcastTargetConflict);
+        Assert.Same(broadcast, issue.Step);
+    }
+
+    [Fact]
+    public void DifferentTargetsAndMutedTracks_DoNotCreateConflicts()
+    {
+        var issues = Analyze(Input(
+            steps: new[]
+            {
+                Step(0x4001, durationMs: 1_000),
+                Step(0x4002, startMs: 300, durationMs: 1_000),
+                Step(ushort.MaxValue, startMs: 300, durationMs: 1_000),
+            },
+            droids: new[] { Master(0x4001), new Droid { Id = 0x4002, Online = true } },
+            mutedTargets: new HashSet<ushort> { ushort.MaxValue }));
+
+        Assert.DoesNotContain(issues, issue => issue.Code is
+            SequencerPreflightCode.GestureOverlap or
+            SequencerPreflightCode.DuplicateGestureTimestamp or
+            SequencerPreflightCode.BroadcastTargetConflict);
+    }
+
+    [Fact]
+    public void InfiniteAndOfflineTargetOverlap_IsStillReportedForRepair()
+    {
+        var infinite = Step(0x4002, animId: 17);
+        infinite.EndAfterMs = 2_000;
+        var later = Step(0x4002, startMs: 1_500, animId: 3, durationMs: 500);
+
+        var issues = Analyze(Input(
+            steps: new[] { infinite, later },
+            droids: new[]
+            {
+                Master(0x4001),
+                new Droid { Id = 0x4002, Online = false },
+            },
+            effectiveEndMs: 2_000));
+
+        Assert.Contains(issues, issue => issue.Code == SequencerPreflightCode.TargetOffline);
+        Assert.Contains(issues, issue => issue.Code == SequencerPreflightCode.GestureOverlap &&
+            ReferenceEquals(issue.Step, later));
+    }
+
+    [Fact]
     public void ErrorsSortBeforeWarningsAndInformation()
     {
         var issues = Analyze(Input(
@@ -294,6 +420,26 @@ public sealed class SequencerPreflightServiceTests
     }
 
     [Fact]
+    public void GoToFinding_IsDisabledWhileTransportIsActive()
+    {
+        var scheduler = new FakePlaybackTimerScheduler();
+        using var vm = ViewModel(
+            new FakeSequencerProtocol { PortOpen = false, SessionReady = false },
+            scheduler,
+            fileExists: _ => true);
+        var clip = Clip("empty.wav", 0);
+        vm.AudioLanes[0].Clips.Add(clip);
+        vm.TogglePreflightCommand.Execute(null);
+        var issue = vm.PreflightIssues.Single(finding => finding.AudioClip == clip);
+
+        Assert.True(vm.GoToPreflightIssueCommand.CanExecute(issue));
+        vm.PlayCommand.Execute(null);
+
+        Assert.Equal(SequencerTransportState.Playing, vm.TransportState);
+        Assert.False(vm.GoToPreflightIssueCommand.CanExecute(issue));
+    }
+
+    [Fact]
     public void FixingConnectionAndRoster_AllowsTheNextPlayAttempt()
     {
         var protocol = new FakeSequencerProtocol { PortOpen = false, SessionReady = false };
@@ -340,8 +486,15 @@ public sealed class SequencerPreflightServiceTests
     private static SequenceStep Step(
         ushort target,
         int startMs = 0,
-        int animId = 2) =>
-        new() { Target = target, StartMs = startMs, AnimId = animId };
+        int animId = 2,
+        int durationMs = SequencerPlaybackPlan.DefaultGestureDurationMs) =>
+        new()
+        {
+            Target = target,
+            StartMs = startMs,
+            AnimId = animId,
+            ResolvedDurationMs = durationMs,
+        };
 
     private static Droid Master(ushort id) =>
         new() { Id = id, Name = "Master", IsMaster = true, Online = true };
