@@ -24,6 +24,9 @@ relevant behavior.
   last. Only semantic upgrades are automatic; never downgrade, overwrite a
   same-version custom Build ID, include an offline/pending droid, or select full
   erase. Stop the batch at the first failed transfer or identity verification.
+  The master republishes its roster more frequently than the stabilization
+  delay; debounce only update-relevant roster fingerprints, never every
+  `evt:droids` telemetry refresh, or the startup prompt is postponed forever.
 - `IS_MASTER` in `config.h` controls local `[env:b1]` flashing. CI release
   environments `[env:b1_master]` and `[env:b1_slave]` override it with build
   flags. Check the role before every flash.

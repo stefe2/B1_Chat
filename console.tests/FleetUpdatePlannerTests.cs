@@ -93,6 +93,24 @@ public class FleetUpdatePlannerTests
         Assert.Equal(expected, result.Ok);
     }
 
+    [Fact]
+    public void StartupFingerprint_IgnoresTelemetryRefreshButTracksUpdateRelevantChanges()
+    {
+        var release = Release();
+        var droid = Droid(0x6001, "Slave", false, true, true, "1.10.0", "OLD");
+        droid.Rssi = -65;
+        var initial = MainViewModel.BuildFleetUpdateFingerprint(new[] { droid }, release);
+
+        droid.Rssi = -82;
+        droid.LastSeen = droid.LastSeen.AddSeconds(2);
+        var telemetryOnly = MainViewModel.BuildFleetUpdateFingerprint(new[] { droid }, release);
+        droid.Online = false;
+        var wentOffline = MainViewModel.BuildFleetUpdateFingerprint(new[] { droid }, release);
+
+        Assert.Equal(initial, telemetryOnly);
+        Assert.NotEqual(initial, wentOffline);
+    }
+
     private static Droid Droid(
         ushort id,
         string name,

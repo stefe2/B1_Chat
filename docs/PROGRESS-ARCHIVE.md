@@ -1119,7 +1119,14 @@ Sequencer backlog item by item.
       and slave Build ID `3747D85A` (975,600 bytes, SHA-256
       `859cf50f9a72e8c62c66d4ad53f4e1b64d46ceed8530cf5fc4c6ece95d6070b4`).
       All five downloaded release assets matched `firmware_manifest.json`.
-      No physical flash was used for implementation/release validation.
+      No physical flash was used for implementation/release validation. The
+      first live startup exposed that the master's recurring 1.5 s roster
+      telemetry continuously reset the prompt's 2.5 s stabilization delay.
+      Startup coalescing now uses an update-relevant roster fingerprint, ignores
+      RSSI/time-only refreshes, and restarts only when identity or eligibility
+      changes. Regression coverage brought the suite to 289/289; the final
+      non-destructive self-test passed 21/21 with build 360 preserved
+      (`b1-self-test-20260815-010955.json`).
 
 ## Incidents (full narratives)
 

@@ -22,6 +22,8 @@ public partial class MainViewModel : ObservableObject
     // disconnects, same "don't fight the user" reflex as SerialLinkService's own reconnect loop.
     private System.Threading.Timer? _startupConnectTimer;
     private CancellationTokenSource? _fleetUpdateOfferDebounce;
+    private string? _pendingFleetUpdateFingerprint;
+    private string? _evaluatedFleetUpdateFingerprint;
     private bool _fleetUpdateOfferShown;
 
     [ObservableProperty] private string? _selectedPort;
@@ -126,22 +128,51 @@ public partial class MainViewModel : ObservableObject
 
     private void ScheduleFleetUpdateOffer()
     {
-        _fleetUpdateOfferDebounce?.Cancel();
-        _fleetUpdateOfferDebounce?.Dispose();
-        _fleetUpdateOfferDebounce = null;
-
         if (_fleetUpdateOfferShown || !Protocol.SessionReady ||
             Firmware.LatestFirmwareInfo is not { Latest.Length: > 0 } ||
             Droids.AnyOtaActive || Firmware.Flashing ||
             Sequencer.TransportState != SequencerTransportState.Stopped)
+        {
+            CancelPendingFleetUpdateOffer();
             return;
+        }
+
+        var fingerprint = BuildFleetUpdateFingerprint(Protocol.Droids, Firmware.LatestFirmwareInfo);
+        // The master republishes the roster about every 1.5 s. Do not restart the 2.5 s
+        // stabilization delay for an identical semantic snapshot (RSSI/age telemetry is
+        // intentionally absent from the fingerprint), or the prompt can never appear.
+        if (string.Equals(_pendingFleetUpdateFingerprint, fingerprint, StringComparison.Ordinal) ||
+            string.Equals(_evaluatedFleetUpdateFingerprint, fingerprint, StringComparison.Ordinal))
+            return;
+
+        CancelPendingFleetUpdateOffer();
 
         var debounce = new CancellationTokenSource();
         _fleetUpdateOfferDebounce = debounce;
-        _ = OfferFleetUpdateAfterRosterSettlesAsync(debounce);
+        _pendingFleetUpdateFingerprint = fingerprint;
+        _ = OfferFleetUpdateAfterRosterSettlesAsync(debounce, fingerprint);
     }
 
-    private async Task OfferFleetUpdateAfterRosterSettlesAsync(CancellationTokenSource debounce)
+    private void CancelPendingFleetUpdateOffer()
+    {
+        _fleetUpdateOfferDebounce?.Cancel();
+        _fleetUpdateOfferDebounce?.Dispose();
+        _fleetUpdateOfferDebounce = null;
+        _pendingFleetUpdateFingerprint = null;
+    }
+
+    internal static string BuildFleetUpdateFingerprint(
+        IEnumerable<Droid> droids,
+        FirmwareUpdateInfo firmware) =>
+        $"{firmware.Latest}|{firmware.BuildIdMaster}|{firmware.BuildIdSlave}|" +
+        string.Join(";", droids
+            .OrderBy(droid => droid.Id)
+            .Select(droid =>
+                $"{droid.Id}:{droid.IsMaster}:{droid.Online}:{droid.Adopted}:{droid.FwVersion}:{droid.BuildId}"));
+
+    private async Task OfferFleetUpdateAfterRosterSettlesAsync(
+        CancellationTokenSource debounce,
+        string fingerprint)
     {
         try
         {
@@ -152,7 +183,15 @@ public partial class MainViewModel : ObservableObject
                 Firmware.LatestFirmwareInfo is not { } firmware)
                 return;
 
+            if (!string.Equals(BuildFleetUpdateFingerprint(Protocol.Droids, firmware), fingerprint,
+                    StringComparison.Ordinal))
+            {
+                ScheduleFleetUpdateOffer();
+                return;
+            }
+
             var plan = FleetUpdatePlanner.Create(Protocol.Droids, firmware);
+            _evaluatedFleetUpdateFingerprint = fingerprint;
             if (!plan.HasTargets) return;
 
             _fleetUpdateOfferShown = true;
@@ -168,6 +207,7 @@ public partial class MainViewModel : ObservableObject
             {
                 _fleetUpdateOfferDebounce.Dispose();
                 _fleetUpdateOfferDebounce = null;
+                _pendingFleetUpdateFingerprint = null;
             }
         }
     }

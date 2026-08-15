@@ -54,7 +54,9 @@ enables/disables a servo, previews a position, or starts an animation.
 - verifies fail-closed SHA-256 handling for downloaded firmware assets;
 - verifies startup fleet-update planning includes only older online/adopted
   droids, orders OTA slaves before the USB master, carries the release Build ID,
-  and leaves newer, unknown and same-version custom builds untouched;
+  and leaves newer, unknown and same-version custom builds untouched; its roster
+  fingerprint ignores recurring RSSI/time telemetry while reacting to online,
+  role, adoption and firmware-identity changes;
 - verifies that Help files are forced into the published payload, checked before
   installer creation, and handled safely at runtime if an image is absent;
 - verifies that the installer checks Windows/CPU compatibility, warns when the
