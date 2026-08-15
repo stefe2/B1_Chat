@@ -42,3 +42,10 @@ droid update.
 The installer is self-contained for Windows x64 and includes the application,
 .NET desktop runtime, current Help payload, `espflash`, and its local Visual C++
 runtime. Firmware 1.11.0 remains the matching current droid release.
+
+## Download verification
+
+The published installer contains console build 361. SHA-256 for
+`b1-chat-console-setup-0.12.1.exe`:
+
+`fe2207baaa86582b190557b5073d2d26d5c24dee0650ca0edfa0ef2b0e1c58d0`

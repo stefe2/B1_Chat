@@ -1147,7 +1147,8 @@ Sequencer backlog item by item.
       sections, tests passed 290/290, and the non-destructive self-test passed
       21/21 with build 360 preserved
       (`b1-self-test-20260815-015423.json`).
-- [x] Console-wide tooltip contract audit (2026-08-15).
+- [x] Console-wide tooltip contract audit and Console 0.12.1 release
+      (2026-08-15).
       All 113 operator-facing buttons, toggles, checkboxes, combo boxes, text
       fields, sliders, menu items and selectable lists now expose an action
       tooltip; 22 missing surfaces were filled across connection, Fleet update,
@@ -1162,7 +1163,12 @@ Sequencer backlog item by item.
       confirmed both an enabled Disconnect tooltip and the disabled Auto
       endpoint tooltip. Tests passed 293/293; the non-destructive self-test
       passed 21/21 with build 360 preserved
-      (`b1-self-test-20260815-111238.json`).
+      (`b1-self-test-20260815-111238.json`). Console `v0.12.1` was then
+      published from commit `180a12f`: the verified self-contained x64
+      installer contains build 361, is 55,510,464 bytes and has SHA-256
+      `fe2207baaa86582b190557b5073d2d26d5c24dee0650ca0edfa0ef2b0e1c58d0`.
+      GitHub reports the identical uploaded-asset digest; the release is public
+      and non-prerelease. No firmware or protocol release was required.
 
 ## Incidents (full narratives)
 
