@@ -13,6 +13,8 @@ internal sealed class FakeSequencerProtocol : ISequencerProtocol
     public IReadOnlyDictionary<int, AnimationDurationMetadata> AnimDurationMetadata => DurationMetadata;
     public Dictionary<ushort, int> Speeds { get; } = new();
     public IReadOnlyDictionary<ushort, int> AnimSpeedPct => Speeds;
+    public bool PortOpen { get; set; } = true;
+    public bool SessionReady { get; set; } = true;
     public List<SentGesture> Sent { get; } = new();
     public List<SentLeaseRenewal> LeaseRenewals { get; } = new();
     public List<ushort> SafeStops { get; } = new();
@@ -69,6 +71,29 @@ internal sealed class FakeSequencerProtocol : ISequencerProtocol
 internal sealed record SentGesture(uint RequestId, ushort Target, int AnimId, uint Seed, ushort LeaseMs);
 internal sealed record SentLeaseRenewal(ushort Target, int MeshSeq, ushort LeaseMs);
 internal sealed record SentServoCommand(ushort Target, bool Enabled);
+
+/// <summary>
+/// Used by tests whose subject is transport/editing rather than readiness. Focused preflight
+/// tests use the real service and explicit connection/file state.
+/// </summary>
+internal sealed class PermissiveSequencerPreflightService : ISequencerPreflightService
+{
+    public int AnalyzeCalls { get; private set; }
+
+    public IReadOnlyList<SequencerPreflightIssue> Analyze(SequencerPreflightInput input)
+    {
+        AnalyzeCalls++;
+        return new[]
+        {
+            new SequencerPreflightIssue(
+                SequencerPreflightCode.Ready,
+                SequencerPreflightSeverity.Info,
+                "Ready",
+                "Permissive fixture.",
+                "Test"),
+        };
+    }
+}
 
 internal sealed class FakeAudioPlayer : ISequencerAudioPlayer
 {

@@ -472,7 +472,8 @@ public sealed class SequencerPersistenceTests
             new FakePlaybackTimerScheduler(),
             dialogs ?? new FakeSequencerPersistenceDialogs(),
             writer ?? new AtomicTextFileWriter(),
-            new FakeSequenceLibraryService());
+            new FakeSequenceLibraryService(),
+            preflightService: new PermissiveSequencerPreflightService());
 
     private static string FixturePath(string fileName) =>
         Path.Combine(AppContext.BaseDirectory, "Fixtures", "Sequences", fileName);

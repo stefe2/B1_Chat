@@ -461,6 +461,7 @@ public sealed class SceneLibraryTests
             new FakePlaybackTimerScheduler(),
             dialogs,
             new AtomicTextFileWriter(),
-            library);
+            library,
+            preflightService: new PermissiveSequencerPreflightService());
     }
 }

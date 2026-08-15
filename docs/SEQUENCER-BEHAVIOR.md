@@ -121,6 +121,34 @@ retained cursor: earlier gesture events remain skipped, while audio clips that
 overlap the cursor seek to their matching source offsets (modulo their duration
 when looping). At the natural end Play starts a fresh pass from zero.
 
+## Preflight and Play gate
+
+The toolbar's **Preflight** control performs a side-effect-free readiness scan.
+Its expandable panel reports `ERROR`, `WARNING` and `INFO` findings with the
+affected target, lane, filename, gesture and timestamp. **Go to** moves a stopped
+playhead to the finding and selects its gesture when applicable. The scan never
+sends protocol traffic, probes media, changes Windows settings or edits the Scene.
+
+Play and Restart refresh the scan before replacing or starting a pass. Errors
+intercept that start and open the panel; warnings remain playable. Resume also
+rechecks the live environment without rebuilding the immutable paused plan. A
+Scene with active gestures requires an open port, completed handshake and online
+master. Targeted clips require that target online, and broadcasts require at
+least one online recipient. Muted gesture tracks are excluded because their
+commands will not be dispatched. An audio-only Scene does not require a droid
+connection. Muting an offline target is the explicit rehearsal authorization to
+run without that droid; missed commands are never queued or replayed if it later
+reconnects.
+
+Every audio path is checked again when the panel or transport runs. Missing or
+decoder-rejected files are errors; validation still in progress and a validated
+zero/unknown duration are warnings. The latter may play but cannot establish an
+automatic content tail. Every effective `TALK`/`POWER_DOWN` must retain its
+authored endpoint of at least 100 ms inside the effective Scene boundary; an
+invalid endpoint blocks Play because targeted IDLE cleanup would not be
+represented. Existing import/edit validation normally prevents that state, so
+this is a final fail-closed check.
+
 ## Scene endpoint and loop boundaries
 
 Every Scene has one authoritative endpoint, drawn as a cyan dashed `END` line

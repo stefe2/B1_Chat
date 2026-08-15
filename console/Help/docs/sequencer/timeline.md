@@ -11,7 +11,7 @@ the entire Add audio lane button remains visible at the right.*
 *Transport, timecode, zoom, Snap, editing, import/export, Clear, and audio-lane
 controls stay together above the timeline.*
 
-## A first sequence in five steps
+## A first sequence in six steps
 
 1. Connect the master so live droids populate their tracks.
 2. Click a track gutter to **arm** it. The highlighted track receives gesture
@@ -19,7 +19,9 @@ controls stay together above the timeline.*
 3. Click the ruler to place the playhead at the desired time.
 4. Click a gesture in the bottom library, or drag it directly onto a track and
    time.
-5. Give the Scene a name, choose **Save** (`Ctrl+S`) to keep it in the Local
+5. Choose **Preflight** and correct every blocking error. Warnings remain
+   playable and identify the exact clip or environment fact to review.
+6. Give the Scene a name, choose **Save** (`Ctrl+S`) to keep it in the Local
    Library, then use **Export a copy** from the **…** menu only when you need an
    external file.
 

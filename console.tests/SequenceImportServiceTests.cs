@@ -401,7 +401,8 @@ public sealed class SequenceImportServiceTests
         new FakePlaybackTimerScheduler(),
         new FakePlaybackClock(),
         new FakePlaybackTimerScheduler(),
-        library: new FakeSequenceLibraryService());
+        library: new FakeSequenceLibraryService(),
+        preflightService: new PermissiveSequencerPreflightService());
 
     private static string FixturePath(string fileName) =>
         Path.Combine(AppContext.BaseDirectory, "Fixtures", "Sequences", fileName);

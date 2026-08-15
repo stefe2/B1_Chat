@@ -2244,6 +2244,7 @@ public sealed class SequencerPlaybackIntegrationTests
         FakePlaybackTimerScheduler? executionScheduler = null) =>
         new(protocol, new FakeSequencerSettings(), audio ?? new FakeAudioPlayer(), scheduler, clock,
             executionScheduler ?? new FakePlaybackTimerScheduler(),
-            library: new FakeSequenceLibraryService());
+            library: new FakeSequenceLibraryService(),
+            preflightService: new PermissiveSequencerPreflightService());
 
 }

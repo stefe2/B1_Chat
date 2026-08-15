@@ -26,6 +26,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     private readonly ISequencerAudioPlayer _audioPlayer;
     private readonly IAudioProbe _audioProbe;
     private readonly IWaveformDecoder _waveformDecoder;
+    private readonly ISequencerPreflightService _preflightService;
     private readonly IPlaybackWakeScheduler _timerScheduler;
     private readonly IPlaybackTimerScheduler _executionTimerScheduler;
     private readonly IPlaybackClock _playbackClock;
@@ -89,6 +90,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool _followPlayhead = true;
     [ObservableProperty] private double _playheadMs;
     [ObservableProperty] private int? _sequenceEndMs;
+    [ObservableProperty] private bool _isPreflightOpen;
 
     public bool HasManualSequenceEnd => SequenceEndMs.HasValue;
     public string SequenceEndModeText => HasManualSequenceEnd ? "END SET" : "END AUTO";
@@ -277,6 +279,36 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     public bool HasAudioFailures => _audioFailures.Count > 0;
     public string AudioFailureText => string.Join(Environment.NewLine, _audioFailures);
 
+    public ObservableCollection<SequencerPreflightIssue> PreflightIssues { get; } = new();
+    public bool HasPreflightErrors => PreflightIssues.Any(
+        issue => issue.Severity == SequencerPreflightSeverity.Error);
+    public bool HasPreflightWarnings => PreflightIssues.Any(
+        issue => issue.Severity == SequencerPreflightSeverity.Warning);
+    public string PreflightBadgeText
+    {
+        get
+        {
+            var errors = PreflightIssues.Count(issue => issue.Severity == SequencerPreflightSeverity.Error);
+            var warnings = PreflightIssues.Count(issue => issue.Severity == SequencerPreflightSeverity.Warning);
+            if (errors > 0) return $"PREFLIGHT · {errors} ERROR{(errors == 1 ? "" : "S")}";
+            if (warnings > 0) return $"PREFLIGHT · {warnings} WARNING{(warnings == 1 ? "" : "S")}";
+            return "PREFLIGHT · READY";
+        }
+    }
+    public string PreflightSummaryText
+    {
+        get
+        {
+            var errors = PreflightIssues.Count(issue => issue.Severity == SequencerPreflightSeverity.Error);
+            var warnings = PreflightIssues.Count(issue => issue.Severity == SequencerPreflightSeverity.Warning);
+            return errors > 0
+                ? $"{errors} blocking error{(errors == 1 ? "" : "s")} · Play and Restart are intercepted"
+                : warnings > 0
+                    ? $"{warnings} warning{(warnings == 1 ? "" : "s")} · playback remains available"
+                    : "No blocking issue found";
+        }
+    }
+
     private readonly record struct GestureTargetState(uint RequestId, int AnimId)
     {
         public bool IsInfinite => AnimId is 16 or 17;
@@ -378,13 +410,16 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         IAtomicTextFileWriter? atomicFileWriter = null,
         ISequenceLibraryService? library = null,
         IAudioProbe? audioProbe = null,
-        IWaveformDecoder? waveformDecoder = null)
+        IWaveformDecoder? waveformDecoder = null,
+        ISequencerPreflightService? preflightService = null)
     {
         _protocol = protocol;
         _settings = settings;
         _audioPlayer = audioPlayer ?? new AudioPlaybackService();
         _audioProbe = audioProbe ?? new AudioProbe();
         _waveformDecoder = waveformDecoder ?? WaveformService.Shared;
+        _preflightService = preflightService ?? new SequencerPreflightService(
+            gestureNames: AnimationViewModel.AnimNames);
         _audioPlayer.PlaybackFailed += OnAudioPlaybackFailed;
         _timerScheduler = timerScheduler ?? new ThreadPoolPlaybackTimerScheduler();
         _executionTimerScheduler = executionTimerScheduler ?? new ThreadPoolPlaybackTimerScheduler();
@@ -418,10 +453,16 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         // depends on identity/name/role; broadcast timing only depends on online membership.
         // Compare those two projections independently and leave the visual tree untouched when
         // a heartbeat merely refreshes age/RSSI/state already represented elsewhere.
-        if (!string.Equals(_trackRosterSignature, TrackRosterSignature(), StringComparison.Ordinal))
+        var rosterChanged = !string.Equals(
+            _trackRosterSignature, TrackRosterSignature(), StringComparison.Ordinal);
+        var onlineTargetsChanged = !string.Equals(
+            _durationTargetSignature, DurationTargetSignature(), StringComparison.Ordinal);
+        if (rosterChanged)
             RebuildTracks();
-        if (!string.Equals(_durationTargetSignature, DurationTargetSignature(), StringComparison.Ordinal))
+        if (onlineTargetsChanged)
             RefreshDurationDerivedState();
+        else if (rosterChanged)
+            RefreshPreflight();
     }
 
     private void OnAnimDurationsReceived()
@@ -436,6 +477,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     {
         ResolveGestureDurationsAndExtent();
         RebuildRulerTicks();
+        RefreshPreflight();
     }
 
     private void ResetExecutionTracking()
@@ -802,6 +844,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     private void OnProtocolLinkClosed(bool unexpected) => RunOnUiThread(() =>
     {
         if (TransportState != SequencerTransportState.Stopped) Stop();
+        RefreshPreflight();
     });
 
     public void Dispose()
@@ -917,6 +960,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     {
         if (track == null) return;
         track.Muted = !track.Muted;
+        RefreshPreflight();
     }
 
     private bool IsTrackMuted(ushort targetId) => Tracks.FirstOrDefault(t => t.Id == targetId)?.Muted ?? false;
@@ -1514,6 +1558,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         RebuildTracks();
         ResolveGestureDurationsAndExtent();
         RebuildRulerTicks();
+        RefreshPreflight();
     }
 
     private void SetScheduleWarnings(IReadOnlyList<SequencerScheduleWarning> warnings)
@@ -1521,6 +1566,49 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         _scheduleWarnings = warnings;
         OnPropertyChanged(nameof(HasScheduleWarnings));
         OnPropertyChanged(nameof(ScheduleWarningText));
+    }
+
+    private void RefreshPreflight()
+    {
+        var mutedTargets = Tracks.Where(track => track.Muted).Select(track => track.Id).ToHashSet();
+        var issues = _preflightService.Analyze(new SequencerPreflightInput(
+            _protocol.PortOpen,
+            _protocol.SessionReady,
+            _protocol.Droids.ToArray(),
+            Steps.ToArray(),
+            AudioLanes.ToArray(),
+            mutedTargets,
+            (int)Math.Clamp(TotalDurationMsValue, 0, int.MaxValue)));
+
+        PreflightIssues.Clear();
+        foreach (var issue in issues) PreflightIssues.Add(issue);
+        OnPropertyChanged(nameof(HasPreflightErrors));
+        OnPropertyChanged(nameof(HasPreflightWarnings));
+        OnPropertyChanged(nameof(PreflightBadgeText));
+        OnPropertyChanged(nameof(PreflightSummaryText));
+    }
+
+    [RelayCommand]
+    private void TogglePreflight()
+    {
+        RefreshPreflight();
+        IsPreflightOpen = !IsPreflightOpen;
+    }
+
+    [RelayCommand]
+    private void GoToPreflightIssue(SequencerPreflightIssue? issue)
+    {
+        if (issue == null || TransportState != SequencerTransportState.Stopped) return;
+        if (issue.Step != null) SelectedStep = issue.Step;
+        PlayheadMs = Math.Clamp(issue.StartMs, 0, TotalDurationMsValue);
+    }
+
+    private bool PreflightAllowsPlayback()
+    {
+        RefreshPreflight();
+        if (!HasPreflightErrors) return true;
+        IsPreflightOpen = true;
+        return false;
     }
 
     private void Apply(SequenceSnapshot snap)
@@ -2084,6 +2172,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         }
         if (IsPaused)
         {
+            if (!PreflightAllowsPlayback()) return;
             if (_activePlaybackPlan == null) { Stop(); return; }
             StartPlaybackPass(_elapsedAtPauseMs, resumeAudio: true, skipEventsBeforeStart: false);
             return;
@@ -2098,6 +2187,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     {
         if (Steps.Count == 0 && AudioLanes.All(l => l.Clips.Count == 0) &&
             (SequenceEndMs ?? 0) == 0) return;
+        if (!PreflightAllowsPlayback()) return;
         _playbackGeneration.Cancel();
         DisposePlaybackScheduler();
         _audioPlayer.StopAll();

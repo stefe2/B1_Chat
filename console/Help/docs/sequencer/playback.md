@@ -30,6 +30,26 @@ console send order. The **SCHEDULE** warning appears after Play; hover it for th
 exact timestamp and conflict description. Separate those clips in time when the
 final physical pose matters.
 
+## Preflight before Play
+
+Choose **Preflight** to open the readiness panel. Each finding names the affected
+connection, droid track, gesture, audio lane/file and timestamp. **Go to** moves
+the stopped playhead to that finding and selects its gesture when applicable.
+
+- `ERROR` blocks a new Play or Restart and opens the panel automatically.
+- `WARNING` is visible but does not block playback.
+- `INFO` confirms a ready or deliberately audio-only Scene.
+
+The scan checks the serial port and handshake only when active gesture clips need
+droids. It then checks for an online master, offline targeted droids, broadcasts
+with no recipients, missing/unreadable audio, pending or unknown audio duration,
+and `TALK`/`POWER_DOWN` clips without a valid represented endpoint. Muted gesture
+tracks are ignored; an audio-only Scene is allowed without a master. The scan
+does not send commands, alter the Scene, probe media or change Windows settings.
+Play, Restart and Resume refresh it against the current environment. Muting an
+offline target is the explicit rehearsal choice to run without that droid;
+missed commands are never queued or replayed after reconnection.
+
 ![Audio and per-droid gesture tracks](../images/sequencer-tracks.png)
 
 *Figure: The orange playhead crosses linked audio and per-droid gesture lanes.

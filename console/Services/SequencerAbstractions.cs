@@ -41,6 +41,8 @@ public interface ISequencerProtocol
     IReadOnlyDictionary<int, int> AnimDurationMs { get; }
     IReadOnlyDictionary<int, AnimationDurationMetadata> AnimDurationMetadata { get; }
     IReadOnlyDictionary<ushort, int> AnimSpeedPct { get; }
+    bool PortOpen { get; }
+    bool SessionReady { get; }
     bool SupportsAnimLease { get; }
     bool SupportsSafeStop { get; }
     event Action? DroidsChanged;

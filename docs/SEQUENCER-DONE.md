@@ -824,6 +824,61 @@ For what the shipped behavior actually does at runtime, read
 
 ## EPIC G — Preflight and ergonomics
 
+### [x] SEQ-G01 — Add a preflight result model and Play gate
+
+- **Priority:** P1
+- **Problem:** Play silently starts audio even if no ready master can receive
+  gestures, and there is no consolidated readiness check.
+- **Depends on:** SEQ-A06, SEQ-D02, SEQ-F05.
+- **Acceptance:** preflight produces errors, warnings and information; blocking
+  errors disable or intercept Play; the user can inspect exact affected clips,
+  tracks and files.
+- **Validation:** headless rule tests and manual UI presentation.
+- **Implemented:** immutable severity/code findings retain transient links to the
+  affected gesture/audio source. The toolbar badge and expandable panel expose
+  exact location/detail plus Go to navigation. Play, Restart and Resume refresh
+  the scan; errors intercept a new pass and open the panel, while warnings remain
+  playable. The analyzer is injected and side-effect-free.
+- **Evidence:** the operator validated ready/error presentation, panel open/close,
+  Go to navigation, intercepted Play and audio-only offline playback in Release
+  build 359. The automated suite passed 275/275.
+
+### [x] SEQ-G02 — Detect connection, offline-target and missing-audio issues
+
+- **Priority:** P1
+- **Problem:** offline rows are preserved correctly but missed commands are not
+  queued, while missing audio is silently skipped.
+- **Depends on:** SEQ-G01.
+- **Acceptance:** preflight reports no port/session, no master, offline targeted
+  droids, broadcast with no recipients, missing/unreadable audio, and unknown
+  duration. The user sees which findings block Play.
+- **Validation:** rule matrix with mixed live/offline roster and file states.
+- **Implemented:** active gestures check port, handshake, online master, targeted
+  recipient and broadcast roster. Muted gesture tracks are excluded and audio-only
+  Scenes need no droid connection. Audio paths are rechecked on preflight/transport;
+  missing or rejected files block, while pending/zero duration warns.
+- **Evidence:** 22 focused cases cover the connection/roster/file matrix and
+  transport gate. The operator confirmed all six rendered workflows, including
+  that an audio-only Scene remains playable while disconnected.
+
+### [x] SEQ-G04 — Detect unterminated infinite gestures
+
+- **Priority:** P0
+- **Problem:** TALK/POWER_DOWN without a represented terminator can outlive the
+  intended scene.
+- **Depends on:** SEQ-B04, SEQ-G01.
+- **Acceptance:** Play is blocked or requires an explicit safety confirmation
+  until every effective infinite gesture has a defined end/cleanup path.
+- **Validation:** per-target and broadcast termination graph tests.
+- **Implemented:** every effective TALK/POWER_DOWN must retain a represented
+  endpoint of at least 100 ms inside the effective Scene boundary. Invalid raw
+  state fails closed before plan replacement; valid targeted/broadcast endpoints
+  continue through the existing ownership-safe IDLE termination path. Muted clips
+  are correctly excluded.
+- **Evidence:** invalid endpoints are structurally impossible through normal UI
+  and import bounds; focused headless cases force the raw invalid state and prove
+  Play is blocked for TALK and POWER_DOWN while valid endpoints remain ready.
+
 ### [x] SEQ-G14 — Redesign Play as an unambiguous Play/Pause control
 
 - **Priority:** P1
@@ -949,6 +1004,7 @@ Append concise evidence when closing items; do not paste full build logs.
 
 | Date | Items | Evidence |
 |---|---|---|
+| 2026-08-14 | SEQ-G01, SEQ-G02, SEQ-G04 | Added side-effect-free readiness findings, expandable toolbar panel and source-linked navigation. Play/Restart/Resume now fail closed on connection/master/target routing, missing/unreadable audio and invalid infinite endpoints while warnings and audio-only offline Scenes remain playable. Twenty-two focused cases expand the WPF suite from 253 to 275, all passing. Offline self-test passed 21/21 with clean master/slave/WPF builds and real Media Foundation smoke (`b1-self-test-20260814-012815.json`); Release built with zero warnings and build number 359 remained preserved. The operator confirmed all six rendered workflows. |
 | 2026-08-14 | SEQ-E05, SEQ-F08, SEQ-H05 | Added automatic/manual Scene endpoint, cyan END marker, schema v6 nullable `endMs`, deterministic final scheduler wake and audio-loop lifetime bounded by the immutable endpoint. Eighteen new plan/import/persistence/library/transport cases expand the WPF suite from 235 to 253, all passing. `tools/self-test.ps1 -SkipSerial`: 21 passed, 0 failed, including clean master/slave/WPF builds, real Media Foundation/MP3 smoke and preserved build number 359; report `b1-self-test-20260814-003311.json`. The operator confirmed the rendered controls and audible repeat-to-END behavior in Release build 359. |
 | 2026-08-14 | SEQ-G15, SEQ-G16, SEQ-G17, SEQ-G18 | Closed after final rendered Release build 359 validation. Stop/Pause cursor moves restart overlapping audio at the requested offset; an unchanged paused click resumes; releasing the horizontal scrollbar restores Follow automatically. Earlier checks in the same pass confirmed wheel navigation and the complete Scene browser/document workflow. Automated evidence remains green through the 231-test transport suite and the current 235/235 repository suite. |
 | 2026-08-14 | SEQ-G15 (in progress) | Moving the playhead during Pause now abandons the retained pass through normal Stop cleanup, while a sub-millisecond unchanged click preserves seamless Resume. Three focused tests prove stopped transition with audio re-seek, unchanged Resume and targeted IDLE cleanup for an infinite gesture. Full WPF suite: 231/231; Release build clean with 0 warnings/errors. Rendered confirmation remains. |

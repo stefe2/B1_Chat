@@ -22,6 +22,7 @@
              only inside the nested item DataTemplates below). -->
         <Border Grid.Row="0" Margin="0,0,0,8" Padding="10,7" CornerRadius="7"
                 Background="{StaticResource RecessBrush}" BorderBrush="{StaticResource BorderLoBrush}" BorderThickness="1">
+            <StackPanel>
             <WrapPanel Orientation="Horizontal">
                 <!-- The primary button exposes its next action. Restart and return-to-start are
                      deliberately separate from normal Play and Stop. -->
@@ -77,6 +78,41 @@
                         ToolTip="{Binding SequenceEndToolTip}" Margin="0,0,10,0">
                     <TextBlock Text="{Binding SequenceEndModeText}" Foreground="#FF5BC0EB"
                                FontFamily="{StaticResource MonoFont}" FontWeight="Bold" FontSize="9.5" />
+                </Border>
+
+                <Button Content="Preflight" Style="{StaticResource MiniButtonStyle}"
+                        Command="{Binding TogglePreflightCommand}" Margin="0,0,4,0"
+                        ToolTip="Analyze connection, target, audio, and infinite-gesture readiness before playback." />
+                <Border Margin="0,0,10,0" ToolTip="{Binding PreflightSummaryText}">
+                    <Border.Style>
+                        <Style TargetType="Border" BasedOn="{StaticResource ValuePillStyle}">
+                            <Setter Property="BorderBrush" Value="{StaticResource OkBrush}" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding HasPreflightWarnings}" Value="True">
+                                    <Setter Property="BorderBrush" Value="{StaticResource WarnBrush}" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding HasPreflightErrors}" Value="True">
+                                    <Setter Property="BorderBrush" Value="{StaticResource BadBrush}" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                    <TextBlock Text="{Binding PreflightBadgeText}" FontFamily="{StaticResource MonoFont}"
+                               FontWeight="Bold" FontSize="9.5">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="{StaticResource OkBrush}" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasPreflightWarnings}" Value="True">
+                                        <Setter Property="Foreground" Value="{StaticResource WarnBrush}" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding HasPreflightErrors}" Value="True">
+                                        <Setter Property="Foreground" Value="{StaticResource BadBrush}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
                 </Border>
 
                 <Rectangle Width="1" Fill="{StaticResource BorderHiBrush}" Opacity="0.5" Margin="0,2,10,2" />
@@ -146,6 +182,68 @@
                                FontFamily="{StaticResource MonoFont}" FontWeight="Bold" FontSize="10.5" />
                 </Border>
             </WrapPanel>
+
+            <Border Margin="0,8,0,0" Padding="10,8" CornerRadius="5" BorderThickness="1"
+                    BorderBrush="{StaticResource BorderHiBrush}" Background="{StaticResource Recess2Brush}"
+                    Visibility="{Binding IsPreflightOpen, Converter={StaticResource BoolToVisConv}}">
+                <StackPanel>
+                    <DockPanel Margin="0,0,0,7" LastChildFill="False">
+                        <TextBlock DockPanel.Dock="Left" Text="PREFLIGHT" FontFamily="{StaticResource MonoFont}"
+                                   FontWeight="Bold" Foreground="{StaticResource TextStrongBrush}" />
+                        <TextBlock DockPanel.Dock="Left" Text="{Binding PreflightSummaryText}" Margin="10,0,0,0"
+                                   Foreground="{StaticResource MutedBrush}" FontSize="10.5" VerticalAlignment="Center" />
+                        <Button DockPanel.Dock="Right" Content="Close" Style="{StaticResource MiniButtonStyle}"
+                                Command="{Binding TogglePreflightCommand}" />
+                    </DockPanel>
+                    <ScrollViewer MaxHeight="190" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <ItemsControl ItemsSource="{Binding PreflightIssues}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Margin="0,0,0,5" Padding="8,6" CornerRadius="4"
+                                            Background="{StaticResource RecessBrush}" BorderThickness="2,0,0,0">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="BorderBrush" Value="{StaticResource OkBrush}" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Severity}" Value="{x:Static Models:SequencerPreflightSeverity.Warning}">
+                                                        <Setter Property="BorderBrush" Value="{StaticResource WarnBrush}" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Severity}" Value="{x:Static Models:SequencerPreflightSeverity.Error}">
+                                                        <Setter Property="BorderBrush" Value="{StaticResource BadBrush}" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="58" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="{Binding SeverityText}" FontFamily="{StaticResource MonoFont}"
+                                                       FontWeight="Bold" FontSize="9" Foreground="{Binding RelativeSource={RelativeSource AncestorType=Border}, Path=BorderBrush}"
+                                                       VerticalAlignment="Top" />
+                                            <StackPanel Grid.Column="1" Margin="4,0,12,0">
+                                                <TextBlock Text="{Binding Title}" Foreground="{StaticResource TextStrongBrush}" FontWeight="SemiBold" />
+                                                <TextBlock Text="{Binding Detail}" Foreground="{StaticResource MutedBrush}" FontSize="10.5" TextWrapping="Wrap" />
+                                                <TextBlock Text="{Binding Location}" Foreground="{StaticResource AccentBrush}" FontFamily="{StaticResource MonoFont}"
+                                                           FontSize="9.5" Margin="0,3,0,0" TextWrapping="Wrap" />
+                                            </StackPanel>
+                                            <Button Grid.Column="2" Content="Go to" Style="{StaticResource MiniButtonStyle}"
+                                                    VerticalAlignment="Center"
+                                                    Visibility="{Binding CanNavigate, Converter={StaticResource BoolToVisConv}}"
+                                                    Command="{Binding DataContext.GoToPreflightIssueCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    CommandParameter="{Binding}"
+                                                    ToolTip="Move the stopped playhead to this finding and select its gesture when applicable." />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </StackPanel>
+            </Border>
+            </StackPanel>
         </Border>
 
         <!-- Body: one recessed rounded container (mockup's .body) holding the track rail,

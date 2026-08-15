@@ -1055,6 +1055,20 @@ Sequencer backlog item by item.
       Media Foundation MP3 smoke (`b1-self-test-20260814-003311.json`); build number remained
       359. The operator then confirmed the rendered endpoint controls and audible
       repeat-to-END behavior in the Release console, closing SEQ-E05, SEQ-F08 and SEQ-H05.
+- [x] Sequencer readiness preflight and Play gate (2026-08-14).
+      Added a side-effect-free severity/code model, expandable toolbar panel,
+      source-linked Go to navigation and fail-closed Play/Restart/Resume gate.
+      Active gesture routing checks port, handshake, online master, target and
+      broadcast recipients while correctly excluding muted tracks and permitting
+      audio-only offline Scenes. Audio paths/status/duration and raw
+      TALK/POWER_DOWN endpoints are checked immediately before transport. Twenty-two
+      focused rule/integration cases expanded the suite from 253 to 275, all
+      passing. Offline self-test passed 21/21 with clean master/slave/WPF builds,
+      real Media Foundation smoke and build number 359 preserved
+      (`b1-self-test-20260814-012815.json`); Release then built with zero warnings.
+      The operator confirmed the error panel, exact findings, Go to navigation,
+      Play interception, audio-only offline playback and panel close behavior,
+      closing G01/G02/G04.
 
 ## Incidents (full narratives)
 

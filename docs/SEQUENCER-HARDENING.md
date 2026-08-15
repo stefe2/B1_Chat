@@ -6,14 +6,14 @@ Scope: WPF console Sequencer, console-side audio, serial/mesh animation dispatch
 and the small firmware changes needed to give playback safe stop semantics.
 
 This document is the persistent source of truth for making the Animation
-Sequencer reliable. It carries **only actionable work** — the 28 items that are
+Sequencer reliable. It carries **only actionable work** — the 25 items that are
 open, in progress or awaiting hardware validation.
 
 Three companion documents hold the rest, so this one stays cheap to read:
 
 - [SEQUENCER-BEHAVIOR.md](SEQUENCER-BEHAVIOR.md) — what currently *ships*, at
   runtime. Read it before changing Sequencer behavior.
-- [SEQUENCER-DONE.md](SEQUENCER-DONE.md) — the 49 closed items with their
+- [SEQUENCER-DONE.md](SEQUENCER-DONE.md) — the 52 closed items with their
   acceptance criteria and the completion evidence log.
 - [SEQUENCER-IDEAS.md](SEQUENCER-IDEAS.md) — EPIC I and EPIC K, 30 deferred
   design ideas gated behind the M1–M4 baseline.
@@ -90,7 +90,7 @@ along is the Sequencer".
 | D | Import, export and local library | 8 / 8 | 0 / 1 |
 | E | Deterministic scheduler and performance | 6 / 6 | 0 / 1 |
 | F | Duration and audio robustness | 7 / 8 | — |
-| G | Preflight and ergonomics | 5 / 14 | 0 / 5 |
+| G | Preflight and ergonomics | 8 / 14 | 0 / 5 |
 | H | Automated and hardware validation | 2 / 8 | — |
 | I | Scene & Show System (future) | — | 0 / 22 |
 | J | Commissioning and servo configuration safety | 0 / 2 | — |
@@ -201,29 +201,7 @@ along is the Sequencer".
 
 ## EPIC G — Preflight and ergonomics
 
-5 completed items moved to [SEQUENCER-DONE.md](SEQUENCER-DONE.md): SEQ-G14, SEQ-G15, SEQ-G16, SEQ-G17, SEQ-G18.
-
-### [ ] SEQ-G01 — Add a preflight result model and Play gate
-
-- **Priority:** P1
-- **Problem:** Play silently starts audio even if no ready master can receive
-  gestures, and there is no consolidated readiness check.
-- **Depends on:** SEQ-A06, SEQ-D02, SEQ-F05.
-- **Acceptance:** preflight produces errors, warnings and information; blocking
-  errors disable or intercept Play; the user can inspect exact affected clips,
-  tracks and files.
-- **Validation:** headless rule tests and manual UI presentation.
-
-### [ ] SEQ-G02 — Detect connection, offline-target and missing-audio issues
-
-- **Priority:** P1
-- **Problem:** offline rows are preserved correctly but missed commands are not
-  queued, while missing audio is silently skipped.
-- **Depends on:** SEQ-G01.
-- **Acceptance:** preflight reports no port/session, no master, offline targeted
-  droids, broadcast with no recipients, missing/unreadable audio, and unknown
-  duration. The user sees which findings block Play.
-- **Validation:** rule matrix with mixed live/offline roster and file states.
+8 completed items moved to [SEQUENCER-DONE.md](SEQUENCER-DONE.md): SEQ-G01, SEQ-G02, SEQ-G04, SEQ-G14, SEQ-G15, SEQ-G16, SEQ-G17, SEQ-G18.
 
 ### [ ] SEQ-G03 — Detect overlapping and ambiguous gesture commands
 
@@ -235,16 +213,6 @@ along is the Sequencer".
   flag same-target overlaps, same-time duplicates, and broadcast/target conflicts;
   link warnings to clips.
 - **Validation:** finite, infinite, broadcast, muted, and offline combinations.
-
-### [ ] SEQ-G04 — Detect unterminated infinite gestures
-
-- **Priority:** P0
-- **Problem:** TALK/POWER_DOWN without a represented terminator can outlive the
-  intended scene.
-- **Depends on:** SEQ-B04, SEQ-G01.
-- **Acceptance:** Play is blocked or requires an explicit safety confirmation
-  until every effective infinite gesture has a defined end/cleanup path.
-- **Validation:** per-target and broadcast termination graph tests.
 
 ### [ ] SEQ-G05 — Remove implicit broadcast insertion risk
 
@@ -568,6 +536,8 @@ SEQ-D09 remains deferred. The Play/Pause control and the complete transport,
 Follow, wheel-navigation and Scene-document workflow batch (SEQ-G14 through
 SEQ-G18) are closed. Sequence/audio end semantics (SEQ-E05 and SEQ-F08) and their
 audio-service coverage (SEQ-H05) are also closed after rendered Release validation.
+The first preflight batch (SEQ-G01, SEQ-G02 and SEQ-G04) is closed after its
+rendered operator pass.
 
 ## Decision log
 
@@ -579,9 +549,9 @@ options.
 | DEC-001 | Resolved 2026-08-11 | Lock persistent editing during Play/Pause; allow transient inspection, zoom/scroll and dynamic track mute. |
 | DEC-002 | Resolved 2026-08-11 | Normal Stop uses targeted tracked IDLE only for Sequencer-owned infinite gestures. Safe Stop broadcasts a transient centered/servo-powered hold. Emergency Stop immediately broadcasts persistent Servo OFF without confirmation; the owner accepts loss of holding torque. |
 | DEC-003 | Resolved 2026-08-11 | Treat the current Sequencer document as a Scene and retain Local Library as the normal local working catalog. Save updates the current stable scene ID; Save As creates a new one. Import never auto-adds. Export is not required for normal work, but remains an explicit external snapshot for backup, transfer, support and version control. Future Show authoring combines scenes and published Shows embed immutable scene snapshots. |
-| DEC-004 | Open | Unknown/offline targets: warning or blocking preflight error? |
+| DEC-004 | Resolved 2026-08-14 | An active targeted gesture whose droid is unknown/offline is a blocking preflight error because missed commands are never queued or reconstructed. Muted tracks are excluded. The finding links to the exact clip/target so the operator can reconnect, retarget or mute deliberately. |
 | DEC-005 | Resolved 2026-08-11 | Same-time events form one batch in immutable source order: gesture clips in editor order, then audio clips by lane/clip order. Multiple gestures for one target are last-received-wins. Broadcast plus targeted overlap is serialized but warned because mesh arrival can differ from console order. |
-| DEC-006 | Open | Audio-only rehearsal when no master is connected? |
+| DEC-006 | Resolved 2026-08-14 | Audio-only Scenes may Play without a serial/master connection. Connection readiness is required only when at least one unmuted gesture would dispatch; audio asset findings still apply normally. |
 | DEC-007 | Deferred | Scene identity and migration from `.b1seq.json` to `.b1scene.json`? |
 | DEC-008 | Deferred | Show authoring uses linked scenes, embedded snapshots, or a publish-time hybrid? |
 | DEC-009 | Deferred | Scene targets remain physical IDs, become semantic roles, or support both? |

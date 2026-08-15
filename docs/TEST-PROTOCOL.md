@@ -28,6 +28,12 @@ enables/disables a servo, previews a position, or starts an animation.
 - validates the explicit Scene endpoint across automatic/manual mode, empty timed
   passes, content-tail clamping, looping audio, Pause/Resume, Stop and whole-pass
   Loop without stacked players or stale boundary rearming;
+- validates the Sequencer preflight and Play gate across closed port, pending
+  handshake, missing master, offline target, empty broadcast roster, muted
+  tracks, audio-only offline playback, missing/unreadable/pending/unknown audio,
+  invalid/valid infinite-gesture endpoints, issue navigation and recovery after
+  connection repair. Errors intercept Play/Restart/Resume without replacing an
+  active or retained pass; warnings remain playable;
 - runs `git diff --check`;
 - verifies that the callback-to-loop mesh inbox is present;
 - verifies the per-droid animation-parameter store and targeted protocol;
