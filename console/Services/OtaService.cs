@@ -5,6 +5,13 @@ using System.Windows.Threading;
 
 namespace b1_chat_console.Services;
 
+public readonly record struct OtaCompletion(
+    bool Ok,
+    string Message,
+    string? FirmwareVersion,
+    string? BuildId,
+    string? Reason);
+
 /// <summary>
 /// Drives an OTA session (one slave at a time): reads the .bin, computes its MD5,
 /// then sends one chunk per evt:otaChunkAck received (stop-and-wait, driven by
@@ -16,7 +23,7 @@ namespace b1_chat_console.Services;
 /// WatchdogTimeout of silence (the master re-emits the ack if the chunk had
 /// already gone through — see onSerialChunk), and declares failure after MaxRetries.
 /// </summary>
-public class OtaService
+public class OtaService : IDisposable
 {
     private static readonly TimeSpan WatchdogTimeout = TimeSpan.FromSeconds(3);
     private const int MaxRetries = 5;
@@ -34,6 +41,7 @@ public class OtaService
 
     public event Action<int, int>? Progress;   // sent, total
     public event Action<bool, string>? Completed; // ok, message
+    public event Action<OtaCompletion>? CompletedDetailed;
     public event Action<int, int>? Retrying;   // index, attempt (UI info)
 
     public OtaService(ProtocolClient protocol)
@@ -73,8 +81,10 @@ public class OtaService
     {
         if (!_active) return;
         _watchdog.Stop();
-        _protocol.OtaAbort();
+        // Clear first: if the serial write itself fails, ProtocolClient raises LinkError
+        // synchronously and an owner may call Abort() again from that callback.
         _active = false;
+        if (_protocol.PortOpen && _protocol.SessionReady) _protocol.OtaAbort();
     }
 
     private void SendChunk(int index)
@@ -96,7 +106,12 @@ public class OtaService
         {
             _watchdog.Stop();
             _active = false;
-            Completed?.Invoke(false, $"Serial link silent (chunk {_lastSentIndex} no response after {MaxRetries} attempts).");
+            Complete(new OtaCompletion(
+                false,
+                $"Serial link silent (chunk {_lastSentIndex} no response after {MaxRetries} attempts).",
+                null,
+                null,
+                "serialTimeout"));
             return;
         }
 
@@ -140,7 +155,12 @@ public class OtaService
         _watchdog.Stop();
         _active = false;
         var identity = string.IsNullOrWhiteSpace(buildId) ? $"fw {fw}" : $"fw {fw}, build {buildId}";
-        Completed?.Invoke(ok, ok ? $"Update succeeded ({identity})." : $"Failed after reboot: {reason} ({identity}).");
+        Complete(new OtaCompletion(
+            ok,
+            ok ? $"Update succeeded ({identity})." : $"Failed after reboot: {reason} ({identity}).",
+            fw,
+            buildId,
+            reason));
     }
 
     private void OnError(ushort? target, int sessionId, string reason)
@@ -148,6 +168,22 @@ public class OtaService
         if (!_active || (target.HasValue && target.Value != _target)) return;
         _watchdog.Stop();
         _active = false;
-        Completed?.Invoke(false, "Transfer failed: " + reason);
+        Complete(new OtaCompletion(false, "Transfer failed: " + reason, null, null, reason));
+    }
+
+    private void Complete(OtaCompletion result)
+    {
+        CompletedDetailed?.Invoke(result);
+        Completed?.Invoke(result.Ok, result.Message);
+    }
+
+    public void Dispose()
+    {
+        Abort();
+        _watchdog.Tick -= OnWatchdogTick;
+        _protocol.OtaReadyReceived -= OnReady;
+        _protocol.OtaChunkAckReceived -= OnChunkAck;
+        _protocol.OtaResultReceived -= OnResult;
+        _protocol.OtaErrorReceived -= OnError;
     }
 }

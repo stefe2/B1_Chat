@@ -11,11 +11,19 @@ relevant behavior.
   erase; otherwise NVS can silently appear lost or resurrect stale data.
 - App-only flashing writes `0x10000` and is the default update path. Full flash
   is only for a new/erased board and writes bootloader (`0x1000`), partitions
-  (`0x8000`) and app (`0x10000`) after chip erase.
+  (`0x8000`) and app (`0x10000`) after chip erase. Keep this destructive option
+  under Firmware's Advanced options, behind the themed confirmation dialog;
+  completion must remain visible outside the scrolling log.
 - A board that has completed OTA needs the full-erase USB path before the next
   app flash, because otadata may still select the other OTA partition.
 - Support images must be present and verified with the 64-character SHA-256
   from `firmware_manifest.json`; never label an unverified download as valid.
+- The startup fleet updater is supervised, not unattended: wait for a stable
+  online roster, ask once per console session, stop Sequencer playback before
+  writing, update slaves sequentially through OTA, and update the USB master
+  last. Only semantic upgrades are automatic; never downgrade, overwrite a
+  same-version custom Build ID, include an offline/pending droid, or select full
+  erase. Stop the batch at the first failed transfer or identity verification.
 - `IS_MASTER` in `config.h` controls local `[env:b1]` flashing. CI release
   environments `[env:b1_master]` and `[env:b1_slave]` override it with build
   flags. Check the role before every flash.

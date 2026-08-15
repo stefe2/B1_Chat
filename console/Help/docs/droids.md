@@ -103,3 +103,12 @@ exists are not queued for later delivery.
 An adopted slave that is behind the latest release displays **Flash (OTA)**.
 The master uses USB only; select its Flash action or the header's Firmware button.
 Read [OTA over the Mesh](firmware/ota.md) before starting a transfer.
+
+After startup connection and release checking, the console waits briefly for a
+stable online roster. If one or more droids run an older published version, a
+single **Fleet Firmware Update** window offers **Update all** or **Later**. It
+never includes offline/pending droids, newer firmware, or a same-version custom
+build. Accepting stops Sequencer playback, downloads and verifies each required
+image, updates slaves one at a time by OTA, then app-only flashes the connected
+master by USB last. The window shows each droid plus one overall progress bar and
+stops at the first failure. Full erase is never selected by this assistant.

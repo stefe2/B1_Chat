@@ -21,6 +21,8 @@ public partial class MainViewModel : ObservableObject
     // the console itself) — stopped as soon as any connection succeeds or the user manually
     // disconnects, same "don't fight the user" reflex as SerialLinkService's own reconnect loop.
     private System.Threading.Timer? _startupConnectTimer;
+    private CancellationTokenSource? _fleetUpdateOfferDebounce;
+    private bool _fleetUpdateOfferShown;
 
     [ObservableProperty] private string? _selectedPort;
     [ObservableProperty] private bool _connected;
@@ -38,6 +40,8 @@ public partial class MainViewModel : ObservableObject
     public FirmwareViewModel Firmware { get; }
     public MeshTopologyViewModel Topology { get; }
     public SequencerViewModel Sequencer { get; }
+
+    public event Action<FleetUpdateViewModel>? FleetUpdatePromptRequested;
 
     // Always visible once the firmware supports the commit/dirty model (regardless of
     // Dirty itself) — the badge now doubles as a passive "synced" status indicator
@@ -75,6 +79,7 @@ public partial class MainViewModel : ObservableObject
             var build = string.IsNullOrWhiteSpace(Protocol.FwBuildId) ? "" : $" · build {Protocol.FwBuildId}";
             ConnectionStatusText = Protocol.SessionReady ? $"Connected — fw {Protocol.FwVersion ?? "?"}{build}" : "Handshake failed";
             OnPropertyChanged(nameof(ShowSyncBadge));
+            ScheduleFleetUpdateOffer();
         };
 
         Protocol.LogTx += line => AddLog(LogKind.Tx, "→ " + line);
@@ -90,10 +95,21 @@ public partial class MainViewModel : ObservableObject
         {
             if (e.PropertyName is nameof(FirmwareViewModel.FwLatest)) Droids.UpdateLatestFwVersion(Firmware.FwLatest);
             if (e.PropertyName is nameof(FirmwareViewModel.HasAppUpdate)) OnPropertyChanged(nameof(HasAnyUpdateAvailable));
+            if (e.PropertyName is nameof(FirmwareViewModel.Flashing)) ScheduleFleetUpdateOffer();
         };
+        Firmware.FirmwareCatalogUpdated += ScheduleFleetUpdateOffer;
+        Protocol.DroidsChanged += ScheduleFleetUpdateOffer;
         Droids.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName is nameof(DroidsViewModel.AnyFwUpdateAvailable)) OnPropertyChanged(nameof(HasAnyUpdateAvailable));
+            if (e.PropertyName is nameof(DroidsViewModel.AnyFwUpdateAvailable))
+            {
+                OnPropertyChanged(nameof(HasAnyUpdateAvailable));
+                ScheduleFleetUpdateOffer();
+            }
+        };
+        Sequencer.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(SequencerViewModel.TransportState)) ScheduleFleetUpdateOffer();
         };
         Firmware.CheckUpdatesCommand.Execute(null);
 
@@ -105,6 +121,54 @@ public partial class MainViewModel : ObservableObject
             _startupConnectTimer = new System.Threading.Timer(_ =>
                 System.Windows.Application.Current?.Dispatcher.BeginInvoke(TryAutoConnect),
                 null, TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(3));
+        }
+    }
+
+    private void ScheduleFleetUpdateOffer()
+    {
+        _fleetUpdateOfferDebounce?.Cancel();
+        _fleetUpdateOfferDebounce?.Dispose();
+        _fleetUpdateOfferDebounce = null;
+
+        if (_fleetUpdateOfferShown || !Protocol.SessionReady ||
+            Firmware.LatestFirmwareInfo is not { Latest.Length: > 0 } ||
+            Droids.AnyOtaActive || Firmware.Flashing ||
+            Sequencer.TransportState != SequencerTransportState.Stopped)
+            return;
+
+        var debounce = new CancellationTokenSource();
+        _fleetUpdateOfferDebounce = debounce;
+        _ = OfferFleetUpdateAfterRosterSettlesAsync(debounce);
+    }
+
+    private async Task OfferFleetUpdateAfterRosterSettlesAsync(CancellationTokenSource debounce)
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(2.5), debounce.Token);
+            if (debounce.IsCancellationRequested || _fleetUpdateOfferShown ||
+                !Protocol.SessionReady || Droids.AnyOtaActive || Firmware.Flashing ||
+                Sequencer.TransportState != SequencerTransportState.Stopped ||
+                Firmware.LatestFirmwareInfo is not { } firmware)
+                return;
+
+            var plan = FleetUpdatePlanner.Create(Protocol.Droids, firmware);
+            if (!plan.HasTargets) return;
+
+            _fleetUpdateOfferShown = true;
+            FleetUpdatePromptRequested?.Invoke(new FleetUpdateViewModel(plan, Protocol, _link, Sequencer));
+        }
+        catch (OperationCanceledException)
+        {
+            // A newer roster/catalog signal restarted the short stabilization delay.
+        }
+        finally
+        {
+            if (ReferenceEquals(_fleetUpdateOfferDebounce, debounce))
+            {
+                _fleetUpdateOfferDebounce.Dispose();
+                _fleetUpdateOfferDebounce = null;
+            }
         }
     }
 

@@ -3,6 +3,7 @@ using System.Linq;
 using System.Reflection;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using b1_chat_console.Models;
 using b1_chat_console.Services;
 using Microsoft.Win32;
 
@@ -16,6 +17,13 @@ public partial class FirmwareViewModel : ObservableObject
     private readonly UpdateService _update = new();
     private readonly System.Threading.Timer _portScanTimer;
     private string? _reconnectPortAfterFlash;
+    private string? _activeFlashPort;
+    private string? _activeFlashRoleLabel;
+
+    public event Action? CloseFirmwareWindowRequested;
+    public event Action? FirmwareCatalogUpdated;
+
+    public FirmwareUpdateInfo? LatestFirmwareInfo { get; private set; }
 
     public ObservableCollection<string> FlashLog { get; } = new();
     public ObservableCollection<string> AvailablePorts { get; } = new();
@@ -46,6 +54,11 @@ public partial class FirmwareViewModel : ObservableObject
     [ObservableProperty] private bool _isMasterRole = true;
     [ObservableProperty] private bool _showAdvanced;
     [ObservableProperty] private bool _eraseChipFirst;
+    [ObservableProperty] private bool _showFlashResult;
+    [ObservableProperty] private bool _flashSucceeded;
+    [ObservableProperty] private string _flashResultGlyph = "";
+    [ObservableProperty] private string _flashResultTitle = "";
+    [ObservableProperty] private string _flashResultMessage = "";
 
     public bool IsSlaveRole => !IsMasterRole;
     public string RoleLabel => IsMasterRole ? "MASTER" : "SLAVE";
@@ -147,6 +160,14 @@ public partial class FirmwareViewModel : ObservableObject
     [RelayCommand] private void SelectMasterRole() => IsMasterRole = true;
     [RelayCommand] private void SelectSlaveRole() => IsMasterRole = false;
     [RelayCommand] private void ToggleAdvanced() => ShowAdvanced = !ShowAdvanced;
+    [RelayCommand]
+    private void CloseFirmwareWindow()
+    {
+        DismissFlashResult();
+        CloseFirmwareWindowRequested?.Invoke();
+    }
+
+    public void DismissFlashResult() => ShowFlashResult = false;
 
     /// <summary>
     /// Port scan independent of SerialLinkService: the Firmware window doesn't need to be
@@ -228,14 +249,26 @@ public partial class FirmwareViewModel : ObservableObject
                        "All settings saved on THIS droid (name, servo calibration, and if master: volume, sequences, anim parameters) will be permanently lost — not just the firmware.\n\n" +
                        "Continue?";
 
-        if (System.Windows.MessageBox.Show(message, "Confirm flash", System.Windows.MessageBoxButton.YesNo,
-                System.Windows.MessageBoxImage.Warning) != System.Windows.MessageBoxResult.Yes)
+        var confirmation = new SceneDecisionWindow(
+            "Confirm flash",
+            EraseChipFirst ? "FULL CHIP ERASE + FLASH" : $"CONFIRM {RoleLabel} FLASH",
+            message,
+            EraseChipFirst ? $"Erase + flash {RoleLabel}" : $"Flash {RoleLabel}");
+        var owner = System.Windows.Application.Current?.Windows
+            .OfType<System.Windows.Window>()
+            .FirstOrDefault(window => window.IsVisible && ReferenceEquals(window.DataContext, this))
+            ?? System.Windows.Application.Current?.MainWindow;
+        if (owner != null) confirmation.Owner = owner;
+        if (confirmation.ShowDialog() != true)
             return;
 
+        ShowFlashResult = false;
         Flashing = true;
         CanFlash = false;
         FlashProgressPct = 0;
         FlashProgressIndeterminate = true;
+        _activeFlashPort = port;
+        _activeFlashRoleLabel = RoleLabel;
         // The flash port is independent of the main serial link; it's only released if it
         // happens to be exactly the one already opened by SerialLinkService (same board). It
         // will be reopened ourselves once the flash finishes (PrepareForExternalClose doesn't
@@ -271,6 +304,19 @@ public partial class FirmwareViewModel : ObservableObject
         if (ok) { FlashProgressPct = 100; FlashProgressIndeterminate = false; }
         FlashLog.Add(ok ? "— Flash completed successfully —" : $"— Flash failed{(error != null ? ": " + error : $" (code {exitCode})")} —");
 
+        var role = _activeFlashRoleLabel ?? RoleLabel;
+        var resultPort = _activeFlashPort ?? SelectedFlashPort ?? "the selected port";
+        FlashSucceeded = ok;
+        FlashResultGlyph = ok ? "✓" : "!";
+        FlashResultTitle = ok ? "FLASH COMPLETED" : "FLASH FAILED";
+        FlashResultMessage = ok
+            ? $"The {role} firmware was written successfully to {resultPort}."
+            : $"The {role} firmware could not be written to {resultPort}. " +
+              (error ?? (exitCode != null ? $"espflash returned code {exitCode}." : "See the flash log below for details."));
+        ShowFlashResult = true;
+        _activeFlashPort = null;
+        _activeFlashRoleLabel = null;
+
         if (_reconnectPortAfterFlash != null)
         {
             var port = _reconnectPortAfterFlash;
@@ -292,6 +338,7 @@ public partial class FirmwareViewModel : ObservableObject
     {
         var result = await _update.CheckUpdatesAsync();
         if (!result.Ok) return (false, result.Error);
+        LatestFirmwareInfo = result.Fw;
         AppLatest = result.App.Latest;
         AppDownloadUrl = result.App.Url;
         FwLatest = result.Fw.Latest;
@@ -303,6 +350,7 @@ public partial class FirmwareViewModel : ObservableObject
         FwUrlPartitions = result.Fw.UrlPartitions;
         FwShaBootloader = result.Fw.Sha256Bootloader;
         FwShaPartitions = result.Fw.Sha256Partitions;
+        FirmwareCatalogUpdated?.Invoke();
         return (true, null);
     }
 

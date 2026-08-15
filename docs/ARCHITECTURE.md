@@ -59,20 +59,21 @@ design reference and is never loaded at runtime.
 | Folder / file | Role |
 | --- | --- |
 | `MainWindow.xaml(.cs)` | header (logo, connection status, unsaved auto-commit badge, Firmware and Help buttons) plus the card grid; startup placement is delegated to `WindowPlacement` so the complete window remains reachable on the selected monitor |
-| `FirmwareWindow.xaml(.cs)` | separate window hosting `Views/FirmwareCardView` — espflash flashing and GitHub updates |
+| `FirmwareWindow.xaml(.cs)` | separate window hosting `Views/FirmwareCardView` — espflash flashing and GitHub updates; full-chip erase remains hidden under Advanced options, confirmation uses the app-owned dark dialog, and completion is reported by a prominent success/failure panel with an explicit window-close action |
+| `FleetUpdateWindow.xaml(.cs)` | startup, app-owned modal that presents the immutable online-fleet update plan, then shows per-droid and overall progress while slaves update sequentially by OTA and the USB master updates last |
 | `HelpWindow.xaml(.cs)` | separate window: table-of-contents sidebar plus one continuous `FlowDocumentScrollViewer` assembled from `Help/docs/*.md` through `Markdig.Wpf` (deliberately not WebView2); menu clicks jump to sections and scrolling syncs the active page |
 | `CalibrationWindow.xaml(.cs)` | separate window hosting `Views/CalibrationCardView`, opened from each Droids row's ⛭ button and pre-targeted at that droid before the window shows |
 | `SceneBrowserWindow` / `SceneDecisionWindow` / `SceneNameWindow` | modal Scene dialogs: searchable library browser, save/discard/cancel replacement decision, themed name prompt. App-owned and themed; only Import/Export uses a native file picker |
 | `App.xaml(.cs)` | composition root: converters and merged resource dictionaries |
 | `Themes/Theme.xaml` | palette, button/LED/mesh-node gradients — ported from the reference page's CSS custom properties |
 | `Themes/Effects.xaml` | shared styles: `CardBorderStyle`, `BeveledButtonStyle`, `HaloBadge*Style`, `MetalSliderStyle`, `DarkComboBoxStyle`, `CardIconBoxStyle`, `MeshNodeEllipseStyle`, app-wide dark `ScrollBar`. `Themes/HelpStyles.xaml` holds the Help window's `FlowDocument` styling |
-| `Models/` | view-bound objects (`Droid`, mesh visuals, `HelpDoc`, `UpdateInfo`) and the Sequencer's explicit type boundaries: `SequenceSnapshot` (persistent document including nullable explicit Scene endpoint), `SequencerPlaybackPlan` (immutable runtime pass and resolved endpoint), `SequencerPreflightInput`/`Issue` (manual Scene-content findings and source links), `AnimationDurationMetadata`, `SequenceLibraryModels` |
-| `ViewModels/` | `MainViewModel` plus one per card (`DroidsViewModel`, `CalibrationViewModel`, `AnimationViewModel`, `FirmwareViewModel`, `MeshTopologyViewModel`, `SequencerViewModel`) and `HelpViewModel`, which has no `ProtocolClient` dependency because Help is local-only |
+| `Models/` | view-bound objects (`Droid`, mesh visuals, `HelpDoc`, `UpdateInfo`), the pure `FleetUpdatePlanner`/immutable update plan, and the Sequencer's explicit type boundaries: `SequenceSnapshot` (persistent document including nullable explicit Scene endpoint), `SequencerPlaybackPlan` (immutable runtime pass and resolved endpoint), `SequencerPreflightInput`/`Issue` (manual Scene-content findings and source links), `AnimationDurationMetadata`, `SequenceLibraryModels` |
+| `ViewModels/` | `MainViewModel` plus one per card (`DroidsViewModel`, `CalibrationViewModel`, `AnimationViewModel`, `FirmwareViewModel`, `MeshTopologyViewModel`, `SequencerViewModel`), the supervised `FleetUpdateViewModel`, and `HelpViewModel`, which has no `ProtocolClient` dependency because Help is local-only |
 | `Views/` | one XAML `UserControl` per card, plus `SequenceTimelineView` |
 | `Services/SerialLinkService.cs` | native serial port (`System.IO.Ports`) with 3 s auto-reconnect |
 | `Services/ProtocolClient.cs` | central state: parses incoming `evt` JSON, builds outgoing `cmd` JSON |
 | `Services/UpdateService.cs` · `FlashService.cs` · `LibraryService.cs` · `SettingsService.cs` | GitHub updates (per-train tag filtering, semantic maximum), espflash flashing, Scene library, `settings.json` |
-| `Services/OtaService.cs` | drives an OTA session one slave at a time: reads the `.bin`, computes the MD5, sends one fragment per `evt:otaChunkAck` |
+| `Services/OtaService.cs` | drives an OTA session one slave at a time: reads the `.bin`, computes the MD5, sends one fragment per `evt:otaChunkAck`, and exposes the structured post-reboot firmware/Build-ID verdict used by fleet updates |
 | `Services/AudioPlaybackService.cs` | console-side Sequencer audio, the only audio source since the DFPlayer was retired in fw 1.6.0: one media handle per clip, retired as soon as it ends or fails, with failures reported per clip |
 | `Services/AudioAbstractions.cs` | audio seams and result types: `IAudioProbe`, `IWaveformDecoder`, `IMediaHandle`/factory, `AudioProbeResult`, `AudioPlaybackFailure` |
 | `Services/AudioProbe.cs` | bounded duration probe — typed outcome, timeout, cancellation, handle released on every path |

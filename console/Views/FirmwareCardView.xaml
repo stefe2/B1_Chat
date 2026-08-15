@@ -39,27 +39,29 @@
 
             <Button Content="Advanced options" Style="{StaticResource MiniButtonStyle}" Command="{Binding ToggleAdvancedCommand}"
                     HorizontalAlignment="Left" Margin="0,0,0,6"
-                    ToolTip="Show or hide the application flash-address override. Leave it unchanged for normal B1 Chat firmware." />
-            <StackPanel Orientation="Horizontal" Margin="0,0,0,8" Visibility="{Binding ShowAdvanced, Converter={StaticResource BoolToVisConv}}">
-                <TextBlock Text="Address " VerticalAlignment="Center" FontSize="11" />
-                <TextBox Width="90" Style="{StaticResource RecessedTextBoxStyle}" Text="{Binding Address}" Margin="4,0,0,0"
-                         ToolTip="Application flash address for an app-only update. The normal B1 Chat address is 0x10000; full erase always uses the standard layout." />
-            </StackPanel>
-
-            <Border Background="{StaticResource RecessBrush}" CornerRadius="4" Padding="10,8" Margin="0,0,0,10"
-                    BorderBrush="{StaticResource WarnBrush}" BorderThickness="1">
-                <StackPanel>
-                    <CheckBox Content="New / erased board (full erase + flash)" Style="{StaticResource DangerCheckBoxStyle}"
-                              IsChecked="{Binding EraseChipFirst}"
-                              ToolTip="Erase the entire chip, then write the bootloader, partition table, and application. This permanently removes all settings on this board." />
-                    <TextBlock Style="{StaticResource HintTextStyle}" TextWrapping="Wrap" Margin="24,4,0,0"
-                               Text="Erases everything (all saved settings — irreversible) then writes bootloader + partition table + app: the only way to bring up a virgin ESP32, or to fully reset one. Unchecked (normal update): only the app is rewritten, keeping every saved setting — needs a board that already runs our firmware." />
-                    <TextBlock Style="{StaticResource HintTextStyle}" TextWrapping="Wrap" Margin="24,4,0,0"
-                               Foreground="{StaticResource WarnBrush}"
-                               Visibility="{Binding NeedsSupportImagesWarning, Converter={StaticResource BoolToVisConv}}"
-                               Text="⚠ bootloader.bin + partitions.bin aren't available for this binary — pick one from a folder that has all three (e.g. .pio\build\b1\), or use &quot;From GitHub&quot;." />
+                    ToolTip="Show or hide the application flash-address override and the full erase option. Leave both unchanged for a normal B1 Chat update." />
+            <StackPanel Visibility="{Binding ShowAdvanced, Converter={StaticResource BoolToVisConv}}">
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                    <TextBlock Text="Address " VerticalAlignment="Center" FontSize="11" />
+                    <TextBox Width="90" Style="{StaticResource RecessedTextBoxStyle}" Text="{Binding Address}" Margin="4,0,0,0"
+                             ToolTip="Application flash address for an app-only update. The normal B1 Chat address is 0x10000; full erase always uses the standard layout." />
                 </StackPanel>
-            </Border>
+
+                <Border Background="{StaticResource RecessBrush}" CornerRadius="4" Padding="10,8" Margin="0,0,0,10"
+                        BorderBrush="{StaticResource WarnBrush}" BorderThickness="1">
+                    <StackPanel>
+                        <CheckBox Content="New / erased board (full erase + flash)" Style="{StaticResource DangerCheckBoxStyle}"
+                                  IsChecked="{Binding EraseChipFirst}"
+                                  ToolTip="Erase the entire chip, then write the bootloader, partition table, and application. This permanently removes all settings on this board." />
+                        <TextBlock Style="{StaticResource HintTextStyle}" TextWrapping="Wrap" Margin="24,4,0,0"
+                                   Text="Erases everything (all saved settings — irreversible) then writes bootloader + partition table + app: the only way to bring up a virgin ESP32, or to fully reset one. Unchecked (normal update): only the app is rewritten, keeping every saved setting — needs a board that already runs our firmware." />
+                        <TextBlock Style="{StaticResource HintTextStyle}" TextWrapping="Wrap" Margin="24,4,0,0"
+                                   Foreground="{StaticResource WarnBrush}"
+                                   Visibility="{Binding NeedsSupportImagesWarning, Converter={StaticResource BoolToVisConv}}"
+                                   Text="⚠ bootloader.bin + partitions.bin aren't available for this binary — pick one from a folder that has all three (e.g. .pio\build\b1\), or use &quot;From GitHub&quot;." />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
 
             <Button Content="{Binding FlashLabel}" Style="{StaticResource PrimaryButtonStyle}" Command="{Binding FlashCommand}"
                     IsEnabled="{Binding CanFlash}" HorizontalAlignment="Left" Margin="0,0,0,10"
@@ -73,6 +75,38 @@
                            Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Right" Margin="0,2,0,0"
                            Visibility="{Binding FlashProgressIndeterminate, Converter={StaticResource BoolToVisConv}, ConverterParameter=Invert}" />
             </StackPanel>
+
+            <Border Background="{StaticResource RecessBrush}" CornerRadius="6" Padding="12,10" Margin="0,0,0,10"
+                    BorderThickness="2"
+                    BorderBrush="{Binding FlashSucceeded, Converter={StaticResource BoolToBrushConv}, ConverterParameter='OkBrush|BadBrush'}"
+                    Visibility="{Binding ShowFlashResult, Converter={StaticResource BoolToVisConv}}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Border Width="34" Height="34" CornerRadius="17" Margin="0,0,10,0"
+                            BorderThickness="2"
+                            BorderBrush="{Binding FlashSucceeded, Converter={StaticResource BoolToBrushConv}, ConverterParameter='OkBrush|BadBrush'}">
+                        <TextBlock Text="{Binding FlashResultGlyph}" FontSize="20" FontWeight="Bold"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   Foreground="{Binding FlashSucceeded, Converter={StaticResource BoolToBrushConv}, ConverterParameter='OkBrush|BadBrush'}" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Text="{Binding FlashResultTitle}" FontSize="14" FontWeight="Bold"
+                                   Foreground="{Binding FlashSucceeded, Converter={StaticResource BoolToBrushConv}, ConverterParameter='OkBrush|BadBrush'}" />
+                        <TextBlock Text="{Binding FlashResultMessage}" FontSize="11" TextWrapping="Wrap"
+                                   Foreground="{StaticResource TextBrush}" Margin="0,3,0,0" />
+                    </StackPanel>
+                    <Button Grid.Row="1" Grid.Column="1" Content="Close window"
+                            Style="{StaticResource PrimaryButtonStyle}" Command="{Binding CloseFirmwareWindowCommand}"
+                            HorizontalAlignment="Right" Margin="0,10,0,0" />
+                </Grid>
+            </Border>
 
             <Border Background="{StaticResource RecessBrush}" CornerRadius="4" Padding="6" Margin="0,0,0,12">
                 <ScrollViewer x:Name="FlashLogScroll" Height="150" VerticalScrollBarVisibility="Auto" ScrollChanged="FlashLogScroll_ScrollChanged">

@@ -52,6 +52,9 @@ enables/disables a servo, previews a position, or starts an animation.
   correlation through the serial protocol and WPF timeline;
 - verifies randomized mesh sequence initialization;
 - verifies fail-closed SHA-256 handling for downloaded firmware assets;
+- verifies startup fleet-update planning includes only older online/adopted
+  droids, orders OTA slaves before the USB master, carries the release Build ID,
+  and leaves newer, unknown and same-version custom builds untouched;
 - verifies that Help files are forced into the published payload, checked before
   installer creation, and handled safely at runtime if an image is absent;
 - verifies that the installer checks Windows/CPU compatibility, warns when the

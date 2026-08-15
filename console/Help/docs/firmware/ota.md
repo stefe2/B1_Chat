@@ -34,13 +34,27 @@ Progress is reported as acknowledged fragments out of the total, not a time
 estimate. A temporary serial silence causes the console to retry the current
 fragment. Repeated silence or a dropped serial link aborts the console session.
 
+## Startup fleet update
+
+When the startup release check finds older online droids, **Fleet Firmware
+Update** offers one supervised batch. **Update all** processes adopted slaves
+one at a time, displays acknowledged-chunk and overall progress, verifies the
+reported version and official Build ID after every reboot, then updates the USB
+master last. **Later** dismisses the offer for the current console session.
+
+Offline/pending droids are omitted rather than blocking the batch. Newer
+firmware and same-version local builds are never replaced automatically. The
+batch uses app-only USB flashing for the master and never arms full erase. A
+failure stops the remaining queue so the cause can be corrected before retrying.
+
 ## Transfer and reboot outcomes
 
 After the last fragment, the slave verifies the image, finalizes it, and reboots.
 The master waits up to roughly 90 seconds for a heartbeat and compares the
 version seen before and after reboot:
 
-- **Success** — the reported version changed.
+- **Success** — the reported version and, for current releases, Build ID match
+  the verified release image.
 - **Rolled back** — the version did not change; the safety mechanism most likely
   restored the previous image.
 - **Unreachable** — no heartbeat returned before the wait window expired. This

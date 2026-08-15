@@ -106,8 +106,19 @@ public class UpdateService
                         {
                             var role = f.GetProperty("role").GetString();
                             var sha = f.GetProperty("sha256").GetString();
-                            if (role == "master") fw.Sha256Master = sha;
-                            else if (role == "slave") fw.Sha256Slave = sha;
+                            var build = f.TryGetProperty("build", out var buildElement)
+                                ? buildElement.GetString()
+                                : null;
+                            if (role == "master")
+                            {
+                                fw.Sha256Master = sha;
+                                fw.BuildIdMaster = build;
+                            }
+                            else if (role == "slave")
+                            {
+                                fw.Sha256Slave = sha;
+                                fw.BuildIdSlave = build;
+                            }
                             else if (role == "bootloader") fw.Sha256Bootloader = sha;
                             else if (role == "partitions") fw.Sha256Partitions = sha;
                         }

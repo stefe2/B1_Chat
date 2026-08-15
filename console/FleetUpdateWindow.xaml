@@ -1,0 +1,120 @@
+<Window x:Class="b1_chat_console.FleetUpdateWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:b1_chat_console.ViewModels"
+        Title="Firmware updates — B1 Chat"
+        Width="650" SizeToContent="Height" MaxHeight="720"
+        ResizeMode="NoResize" WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{StaticResource PageBackgroundBrush}"
+        Icon="Assets/AppIcon.ico"
+        Closing="Window_Closing">
+    <Grid>
+        <Rectangle Fill="{StaticResource NoiseTileBrush}" IsHitTestVisible="False" />
+        <Border Style="{StaticResource CardBorderStyle}" Margin="14">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <StackPanel>
+                    <TextBlock Text="FLEET FIRMWARE UPDATE" Style="{StaticResource CardTitleStyle}" Margin="0" />
+                    <TextBlock Text="{Binding SummaryText}" Foreground="{StaticResource TextBrush}"
+                               FontSize="12" TextWrapping="Wrap" Margin="0,8,0,0" />
+                    <TextBlock Text="Only online droids are included. Slaves update by OTA first; the USB master updates last. Full erase is never used and saved settings are preserved."
+                               Style="{StaticResource HintTextStyle}" TextWrapping="Wrap" Margin="0,5,0,0" />
+                </StackPanel>
+
+                <Border Grid.Row="1" Background="{StaticResource RecessBrush}" CornerRadius="5"
+                        BorderBrush="{StaticResource WarnBrush}" BorderThickness="1" Padding="9,7" Margin="0,12,0,0"
+                        Visibility="{Binding HasNotices, Converter={StaticResource BoolToVisConv}}">
+                    <TextBlock Text="{Binding NoticesText}" Foreground="{StaticResource WarnBrush}"
+                               FontSize="10.5" TextWrapping="Wrap" />
+                </Border>
+
+                <ScrollViewer Grid.Row="2" MaxHeight="300" VerticalScrollBarVisibility="Auto" Margin="0,12,0,0">
+                    <ItemsControl ItemsSource="{Binding Items}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="{StaticResource RecessBrush}" CornerRadius="5" Padding="10,8" Margin="0,0,0,7"
+                                        BorderBrush="{StaticResource BorderHiBrush}" BorderThickness="1">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="145" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding DisplayName}" Foreground="{StaticResource TextStrongBrush}"
+                                                       FontWeight="SemiBold" FontSize="11.5" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{Binding RoleAndId}" Foreground="{StaticResource Muted2Brush}"
+                                                       FontFamily="{StaticResource MonoFont}" FontSize="9.5" />
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="1" Text="{Binding VersionChange}" Foreground="{StaticResource TextBrush}"
+                                                   FontFamily="{StaticResource MonoFont}" FontSize="10.5" VerticalAlignment="Center" />
+                                        <ProgressBar Grid.Row="1" Grid.ColumnSpan="2" Minimum="0" Maximum="100"
+                                                     Value="{Binding Progress}" IsIndeterminate="{Binding ProgressIndeterminate}"
+                                                     Height="8" Margin="0,8,0,0" />
+                                        <TextBlock Grid.Row="2" Grid.ColumnSpan="2" Text="{Binding Status}" FontSize="10.5" Margin="0,4,0,0">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding State}" Value="{x:Static vm:FleetUpdateItemState.Running}">
+                                                            <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding State}" Value="{x:Static vm:FleetUpdateItemState.Succeeded}">
+                                                            <Setter Property="Foreground" Value="{StaticResource OkBrush}" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding State}" Value="{x:Static vm:FleetUpdateItemState.Failed}">
+                                                            <Setter Property="Foreground" Value="{StaticResource BadBrush}" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+
+                <StackPanel Grid.Row="3" Margin="0,8,0,0"
+                            Visibility="{Binding ShowConfirmation, Converter={StaticResource BoolToVisConv}, ConverterParameter=Invert}">
+                    <TextBlock Text="OVERALL PROGRESS" Style="{StaticResource FieldLabelStyle}" Margin="0,0,0,4" />
+                    <ProgressBar Minimum="0" Maximum="100" Value="{Binding OverallProgress}"
+                                 IsIndeterminate="{Binding OverallProgressIndeterminate}" Height="13" />
+                    <TextBlock Text="{Binding OverallProgress, StringFormat='{}{0}%'}" HorizontalAlignment="Right"
+                               Foreground="{StaticResource MutedBrush}" FontSize="10"
+                               Visibility="{Binding OverallProgressIndeterminate, Converter={StaticResource BoolToVisConv}, ConverterParameter=Invert}" />
+                </StackPanel>
+
+                <Border Grid.Row="4" Background="{StaticResource RecessBrush}" CornerRadius="5" Padding="9,7" Margin="0,10,0,0">
+                    <TextBlock Text="{Binding CurrentStatus}" Foreground="{StaticResource TextBrush}"
+                               FontSize="11" TextWrapping="Wrap" />
+                </Border>
+
+                <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
+                    <Button Content="Later" Style="{StaticResource MiniButtonStyle}" Command="{Binding CloseCommand}"
+                            MinWidth="90" Margin="0,0,8,0"
+                            Visibility="{Binding ShowConfirmation, Converter={StaticResource BoolToVisConv}}" />
+                    <Button Content="Update all" Style="{StaticResource AccentButtonStyle}" Command="{Binding StartUpdateCommand}"
+                            MinWidth="120"
+                            Visibility="{Binding ShowConfirmation, Converter={StaticResource BoolToVisConv}}" />
+                    <Button Content="Close" Style="{StaticResource PrimaryButtonStyle}" Command="{Binding CloseCommand}"
+                            MinWidth="100"
+                            Visibility="{Binding IsComplete, Converter={StaticResource BoolToVisConv}}" />
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

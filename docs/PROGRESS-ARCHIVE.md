@@ -1095,6 +1095,25 @@ Sequencer backlog item by item.
       55,604,999 bytes with SHA-256
       `3b5242e53affe81901609be4201857271becd720e295164165709166eff3fee1`;
       the publish build is 360. No firmware or protocol release was required.
+- [x] Supervised startup fleet updater and Firmware-window feedback (2026-08-15).
+      The release check now consumes the manifest's role-specific Build IDs and,
+      after a stable online roster is available, offers one dark themed update
+      window per console session. Its immutable plan includes only semantic
+      upgrades for online adopted droids, explicitly avoids downgrades and
+      same-version local builds, stops Sequencer playback, downloads SHA-256
+      verified images once per role, updates slaves sequentially by OTA, and
+      app-only flashes the connected USB master last. Per-droid plus overall
+      progress remain visible; every reboot is checked against the published
+      version/Build ID and the queue stops at its first failure. The manual
+      Firmware window also moved full erase under Advanced options, replaced the
+      white native confirmation with the app-owned dark dialog, and gained a
+      prominent success/failure result with a Close button. Planner/identity
+      tests brought the suite to 288/288; the non-destructive self-test passed
+      21/21 with build 360 preserved
+      (`b1-self-test-20260815-005439.json`). The implementation required no
+      protocol change; `FW_VERSION` was then advanced to 1.11.0 solely to
+      publish new official master/slave identities for the supervised-update
+      bench test. No physical flash was used for implementation validation.
 
 ## Incidents (full narratives)
 

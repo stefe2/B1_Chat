@@ -11,6 +11,7 @@ namespace b1_chat_console;
 public partial class MainWindow : Window
 {
     private FirmwareWindow? _firmwareWindow;
+    private FleetUpdateWindow? _fleetUpdateWindow;
     private HelpWindow? _helpWindow;
     private CalibrationWindow? _calibrationWindow;
 
@@ -26,6 +27,24 @@ public partial class MainWindow : Window
         Title = "B1 Chat — Supervision Console";
         vm.Droids.OpenFirmwareRequested += OpenFirmwareWindow;
         vm.Droids.OpenCalibrationRequested += OpenCalibrationWindow;
+        vm.FleetUpdatePromptRequested += OpenFleetUpdateWindow;
+    }
+
+    private void OpenFleetUpdateWindow(FleetUpdateViewModel viewModel)
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (_fleetUpdateWindow is { IsVisible: true })
+            {
+                viewModel.Dispose();
+                _fleetUpdateWindow.Activate();
+                return;
+            }
+
+            _fleetUpdateWindow = new FleetUpdateWindow(viewModel) { Owner = this };
+            _fleetUpdateWindow.Closed += (_, _) => _fleetUpdateWindow = null;
+            _fleetUpdateWindow.ShowDialog();
+        });
     }
 
     private void OpenFirmwareWindow_Click(object sender, RoutedEventArgs e) => OpenFirmwareWindow();

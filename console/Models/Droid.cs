@@ -44,10 +44,19 @@ public partial class Droid : ObservableObject
     // Adopted droid (slave): can be manually removed from the registry at any time.
     public bool CanForget => !IsMaster && Adopted;
 
-    // null = not checked yet (or version not reported yet) -> neutral color.
-    public bool? FwUpToDate => string.IsNullOrEmpty(LatestFwVersion) || string.IsNullOrEmpty(FwVersion)
-        ? null
-        : FwVersion == LatestFwVersion;
+    // null = not checked yet (or version not reported yet) -> neutral color. A local/dev
+    // firmware newer than the published release is not an "update available": never invite
+    // the operator to downgrade it just because the strings differ.
+    public bool? FwUpToDate
+    {
+        get
+        {
+            if (string.IsNullOrEmpty(LatestFwVersion) || string.IsNullOrEmpty(FwVersion)) return null;
+            if (Version.TryParse(LatestFwVersion, out var latest) && Version.TryParse(FwVersion, out var installed))
+                return installed >= latest;
+            return string.Equals(FwVersion, LatestFwVersion, StringComparison.OrdinalIgnoreCase);
+        }
+    }
 
     // USB flash entry point (master only) : hidden once the master's own firmware is
     // confirmed up to date, since the header's "Firmware…" button remains available

@@ -15,7 +15,7 @@ current authoritative implementation, use `src/mesh_comm.h` and
 their implementation status. For how each item evolved over time, see the
 Progress archive.
 
-## ⚑ Resolution summary (current firmware: 1.10.0, proto 5)
+## ⚑ Resolution summary (current firmware: 1.11.0, proto 5)
 
 | Section | Outcome |
 | --- | --- |
