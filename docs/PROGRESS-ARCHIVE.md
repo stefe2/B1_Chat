@@ -1113,7 +1113,13 @@ Sequencer backlog item by item.
       (`b1-self-test-20260815-005439.json`). The implementation required no
       protocol change; `FW_VERSION` was then advanced to 1.11.0 solely to
       publish new official master/slave identities for the supervised-update
-      bench test. No physical flash was used for implementation validation.
+      bench test. GitHub Actions run `31865865519` published `fw-v1.11.0` from
+      commit `48e172f`: master Build ID `C47EDD73` (1,004,576 bytes, SHA-256
+      `559ed18091f6b0d5c163485e50161a5a04f9f56f6b6dcf753c38b2b7e472a7de`)
+      and slave Build ID `3747D85A` (975,600 bytes, SHA-256
+      `859cf50f9a72e8c62c66d4ad53f4e1b64d46ceed8530cf5fc4c6ece95d6070b4`).
+      All five downloaded release assets matched `firmware_manifest.json`.
+      No physical flash was used for implementation/release validation.
 
 ## Incidents (full narratives)
 
