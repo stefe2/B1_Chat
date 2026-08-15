@@ -121,35 +121,32 @@ retained cursor: earlier gesture events remain skipped, while audio clips that
 overlap the cursor seek to their matching source offsets (modulo their duration
 when looping). At the natural end Play starts a fresh pass from zero.
 
-## Preflight and Play gate
+## Manual Preflight Scene check
 
-The toolbar's **Preflight** control performs a side-effect-free readiness scan.
-Its expandable panel reports `ERROR`, `WARNING` and `INFO` findings with the
-affected target, lane, filename, gesture and timestamp. **Go to** moves a stopped
-playhead to the finding and selects its gesture when applicable. The scan never
-sends protocol traffic, probes media, changes Windows settings or edits the Scene.
+The toolbar's **Preflight** control performs a side-effect-free Scene-content
+scan only when the operator opens it. Closing the panel performs no scan. Its
+expandable panel reports advisory `ERROR`, `WARNING` and `INFO` findings with the
+affected lane, filename, gesture and timestamp. **Go to** moves a stopped
+playhead to the finding and selects its gesture when applicable. There is no
+persistent result badge beside the button. Once opened, the panel remains visible
+until the operator explicitly closes it with a second click on **Preflight**.
+Relevant timeline edits refresh its findings in place; while closed, no scan runs.
 
-Play and Restart refresh the scan before replacing or starting a pass. Errors
-intercept that start and open the panel; warnings remain playable. Resume also
-rechecks the live environment without rebuilding the immutable paused plan. A
-Scene with active gestures requires an open port, completed handshake and online
-master. Targeted clips require that target online, and broadcasts require at
-least one online recipient. Muted gesture tracks are excluded because their
-commands will not be dispatched. An audio-only Scene does not require a droid
-connection. Muting an offline target is the explicit rehearsal authorization to
-run without that droid; missed commands are never queued or replayed if it later
-reconnects.
+Preflight never runs from Play, Restart or Resume and no finding gates transport.
+It deliberately receives no serial-port, handshake, master, roster or online-
+target state. A disconnected or absent droid is therefore not a Preflight issue;
+actual dispatch results remain visible on gesture clips as `NO LINK`, `NOT READY`,
+`WRITE FAIL`, `MASTER`, target execution states and timeouts. Missed commands are
+never queued or replayed if a droid later reconnects.
 
-Every audio path is checked again when the panel or transport runs. Missing or
-decoder-rejected files are errors; validation still in progress and a validated
-zero/unknown duration are warnings. The latter may play but cannot establish an
-automatic content tail. Every effective `TALK`/`POWER_DOWN` must retain its
-authored endpoint of at least 100 ms inside the effective Scene boundary; an
-invalid endpoint blocks Play because targeted IDLE cleanup would not be
-represented. Existing import/edit validation normally prevents that state, so
-this is a final fail-closed check.
+The manual scan checks the current known audio path/status, represented gesture
+overlaps and `TALK`/`POWER_DOWN` endpoints. Missing or decoder-rejected files are
+reported as errors; validation still in progress and a validated zero/unknown
+duration are warnings. These severities communicate likelihood and impact only:
+all remain advisory. The scan never sends protocol traffic, starts a new media
+probe, changes Windows settings or edits the Scene.
 
-The same scan compares every unmuted gesture's represented half-open duration
+The scan compares every unmuted gesture's represented half-open duration
 span and effective target intersection. Same-target overlaps, duplicate
 timestamps and broadcast/target intersections are warnings, not errors. Each
 finding links to the later clip where replacement or ambiguous delivery begins;

@@ -9,7 +9,7 @@ public sealed class SequencerPreflightServiceTests
     [Fact]
     public void EmptyScene_IsReadyWithoutAConnection()
     {
-        var issues = Analyze(Input(portOpen: false, sessionReady: false));
+        var issues = Analyze(Input());
 
         var ready = Assert.Single(issues);
         Assert.Equal(SequencerPreflightCode.Ready, ready.Code);
@@ -17,98 +17,17 @@ public sealed class SequencerPreflightServiceTests
     }
 
     [Fact]
-    public void AudioOnlyScene_DoesNotRequireADroidConnection()
+    public void AudioSceneWithoutIssues_IsReady()
     {
         var lane = Lane(Clip("tone.mp3", durationMs: 1_500));
 
-        var issues = Analyze(Input(
-            portOpen: false,
-            sessionReady: false,
-            audioLanes: new[] { lane }), existingFiles: "tone.mp3");
+        var issues = Analyze(Input(audioLanes: new[] { lane }), existingFiles: "tone.mp3");
 
-        Assert.Equal(SequencerPreflightCode.AudioOnly, Assert.Single(issues).Code);
+        Assert.Equal(SequencerPreflightCode.Ready, Assert.Single(issues).Code);
     }
 
     [Fact]
-    public void GestureWithClosedPort_IsBlocked()
-    {
-        var issues = Analyze(Input(
-            portOpen: false,
-            steps: new[] { Step(0x1234) },
-            droids: new[] { Master(0x1234) }));
-
-        Assert.Contains(issues, issue => issue.Code == SequencerPreflightCode.PortClosed &&
-            issue.Severity == SequencerPreflightSeverity.Error);
-    }
-
-    [Fact]
-    public void GestureBeforeHandshake_IsBlocked()
-    {
-        var issues = Analyze(Input(
-            sessionReady: false,
-            steps: new[] { Step(0x1234) },
-            droids: new[] { Master(0x1234) }));
-
-        Assert.Contains(issues, issue => issue.Code == SequencerPreflightCode.SessionNotReady);
-        Assert.DoesNotContain(issues, issue => issue.Code == SequencerPreflightCode.PortClosed);
-    }
-
-    [Fact]
-    public void ReadySessionWithoutMaster_IsBlocked()
-    {
-        var target = new Droid { Id = 0x1234, Online = true };
-
-        var issues = Analyze(Input(
-            steps: new[] { Step(0x1234) },
-            droids: new[] { target }));
-
-        Assert.Contains(issues, issue => issue.Code == SequencerPreflightCode.MasterUnavailable);
-    }
-
-    [Fact]
-    public void OfflineTarget_NamesAndLinksTheAffectedGesture()
-    {
-        var step = Step(0x4002, startMs: 700);
-        var issues = Analyze(Input(
-            steps: new[] { step },
-            droids: new[]
-            {
-                Master(0x4001),
-                new Droid { Id = 0x4002, Name = "B1 Right", Online = false },
-            }));
-
-        var issue = Assert.Single(issues, finding => finding.Code == SequencerPreflightCode.TargetOffline);
-        Assert.Same(step, issue.Step);
-        Assert.Equal(700, issue.StartMs);
-        Assert.Contains("B1 Right (4002)", issue.Location);
-    }
-
-    [Fact]
-    public void BroadcastWithoutOnlineRecipients_IsBlocked()
-    {
-        var offlineMaster = new Droid { Id = 0x4001, IsMaster = true, Online = false };
-
-        var issues = Analyze(Input(
-            steps: new[] { Step(ushort.MaxValue) },
-            droids: new[] { offlineMaster }));
-
-        Assert.Contains(issues, issue => issue.Code == SequencerPreflightCode.BroadcastWithoutRecipients);
-    }
-
-    [Fact]
-    public void MutedGesture_DoesNotRequireAConnectionOrRecipient()
-    {
-        var issues = Analyze(Input(
-            portOpen: false,
-            sessionReady: false,
-            steps: new[] { Step(0x4002) },
-            mutedTargets: new HashSet<ushort> { 0x4002 }));
-
-        Assert.DoesNotContain(issues, issue => issue.Severity == SequencerPreflightSeverity.Error);
-    }
-
-    [Fact]
-    public void MissingAudio_IsBlockedAndNamesTheLaneAndFile()
+    public void MissingAudio_IsReportedAndNamesTheLaneAndFile()
     {
         var clip = Clip("missing.mp3", 1_500);
 
@@ -121,7 +40,7 @@ public sealed class SequencerPreflightServiceTests
     }
 
     [Fact]
-    public void UnreadableAudio_IsBlockedWithProbeReason()
+    public void UnreadableAudio_IsReportedWithProbeReason()
     {
         var clip = Clip("broken.mp3", 0);
         clip.ProbeStatus = AudioProbeStatus.DecodeFailed;
@@ -135,7 +54,7 @@ public sealed class SequencerPreflightServiceTests
     }
 
     [Fact]
-    public void PendingAudioValidation_WarnsButDoesNotBlock()
+    public void PendingAudioValidation_IsReportedAsAWarning()
     {
         var clip = Clip("pending.mp3", 1_500);
         clip.ValidationPending = true;
@@ -148,7 +67,7 @@ public sealed class SequencerPreflightServiceTests
     }
 
     [Fact]
-    public void UnknownAudioDuration_WarnsButDoesNotBlock()
+    public void UnknownAudioDuration_IsReportedAsAWarning()
     {
         var issue = Assert.Single(Analyze(
             Input(audioLanes: new[] { Lane(Clip("empty.wav", 0)) }),
@@ -161,15 +80,12 @@ public sealed class SequencerPreflightServiceTests
     [Theory]
     [InlineData(16)]
     [InlineData(17)]
-    public void InfiniteGestureWithoutRepresentedEndpoint_IsBlocked(int animId)
+    public void InfiniteGestureWithoutRepresentedEndpoint_IsReported(int animId)
     {
         var step = Step(0x1234, animId: animId);
         step.EndAfterMs = 0;
 
-        var issues = Analyze(Input(
-            steps: new[] { step },
-            droids: new[] { Master(0x1234) },
-            effectiveEndMs: 100));
+        var issues = Analyze(Input(steps: new[] { step }, effectiveEndMs: 100));
 
         Assert.Contains(issues, issue =>
             issue.Code == SequencerPreflightCode.InfiniteGestureUnterminated &&
@@ -182,10 +98,7 @@ public sealed class SequencerPreflightServiceTests
         var step = Step(0x1234, startMs: 500, animId: 17);
         step.EndAfterMs = 2_000;
 
-        var issues = Analyze(Input(
-            steps: new[] { step },
-            droids: new[] { Master(0x1234) },
-            effectiveEndMs: 2_500));
+        var issues = Analyze(Input(steps: new[] { step }, effectiveEndMs: 2_500));
 
         Assert.DoesNotContain(issues, issue => issue.Severity == SequencerPreflightSeverity.Error);
     }
@@ -196,9 +109,7 @@ public sealed class SequencerPreflightServiceTests
         var earlier = Step(0x1234, startMs: 100, durationMs: 1_000);
         var later = Step(0x1234, startMs: 800, animId: 3, durationMs: 500);
 
-        var issues = Analyze(Input(
-            steps: new[] { earlier, later },
-            droids: new[] { Master(0x1234) }));
+        var issues = Analyze(Input(steps: new[] { earlier, later }));
 
         var issue = Assert.Single(issues, finding => finding.Code == SequencerPreflightCode.GestureOverlap);
         Assert.Equal(SequencerPreflightSeverity.Warning, issue.Severity);
@@ -215,8 +126,7 @@ public sealed class SequencerPreflightServiceTests
             {
                 Step(0x1234, durationMs: 500),
                 Step(0x1234, startMs: 500, animId: 3, durationMs: 500),
-            },
-            droids: new[] { Master(0x1234) }));
+            }));
 
         Assert.DoesNotContain(issues, issue => issue.Code is
             SequencerPreflightCode.GestureOverlap or
@@ -233,8 +143,7 @@ public sealed class SequencerPreflightServiceTests
             {
                 Step(0x1234, animId: 1, durationMs: 0),
                 later,
-            },
-            droids: new[] { Master(0x1234) }));
+            }));
 
         var issue = Assert.Single(issues,
             finding => finding.Code == SequencerPreflightCode.DuplicateGestureTimestamp);
@@ -250,8 +159,7 @@ public sealed class SequencerPreflightServiceTests
             {
                 Step(ushort.MaxValue, durationMs: 1_000),
                 targeted,
-            },
-            droids: new[] { Master(0x1234) }));
+            }));
 
         var issue = Assert.Single(issues,
             finding => finding.Code == SequencerPreflightCode.BroadcastTargetConflict);
@@ -268,8 +176,7 @@ public sealed class SequencerPreflightServiceTests
             {
                 Step(0x1234, durationMs: 1_000),
                 broadcast,
-            },
-            droids: new[] { Master(0x1234) }));
+            }));
 
         var issue = Assert.Single(issues,
             finding => finding.Code == SequencerPreflightCode.BroadcastTargetConflict);
@@ -285,9 +192,7 @@ public sealed class SequencerPreflightServiceTests
                 Step(0x4001, durationMs: 1_000),
                 Step(0x4002, startMs: 300, durationMs: 1_000),
                 Step(ushort.MaxValue, startMs: 300, durationMs: 1_000),
-            },
-            droids: new[] { Master(0x4001), new Droid { Id = 0x4002, Online = true } },
-            mutedTargets: new HashSet<ushort> { ushort.MaxValue }));
+            }, mutedTargets: new HashSet<ushort> { ushort.MaxValue }));
 
         Assert.DoesNotContain(issues, issue => issue.Code is
             SequencerPreflightCode.GestureOverlap or
@@ -296,22 +201,14 @@ public sealed class SequencerPreflightServiceTests
     }
 
     [Fact]
-    public void InfiniteAndOfflineTargetOverlap_IsStillReportedForRepair()
+    public void InfiniteTargetOverlap_IsStillReportedForRepair()
     {
         var infinite = Step(0x4002, animId: 17);
         infinite.EndAfterMs = 2_000;
         var later = Step(0x4002, startMs: 1_500, animId: 3, durationMs: 500);
 
-        var issues = Analyze(Input(
-            steps: new[] { infinite, later },
-            droids: new[]
-            {
-                Master(0x4001),
-                new Droid { Id = 0x4002, Online = false },
-            },
-            effectiveEndMs: 2_000));
+        var issues = Analyze(Input(steps: new[] { infinite, later }, effectiveEndMs: 2_000));
 
-        Assert.Contains(issues, issue => issue.Code == SequencerPreflightCode.TargetOffline);
         Assert.Contains(issues, issue => issue.Code == SequencerPreflightCode.GestureOverlap &&
             ReferenceEquals(issue.Step, later));
     }
@@ -319,10 +216,10 @@ public sealed class SequencerPreflightServiceTests
     [Fact]
     public void ErrorsSortBeforeWarningsAndInformation()
     {
+        var unterminated = Step(0x9999, animId: 17);
+        unterminated.EndAfterMs = 0;
         var issues = Analyze(Input(
-            portOpen: false,
-            sessionReady: false,
-            steps: new[] { Step(0x9999) },
+            steps: new[] { unterminated },
             audioLanes: new[] { Lane(Clip("empty.wav", 0)) }),
             existingFiles: "empty.wav");
 
@@ -331,75 +228,80 @@ public sealed class SequencerPreflightServiceTests
     }
 
     [Fact]
-    public void BlockingPreflight_InterceptsPlayAndOpensThePanel()
+    public void PreflightRunsOnlyWhenThePanelIsOpenedManually()
     {
         var protocol = new FakeSequencerProtocol { PortOpen = false, SessionReady = false };
         var scheduler = new FakePlaybackTimerScheduler();
-        using var vm = ViewModel(protocol, scheduler);
-        vm.Steps.Add(Step(0x1234));
-
-        vm.PlayCommand.Execute(null);
-
-        Assert.Equal(SequencerTransportState.Stopped, vm.TransportState);
-        Assert.True(vm.HasPreflightErrors);
-        Assert.True(vm.IsPreflightOpen);
-        Assert.Empty(scheduler.Entries);
-        Assert.Empty(protocol.Sent);
-    }
-
-    [Fact]
-    public void BlockingPreflight_InterceptsRestartBeforeReplacingTheActivePass()
-    {
-        var protocol = new FakeSequencerProtocol();
-        protocol.Droids.Add(Master(0x1234));
-        var scheduler = new FakePlaybackTimerScheduler();
-        using var vm = ViewModel(protocol, scheduler);
+        var preflight = new CountingPreflightService();
+        using var vm = ViewModel(protocol, scheduler, preflightService: preflight);
         vm.Steps.Add(Step(0x1234, startMs: 500));
-        vm.PlayCommand.Execute(null);
-        var activeTimerCount = scheduler.ActiveWakeTimers;
-        protocol.PortOpen = false;
-        protocol.SessionReady = false;
 
+        vm.PlayCommand.Execute(null);
+        vm.PlayCommand.Execute(null); // Pause.
+        vm.PlayCommand.Execute(null); // Resume.
         vm.RestartCommand.Execute(null);
 
         Assert.Equal(SequencerTransportState.Playing, vm.TransportState);
+        Assert.Equal(0, preflight.CallCount);
+        Assert.False(vm.IsPreflightOpen);
+
+        vm.StopCommand.Execute(null);
+        vm.TogglePreflightCommand.Execute(null);
+        Assert.Equal(1, preflight.CallCount);
         Assert.True(vm.IsPreflightOpen);
-        Assert.Equal(activeTimerCount, scheduler.ActiveWakeTimers);
+
+        // Closed means no background scan. Open means live Scene-content feedback.
+        vm.Steps.Add(Step(0x4002, startMs: 750));
+        Assert.Equal(2, preflight.CallCount);
+        Assert.True(vm.IsPreflightOpen);
+
+        vm.TogglePreflightCommand.Execute(null);
+        Assert.Equal(2, preflight.CallCount);
+        Assert.False(vm.IsPreflightOpen);
+
+        vm.TogglePreflightCommand.Execute(null);
+        Assert.Equal(3, preflight.CallCount);
     }
 
     [Fact]
-    public void BlockingPreflight_LeavesPausedPassRetainedInsteadOfResumingIt()
+    public void OpenPreflightRefreshesWhenATimelineConflictIsRepaired()
     {
-        var protocol = new FakeSequencerProtocol();
-        protocol.Droids.Add(Master(0x1234));
-        var scheduler = new FakePlaybackTimerScheduler();
-        using var vm = ViewModel(protocol, scheduler);
-        vm.Steps.Add(Step(0x1234, startMs: 500));
-        vm.PlayCommand.Execute(null);
-        vm.PlayCommand.Execute(null);
-        protocol.PortOpen = false;
-        protocol.SessionReady = false;
+        using var vm = ViewModel(new FakeSequencerProtocol(), new FakePlaybackTimerScheduler());
+        vm.Steps.Add(Step(0x1234, startMs: 500, animId: 0, durationMs: 0));
+        var later = Step(0x1234, startMs: 500, animId: 0, durationMs: 0);
+        vm.Steps.Add(later);
+        vm.SelectedStep = later;
+        vm.TogglePreflightCommand.Execute(null);
 
-        vm.PlayCommand.Execute(null);
+        Assert.Contains(vm.PreflightIssues,
+            issue => issue.Code == SequencerPreflightCode.DuplicateGestureTimestamp);
 
-        Assert.Equal(SequencerTransportState.Paused, vm.TransportState);
+        vm.NudgeStartForwardCommand.Execute(null);
+
         Assert.True(vm.IsPreflightOpen);
-        Assert.Equal(0, scheduler.ActiveWakeTimers);
+        Assert.DoesNotContain(vm.PreflightIssues, issue => issue.Code is
+            SequencerPreflightCode.GestureOverlap or
+            SequencerPreflightCode.DuplicateGestureTimestamp or
+            SequencerPreflightCode.BroadcastTargetConflict);
+        Assert.Equal(SequencerPreflightCode.Ready, Assert.Single(vm.PreflightIssues).Code);
     }
 
     [Fact]
-    public void WarningPreflight_AllowsPlayback()
+    public void ReportedPreflightError_DoesNotBlockPlayback()
     {
         var protocol = new FakeSequencerProtocol { PortOpen = false, SessionReady = false };
         var scheduler = new FakePlaybackTimerScheduler();
-        using var vm = ViewModel(protocol, scheduler, fileExists: _ => true);
-        vm.AudioLanes[0].Clips.Add(Clip("empty.wav", 0));
+        using var vm = ViewModel(protocol, scheduler, fileExists: _ => false);
+        vm.AudioLanes[0].Clips.Add(Clip("missing.wav", 1_000));
+        vm.TogglePreflightCommand.Execute(null);
 
+        Assert.Contains(vm.PreflightIssues,
+            issue => issue.Severity == SequencerPreflightSeverity.Error);
+        vm.TogglePreflightCommand.Execute(null);
         vm.PlayCommand.Execute(null);
 
-        Assert.True(vm.HasPreflightWarnings);
-        Assert.False(vm.HasPreflightErrors);
         Assert.Equal(SequencerTransportState.Playing, vm.TransportState);
+        Assert.False(vm.IsPreflightOpen);
         Assert.Single(scheduler.Entries);
     }
 
@@ -408,7 +310,8 @@ public sealed class SequencerPreflightServiceTests
     {
         var protocol = new FakeSequencerProtocol { PortOpen = false, SessionReady = false };
         using var vm = ViewModel(protocol, new FakePlaybackTimerScheduler());
-        var step = Step(0x4002, startMs: 850);
+        vm.Steps.Add(Step(0x4002, durationMs: 1_000));
+        var step = Step(0x4002, startMs: 850, animId: 3);
         vm.Steps.Add(step);
         vm.TogglePreflightCommand.Execute(null);
         var issue = vm.PreflightIssues.Single(finding => finding.Step == step);
@@ -439,25 +342,6 @@ public sealed class SequencerPreflightServiceTests
         Assert.False(vm.GoToPreflightIssueCommand.CanExecute(issue));
     }
 
-    [Fact]
-    public void FixingConnectionAndRoster_AllowsTheNextPlayAttempt()
-    {
-        var protocol = new FakeSequencerProtocol { PortOpen = false, SessionReady = false };
-        var scheduler = new FakePlaybackTimerScheduler();
-        using var vm = ViewModel(protocol, scheduler);
-        vm.Steps.Add(Step(0x1234));
-        vm.PlayCommand.Execute(null);
-        protocol.PortOpen = true;
-        protocol.SessionReady = true;
-        protocol.Droids.Add(Master(0x1234));
-        protocol.RaiseDroidsChanged();
-
-        vm.PlayCommand.Execute(null);
-
-        Assert.False(vm.HasPreflightErrors);
-        Assert.Equal(SequencerTransportState.Playing, vm.TransportState);
-    }
-
     private static IReadOnlyList<SequencerPreflightIssue> Analyze(
         SequencerPreflightInput input,
         params string[] existingFiles)
@@ -467,17 +351,11 @@ public sealed class SequencerPreflightServiceTests
     }
 
     private static SequencerPreflightInput Input(
-        bool portOpen = true,
-        bool sessionReady = true,
-        IReadOnlyList<Droid>? droids = null,
         IReadOnlyList<SequenceStep>? steps = null,
         IReadOnlyList<AudioLane>? audioLanes = null,
         IReadOnlySet<ushort>? mutedTargets = null,
         int effectiveEndMs = 10_000) =>
         new(
-            portOpen,
-            sessionReady,
-            droids ?? Array.Empty<Droid>(),
             steps ?? Array.Empty<SequenceStep>(),
             audioLanes ?? Array.Empty<AudioLane>(),
             mutedTargets ?? new HashSet<ushort>(),
@@ -496,9 +374,6 @@ public sealed class SequencerPreflightServiceTests
             ResolvedDurationMs = durationMs,
         };
 
-    private static Droid Master(ushort id) =>
-        new() { Id = id, Name = "Master", IsMaster = true, Online = true };
-
     private static AudioClip Clip(string path, int durationMs) =>
         new() { FilePath = path, DurationMs = durationMs, ProbeStatus = AudioProbeStatus.Ok };
 
@@ -512,7 +387,8 @@ public sealed class SequencerPreflightServiceTests
     private static SequencerViewModel ViewModel(
         FakeSequencerProtocol protocol,
         FakePlaybackTimerScheduler scheduler,
-        Func<string, bool>? fileExists = null) =>
+        Func<string, bool>? fileExists = null,
+        ISequencerPreflightService? preflightService = null) =>
         new(
             protocol,
             new FakeSequencerSettings(),
@@ -521,5 +397,24 @@ public sealed class SequencerPreflightServiceTests
             new FakePlaybackClock(),
             new FakePlaybackTimerScheduler(),
             library: new FakeSequenceLibraryService(),
-            preflightService: new SequencerPreflightService(fileExists ?? (_ => true)));
+            preflightService: preflightService ?? new SequencerPreflightService(fileExists ?? (_ => true)));
+
+    private sealed class CountingPreflightService : ISequencerPreflightService
+    {
+        public int CallCount { get; private set; }
+
+        public IReadOnlyList<SequencerPreflightIssue> Analyze(SequencerPreflightInput input)
+        {
+            CallCount++;
+            return new[]
+            {
+                new SequencerPreflightIssue(
+                    SequencerPreflightCode.AudioMissing,
+                    SequencerPreflightSeverity.Error,
+                    "Potential problem",
+                    "Manual advisory result.",
+                    "Test"),
+            };
+        }
+    }
 }

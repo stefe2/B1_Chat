@@ -23,10 +23,11 @@ one batch: gesture clips are sent in editor order, followed by audio clips in
 lane/clip order. They are serialized, not latched by every droid on one hardware
 clock edge.
 
-Preflight warns before Play when represented gesture durations overlap on an
-effective target. It distinguishes same-target overlaps, duplicate timestamps,
-and broadcast/target intersections, then **Go to** selects the later clip where
-the interruption or ambiguity begins. These warnings do not block playback.
+When requested manually, Preflight reports represented gesture durations that
+overlap on an effective target. It distinguishes same-target overlaps, duplicate
+timestamps, and broadcast/target intersections, then **Go to** selects the later
+clip where the interruption or ambiguity begins. These findings do not block
+playback.
 
 Two gestures for the same target at one timestamp are both sent in editor order;
 the last command received by that droid wins. Mixing broadcast and targeted
@@ -35,28 +36,34 @@ order. The runtime **SCHEDULE** badge remains as an additional same-timestamp
 reminder after Play. Separate conflicting clips when the final physical pose
 matters.
 
-## Preflight before Play
+## Manual Preflight Scene check
 
-Choose **Preflight** to open the readiness panel. Each finding names the affected
-connection, droid track, gesture, audio lane/file and timestamp. **Go to** moves
-the stopped playhead to that finding and selects its gesture when applicable.
+Choose **Preflight** when you want to inspect the current Scene. Each finding
+names the affected gesture, audio lane/file and timestamp. **Go to** moves the
+stopped playhead to that finding and selects its gesture when applicable.
 
-- `ERROR` blocks a new Play or Restart and opens the panel automatically.
-- `WARNING` is visible but does not block playback.
-- `INFO` confirms a ready or deliberately audio-only Scene.
+- `ERROR` identifies content that is expected not to work as authored.
+- `WARNING` identifies uncertain or potentially ambiguous content.
+- `INFO` confirms that no potential Scene-content issue was found.
 
-The scan checks the serial port and handshake only when active gesture clips need
-droids. It then checks for an online master, offline targeted droids, broadcasts
-with no recipients, overlapping/duplicate/ambiguous gestures,
-missing/unreadable audio, pending or unknown audio duration, and
-`TALK`/`POWER_DOWN` clips without a valid represented endpoint. Muted gesture
-tracks are ignored, including conflict analysis; an audio-only Scene is allowed
-without a master. Conflict warnings remain useful for offline targeted clips so
-they can be repaired before that droid reconnects. The scan does not send
-commands, alter the Scene, probe media or change Windows settings. Play, Restart
-and Resume refresh it against the current environment. Muting an offline target
-is the explicit rehearsal choice to run without that droid; missed commands are
-never queued or replayed after reconnection.
+Every finding is advisory: Preflight never disables or intercepts Play, Restart
+or Resume. It runs only when you open the panel; closing it does not rescan, and
+there is no persistent red result badge beside the button. The scan checks
+overlapping/duplicate/ambiguous gestures, missing/unreadable audio, pending or
+unknown audio duration, and `TALK`/`POWER_DOWN` clips without a valid represented
+endpoint. Muted gesture tracks are ignored, including conflict analysis.
+
+Preflight deliberately does not inspect the serial port, handshake, master or
+online droids. Those are temporary runtime conditions, not Scene-content errors.
+The scan does not send commands, alter the Scene, probe media or change Windows
+settings. If a command cannot be sent during Play, its gesture clip reports the
+actual `NO LINK`, `NOT READY`, `WRITE FAIL` or later execution status. Missed
+commands are never queued or replayed after reconnection.
+
+The opened panel remains visible until you press **Preflight** again. Relevant
+timeline edits refresh its findings immediately without closing it. While the
+panel is closed, edits do not run Preflight in the background; reopening performs
+a fresh scan.
 
 ![Audio and per-droid gesture tracks](../images/sequencer-tracks.png)
 
@@ -186,7 +193,7 @@ animation engine, not physical servo motion.
 A muted droid track is skipped when its scheduled start arrives. If the command
 was already sent before you mute or pause, the target continues it. Mute is a
 runtime rehearsal control rather than saved Scene data; it also removes that
-track from preflight routing and conflict checks.
+track from Preflight conflict checks.
 
 ## Offline droids and missed events
 

@@ -824,6 +824,11 @@ For what the shipped behavior actually does at runtime, read
 
 ## EPIC G — Preflight and ergonomics
 
+> **Current policy (2026-08-14, DEC-024):** the original G01/G02 readiness gate
+> below is retained as implementation history. Preflight was subsequently
+> simplified to a manual, advisory Scene-content check with no connection/roster
+> rules, transport interception or persistent result badge.
+
 ### [x] SEQ-G01 — Add a preflight result model and Play gate
 
 - **Priority:** P1
@@ -1064,6 +1069,7 @@ Append concise evidence when closing items; do not paste full build logs.
 | Date | Items | Evidence |
 |---|---|---|
 | 2026-08-14 | SEQ-G03, SEQ-G05, SEQ-G06 | Added bounded span/target conflict warnings linked to the later clip, removed every implicit broadcast insertion fallback, exposed the armed target continuously and completed the versioned XAML/Help/control audit. Twelve focused cases expand the WPF suite from 275 to 287, all passing. Offline self-test passed 21/21 with clean master/slave/WPF builds and real Media Foundation smoke (`b1-self-test-20260814-222604.json`); Release build 359 has 0 warnings/errors and the complete Sequencer/library status rendered cleanly. |
+| 2026-08-14 | DEC-024 / Preflight simplification | Recast Preflight as an advisory Scene-content check: removed connection/handshake/master/online-target inputs and findings, removed Play/Restart/Resume interception, and removed the persistent toolbar result badge. The on-demand panel remains open and refreshes its content findings across relevant timeline edits until explicitly closed; actual link/execution failures remain on gesture clips. Full WPF suite passed 279/279 including live conflict repair; non-destructive offline self-test passed 21/21 with clean master/slave/WPF builds, real Media Foundation smoke and build number 359 preserved (`b1-self-test-20260815-000802.json`). |
 | 2026-08-14 | SEQ-G01, SEQ-G02, SEQ-G04 | Added side-effect-free readiness findings, expandable toolbar panel and source-linked navigation. Play/Restart/Resume now fail closed on connection/master/target routing, missing/unreadable audio and invalid infinite endpoints while warnings and audio-only offline Scenes remain playable. Twenty-two focused cases expand the WPF suite from 253 to 275, all passing. Offline self-test passed 21/21 with clean master/slave/WPF builds and real Media Foundation smoke (`b1-self-test-20260814-012815.json`); Release built with zero warnings and build number 359 remained preserved. The operator confirmed all six rendered workflows. |
 | 2026-08-14 | SEQ-E05, SEQ-F08, SEQ-H05 | Added automatic/manual Scene endpoint, cyan END marker, schema v6 nullable `endMs`, deterministic final scheduler wake and audio-loop lifetime bounded by the immutable endpoint. Eighteen new plan/import/persistence/library/transport cases expand the WPF suite from 235 to 253, all passing. `tools/self-test.ps1 -SkipSerial`: 21 passed, 0 failed, including clean master/slave/WPF builds, real Media Foundation/MP3 smoke and preserved build number 359; report `b1-self-test-20260814-003311.json`. The operator confirmed the rendered controls and audible repeat-to-END behavior in Release build 359. |
 | 2026-08-14 | SEQ-G15, SEQ-G16, SEQ-G17, SEQ-G18 | Closed after final rendered Release build 359 validation. Stop/Pause cursor moves restart overlapping audio at the requested offset; an unchanged paused click resumes; releasing the horizontal scrollbar restores Follow automatically. Earlier checks in the same pass confirmed wheel navigation and the complete Scene browser/document workflow. Automated evidence remains green through the 231-test transport suite and the current 235/235 repository suite. |

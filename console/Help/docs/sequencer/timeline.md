@@ -19,8 +19,8 @@ controls stay together above the timeline.*
 3. Click the ruler to place the playhead at the desired time.
 4. Click a gesture in the bottom library, or drag it directly onto a track and
    time.
-5. Choose **Preflight** and correct every blocking error. Warnings remain
-   playable and identify the exact clip or environment fact to review.
+5. Optionally choose **Preflight** to inspect potential Scene-content problems.
+   Its findings are advisory and never prevent playback.
 6. Give the Scene a name, choose **Save** (`Ctrl+S`) to keep it in the Local
    Library, then use **Export a copy** from the **…** menu only when you need an
    external file.

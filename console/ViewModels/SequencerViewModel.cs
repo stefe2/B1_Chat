@@ -290,21 +290,6 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     public string AudioFailureText => string.Join(Environment.NewLine, _audioFailures);
 
     public ObservableCollection<SequencerPreflightIssue> PreflightIssues { get; } = new();
-    public bool HasPreflightErrors => PreflightIssues.Any(
-        issue => issue.Severity == SequencerPreflightSeverity.Error);
-    public bool HasPreflightWarnings => PreflightIssues.Any(
-        issue => issue.Severity == SequencerPreflightSeverity.Warning);
-    public string PreflightBadgeText
-    {
-        get
-        {
-            var errors = PreflightIssues.Count(issue => issue.Severity == SequencerPreflightSeverity.Error);
-            var warnings = PreflightIssues.Count(issue => issue.Severity == SequencerPreflightSeverity.Warning);
-            if (errors > 0) return $"PREFLIGHT · {errors} ERROR{(errors == 1 ? "" : "S")}";
-            if (warnings > 0) return $"PREFLIGHT · {warnings} WARNING{(warnings == 1 ? "" : "S")}";
-            return "PREFLIGHT · READY";
-        }
-    }
     public string PreflightSummaryText
     {
         get
@@ -312,10 +297,10 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
             var errors = PreflightIssues.Count(issue => issue.Severity == SequencerPreflightSeverity.Error);
             var warnings = PreflightIssues.Count(issue => issue.Severity == SequencerPreflightSeverity.Warning);
             return errors > 0
-                ? $"{errors} blocking error{(errors == 1 ? "" : "s")} · Play and Restart are intercepted"
+                ? $"{errors} potential error{(errors == 1 ? "" : "s")} · advisory only"
                 : warnings > 0
-                    ? $"{warnings} warning{(warnings == 1 ? "" : "s")} · playback remains available"
-                    : "No blocking issue found";
+                    ? $"{warnings} potential warning{(warnings == 1 ? "" : "s")} · advisory only"
+                    : "No potential issue found";
         }
     }
 
@@ -482,8 +467,6 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
             RebuildTracks();
         if (onlineTargetsChanged)
             RefreshDurationDerivedState();
-        else if (rosterChanged)
-            RefreshPreflight();
     }
 
     private void OnAnimDurationsReceived()
@@ -498,7 +481,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     {
         ResolveGestureDurationsAndExtent();
         RebuildRulerTicks();
-        RefreshPreflight();
+        RefreshPreflightIfOpen();
     }
 
     private void ResetExecutionTracking()
@@ -865,7 +848,6 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     private void OnProtocolLinkClosed(bool unexpected) => RunOnUiThread(() =>
     {
         if (TransportState != SequencerTransportState.Stopped) Stop();
-        RefreshPreflight();
     });
 
     public void Dispose()
@@ -981,7 +963,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     {
         if (track == null) return;
         track.Muted = !track.Muted;
-        RefreshPreflight();
+        RefreshPreflightIfOpen();
     }
 
     private bool IsTrackMuted(ushort targetId) => Tracks.FirstOrDefault(t => t.Id == targetId)?.Muted ?? false;
@@ -1582,7 +1564,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         RebuildTracks();
         ResolveGestureDurationsAndExtent();
         RebuildRulerTicks();
-        RefreshPreflight();
+        RefreshPreflightIfOpen();
     }
 
     private void SetScheduleWarnings(IReadOnlyList<SequencerScheduleWarning> warnings)
@@ -1596,9 +1578,6 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     {
         var mutedTargets = Tracks.Where(track => track.Muted).Select(track => track.Id).ToHashSet();
         var issues = _preflightService.Analyze(new SequencerPreflightInput(
-            _protocol.PortOpen,
-            _protocol.SessionReady,
-            _protocol.Droids.ToArray(),
             Steps.ToArray(),
             AudioLanes.ToArray(),
             mutedTargets,
@@ -1606,18 +1585,26 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
 
         PreflightIssues.Clear();
         foreach (var issue in issues) PreflightIssues.Add(issue);
-        OnPropertyChanged(nameof(HasPreflightErrors));
-        OnPropertyChanged(nameof(HasPreflightWarnings));
-        OnPropertyChanged(nameof(PreflightBadgeText));
         OnPropertyChanged(nameof(PreflightSummaryText));
         GoToPreflightIssueCommand.NotifyCanExecuteChanged();
+    }
+
+    private void RefreshPreflightIfOpen()
+    {
+        if (IsPreflightOpen) RefreshPreflight();
     }
 
     [RelayCommand]
     private void TogglePreflight()
     {
+        if (IsPreflightOpen)
+        {
+            IsPreflightOpen = false;
+            return;
+        }
+
         RefreshPreflight();
-        IsPreflightOpen = !IsPreflightOpen;
+        IsPreflightOpen = true;
     }
 
     [RelayCommand(CanExecute = nameof(CanGoToPreflightIssue))]
@@ -1630,14 +1617,6 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
 
     private bool CanGoToPreflightIssue(SequencerPreflightIssue? issue) =>
         issue?.CanNavigate == true && TransportState == SequencerTransportState.Stopped;
-
-    private bool PreflightAllowsPlayback()
-    {
-        RefreshPreflight();
-        if (!HasPreflightErrors) return true;
-        IsPreflightOpen = true;
-        return false;
-    }
 
     private void Apply(SequenceSnapshot snap)
     {
@@ -2200,7 +2179,6 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         }
         if (IsPaused)
         {
-            if (!PreflightAllowsPlayback()) return;
             if (_activePlaybackPlan == null) { Stop(); return; }
             StartPlaybackPass(_elapsedAtPauseMs, resumeAudio: true, skipEventsBeforeStart: false);
             return;
@@ -2215,7 +2193,6 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     {
         if (Steps.Count == 0 && AudioLanes.All(l => l.Clips.Count == 0) &&
             (SequenceEndMs ?? 0) == 0) return;
-        if (!PreflightAllowsPlayback()) return;
         _playbackGeneration.Cancel();
         DisposePlaybackScheduler();
         _audioPlayer.StopAll();

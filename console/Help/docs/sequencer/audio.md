@@ -32,9 +32,8 @@ for recovery, but is ignored while the file is pending, unavailable or unreadabl
 
 If a clip fails during playback, the Sequencer names the file and the reason
 in a **⚠ AUDIO** badge above the timeline instead of failing silently, and the
-rest of the pass continues. Preflight blocks a new Play for a known missing or
-unreadable file; pending validation or an unknown/zero duration is a playable
-warning.
+rest of the pass continues. A manually requested Preflight also reports known
+missing/unreadable files and uncertain durations, but it never blocks Play.
 
 ## Add and arrange audio
 

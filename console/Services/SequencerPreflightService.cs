@@ -9,8 +9,8 @@ public interface ISequencerPreflightService
 }
 
 /// <summary>
-/// Side-effect-free Scene readiness analysis. It reports only facts observable by the console;
-/// it does not send protocol traffic, probe media, or change Windows/system settings.
+/// Side-effect-free, manually requested Scene-content analysis. It deliberately ignores live
+/// connection and roster state, sends no protocol traffic, probes no media, and never gates Play.
 /// </summary>
 public sealed class SequencerPreflightService : ISequencerPreflightService
 {
@@ -33,33 +33,18 @@ public sealed class SequencerPreflightService : ISequencerPreflightService
             .Where(step => !input.MutedTargets.Contains(step.Target))
             .ToArray();
 
-        AnalyzeConnection(input, activeSteps, issues);
-        AnalyzeGestureTargets(input, activeSteps, issues);
         AnalyzeInfiniteGestures(input, activeSteps, issues);
         AnalyzeGestureConflicts(activeSteps, issues);
         AnalyzeAudio(input, issues);
 
         if (issues.Count == 0)
         {
-            var audioCount = input.AudioLanes.Sum(lane => lane.Clips.Count);
-            if (activeSteps.Length == 0 && audioCount > 0)
-            {
-                issues.Add(new SequencerPreflightIssue(
-                    SequencerPreflightCode.AudioOnly,
-                    SequencerPreflightSeverity.Info,
-                    "Audio-only Scene is ready",
-                    "No droid connection is required because this Scene contains no active gesture commands.",
-                    $"{audioCount} audio clip{(audioCount == 1 ? "" : "s")}"));
-            }
-            else
-            {
-                issues.Add(new SequencerPreflightIssue(
-                    SequencerPreflightCode.Ready,
-                    SequencerPreflightSeverity.Info,
-                    "Scene is ready",
-                    "No blocking readiness or infinite-gesture safety issue was found.",
-                    $"{activeSteps.Length} active gesture{(activeSteps.Length == 1 ? "" : "s")}"));
-            }
+            issues.Add(new SequencerPreflightIssue(
+                SequencerPreflightCode.Ready,
+                SequencerPreflightSeverity.Info,
+                "No potential issue found",
+                "This manual check found no audio, timing, or gesture-end issue in the Scene.",
+                $"{activeSteps.Length} active gesture{(activeSteps.Length == 1 ? "" : "s")}"));
         }
 
         return issues
@@ -67,80 +52,6 @@ public sealed class SequencerPreflightService : ISequencerPreflightService
             .ThenBy(issue => issue.StartMs)
             .ThenBy(issue => issue.Code)
             .ToArray();
-    }
-
-    private static void AnalyzeConnection(
-        SequencerPreflightInput input,
-        IReadOnlyCollection<SequenceStep> activeSteps,
-        ICollection<SequencerPreflightIssue> issues)
-    {
-        if (activeSteps.Count == 0) return;
-
-        if (!input.PortOpen)
-        {
-            issues.Add(new SequencerPreflightIssue(
-                SequencerPreflightCode.PortClosed,
-                SequencerPreflightSeverity.Error,
-                "Droid connection is closed",
-                "Connect the console to a master before playing gesture commands.",
-                "Connection"));
-            return;
-        }
-
-        if (!input.SessionReady)
-        {
-            issues.Add(new SequencerPreflightIssue(
-                SequencerPreflightCode.SessionNotReady,
-                SequencerPreflightSeverity.Error,
-                "Master handshake is not ready",
-                "Wait for the firmware handshake to complete before playing gesture commands.",
-                "Connection"));
-            return;
-        }
-
-        if (!input.Droids.Any(droid => droid.IsMaster && droid.Online))
-        {
-            issues.Add(new SequencerPreflightIssue(
-                SequencerPreflightCode.MasterUnavailable,
-                SequencerPreflightSeverity.Error,
-                "No online master is available",
-                "The serial session is ready, but the live roster does not contain an online master.",
-                "Droid roster"));
-        }
-    }
-
-    private void AnalyzeGestureTargets(
-        SequencerPreflightInput input,
-        IEnumerable<SequenceStep> activeSteps,
-        ICollection<SequencerPreflightIssue> issues)
-    {
-        var online = input.Droids.Where(droid => droid.Online).ToArray();
-        foreach (var step in activeSteps)
-        {
-            if (step.Target == ushort.MaxValue)
-            {
-                if (online.Length == 0)
-                    issues.Add(GestureIssue(
-                        SequencerPreflightCode.BroadcastWithoutRecipients,
-                        step,
-                        "Broadcast has no online recipient",
-                        "No droid in the current roster can receive this broadcast gesture.",
-                        "All droids"));
-                continue;
-            }
-
-            var target = input.Droids.FirstOrDefault(droid => droid.Id == step.Target);
-            if (target?.Online == true) continue;
-            var label = target == null || string.IsNullOrWhiteSpace(target.Name)
-                ? step.Target.ToString("X4")
-                : $"{target.Name} ({step.Target:X4})";
-            issues.Add(GestureIssue(
-                SequencerPreflightCode.TargetOffline,
-                step,
-                "Gesture target is offline",
-                "Commands are not queued for offline droids; this clip would be missed.",
-                label));
-        }
     }
 
     private void AnalyzeInfiniteGestures(

@@ -10,12 +10,6 @@ public enum SequencerPreflightSeverity
 public enum SequencerPreflightCode
 {
     Ready,
-    AudioOnly,
-    PortClosed,
-    SessionNotReady,
-    MasterUnavailable,
-    TargetOffline,
-    BroadcastWithoutRecipients,
     AudioMissing,
     AudioUnreadable,
     AudioValidationPending,
@@ -58,9 +52,6 @@ public sealed record SequencerPreflightIssue(
 }
 
 public sealed record SequencerPreflightInput(
-    bool PortOpen,
-    bool SessionReady,
-    IReadOnlyList<Droid> Droids,
     IReadOnlyList<SequenceStep> Steps,
     IReadOnlyList<AudioLane> AudioLanes,
     IReadOnlySet<ushort> MutedTargets,

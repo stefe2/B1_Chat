@@ -81,39 +81,8 @@
                 </Border>
 
                 <Button Content="Preflight" Style="{StaticResource MiniButtonStyle}"
-                        Command="{Binding TogglePreflightCommand}" Margin="0,0,4,0"
-                        ToolTip="Analyze connection, targets, gesture conflicts, audio, and infinite-gesture readiness before playback." />
-                <Border Margin="0,0,10,0" ToolTip="{Binding PreflightSummaryText}">
-                    <Border.Style>
-                        <Style TargetType="Border" BasedOn="{StaticResource ValuePillStyle}">
-                            <Setter Property="BorderBrush" Value="{StaticResource OkBrush}" />
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding HasPreflightWarnings}" Value="True">
-                                    <Setter Property="BorderBrush" Value="{StaticResource WarnBrush}" />
-                                </DataTrigger>
-                                <DataTrigger Binding="{Binding HasPreflightErrors}" Value="True">
-                                    <Setter Property="BorderBrush" Value="{StaticResource BadBrush}" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Border.Style>
-                    <TextBlock Text="{Binding PreflightBadgeText}" FontFamily="{StaticResource MonoFont}"
-                               FontWeight="Bold" FontSize="9.5">
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="Foreground" Value="{StaticResource OkBrush}" />
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding HasPreflightWarnings}" Value="True">
-                                        <Setter Property="Foreground" Value="{StaticResource WarnBrush}" />
-                                    </DataTrigger>
-                                    <DataTrigger Binding="{Binding HasPreflightErrors}" Value="True">
-                                        <Setter Property="Foreground" Value="{StaticResource BadBrush}" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBlock.Style>
-                    </TextBlock>
-                </Border>
+                        Command="{Binding TogglePreflightCommand}" Margin="0,0,10,0"
+                        ToolTip="Manually check Scene audio, gesture timing, and infinite-gesture endpoints. This advisory check ignores live connections and never blocks playback." />
 
                 <Rectangle Width="1" Fill="{StaticResource BorderHiBrush}" Opacity="0.5" Margin="0,2,10,2" />
 
@@ -192,8 +161,6 @@
                                    FontWeight="Bold" Foreground="{StaticResource TextStrongBrush}" />
                         <TextBlock DockPanel.Dock="Left" Text="{Binding PreflightSummaryText}" Margin="10,0,0,0"
                                    Foreground="{StaticResource MutedBrush}" FontSize="10.5" VerticalAlignment="Center" />
-                        <Button DockPanel.Dock="Right" Content="Close" Style="{StaticResource MiniButtonStyle}"
-                                Command="{Binding TogglePreflightCommand}" />
                     </DockPanel>
                     <ScrollViewer MaxHeight="190" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                         <ItemsControl ItemsSource="{Binding PreflightIssues}">

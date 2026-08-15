@@ -28,14 +28,13 @@ enables/disables a servo, previews a position, or starts an animation.
 - validates the explicit Scene endpoint across automatic/manual mode, empty timed
   passes, content-tail clamping, looping audio, Pause/Resume, Stop and whole-pass
   Loop without stacked players or stale boundary rearming;
-- validates the Sequencer preflight and Play gate across closed port, pending
-  handshake, missing master, offline target, empty broadcast roster, muted
-  tracks, audio-only offline playback, missing/unreadable/pending/unknown audio,
-  invalid/valid infinite-gesture endpoints, finite/infinite duration overlaps,
-  same-time duplicates, broadcast/target ambiguity, issue navigation and
-  recovery after connection repair. Muted tracks are excluded while offline
-  conflicts remain visible for repair. Errors intercept Play/Restart/Resume
-  without replacing an active or retained pass; warnings remain playable;
+- validates the manual advisory Sequencer preflight across muted tracks,
+  missing/unreadable/pending/unknown audio, invalid/valid infinite-gesture
+  endpoints, finite/infinite duration overlaps, same-time duplicates,
+  broadcast/target ambiguity and issue navigation. The analyzer has no live
+  connection/roster input, runs only when its panel is opened, and errors never
+  intercept Play/Restart/Resume. An open panel remains visible and refreshes in
+  place across relevant edits; a closed panel performs no background scan;
 - verifies gesture-library clicks require an explicitly armed target, including
   fresh startup, offline and explicit broadcast tracks, roster rebuild/loss and
   null direct-drop guards; preflight navigation is unavailable during an active
@@ -108,8 +107,8 @@ this checklist:
   the document workflow;
 - audio formats/codecs, failure presentation and linked-not-embedded portability
   limits remain explicit;
-- Preflight severities, Play gate, conflict warnings and stopped-only Go to
-  navigation agree with the implementation;
+- manual Preflight severities, advisory-only findings, absence of a persistent
+  result badge and stopped-only Go to navigation agree with the implementation;
 - offline targets, broadcasts, muted rehearsal and audio-only disconnected Play
   state exactly when commands will or will not be sent;
 - gesture-library clicks require the prominently displayed armed target, while

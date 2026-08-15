@@ -84,13 +84,13 @@ along is the Sequencer".
 
 | Epic | Description | Required items complete | Deferred ideas complete |
 |---|---|---:|---:|
-| A | Playback isolation and cancellation | 7 / 8 | — |
+| A | Playback isolation and cancellation | 7 / 7 | 0 / 1 |
 | B | Infinite gestures and Stop/Pause semantics | 6 / 6 | 0 / 1 |
 | C | Dirty, Undo/Redo and editing transactions | 8 / 8 | 0 / 1 |
 | D | Import, export and local library | 8 / 8 | 0 / 1 |
 | E | Deterministic scheduler and performance | 6 / 6 | 0 / 1 |
 | F | Duration and audio robustness | 7 / 8 | — |
-| G | Preflight and ergonomics | 11 / 14 | 0 / 5 |
+| G | Preflight and ergonomics | 11 / 12 | 0 / 7 |
 | H | Automated and hardware validation | 2 / 8 | — |
 | I | Scene & Show System (future) | — | 0 / 22 |
 | J | Commissioning and servo configuration safety | 0 / 2 | — |
@@ -100,7 +100,7 @@ along is the Sequencer".
 
 7 completed items moved to [SEQUENCER-DONE.md](SEQUENCER-DONE.md): SEQ-A01, SEQ-A02, SEQ-A03, SEQ-A04, SEQ-A05, SEQ-A06, SEQ-A07.
 
-### [ ] SEQ-A08 — Add explicit Edit, Ready, Armed and Playing lifecycle states
+### [D] SEQ-A08 — Add explicit Edit, Ready, Armed and Playing lifecycle states
 
 - **Priority:** P1
 - **Problem:** a user can validate one document state, modify it, and still have
@@ -114,6 +114,9 @@ along is the Sequencer".
   Rehearsal may use a clearly distinct, documented shortcut.
 - **Validation:** state-table tests cover edit after validation, asset removal,
   casting/roster change, disconnect, arm/disarm, Play, Stop and failed Preflight.
+- **Deferred direction (2026-08-14):** the current editor deliberately keeps
+  Play direct and Preflight advisory. Reconsider explicit arming only with a
+  separately approved future performance/Show mode, not as editor ceremony.
 
 ## EPIC B — Infinite gestures and Stop/Pause semantics
 
@@ -266,7 +269,7 @@ SEQ-G17, SEQ-G18.
   exercise offline/weak-link/disconnect timeouts on hardware and decide whether
   a true per-hop relay acknowledgement is worth the added mesh traffic.
 
-### [ ] SEQ-G12 — Analyze mechanical workload before playback
+### [D] SEQ-G12 — Analyze mechanical workload before playback
 
 - **Priority:** P1
 - **Problem:** a syntactically valid timeline can still demand rapid reversals,
@@ -279,8 +282,10 @@ SEQ-G17, SEQ-G18.
   bounds; warnings never claim to replace physical validation.
 - **Validation:** benign and intentionally aggressive synthetic scenes plus
   measured hardware review at representative calibration/amplitude/speed values.
+- **Deferred direction (2026-08-14):** do not expand the current manual Scene
+  checker until real production use demonstrates a need and usable thresholds.
 
-### [ ] SEQ-G13 — Preflight the host PC and audio environment
+### [D] SEQ-G13 — Preflight the host PC and audio environment
 
 - **Priority:** P1
 - **Problem:** a valid Show can fail because Windows sleeps, the audio device or
@@ -294,6 +299,8 @@ SEQ-G17, SEQ-G18.
   silently changing system-wide settings.
 - **Validation:** device removal/change, mute, unsupported media, battery/power,
   sleep-policy warning, low-space and successful show-PC checklist.
+- **Deferred direction (2026-08-14):** live host readiness is outside the
+  current Scene-content checker. Revisit only for a future performance mode.
 
 ### [D] SEQ-G19 — Add a temporary In/Out playback range
 
@@ -472,8 +479,8 @@ sequential. Unless a test seam must be introduced first, follow this order:
 6. **Persistence correctness:** SEQ-D01 through SEQ-D08.
 7. **Scheduler replacement:** SEQ-E02 through SEQ-E06.
 8. **Duration/audio:** SEQ-F01 through SEQ-F08 and SEQ-B04.
-9. **Preflight/ergonomics:** required SEQ-G01 through SEQ-G06 and SEQ-G11
-   through SEQ-G17.
+9. **Preflight/ergonomics:** required SEQ-G01 through SEQ-G06, SEQ-G11 and
+   SEQ-G14 through SEQ-G18. SEQ-G12/G13 are deferred with the strict lifecycle.
 10. **Validation gate:** SEQ-H02 through SEQ-H08.
 11. **Optional enhancements:** only selected `[D]` items. EPIC I (Scene/Show)
     and EPIC K (Project workspace), in
@@ -482,8 +489,8 @@ sequential. Unless a test seam must be introduced first, follow this order:
 
 Steps 1 through 7 are complete. Step 8 is code-complete; only SEQ-F01's bench
 measurement remains. Closed items are in
-[SEQUENCER-DONE.md](SEQUENCER-DONE.md); live work is now step 9, preflight and
-ergonomics.
+[SEQUENCER-DONE.md](SEQUENCER-DONE.md). Further Sequencer feature work is
+deliberately paused; remaining work is validation or individually approved need.
 
 ### Immediate implementation batches
 
@@ -519,9 +526,9 @@ options.
 | DEC-001 | Resolved 2026-08-11 | Lock persistent editing during Play/Pause; allow transient inspection, zoom/scroll and dynamic track mute. |
 | DEC-002 | Resolved 2026-08-11 | Normal Stop uses targeted tracked IDLE only for Sequencer-owned infinite gestures. Safe Stop broadcasts a transient centered/servo-powered hold. Emergency Stop immediately broadcasts persistent Servo OFF without confirmation; the owner accepts loss of holding torque. |
 | DEC-003 | Resolved 2026-08-11 | Treat the current Sequencer document as a Scene and retain Local Library as the normal local working catalog. Save updates the current stable scene ID; Save As creates a new one. Import never auto-adds. Export is not required for normal work, but remains an explicit external snapshot for backup, transfer, support and version control. Future Show authoring combines scenes and published Shows embed immutable scene snapshots. |
-| DEC-004 | Resolved 2026-08-14 | An active targeted gesture whose droid is unknown/offline is a blocking preflight error because missed commands are never queued or reconstructed. Muted tracks are excluded. The finding links to the exact clip/target so the operator can reconnect, retarget or mute deliberately. |
+| DEC-004 | Superseded by DEC-024 | An active targeted gesture whose droid is unknown/offline was initially a blocking preflight error. The later advisory-only policy removes live connectivity from Preflight entirely. |
 | DEC-005 | Resolved 2026-08-11 | Same-time events form one batch in immutable source order: gesture clips in editor order, then audio clips by lane/clip order. Multiple gestures for one target are last-received-wins. Broadcast plus targeted overlap is serialized but warned because mesh arrival can differ from console order. |
-| DEC-006 | Resolved 2026-08-14 | Audio-only Scenes may Play without a serial/master connection. Connection readiness is required only when at least one unmuted gesture would dispatch; audio asset findings still apply normally. |
+| DEC-006 | Superseded by DEC-024 | Audio-only Scenes were the first disconnected exception. Play is now independent of Preflight for every Scene; actual sends report their runtime result on each gesture clip. |
 | DEC-007 | Deferred | Scene identity and migration from `.b1seq.json` to `.b1scene.json`? |
 | DEC-008 | Deferred | Show authoring uses linked scenes, embedded snapshots, or a publish-time hybrid? |
 | DEC-009 | Deferred | Scene targets remain physical IDs, become semantic roles, or support both? |
@@ -539,3 +546,4 @@ options.
 | DEC-021 | Resolved 2026-08-12 | Ctrl+wheel zooms continuously and multiplicatively around the pointer within 20–300 px/s; Shift+wheel pans horizontally and plain wheel remains native. Slider/Fit/wheel navigation suspends Follow until the operator re-enables it. |
 | DEC-022 | Resolved 2026-08-12 | Treat Scenes like conventional editor documents: New/Open/Save are primary, Local Library storage stays behind a searchable Open browser, Save As/rename/import/export/trash are secondary, and replacement explicitly handles active playback plus save/discard/cancel. The browser is reusable by the future Show editor. |
 | DEC-023 | Direction recorded 2026-08-12; details deferred | Add a Project mode as the mutable working boundary for one production: manifest, Scenes, Shows and managed assets live under one movable folder with relative references. A Project remains distinct from the immutable portable package created by Publish; Show mode must arm the published package, not mutable Project drafts. |
+| DEC-024 | Resolved 2026-08-14 | Preflight is an operator-requested, advisory Scene-content check. While its panel is open, relevant timeline edits refresh the findings in place and only a second click on the toolbar's Preflight button hides it; while closed, no scan runs. It has no persistent toolbar badge, never gates Play/Restart/Resume, and deliberately ignores port, handshake, master and online-droid state. Live dispatch/execution feedback owns connection failures. Strict readiness/arming is deferred to a future explicitly approved performance mode. |
