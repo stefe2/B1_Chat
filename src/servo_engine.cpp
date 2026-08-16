@@ -88,12 +88,6 @@ void ServoEngine::setReversed(bool panReversed, bool tiltReversed) {
     _tiltReversed = tiltReversed;
 }
 
-void ServoEngine::setIdleNoise(bool on, float panAmp, float tiltAmp) {
-    _idleNoise = on;
-    _panNoiseAmp = panAmp;
-    _tiltNoiseAmp = tiltAmp;
-}
-
 void ServoEngine::setEnabled(bool en) {
     if (en == _enabled) return;
     _enabled = en;
@@ -106,12 +100,6 @@ void ServoEngine::setEnabled(bool en) {
         ledcDetach(PIN_SERVO_PAN);
         ledcDetach(PIN_SERVO_TILT);
     }
-}
-
-// Organic noise: sum of two sine waves at incommensurable frequencies
-// -> slow, non-repetitive wandering, with no jerkiness.
-float ServoEngine::noise(float t, float phase) const {
-    return 0.6f * sinf(t * 0.70f + phase) + 0.4f * sinf(t * 1.73f + phase * 2.1f);
 }
 
 void ServoEngine::writeServos(float panDeg, float tiltDeg) {
@@ -138,7 +126,7 @@ void ServoEngine::update() {
     if (now - _lastWrite < interval) return;
     _lastWrite = now;
 
-    // Interpolation progress (base position).
+    // Interpolation progress.
     if (_moving) {
         float t = (float)(now - _moveStart) / (float)_moveDur;
         if (t >= 1.0f) {
@@ -150,14 +138,5 @@ void ServoEngine::update() {
         _curTilt = _startTilt + (_targetTilt - _startTilt) * e;
     }
 
-    // Overlaid idle noise (doesn't alter the remembered base position).
-    float outPan = _curPan;
-    float outTilt = _curTilt;
-    if (_idleNoise) {
-        const float ts = now / 1000.0f;
-        outPan += _panNoiseAmp * noise(ts, 0.0f);
-        outTilt += _tiltNoiseAmp * noise(ts, 1.3f);
-    }
-
-    writeServos(outPan, outTilt);
+    writeServos(_curPan, _curTilt);
 }

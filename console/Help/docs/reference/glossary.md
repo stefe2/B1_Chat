@@ -50,12 +50,12 @@ firmware version.
 
 ## Storage and updates
 
-**NVS** — nonvolatile storage inside an ESP32. Names, calibration, animation
-parameters, adoption, and OTA guard state use it according to the board's role.
+**NVS** — nonvolatile storage inside an ESP32. Names, calibration, adoption, and
+OTA guard state use it according to the board's role.
 
-**Dirty / synced** — the master's name/animation working configuration has or
-has not been committed to persistent storage. It does not report calibration or
-sequence save state.
+**Dirty / synced** — the master's pending name edits have or have not been
+committed to persistent storage. It does not report calibration or Scene save
+state.
 
 **Build ID** — deterministic eight-character identity derived from the firmware
 source, PlatformIO configuration, and role. It distinguishes two binaries that

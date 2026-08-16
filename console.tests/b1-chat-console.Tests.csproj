@@ -24,6 +24,12 @@
 
   <ItemGroup>
     <None Update="Fixtures\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\catalog\gesture-catalog-v1.json"
+          Link="Fixtures\V2\catalog-v1.json"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\catalog\gesture-catalog-v1.json"
+          Link="catalog\gesture-catalog-v1.json"
+          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

@@ -4,7 +4,7 @@
 # Default mode is a read-only preflight. Physical commands are sent only when
 # -AllowMotion is explicit. The active phase snapshots servo/auto-animation
 # states, finishes every motion group with IDLE, and restores those states in a
-# finally block. It never flashes, starts OTA, writes calibration/configuration,
+# finally block. It never flashes, starts OTA, writes calibration,
 # commits NVS drafts, or intentionally disconnects the serial link.
 # ============================================================================
 param(
@@ -138,8 +138,6 @@ function Restore-BenchState {
     Write-Host "Restoring bench state..." -ForegroundColor Cyan
     try { Send-Idle 65535 } catch { Add-Result "Cleanup IDLE" "WARN" $_.Exception.Message }
     foreach ($droid in $script:Snapshot) {
-        try { Set-BooleanCommand "autoAnim" ([int]$droid.id) ([bool]$droid.autoAnim) }
-        catch { Add-Result "Restore autoAnim $($droid.id)" "WARN" $_.Exception.Message }
         try { Set-BooleanCommand "servo" ([int]$droid.id) ([bool]$droid.servos) }
         catch { Add-Result "Restore servos $($droid.id)" "WARN" $_.Exception.Message }
     }
@@ -150,13 +148,12 @@ function Restore-BenchState {
             foreach ($before in $script:Snapshot) {
                 $after = @($list | Where-Object { [int]$_.id -eq [int]$before.id })
                 if ($after.Count -ne 1 -or
-                    [bool]$after[0].servos -ne [bool]$before.servos -or
-                    [bool]$after[0].autoAnim -ne [bool]$before.autoAnim) { return $false }
+                    [bool]$after[0].servos -ne [bool]$before.servos) { return $false }
             }
             return $true
         } 10
         if ($null -eq $restored) { throw "restored states were not reflected by inventory" }
-        Add-Result "Bench state restored" "PASS" "IDLE plus original servo/auto-animation states"
+        Add-Result "Bench state restored" "PASS" "IDLE plus original servo states"
     } catch {
         Add-Result "Bench state restored" "WARN" $_.Exception.Message
     }
@@ -189,7 +186,7 @@ try {
     $masterInventory = @($droids | Where-Object { [int]$_.id -eq $script:MasterId })
     Assert-Bench ($masterInventory.Count -eq 1 -and "$($masterInventory[0].build)" -eq "$($hello.build)") "master hello/inventory Build IDs disagree"
     $script:Snapshot = @($droids | ForEach-Object {
-        [pscustomobject]@{ id = [int]$_.id; servos = [bool]$_.servos; autoAnim = [bool]$_.autoAnim; role = "$($_.role)" }
+        [pscustomobject]@{ id = [int]$_.id; servos = [bool]$_.servos; role = "$($_.role)" }
     })
     $identities = ($droids | ForEach-Object { "$($_.id):$($_.build)" }) -join ", "
     Add-Result "Fleet inventory" "PASS" ("1 master + {0} slaves, fw {1}; {2}" -f $slaves.Count, $hello.fw, $identities)
@@ -197,14 +194,6 @@ try {
     $calibrationById = @{}
     foreach ($droid in $droids) {
         $id = [int]$droid.id
-        $cfg = Send-JsonAndWait @{ cmd = "getConfig"; target = $id } {
-            param($e) $e.evt -eq "config" -and [int]$e.target -eq $id
-        } 4
-        Assert-Bench ($null -ne $cfg) "targeted config response missing target for droid $id; running binary does not match the current protocol contract"
-        foreach ($value in @([int]$cfg.freq, [int]$cfg.amp, [int]$cfg.speed)) {
-            Assert-Bench ($value -ge 0 -and $value -le 100) "invalid stored config for droid $id"
-        }
-
         $cal = Send-JsonAndWait @{ cmd = "getCalib"; target = $id } {
             param($e) $e.evt -eq "calibData" -and [int]$e.target -eq $id
         } 4
@@ -213,7 +202,7 @@ try {
         Assert-Bench ([int]$cal.tiltMin -le [int]$cal.tiltCenter -and [int]$cal.tiltCenter -le [int]$cal.tiltMax) "invalid tilt calibration for droid $id"
         $calibrationById[$id] = $cal
     }
-    Add-Result "Targeted config/calibration contract" "PASS" "all droids returned bounded values with matching target IDs"
+    Add-Result "Targeted calibration contract" "PASS" "all droids returned bounded values with matching target IDs"
 
     $durations = Send-JsonAndWait @{ cmd = "getAnimDurations" } { param($e) $e.evt -eq "animDurations" } 4
     Assert-Bench ($null -ne $durations -and @($durations.list).Count -eq 18) "18-entry duration catalog missing"
@@ -222,7 +211,7 @@ try {
     foreach ($item in @($durations.list)) { $durationById[[int]$item.animId] = [int]$item.ms }
     Add-Result "Animation durations" "PASS" "18 positive durations"
 
-    $validationProbe = Send-JsonAndWait @{ cmd = "getConfig"; target = 70000 } { param($e) $e.evt -eq "err" } 4
+    $validationProbe = Send-JsonAndWait @{ cmd = "getCalib"; target = 70000 } { param($e) $e.evt -eq "err" } 4
     Assert-Bench ($null -ne $validationProbe) "read-only invalid-target probe was accepted; active testing refused"
     Add-Result "Runtime validation preflight" "PASS" "$($validationProbe.msg)"
 
@@ -235,13 +224,12 @@ try {
     } else {
         $script:CleanupRequired = $true
 
-        foreach ($droid in $script:Snapshot) { Set-BooleanCommand "autoAnim" ([int]$droid.id) $false }
         foreach ($droid in $script:Snapshot) { Set-BooleanCommand "servo" ([int]$droid.id) $true }
         $armed = Wait-InventoryState {
             param($list) @($list | Where-Object { -not [bool]$_.servos }).Count -eq 0
         } 10
         Assert-Bench ($null -ne $armed) "not every droid reported servos enabled"
-        Add-Result "Deterministic bench preparation" "PASS" "auto animations paused; servos enabled on all three targets"
+        Add-Result "Deterministic bench preparation" "PASS" "servos enabled on all three targets"
 
         $masterCal = $calibrationById[$script:MasterId]
         $panQuarter = [int][Math]::Round(([int]$masterCal.panMin * 0.75) + ([int]$masterCal.panMax * 0.25))

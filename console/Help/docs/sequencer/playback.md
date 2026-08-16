@@ -156,11 +156,10 @@ to `IDLE` automatically. Pause keeps renewing until the authored clip endpoint;
 that endpoint or explicit Stop cancels renewal before sending IDLE. Delayed
 renewal from an older pass cannot extend a newer gesture.
 
-This lease applies only to Sequencer playback. A looping gesture started from
-the Animation card remains a direct operator command and runs until another
-gesture is sent. Autonomous idle animations are also outside the lease policy.
-With older firmware that does not advertise `animLease`, the Sequencer retains
-targeted Stop cleanup but cannot provide the crash/link-loss fallback.
+This lease applies only to Sequencer playback. Autonomous idle animations are
+outside the lease policy. With older firmware that does not advertise
+`animLease`, the Sequencer retains targeted Stop cleanup but cannot provide the
+crash/link-loss fallback.
 
 Safe Stop requires firmware advertising `safeStop`. With older firmware the
 console sends broadcast `IDLE` as a best-effort fallback, but automatic movement
@@ -213,11 +212,11 @@ always needs the console and active serial connection.
 
 ## Export and Import
 
-**Export** atomically writes a `.b1seq.json` snapshot containing:
+**Export** atomically writes a `.b1scene.json` snapshot containing:
 
 - sequence name and whole-sequence Loop setting;
 - automatic or user-set Scene endpoint;
-- gesture clips, target IDs, and explicit `POWER_DOWN`/`TALK` endpoints;
+- named gesture clips, target IDs, catalog identity, and explicit continuous-gesture holds;
 - saved droid track names/order for offline layout;
 - audio lane names, clip timing, Loop flags, and local file paths.
 

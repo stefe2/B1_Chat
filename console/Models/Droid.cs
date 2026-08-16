@@ -12,7 +12,6 @@ public partial class Droid : ObservableObject
     [ObservableProperty] private bool _isMaster;
     [ObservableProperty] private bool _online;
     [ObservableProperty] private bool _servosOn;
-    [ObservableProperty] private bool _autoAnimOn;
     [ObservableProperty] private bool _locateOn;
     [ObservableProperty] private bool _supportsServoReverse;
     [ObservableProperty] private bool _adopted = true;

@@ -79,7 +79,7 @@ Exporting a sequence does not copy the sound file.
 
 For a portable show folder:
 
-1. Put the `.b1seq.json` and all audio assets in a stable folder before editing.
+1. Put the `.b1scene.json` and all audio assets in a stable folder before editing.
 2. Do not move that folder after choosing the files.
 3. On another PC, import the sequence and use **Replace file…** on broken clips
    to point them at the copied assets.

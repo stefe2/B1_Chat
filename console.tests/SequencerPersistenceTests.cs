@@ -26,10 +26,10 @@ public sealed class SequencerPersistenceTests
 
         vm.ExportTo(path);
         var json = JsonNode.Parse(File.ReadAllText(path))!.AsObject();
-        Assert.Equal(6, json["version"]!.GetValue<int>());
+        Assert.Equal(1, json["version"]!.GetValue<int>());
         Assert.True(json.ContainsKey("endMs"));
         Assert.Null(json["endMs"]);
-        Assert.Equal(2_200, json["steps"]![0]!["endAfterMs"]!.GetValue<int>());
+        Assert.Equal(2_200, json["gestureClips"]![0]!["holdMs"]!.GetValue<int>());
 
         using var reopened = CreateViewModel();
         reopened.ImportFrom(path);
@@ -157,7 +157,7 @@ public sealed class SequencerPersistenceTests
 
         Assert.False(vm.Dirty);
         Assert.Equal(path, settings.LastSequencePath);
-        var exported = SequenceImportService.ParseFile(path);
+        var exported = GestureSceneV2Persistence.ParseFile(path);
         Assert.Equal("Checkpoint", exported.Name);
         Assert.True(exported.Loop);
         Assert.Equal((2, (ushort)0x4001, 400),
@@ -242,7 +242,7 @@ public sealed class SequencerPersistenceTests
         vm.ExportTo(path);
 
         Assert.Equal("", vm.Name);
-        Assert.Equal("", SequenceImportService.ParseFile(path).Name);
+        Assert.Equal("", GestureSceneV2Persistence.ParseFile(path).Name);
         Assert.False(vm.Dirty);
     }
 
@@ -253,7 +253,7 @@ public sealed class SequencerPersistenceTests
         using var vm = CreateViewModel(writer: writer);
         Assert.True(vm.SetAudioLaneLabel(vm.AudioLanes[0], "   "));
 
-        var error = Assert.Throws<SequenceImportException>(() =>
+        var error = Assert.Throws<GestureSceneV2SchemaException>(() =>
             vm.ExportTo(@"C:\unused\invalid.b1seq.json"));
 
         Assert.Equal("$.audioLanes[0].label", error.FieldPath);
@@ -270,7 +270,7 @@ public sealed class SequencerPersistenceTests
         bool confirm,
         bool shouldReplace)
     {
-        var path = FixturePath("sequence-v4.json");
+        var path = V2FixturePath();
         var settings = new FakeSequencerSettings();
         var dialogs = new FakeSequencerPersistenceDialogs
         {
@@ -283,8 +283,8 @@ public sealed class SequencerPersistenceTests
         vm.ImportCommand.Execute(null);
 
         Assert.Equal(dirty ? 1 : 0, dialogs.ConfirmationRequests.Count);
-        if (dirty) Assert.Contains("sequence-v4.json", dialogs.ConfirmationRequests[0]);
-        Assert.Equal(shouldReplace ? "Current document" : "Unsaved", vm.Name);
+        if (dirty) Assert.Contains("scene-v1.json", dialogs.ConfirmationRequests[0]);
+        Assert.Equal(shouldReplace ? "First V2 scene" : "Unsaved", vm.Name);
         Assert.Equal(shouldReplace, settings.LastSequencePath == path);
         Assert.Equal(!shouldReplace && dirty, vm.Dirty);
         Assert.Equal(shouldReplace ? 0 : dirty ? 1 : 0,
@@ -445,13 +445,13 @@ public sealed class SequencerPersistenceTests
     [Fact]
     public void StartupRestore_IsSilentAndEstablishesTheImportedCheckpoint()
     {
-        var settings = new FakeSequencerSettings { LastSequencePath = FixturePath("sequence-v4.json") };
+        var settings = new FakeSequencerSettings { LastSequencePath = V2FixturePath() };
         var dialogs = new FakeSequencerPersistenceDialogs();
         using var vm = CreateViewModel(settings: settings, dialogs: dialogs);
 
         vm.TryLoadLastSequence();
 
-        Assert.Equal("Current document", vm.Name);
+        Assert.Equal("First V2 scene", vm.Name);
         Assert.False(vm.Dirty);
         Assert.Empty(dialogs.ConfirmationRequests);
         Assert.Empty(dialogs.Errors);
@@ -477,6 +477,9 @@ public sealed class SequencerPersistenceTests
 
     private static string FixturePath(string fileName) =>
         Path.Combine(AppContext.BaseDirectory, "Fixtures", "Sequences", fileName);
+
+    private static string V2FixturePath() =>
+        Path.Combine(AppContext.BaseDirectory, "Fixtures", "V2", "scene-v1.json");
 
     private sealed class FailingMoveFileOperations : IAtomicFileOperations
     {

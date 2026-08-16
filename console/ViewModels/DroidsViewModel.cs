@@ -1,14 +1,10 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.IO;
-using System.Text.Json;
-using System.Text.Json.Nodes;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using b1_chat_console.Models;
 using b1_chat_console.Services;
-using Microsoft.Win32;
 
 namespace b1_chat_console.ViewModels;
 
@@ -206,14 +202,6 @@ public partial class DroidsViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void ToggleAutoAnim(Droid? droid)
-    {
-        if (droid == null) return;
-        droid.AutoAnimOn = !droid.AutoAnimOn;
-        _protocol.SetAutoAnim(droid.Id, droid.AutoAnimOn);
-    }
-
-    [RelayCommand]
     private void ToggleLocate(Droid? droid)
     {
         if (droid == null) return;
@@ -235,123 +223,4 @@ public partial class DroidsViewModel : ObservableObject
         _protocol.Forget(droid.Id);
     }
 
-    // --- Backup / restore --------------------------------------------
-    // Simplified compared to index.html: no dedicated diff window, just a
-    // confirmation MessageBox before restoring (the roadmap emphasized a
-    // functional port of the 8 cards, not a pixel-perfect reproduction of
-    // every secondary dialog).
-
-    [RelayCommand]
-    private void Backup()
-    {
-        var dlg = new SaveFileDialog
-        {
-            FileName = $"b1-config-{DateTime.Now:yyyy-MM-dd}.json",
-            Filter = "JSON (*.json)|*.json",
-        };
-        if (dlg.ShowDialog() != true) return;
-
-        var namesObj = new JsonObject();
-        foreach (var d in Droids) namesObj[d.Id.ToString()] = d.Name;
-
-        var configsObj = new JsonObject();
-        foreach (var (id, cfg) in _protocol.AnimConfigs)
-        {
-            configsObj[id.ToString()] = new JsonObject
-            {
-                ["freq"] = cfg.Freq,
-                ["amp"] = cfg.Amp,
-                ["speed"] = cfg.Speed,
-            };
-        }
-
-        var backup = new JsonObject
-        {
-            ["type"] = "b1-config-backup",
-            ["version"] = 2,
-            ["savedAt"] = DateTime.UtcNow.ToString("O"),
-            // Kept for compatibility with older consoles; v2's authoritative
-            // representation is the per-ID `configs` object below.
-            ["freq"] = _protocol.LastFreq,
-            ["amp"] = _protocol.LastAmp,
-            ["speed"] = _protocol.LastSpeed,
-            ["configs"] = configsObj,
-            ["names"] = namesObj,
-        };
-        File.WriteAllText(dlg.FileName, backup.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
-        MessageBox.Show($"Backup saved: {dlg.FileName}", "Backup", MessageBoxButton.OK, MessageBoxImage.Information);
-    }
-
-    [RelayCommand]
-    private void Restore()
-    {
-        var dlg = new OpenFileDialog { Filter = "JSON (*.json)|*.json" };
-        if (dlg.ShowDialog() != true) return;
-
-        JsonObject? backup;
-        try { backup = JsonNode.Parse(File.ReadAllText(dlg.FileName)) as JsonObject; }
-        catch (Exception ex)
-        {
-            MessageBox.Show("Unreadable file: " + ex.Message, "Restore", MessageBoxButton.OK, MessageBoxImage.Error);
-            return;
-        }
-        if (backup == null) return;
-
-        var confirm = MessageBox.Show(
-            $"Restore the configuration from « {Path.GetFileName(dlg.FileName)} »?\n\nNames and animation settings will be overwritten.",
-            "Confirm restore", MessageBoxButton.YesNo, MessageBoxImage.Warning);
-        if (confirm != MessageBoxResult.Yes) return;
-
-        var ops = new JsonArray();
-        if (backup["names"] is JsonObject names)
-            foreach (var (idStr, nameNode) in names)
-                if (ushort.TryParse(idStr, out var id) && nameNode != null)
-                    ops.Add(new JsonObject { ["cmd"] = "name", ["id"] = id, ["name"] = nameNode.GetValue<string>() });
-
-        var hasPerDroidConfigs = false;
-        if (backup["configs"] is JsonObject configs)
-        {
-            foreach (var (idStr, configNode) in configs)
-            {
-                if (!ushort.TryParse(idStr, out var id) || configNode is not JsonObject cfg) continue;
-                if (cfg["freq"] is not JsonNode freqNode || cfg["amp"] is not JsonNode ampNode ||
-                    cfg["speed"] is not JsonNode speedNode) continue;
-                ops.Add(new JsonObject
-                {
-                    ["cmd"] = "config", ["target"] = id,
-                    ["freq"] = freqNode.GetValue<int>(),
-                    ["amp"] = ampNode.GetValue<int>(),
-                    ["speed"] = speedNode.GetValue<int>(),
-                });
-                hasPerDroidConfigs = true;
-            }
-        }
-
-        // Version-1 backup fallback: the old format held one fleet-wide set.
-        if (!hasPerDroidConfigs && backup.TryGetPropertyValue("freq", out var freq) && backup.TryGetPropertyValue("amp", out var amp) && backup.TryGetPropertyValue("speed", out var speed))
-            ops.Add(new JsonObject
-            {
-                ["cmd"] = "config", ["target"] = 0xFFFF,
-                ["freq"] = freq!.GetValue<int>(), ["amp"] = amp!.GetValue<int>(), ["speed"] = speed!.GetValue<int>(),
-            });
-
-        if (_protocol.HasCap("setMulti"))
-        {
-            _protocol.SetMulti(ops);
-        }
-        else
-        {
-            // Older firmware: send one by one instead of an atomic batch.
-            foreach (var op in ops)
-            {
-                if (op is not JsonObject o) continue;
-                switch (o["cmd"]?.GetValue<string>())
-                {
-                    case "name": _protocol.SetName((ushort)o["id"]!.GetValue<int>(), o["name"]!.GetValue<string>()); break;
-                    case "config": _protocol.SetConfig((ushort)o["target"]!.GetValue<int>(), o["freq"]!.GetValue<int>(), o["amp"]!.GetValue<int>(), o["speed"]!.GetValue<int>()); break;
-                }
-            }
-        }
-        if (_protocol.HasCap("commit")) _protocol.Commit();
-    }
 }

@@ -53,7 +53,7 @@ delay expires cancels that pending save.
 
 The actual droid writes a received calibration directly to its own persistent
 storage. It does not use the master's **unsaved/synced** badge, and calibration
-is not included in Droids Backup. A full chip erase of that droid removes it.
+is not included in a console export. A full chip erase of that droid removes it.
 
 ## If the droid is unreachable
 
@@ -64,6 +64,6 @@ the change took effect.
 
 ## Sensible first test
 
-After calibration, reduce Animation amplitude, play a small one-shot gesture,
-and observe both axes through the full motion. Increase amplitude only after the
-mechanism remains clear of its limits.
+After calibration, play a small one-shot gesture and observe both axes through
+the full nominal motion. Confirm that the mechanism remains clear of its limits
+before using a larger gesture.

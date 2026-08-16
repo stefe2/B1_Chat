@@ -11,8 +11,8 @@ A single repo, two halves:
 2. **Supervision console** (`console/`, WPF `net8.0-windows`) — a **100%
    native WPF** desktop app (no WebView2/browser) that owns the serial port
    and gives full control over the fleet: droid roster & adoption, servo
-   calibration, live mesh topology (radar view), animation triggers, a
-   multi-track sequencer (with console-side audio), firmware flashing/OTA,
+   calibration, live mesh topology (radar view), a multi-track gesture
+   sequencer (with console-side audio), firmware flashing/OTA,
    and an in-app Help window.
 
 > Full architecture, protocol reference, and a detailed progress log:

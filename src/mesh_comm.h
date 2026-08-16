@@ -18,12 +18,10 @@
 // ------- Message types (`type` field of the header) ---------------------
 enum MeshMsgType : uint8_t {
     MSG_ANIM      = 1,
-    MSG_CONFIG    = 2,
     MSG_HEARTBEAT = 4,
     MSG_SERVO     = 5,
     MSG_CALIB     = 6,
     MSG_PREVIEW   = 7,
-    MSG_AUTOANIM  = 8,
     MSG_NEIGHBORS = 9,
     MSG_OTA_START = 10,  // master -> targeted slave: starts an OTA session
     MSG_OTA_CHUNK = 11,  // master -> targeted slave: one fragment of the image
@@ -35,7 +33,7 @@ enum MeshMsgType : uint8_t {
     MSG_ANIM_EXEC = 17,  // droid -> master: tracked animation lifecycle report
     MSG_ANIM_LEASED = 18, // safe fail-closed infinite animation with an initial lease
     MSG_ANIM_LEASE_RENEW = 19, // renews only the matching active leased animation
-    MSG_SAFE_STOP = 20, // transient safe hold: center and suppress auto anims
+    MSG_SAFE_STOP = 20, // transient safe hold: center and block stale/untracked motion
     MSG_CALIB_V2  = 21, // calibration plus independent PAN/TILT direction flags
     MSG_CAPABILITIES = 22, // source droid's additive feature-bit report
 };
@@ -136,16 +134,9 @@ static_assert(sizeof(AnimLeaseRenewPayload) == 6,
 static_assert(sizeof(SafeStopPayload) == 2,
               "Safe-stop wire format must remain exactly 2 bytes");
 
-struct ConfigPayload {
-    uint16_t targetId;
-    float    freq;
-    float    amplitude;
-    float    speed;
-};
-
 struct HeartbeatPayload {
     uint32_t uptimeMs;
-    uint8_t  state;      // bit0 = servos active, bit1 = auto anims
+    uint8_t  state;      // bit0 = servos active, bit1 reserved (always 0), bit2 = locate
     uint8_t  fwMajor;
     uint8_t  fwMinor;
     uint8_t  fwPatch;
@@ -174,12 +165,6 @@ static_assert(sizeof(HeartbeatPayload) == 12,
 struct ServoPayload {
     uint16_t targetId;   // MESH_TARGET_ALL or a specific srcId
     uint8_t  enabled;    // 1 = servos active, 0 = off
-};
-
-// Pause/resume of the spontaneous idle animation (doesn't affect Play/Sequencer).
-struct AutoAnimPayload {
-    uint16_t targetId;   // MESH_TARGET_ALL or a specific srcId
-    uint8_t  enabled;    // 1 = auto anims active, 0 = paused
 };
 
 // Overrides the onboard LED's normal execution-indicator blink with a solid

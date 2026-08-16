@@ -45,7 +45,6 @@ of repeatedly appearing for adoption.
 | State | **online** or **lost**. Lost means 4 seconds without a heartbeat, not forgotten or unadopted. |
 | Role | The USB-connected fleet coordinator is master; mesh members are slaves. |
 | Servos | Enables or cuts that board's servo output. Use this first if motion is unsafe. |
-| Auto anims | Allows or suppresses spontaneous idle gestures on that droid. Manual Play and Sequencer commands still work. |
 | Locate | Temporarily overrides the onboard LED with solid on for physical identification; switching Locate off resumes the normal activity blink. |
 | Update | Opens USB flashing for the master or starts OTA for an adopted slave when a newer release is available. |
 | Gear | Opens Servo Calibration already targeted to that row. |
@@ -55,10 +54,9 @@ Locate is transient and is not saved. A board or console restart returns the LED
 to its normal status pattern; current firmware reports that reset state so the
 row no longer remains optimistically lit after the droid reappears.
 
-On a virgin or full-erased board, **Servos** and **Auto anims** also begin off
-and servo PWM stays detached until explicitly enabled. Once changed by the
-operator, those two switches persist across ordinary reboots and firmware
-updates; Locate never persists.
+On a virgin or full-erased board, **Servos** begin off and servo PWM stays
+detached until explicitly enabled. That setting persists across ordinary reboots
+and firmware updates; Locate never persists.
 
 ## Names and persistence
 
@@ -70,26 +68,6 @@ the master.
 Keeping a copy on the droid helps the master recover its display name after a
 master configuration loss, but a **full erase** of that droid still destroys its
 local name and calibration.
-
-## Backup and restore: exact scope
-
-**Backup…** exports a JSON file containing:
-
-- the visible roster's droid IDs and names;
-- saved frequency, amplitude, and speed values available per droid.
-
-It does **not** contain servo calibration, adoption state, Servos/Auto anims/
-Locate switch state, firmware images, sequences, or audio files.
-
-**Restore…** overwrites names and animation settings from that file. With current
-firmware, operations are validated and applied in size-bounded batches; a large
-restore may require more than one batch. Older firmware falls back to individual
-commands. Do not treat the whole file as one guaranteed rollback transaction:
-leave the fleet powered and connected until the header returns to **● synced**,
-then inspect the rows you care about.
-
-See [Data & Backups](reference/data-and-backups.md) before a full flash or moving
-a show to another PC.
 
 ## When a droid is lost
 

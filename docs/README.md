@@ -10,6 +10,8 @@ in the same commit as the behavior it describes.
 | [PROTOCOL-REFERENCE.md](PROTOCOL-REFERENCE.md) | Current mesh message types and USB JSON bridge | Checking a message type or JSON command |
 | [FIRMWARE-CONTRACT.md](FIRMWARE-CONTRACT.md) | Historical console ↔ firmware contract and why fields were renamed | Understanding the rationale behind a protocol decision |
 | [SEQUENCER-BEHAVIOR.md](SEQUENCER-BEHAVIOR.md) | What the Sequencer currently does at runtime | Changing transport, scheduling, editing or Scene behavior |
+| [GESTURE-SEQUENCER-V2.md](GESTURE-SEQUENCER-V2.md) | Approved breaking product direction, target architecture and staged implementation plan for Sequencer + gesture catalog V2 | Discussing or implementing any V2 stage |
+| [GESTURE-CATALOG-SCHEMA-V1.md](GESTURE-CATALOG-SCHEMA-V1.md) | Strict V2 catalog/Scene data contract and validation rules | Editing the V2 catalog or Scene persistence boundary |
 | [SEQUENCER-HARDENING.md](SEQUENCER-HARDENING.md) | The 35 actionable Sequencer items, dashboard, decision log, execution order | Picking up Sequencer work or checking what is still open |
 | [SEQUENCER-DONE.md](SEQUENCER-DONE.md) | The 41 closed items with acceptance criteria and evidence log | Proving an item shipped, or preparing the SEQ-H08 release gate |
 | [SEQUENCER-IDEAS.md](SEQUENCER-IDEAS.md) | EPIC I and K: 30 deferred design ideas | Designing something structural that those ideas must stay compatible with |

@@ -55,15 +55,14 @@ The port opened, but the expected B1 master did not answer.
 - Calibration saves after 1.2 seconds of inactivity. Changing targets sooner
   cancels the pending calibration send.
 - Reselect the calibration target to read its values back.
-- For names/animation settings, wait for **● synced** before power-cycling the
-  master.
+- For names, wait for **● synced** before power-cycling the master.
 
 ## A name or calibration disappeared after flashing
 
 - **App-only USB flash** preserves NVS when the existing partition layout is the
   expected one.
 - **Full erase + flash** intentionally deletes that board's name, calibration,
-  and all other NVS settings. Restore supported backup fields and recalibrate.
+  and all other NVS settings. Re-enter the recorded name and recalibrate.
 - An older/manual procedure that rewrote a different partition table without
   erasing may have moved the NVS region. Do not repeat it; perform one deliberate
   full erase/recovery, then rebuild the board's settings.
@@ -124,7 +123,7 @@ received by firmware. One-shot gestures finish naturally. Replace `TALK` or
 Timeline edits are not autosaved. Use **Save** for normal Local Library work, or
 **Save As** for a separate Scene. The console reloads the last library Scene or
 imported/exported file, but not unsaved changes made afterward. Export a
-`.b1seq.json` copy for backup or transfer. See
+`.b1scene.json` copy for backup or transfer. See
 [Data & Backups](data-and-backups.md).
 
 ## Audio is silent or has no waveform

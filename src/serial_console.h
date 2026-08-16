@@ -4,12 +4,12 @@
 //  SerialConsole — JSON bridge over USB for the web console (master)
 //
 //  Protocol: one line = one JSON message (see CLAUDE.md).
-//  - PC → master: {cmd:"list"|"anim"|"config"|"name"|
-//                   "getConfig"|"calib"|"preview"|"getCalib"|"getAnimDurations"|
-//                   "animLease"|"safeStop"|"servo"|"autoAnim"|"locate"|"getMeshTopology"|"getAll"|
-//                   "setMulti"|"commit", ...}
-//  - master → PC: {evt:"droids"|"log"|"config"|"meshTopology"|"animAccepted"|
-//                   "animExec"|"err"|"allDone"|"setMultiDone"|"dirty", ...}
+//  - PC → master: {cmd:"list"|"anim"|"name"|
+//                   "calib"|"preview"|"getCalib"|"getAnimDurations"|
+//                   "animLease"|"safeStop"|"servo"|"locate"|"getMeshTopology"|"getAll"|
+//                   "commit", ...}
+//  - master → PC: {evt:"droids"|"log"|"meshTopology"|"animAccepted"|
+//                   "animExec"|"err"|"allDone"|"dirty", ...}
 //  (The seq* commands/events — the 8 NVS sequence slots and the onboard
 //  player — were removed in fw 1.7.0: sequences are console-driven only.
 //  "revert" was removed in fw 1.8.0: the console now auto-commits 2s after
@@ -37,10 +37,7 @@ public:
     // instead of the failure being silent.
     void pushErr(const char* fmt, ...);
 
-    // Emits the droid list and one droid's animation configuration. Passing
-    // MESH_TARGET_ALL to pushState resolves to the master itself.
     void pushDroids();
-    void pushState(uint16_t target = 0xFFFF);
 
     // Emits the indicative duration (ms) of each gesture ({evt:"animDurations",...}).
     void pushAnimDurations();
@@ -69,9 +66,7 @@ public:
     void onAnimLeaseRenew(void (*cb)(uint16_t target, uint16_t originSeq,
                                      uint16_t leaseMs)) { _animLeaseRenewCb = cb; }
     void onSafeStop(void (*cb)(uint16_t target)) { _safeStopCb = cb; }
-    void onConfig(void (*cb)(uint8_t freq, uint8_t amp, uint8_t speed)) { _cfgCb = cb; }
     void onServo(void (*cb)(uint16_t target, bool enabled)) { _servoCb = cb; }
-    void onAutoAnim(void (*cb)(uint16_t target, bool enabled)) { _autoAnimCb = cb; }
     void onLocate(void (*cb)(uint16_t target, bool enabled)) { _locateCb = cb; }
     void onCalib(void (*cb)(uint16_t target, uint8_t panMin, uint8_t panCenter, uint8_t panMax,
                             uint8_t tiltMin, uint8_t tiltCenter, uint8_t tiltMax,
@@ -84,20 +79,15 @@ public:
     // Master's servo state (to display it in the list).
     void setMasterServos(bool on) { _masterServos = on; }
 
-    // Master's auto-anim state (to display it in the list).
-    void setMasterAutoAnim(bool on) { _masterAutoAnim = on; }
-
     void setMasterLocate(bool on) { _masterLocate = on; }
 
 private:
-    // Line buffer: 4 KB to accept a large setMulti (and, historically, a
-    // 32-step seqSave). (256 B before: any longer line was silently dropped.)
+    // Line buffer: 4 KB to accept OTA chunks and future Scene commands.
     static const uint16_t SERIAL_LINE_MAX = 4096;
     char     _buf[SERIAL_LINE_MAX];
     uint16_t _len = 0;
     bool     _overflow = false;
     bool     _masterServos = false;
-    bool     _masterAutoAnim = false;
     bool     _masterLocate = false;
     bool     _clientReady = false;
     uint32_t _lastHelloMs = 0;
@@ -106,9 +96,7 @@ private:
     void (*_animCb)(uint16_t, uint8_t, uint32_t, uint32_t, uint16_t) = nullptr;
     void (*_animLeaseRenewCb)(uint16_t, uint16_t, uint16_t) = nullptr;
     void (*_safeStopCb)(uint16_t) = nullptr;
-    void (*_cfgCb)(uint8_t, uint8_t, uint8_t) = nullptr;
     void (*_servoCb)(uint16_t, bool) = nullptr;
-    void (*_autoAnimCb)(uint16_t, bool) = nullptr;
     void (*_locateCb)(uint16_t, bool) = nullptr;
     void (*_calibCb)(uint16_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t,
                      bool, bool) = nullptr;
@@ -118,12 +106,6 @@ private:
     void (*_otaAbortCb)() = nullptr;
 
     void handleLine(const char* line);
-
-    // setMulti: validation then application of a batch op (name/calib/config).
-    // validateOp fills `why` on rejection.
-    bool validateOp(JsonObjectConst op, char* why, size_t whyLen);
-    bool applyOp(JsonObjectConst op);
-    bool applyConfig(uint16_t target, uint8_t freq, uint8_t amp, uint8_t speed);
 
     // Pushes {evt:"dirty"} when the "uncommitted changes" state changes.
     void syncDirty();

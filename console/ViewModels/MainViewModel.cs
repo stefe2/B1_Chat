@@ -38,7 +38,6 @@ public partial class MainViewModel : ObservableObject
 
     public DroidsViewModel Droids { get; }
     public CalibrationViewModel Calibration { get; }
-    public AnimationViewModel Animation { get; }
     public FirmwareViewModel Firmware { get; }
     public MeshTopologyViewModel Topology { get; }
     public SequencerViewModel Sequencer { get; }
@@ -65,7 +64,6 @@ public partial class MainViewModel : ObservableObject
 
         Droids = new DroidsViewModel(Protocol);
         Calibration = new CalibrationViewModel(Protocol);
-        Animation = new AnimationViewModel(Protocol);
         Firmware = new FirmwareViewModel(Protocol, _link);
         Topology = new MeshTopologyViewModel(Protocol);
         Sequencer = new SequencerViewModel(Protocol, _settings);

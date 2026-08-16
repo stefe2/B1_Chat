@@ -11,8 +11,6 @@ internal sealed class FakeSequencerProtocol : ISequencerProtocol
     public IReadOnlyDictionary<int, int> AnimDurationMs => Durations;
     public Dictionary<int, AnimationDurationMetadata> DurationMetadata { get; } = new();
     public IReadOnlyDictionary<int, AnimationDurationMetadata> AnimDurationMetadata => DurationMetadata;
-    public Dictionary<ushort, int> Speeds { get; } = new();
-    public IReadOnlyDictionary<ushort, int> AnimSpeedPct => Speeds;
     public bool PortOpen { get; set; } = true;
     public bool SessionReady { get; set; } = true;
     public List<SentGesture> Sent { get; } = new();
@@ -23,7 +21,6 @@ internal sealed class FakeSequencerProtocol : ISequencerProtocol
 
     public event Action? DroidsChanged;
     public event Action? AnimDurationsReceived;
-    public event Action? AnimConfigurationChanged;
     public event Action<bool>? LinkClosed;
     public event Action<AnimMasterReceipt>? AnimMasterAccepted;
     public event Action<AnimExecutionReport>? AnimExecutionReceived;
@@ -55,7 +52,6 @@ internal sealed class FakeSequencerProtocol : ISequencerProtocol
 
     public void RaiseDroidsChanged() => DroidsChanged?.Invoke();
     public void RaiseAnimDurationsReceived() => AnimDurationsReceived?.Invoke();
-    public void RaiseAnimConfigurationChanged() => AnimConfigurationChanged?.Invoke();
     public void RaiseLinkClosed(bool unexpected = true) => LinkClosed?.Invoke(unexpected);
     public void RaiseAnimMasterAccepted(uint requestId, ushort target, int animId,
         int meshSeq = 77, bool meshQueued = true, bool localHandled = false,

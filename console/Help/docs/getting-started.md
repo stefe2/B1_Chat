@@ -65,25 +65,23 @@ previewing motion. See
 *Figure: Always confirm the droid name at the top before moving a calibration
 slider; slider movement previews live on that droid.*
 
-### 4. Try one gesture, then build a sequence
+### 4. Build a first sequence
 
-Use the Animation card for a single test gesture. Once every droid moves safely,
-use the [Sequencer](sequencer/timeline.md) to place gesture and audio clips on a
-shared timeline. Playback is driven by the console, so the PC and serial link
-must remain active.
+Use the [Sequencer](sequencer/timeline.md) to place a small gesture on one
+explicit droid track before building a larger choreography with gesture and
+audio clips. Playback is driven by the console, so the PC and serial link must
+remain active.
 
 ## What each card does
 
 - **[Droids](droids.md)** — adoption, identity, live state, per-droid toggles,
-  configuration backup/restore, firmware version/Build ID, and OTA entry points.
+  firmware version/Build ID, and OTA entry points.
 - **[Servo Calibration](calibration.md)** — safe pan/tilt limits, neutral centers,
   and live position preview.
 - **[Mesh Topology](mesh-topology.md)** — direct radio neighbors, relayed paths,
   signal strength, and observed traffic.
-- **[Animation](animation.md)** — manual playback of the 18 built-in gestures and
-  per-droid idle tuning.
 - **[Sequencer](sequencer/timeline.md)** — multi-droid gesture tracks, local audio,
-  editing, playback, and `.b1seq.json` import/export.
+  editing, playback, and `.b1scene.json` import/export.
 - **Firmware** — [USB recovery and flashing](firmware/flashing.md),
   [supervised fleet/individual slave OTA](firmware/ota.md), and
   [console updates](firmware/console-updates.md).
@@ -94,11 +92,9 @@ only the Windows console needs an update, it opens the regular Firmware window.
 
 ## Know where your changes are saved
 
-Names and animation parameters first update a working copy on the master. The
-console commits that copy about 2 seconds after the master reports it dirty.
-Animation sliders also have a 1.2-second input debounce, so the full trip from
-your last slider movement to **synced** can take a little over 3 seconds. Watch
-the header badge and wait for **● synced** before power-cycling the master.
+Names first update a working copy on the master. The console commits that copy
+about 2 seconds after the master reports it dirty. Watch the header badge and
+wait for **● synced** before power-cycling the master after renaming a droid.
 
 Calibration follows a different path: after 1.2 seconds without another slider
 change, the console sends all six values to the selected droid, which stores
@@ -107,7 +103,7 @@ targets before the 1.2-second delay cancels that pending change.
 
 Scenes and their audio layout live on the PC. Timeline edits are **not
 autosaved**. Save the Scene to the Local Library before closing the console or
-making risky edits. Export a `.b1seq.json` copy when you need backup or transfer,
+making risky edits. Export a `.b1scene.json` copy when you need backup or transfer,
 and keep the referenced audio files in place. See
 [Data & Backups](reference/data-and-backups.md) for the exact boundaries.
 

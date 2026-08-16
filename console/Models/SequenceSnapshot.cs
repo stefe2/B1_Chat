@@ -30,7 +30,13 @@ public record SequenceSnapshot(
         {
             var left = Steps[i];
             var right = other.Steps[i];
-            if (left.AnimId != right.AnimId ||
+            if (left.Id != right.Id ||
+                !string.Equals(left.GestureKey, right.GestureKey, StringComparison.Ordinal) ||
+                !string.Equals(left.Intensity, right.Intensity, StringComparison.Ordinal) ||
+                !string.Equals(left.Tempo, right.Tempo, StringComparison.Ordinal) ||
+                !string.Equals(left.Variant, right.Variant, StringComparison.Ordinal) ||
+                left.Seed != right.Seed ||
+                left.AnimId != right.AnimId ||
                 left.Target != right.Target ||
                 left.StartMs != right.StartMs ||
                 left.EndAfterMs != right.EndAfterMs)

@@ -7,7 +7,7 @@ Codex or from PowerShell without answering prompts:
 .\tools\self-test.ps1
 ```
 
-It never flashes a board, starts an OTA, changes a valid configuration,
+It never flashes a board, starts an OTA, changes a valid persistent setting,
 enables/disables a servo, previews a position, or starts an animation.
 
 ## What it checks automatically
@@ -28,6 +28,10 @@ enables/disables a servo, previews a position, or starts an animation.
 - validates the explicit Scene endpoint across automatic/manual mode, empty timed
   passes, content-tail clamping, looping audio, Pause/Resume, Stop and whole-pass
   Loop without stacked players or stale boundary rearming;
+- validates the V2 catalog/Scene persistence boundary: named gesture identity,
+  catalog binding, declared exact tempo, explicit continuous hold, strict field
+  rejection, legacy numeric identity rejection, V2 Export/Import/Library
+  round trips and rejection of retired `b1-sequence` files;
 - validates the manual advisory Sequencer preflight across muted tracks,
   missing/unreadable/pending/unknown audio, invalid/valid infinite-gesture
   endpoints, finite/infinite duration overlaps, same-time duplicates,
@@ -41,9 +45,10 @@ enables/disables a servo, previews a position, or starts an animation.
   pass;
 - runs `git diff --check`;
 - verifies that the callback-to-loop mesh inbox is present;
-- verifies the per-droid animation-parameter store and targeted protocol;
+- verifies that obsolete animation configuration has no remaining NVS, serial or
+  mesh path;
 - verifies the serial, mesh, and OTA validation guards;
-- verifies fail-closed virgin-board Servos/Auto anims/Locate defaults and that
+- verifies fail-closed virgin-board Servos/Locate defaults and that
   the servo engine emits no boot-time PWM before the stored preference loads;
 - verifies the per-axis servo Reverse path through console, mesh, NVS and PWM;
 - verifies that the content-derived firmware Build ID is generated and
@@ -67,7 +72,7 @@ enables/disables a servo, previews a position, or starts an animation.
   shared interactive styles keep tooltips visible while controls are disabled;
 - verifies that the installer checks Windows/CPU compatibility, warns when the
   optional Windows media stack is absent, and executes both installed binaries;
-- verifies that animation/calibration debounces snapshot their target and that
+- verifies that calibration debounces snapshot their target and that
   calibration loads suppress write-back callbacks;
 - verifies main-window startup placement against large, smaller/offset, left-of-primary
   and pathologically tiny monitor work areas, including clamping and positive bounds;
@@ -125,8 +130,9 @@ this checklist:
 - gesture-library clicks require the prominently displayed armed target, while
   direct drag-and-drop supplies its own explicit target.
 
-Persistence fixtures cover every `b1-sequence` schema from v1 through v6. V6
-round trips nullable/manual `endMs`; v1–v5 migrate to automatic endpoint mode.
+Archived parser fixtures still cover every `b1-sequence` schema from v1 through
+v6, but the live Sequencer Import path rejects them. The V2 fixtures exercise
+the named gesture and `b1-scene` persistence boundary.
 
 ### Safe serial integration checks
 
@@ -134,15 +140,15 @@ If an available B1 master is detected, the script opens it automatically and:
 
 - validates the JSON handshake, firmware/protocol metadata and master Build ID;
 - reads the droid inventory and confirms every node publishes a Build ID;
-- reads targeted animation parameters and calibration;
+- reads targeted calibration;
 - checks the 18-entry animation-duration catalog; structured clients additionally
   require `kind`, `nominalMs`, `frameCount` and IDLE `settleMs`, while `ms` remains
   the backward-compatible legacy field;
 - proves strict runtime validation with a read-only invalid-target probe before
   sending any invalid setter or animation command;
-- sends invalid animation, configuration, and calibration commands and requires
+- sends invalid animation and calibration commands and requires
   an `evt:"err"` response;
-- rereads configuration/calibration to prove rejected commands changed nothing;
+- rereads calibration to prove rejected commands changed nothing;
 - observes the inventory briefly and fails if it changes unexpectedly or a
   `mesh inbox full` event appears.
 
@@ -176,8 +182,8 @@ fails, making it usable from CI or another automation.
 
 `tools/sequencer-bench-test.ps1` is deliberately separate from the default
 self-test. Without a flag it performs only a strict read-only preflight:
-firmware/protocol consistency, expected fleet, targeted configuration and
-calibration responses, durations, runtime validation and mesh topology.
+firmware/protocol consistency, expected fleet, targeted calibration responses,
+durations, runtime validation and mesh topology.
 
 ```powershell
 # Read-only preflight for one master plus two slaves
@@ -187,13 +193,12 @@ calibration responses, durations, runtime validation and mesh topology.
 .\tools\sequencer-bench-test.ps1 -ComPort COM3 -AllowMotion -LoopCycles 5
 ```
 
-The active run snapshots servo/automatic-animation states, pauses automatic
-motion, enables the three targets, exercises calibrated master preview, targeted
-and broadcast finite gestures, deterministic seeds, rapid restart, explicit
-IDLE interruption of TALK/POWER_DOWN, and a short broadcast-loop stress. A
-`finally` cleanup always attempts broadcast IDLE and restores every captured
-servo/automatic-animation state. It never changes configuration/calibration,
-commits, flashes, starts OTA, or intentionally disconnects USB.
+The active run snapshots servo states, enables the three targets, exercises
+calibrated master preview, targeted and broadcast finite gestures, deterministic
+seeds, rapid restart, explicit IDLE interruption of TALK/POWER_DOWN, and a short
+broadcast-loop stress. A `finally` cleanup always attempts broadcast IDLE and
+restores every captured servo state. It never changes calibration, commits,
+flashes, starts OTA, or intentionally disconnects USB.
 
 The automated verdict proves serial acceptance, inventory/state propagation and
 observed mesh health. Execution reports now prove that each current droid's
@@ -206,8 +211,7 @@ operator observation.
 
 `tools/anim-exec-test.ps1` is the active test for slaves without physical
 servos. It forces the master's attached servos off, temporarily enables only
-the slave software engines, disables spontaneous motion, and restores every
-captured servo/auto-animation state in `finally`.
+the slave software engines and restores every captured servo state in `finally`.
 
 ```powershell
 .\tools\anim-exec-test.ps1 -ComPort COM3
@@ -223,7 +227,7 @@ fail-closed lease expiry, successful lease renewal, and rejection of a renewal
 carrying an older animation's mesh sequence. It also verifies that Safe Stop
 interrupts TALK and permits a later explicit release gesture, then confirms
 fleet-wide Servo OFF as the Emergency Stop policy.
-It does not flash, alter configuration/calibration, or claim physical movement.
+It does not flash, alter calibration, or claim physical movement.
 
 ### Three-level Stop bench run — 2026-08-11
 

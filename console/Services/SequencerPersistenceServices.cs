@@ -41,7 +41,7 @@ internal sealed class WpfSequencerPersistenceDialogs : ISequencerPersistenceDial
         var dialog = new SaveFileDialog
         {
             FileName = suggestedFileName,
-            Filter = "B1 Sequence (*.b1seq.json)|*.b1seq.json",
+            Filter = "B1 Scene (*.b1scene.json)|*.b1scene.json",
         };
         return dialog.ShowDialog() == true ? dialog.FileName : null;
     }
@@ -50,7 +50,7 @@ internal sealed class WpfSequencerPersistenceDialogs : ISequencerPersistenceDial
     {
         var dialog = new OpenFileDialog
         {
-            Filter = "B1 Sequence (*.b1seq.json)|*.b1seq.json|JSON (*.json)|*.json",
+            Filter = "B1 Scene (*.b1scene.json)|*.b1scene.json|JSON (*.json)|*.json",
         };
         return dialog.ShowDialog() == true ? dialog.FileName : null;
     }

@@ -40,6 +40,15 @@ public class SequenceTrackDto
 /// <summary>Flat form (POCO) for JSON serialization of SequenceStep.</summary>
 public class SequenceStepDto
 {
+    // V2 Scene identity. The temporary execution adapter resolves GestureKey to the
+    // current firmware command only when a pass is dispatched; neither number is
+    // written into a Scene file.
+    public Guid Id { get; set; }
+    public string GestureKey { get; set; } = "";
+    public string Intensity { get; set; } = "normal";
+    public string Tempo { get; set; } = "normal";
+    public string Variant { get; set; } = "default";
+    public uint Seed { get; set; }
     public int AnimId { get; set; }
     public ushort Target { get; set; } = 0xFFFF;
     public int StartMs { get; set; }

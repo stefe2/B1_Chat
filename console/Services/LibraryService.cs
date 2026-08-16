@@ -1,6 +1,4 @@
 using System.IO;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using b1_chat_console.Models;
@@ -16,8 +14,8 @@ public interface ISequenceLibraryService
 }
 
 /// <summary>
-/// Versioned, atomic Scene Library storage. Version 0 is the historical flat
-/// SequenceLibraryItem JSON; it is migrated in place on the first successful scan.
+/// Versioned, atomic V2 Scene Library storage. A legacy b1-sequence entry is an
+/// incompatible document, not something the V2 console attempts to reinterpret.
 /// </summary>
 public sealed class LibraryService : ISequenceLibraryService
 {
@@ -59,9 +57,7 @@ public sealed class LibraryService : ISequenceLibraryService
         {
             try
             {
-                var (item, legacy) = Read(path);
-                if (legacy) MigrateLegacy(path, item);
-                items.Add(item);
+                items.Add(Read(path));
             }
             catch (Exception ex)
             {
@@ -81,7 +77,7 @@ public sealed class LibraryService : ISequenceLibraryService
         ValidateId(id);
         var path = ScenePath(id);
         if (!File.Exists(path)) return null;
-        return Read(path).Item;
+        return Read(path);
     }
 
     public void Save(SequenceLibraryItem item)
@@ -91,8 +87,8 @@ public sealed class LibraryService : ISequenceLibraryService
         ValidateName(item.Name);
 
         var document = ToSnapshot(item);
-        var serializedDocument = SequenceExportSerializer.Serialize(document, item.Tracks);
-        _ = SequenceImportService.Parse(serializedDocument);
+        var serializedDocument = GestureSceneV2Persistence.Serialize(document, item.Tracks);
+        _ = GestureSceneV2Persistence.Parse(serializedDocument);
 
         var root = new JsonObject
         {
@@ -121,7 +117,7 @@ public sealed class LibraryService : ISequenceLibraryService
         File.Move(source, destination, overwrite: false);
     }
 
-    private (SequenceLibraryItem Item, bool Legacy) Read(string path)
+    private SequenceLibraryItem Read(string path)
     {
         string json;
         try
@@ -149,17 +145,14 @@ public sealed class LibraryService : ISequenceLibraryService
             if (root.ValueKind != JsonValueKind.Object)
                 throw new InvalidDataException("The library entry root must be an object.");
 
-            if (root.TryGetProperty("type", out var type))
-            {
-                var current = ReadCurrent(root, type);
-                var expectedFileName = $"{current.Id}.b1scene.json";
-                if (!string.Equals(Path.GetFileName(path), expectedFileName, StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidDataException(
-                        $"Scene id does not match its file name (expected {expectedFileName}).");
-                return (current, false);
-            }
-
-            return (ReadLegacy(path, json), true);
+            if (!root.TryGetProperty("type", out var type))
+                throw new InvalidDataException("A Local Library entry must use the V2 Scene Library envelope.");
+            var current = ReadCurrent(root, type);
+            var expectedFileName = $"{current.Id}.b1scene.json";
+            if (!string.Equals(Path.GetFileName(path), expectedFileName, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException(
+                    $"Scene id does not match its file name (expected {expectedFileName}).");
+            return current;
         }
     }
 
@@ -182,42 +175,8 @@ public sealed class LibraryService : ISequenceLibraryService
         if (!root.TryGetProperty("document", out var document))
             throw new InvalidDataException("Scene Library entry has no document.");
 
-        var imported = SequenceImportService.Parse(document.GetRawText());
+        var imported = GestureSceneV2Persistence.Parse(document.GetRawText());
         return FromImported(id, savedAt.ToUniversalTime(), imported);
-    }
-
-    private static SequenceLibraryItem ReadLegacy(string path, string json)
-    {
-        var legacy = JsonSerializer.Deserialize<SequenceLibraryItem>(json,
-            new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
-            ?? throw new InvalidDataException("Empty legacy library entry.");
-        ValidateName(legacy.Name);
-        legacy.Id = Guid.TryParse(legacy.Id, out var existingId)
-            ? existingId.ToString("N")
-            : StableLegacyId(path, legacy.Id);
-        legacy.SavedAt = legacy.SavedAt == default ? DateTime.UtcNow : legacy.SavedAt.ToUniversalTime();
-
-        var snapshot = ToSnapshot(legacy);
-        var normalized = SequenceExportSerializer.Serialize(snapshot, legacy.Tracks);
-        var imported = SequenceImportService.Parse(normalized);
-        return FromImported(legacy.Id, legacy.SavedAt, imported);
-    }
-
-    private static string StableLegacyId(string path, string legacyId)
-    {
-        var identity = $"{Path.GetFileName(path)}\0{legacyId}";
-        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(identity));
-        return new Guid(hash.AsSpan(0, 16)).ToString("N");
-    }
-
-    private void MigrateLegacy(string legacyPath, SequenceLibraryItem item)
-    {
-        Save(item);
-        Directory.CreateDirectory(_trashDir);
-        var baseName = Path.GetFileNameWithoutExtension(legacyPath);
-        var timestamp = DateTime.UtcNow.ToString("yyyyMMdd-HHmmssfff");
-        var destination = Path.Combine(_trashDir, $"legacy-{baseName}.{timestamp}.json");
-        File.Move(legacyPath, destination, overwrite: false);
     }
 
     private string ScenePath(string id) => Path.Combine(_libraryDir, $"{id}.b1scene.json");
@@ -232,7 +191,7 @@ public sealed class LibraryService : ISequenceLibraryService
     private static SequenceLibraryItem FromImported(
         string id,
         DateTime savedAt,
-        ImportedSequenceDocument document) => new()
+        ImportedSceneV2Document document) => new()
     {
         Id = id,
         Name = document.Name,
@@ -254,8 +213,8 @@ public sealed class LibraryService : ISequenceLibraryService
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new InvalidDataException("A Scene Library entry must have a name.");
-        if (name.Trim().Length > SequenceImportService.MaxSequenceNameLength)
+        if (name.Trim().Length > 128)
             throw new InvalidDataException(
-                $"Scene name exceeds {SequenceImportService.MaxSequenceNameLength} characters.");
+                "Scene name exceeds 128 characters.");
     }
 }

@@ -40,8 +40,8 @@ replaces it.
 
 Colored dots show observable activity:
 
-- outgoing gesture, servo, Auto anim, configuration, calibration, preview, and
-  Locate commands;
+- outgoing gesture, servo, calibration, preview, and Locate
+  commands;
 - acknowledged OTA fragments;
 - a generic inbound heartbeat/neighbor-report indication.
 

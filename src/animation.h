@@ -7,8 +7,8 @@
 //    (degrees) from center, played via ServoEngine (built-in easing).
 //  - Non-blocking playback: advances to the next keyframe once the movement
 //    is finished and the hold time has elapsed.
-//  - Variation via `seed`: slight deterministic jitter on targets and
-//    durations, so the same animation feels alive rather than repetitive.
+//  - Variation via `seed`: slight deterministic jitter on targets, so the
+//    same animation feels alive while its timeline duration remains fixed.
 //  See CLAUDE.md (section 6).
 // ============================================================================
 
@@ -53,18 +53,6 @@ public:
 
     bool isPlaying() const { return _playing; }
 
-    // Picks a random "active" animation ID (excluding IDLE and gestures
-    // triggered manually only, like POWER_DOWN/TALK).
-    static uint8_t randomAnimId(uint32_t seed);
-
-    // Live-tunable via MSG_CONFIG (0..100 each, see main.cpp's
-    // applyAnimParamsEffect). Scales keyframe offsets ("petits gestes ↔ grands
-    // gestes") and move/hold durations for every gesture played from here on —
-    // does NOT affect ServoEngine's own idle noise (see setIdleNoise), only
-    // real gesture playback. 60/50 are the historical, pre-this-feature
-    // defaults, so passing them back reproduces today's exact tuning.
-    void setAmpSpeedPct(uint8_t ampPct, uint8_t speedPct);
-
     // Nominal duration of one finite gesture or one loop cycle (sum of keyframes).
     // IDLE is immediate from the protocol's perspective and returns 0.
     static uint32_t totalDurationMs(uint8_t animId);
@@ -85,10 +73,6 @@ private:
     uint32_t _rng = 1;
     uint8_t  rnd(uint8_t n);
     int      jitter(uint8_t amp);
-
-    // See setAmpSpeedPct(); 1.0 = today's untouched tuning.
-    float _ampScale = 1.0f;
-    float _speedScale = 1.0f;
 
     void issueCurrentFrame();
 };

@@ -84,13 +84,11 @@ public class TooltipCoverageTests
     [Fact]
     public void SafetyAndTimingTooltips_MatchCurrentBehavior()
     {
-        var animation = File.ReadAllText(FindRepositoryFile("console", "Views", "AnimationCardView.xaml"));
         var calibration = File.ReadAllText(FindRepositoryFile("console", "Views", "CalibrationCardView.xaml"));
         var droids = File.ReadAllText(FindRepositoryFile("console", "Views", "DroidsCardView.xaml"));
         var firmware = File.ReadAllText(FindRepositoryFile("console", "Views", "FirmwareCardView.xaml"));
         var sequencer = File.ReadAllText(FindRepositoryFile("console", "Views", "SequenceTimelineView.xaml"));
 
-        Assert.Contains("POWER_DOWN and TALK continue", animation, StringComparison.Ordinal);
         Assert.Contains("saved after 1.2 seconds", calibration, StringComparison.Ordinal);
         Assert.Contains("identification LED with solid on", droids, StringComparison.Ordinal);
         Assert.Contains("do not select it automatically", firmware, StringComparison.Ordinal);

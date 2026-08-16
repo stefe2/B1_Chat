@@ -1,40 +1,24 @@
 # Data, Backups & Moving to Another PC
 
-B1 Chat stores different information in different places. No single button is a
-complete fleet backup.
+B1 Chat stores different information in different places. Scene export protects
+choreography, but no single action is a complete fleet backup.
 
 ## Storage map
 
-| Information | Stored where | Survives app-only flash? | Included in Droids Backup? |
+| Information | Stored where | Survives app-only flash? | Portable export? |
 | --- | --- | --- | --- |
-| Droid name | Target droid NVS plus master cache | Yes | Yes |
-| Frequency/amplitude/speed | Target droid NVS plus master configuration | Yes | Yes, when known to the console |
-| Servo calibration | Target droid NVS | Yes | **No** |
-| Adoption | Master NVS | Yes on the master | **No** |
-| Servos / Auto anims state | Target droid NVS after the operator changes it; virgin/full-erased boards default off | Yes | No |
+| Droid name | Target droid NVS plus master cache | Yes | No; record it before a full erase |
+| Servo calibration | Target droid NVS | Yes | No; record it before a full erase |
+| Adoption | Master NVS | Yes on the master | No |
+| Servos state | Target droid NVS after the operator changes it; virgin/full-erased boards default off | Yes | No |
 | Locate state | Target droid runtime only | No; restart clears it | No |
-| Scene gesture/audio layout | PC Local Library and exported `.b1seq.json` copies | Not applicable | No |
-| Actual audio bytes | Original files on the PC | Not applicable | No |
+| Scene gesture/audio layout | PC Local Library and exported `.b1scene.json` copies | Not applicable | Yes, `.b1scene.json` |
+| Actual audio bytes | Original files on the PC | Not applicable | Copy separately |
 | Last COM port and last Scene identity/external path | PC `settings.json` | Not applicable | No |
 
 A full erase destroys all NVS on the board being flashed. An app-only flash is
 designed to leave NVS untouched when the board already has the expected
 partition layout.
-
-## Droids Backup
-
-Use **Backup…** to export names and known per-droid animation parameters. Use
-**Restore…** to write those supported fields back. Large restores can be split
-into multiple validated batches, and older firmware may apply individual
-commands, so verify the final fleet instead of assuming one global transaction.
-
-![Backup and Restore controls above the live droid roster](../images/backup-and-restore.png)
-
-*Figure: Backup and Restore apply to supported roster data. They are not a
-substitute for sequence exports, copied audio files, or a calibration record.*
-
-Calibration, adoption, toggle state, sequences, and sound files require separate
-protection.
 
 ## Scene Library and sequence export
 
@@ -43,7 +27,7 @@ the Local Library; **Save As** creates a new GUID-backed identity. The last
 library Scene is restored at startup. Removing a Scene moves it to
 `library\trash` after confirmation instead of permanently deleting it.
 
-Export writes a `.b1seq.json` snapshot containing gesture clips, target IDs,
+Export writes a `.b1scene.json` snapshot containing named gesture clips, target IDs,
 offline track layout, audio-lane layout, and **paths** to audio files. It does
 not embed or copy audio. Timeline edits after the export remain only in memory
 until the next export.
@@ -59,9 +43,9 @@ that checkpoint.
 For another PC, copy both the sequence JSON and every audio file. Import the JSON,
 then use Replace file on any clip whose old absolute path is invalid.
 
-Sequence Import validates the complete document before replacing the editor.
-Versions 1–6 are supported and migrated explicitly; version 5 introduced real
-endpoints for looping gestures and version 6 added the optional Scene END marker.
+Scene Import validates the complete V2 document and its bound gesture catalog
+before replacing the editor. Older `.b1seq.json` files are deliberately
+incompatible and are not migrated.
 Unknown future versions and invalid fields are refused with a field-specific
 error, leaving the open sequence unchanged. Very old DFPlayer track numbers do
 not contain PC file paths and therefore cannot restore their original sound
@@ -87,12 +71,11 @@ portability should use Export/Import rather than copying `settings.json`.
 
 ## Before changing PCs or performing a full erase
 
-1. Export a fresh Droids Backup.
-2. Save every Scene, then Export external copies needed off this PC.
-3. Copy the audio assets used by those sequences.
-4. Record every droid's six calibration values separately.
-5. Record which board is master and which boards have previously used OTA.
-6. Keep the release/version information with the backup set.
+1. Save every Scene, then Export external copies needed off this PC.
+2. Copy the audio assets used by those sequences.
+3. Record every droid's name and calibration values separately.
+4. Record which board is master and which boards have previously used OTA.
+5. Keep the release/version information with the backup set.
 
 After restoration, verify names, calibration, a small gesture, audio output, and
 mesh reachability before running a full sequence.

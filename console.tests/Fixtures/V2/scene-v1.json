@@ -1,0 +1,38 @@
+{
+  "type": "b1-scene",
+  "version": 1,
+  "name": "First V2 scene",
+  "loop": false,
+  "endMs": null,
+  "catalog": {
+    "id": "b1.core",
+    "revision": "v1",
+    "hash": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+  },
+  "tracks": [{ "id": 43140, "name": "Master" }],
+  "audioLanes": [],
+  "gestureClips": [
+    {
+      "id": "bf259aed-7f2b-4b82-8b09-2a1ca1a3f0d1",
+      "gestureKey": "communicate.nod",
+      "target": { "mode": "droid", "id": 43140 },
+      "startMs": 1200,
+      "intensity": "normal",
+      "tempo": "normal",
+      "variant": "default",
+      "seed": 1847293,
+      "holdMs": null
+    },
+    {
+      "id": "2b7d4a5d-26c7-4415-b252-393d93f44e33",
+      "gestureKey": "dialogue.talk",
+      "target": { "mode": "droid", "id": 43140 },
+      "startMs": 4000,
+      "intensity": "normal",
+      "tempo": "normal",
+      "variant": "default",
+      "seed": 92014,
+      "holdMs": 6000
+    }
+  ]
+}

@@ -287,7 +287,7 @@
         </Setter>
     </Style>
 
-    <!-- Toggle button (Servos / Auto anims): checked = Ok, unchecked = Bad, with crisp borders. -->
+    <!-- Toggle button: checked = Ok, unchecked = Bad, with crisp borders. -->
     <Style x:Key="HaloToggleButtonStyle" TargetType="ToggleButton">
         <Setter Property="Padding" Value="9,5" />
         <Setter Property="Cursor" Value="Hand" />
@@ -347,7 +347,7 @@
         </Setter>
     </Style>
 
-    <!-- Sliding switch (Servos / Auto anims): red/green oval track, sliding white dot. -->
+    <!-- Sliding switch: red/green oval track, sliding white dot. -->
     <Style x:Key="OnOffSwitchStyle" TargetType="ToggleButton">
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="ToolTipService.ShowOnDisabled" Value="True" />

@@ -24,34 +24,14 @@
 
 static ServoEngine head;
 static AnimationPlayer anim;
-static uint32_t nextMove = 0;
 
 // Runtime servo state of THIS droid (controllable from the web console).
 static bool gServos = false;
 
-// Spontaneous idle anims of THIS droid (controllable from the web console).
-// Doesn't affect Play (anim) or the Sequencer: only the random idle draw.
-static bool gAutoAnim = false;
-
-// Transient safety latch. Unlike gAutoAnim it is never persisted: Safe Stop
-// and Emergency Stop suppress spontaneous motion until an explicit gesture is
-// accepted, without changing the operator's saved Auto animation preference.
+// Transient safety latch. Safe Stop and Emergency Stop block untracked or
+// delayed animation traffic until an explicit tracked gesture is accepted.
+// DroidController will replace this narrow temporary ownership mechanism in V2.
 static bool gSafetyHold = false;
-
-// Live-tunable "frequency" param (0..100, see applyAnimParamsEffect) — scales
-// the idle-draw interval below. 50 = historical default = today's untouched
-// 2.5-5s (master)/3-7s (isolated slave) range.
-static uint8_t gIdleFreqPct = 50;
-
-// Multiplier applied to the idle-draw interval, mirroring AnimationPlayer's
-// own amp/speed scale clamp (see setAmpSpeedPct) so "frequency" behaves
-// consistently with the other two knobs.
-static float idleFreqScale() {
-    float s = 50.0f / (float)(gIdleFreqPct < 10 ? 10 : gIdleFreqPct);
-    if (s < 0.15f) s = 0.15f;
-    if (s > 4.0f) s = 4.0f;
-    return s;
-}
 
 // Life LED (execution indicator) — non-blocking blink, overridden solid by "locate".
 static uint32_t lastBlink = 0;
@@ -62,8 +42,6 @@ static bool ledOn = false;
 // persisted (console-driven, ephemeral like preview positioning).
 static bool gLocateOn = false;
 
-// Mesh test / timers
-static uint32_t nextMeshSend = 0;
 // Firmware version, decomposed once at startup from FW_VERSION (config.h)
 // to be included (compact, 3 bytes) in every heartbeat.
 static uint8_t gFwMajor = 0, gFwMinor = 0, gFwPatch = 0;
@@ -148,14 +126,6 @@ static bool validCalibV2Payload(const CalibV2Payload& p) {
     const CalibPayload limits{p.targetId, p.panMin, p.panCenter, p.panMax,
                               p.tiltMin, p.tiltCenter, p.tiltMax};
     return validCalibPayload(limits) && p.panReversed <= 1 && p.tiltReversed <= 1;
-}
-
-static bool validConfigPayload(const ConfigPayload& p) {
-    return validMeshTarget(p.targetId) && isfinite(p.freq) &&
-           isfinite(p.amplitude) && isfinite(p.speed) &&
-           p.freq >= 0.0f && p.freq <= 100.0f &&
-           p.amplitude >= 0.0f && p.amplitude <= 100.0f &&
-           p.speed >= 0.0f && p.speed <= 100.0f;
 }
 
 // One tracked console animation may produce several reports (one per target).
@@ -270,8 +240,8 @@ static void startAnimationCommand(uint16_t targetId, uint8_t animId, uint32_t se
                                   uint16_t originSeq, bool tracked,
                                   uint16_t leaseMs = 0) {
     const bool broadcast = targetId == MESH_TARGET_ALL;
-    // Random master broadcasts are deliberately untracked. Ignore them while
-    // held so even a targeted Safe Stop cannot be undone by fleet idle traffic.
+    // Ignore stale or external untracked traffic while held so Safe Stop cannot
+    // be undone before a tracked operator/Sequencer gesture deliberately releases it.
     if (gSafetyHold && !tracked) return;
     interruptTrackedAnimation();
 
@@ -383,15 +353,6 @@ static void applySafeStop() {
 
 // Pauses/resumes THIS droid's spontaneous idle animation. Persisted
 // immediately, same reasoning as applyServos.
-static void applyAutoAnim(bool en) {
-    gAutoAnim = en;
-    Config.setAutoAnimEnabledImmediate(en);
-#if IS_MASTER
-    Console.setMasterAutoAnim(en);
-#endif
-    LOGF("auto anims %s", en ? "ON" : "PAUSED");
-}
-
 // Persists THIS droid's OWN name (master or slave), received via MSG_NAME —
 // bypasses the master's commit/revert draft (setNameImmediate), so a droid
 // keeps its own name even if the master's own copy is ever lost or reset.
@@ -407,15 +368,6 @@ static void applyLocate(bool en) {
     Console.setMasterLocate(en);
 #endif
     LOGF("locate %s", en ? "ON" : "OFF");
-}
-
-// Applies freq/amp/speed to THIS droid's running behavior (master or slave) —
-// persistence is the CALLER's job (see the two call sites: the master's own
-// draft/auto-commit for its local changes, ConfigStore::setAnimParamsImmediate
-// for a value received over the mesh).
-static void applyAnimParamsEffect(uint8_t freq, uint8_t amp, uint8_t speed) {
-    gIdleFreqPct = freq;
-    anim.setAmpSpeedPct(amp, speed);
 }
 
 // Persists and applies a received calibration for THIS droid (master or slave).
@@ -475,13 +427,6 @@ static void onServoCmd(uint16_t target, bool en) {
     ServoPayload p{target, (uint8_t)(en ? 1 : 0)};
     Mesh.send(MSG_SERVO, &p, sizeof(p));
     if (target == MESH_TARGET_ALL || target == Mesh.myId()) applyServos(en);
-}
-
-// Console hook: pause/resume a target's spontaneous animation (master).
-static void onAutoAnimCmd(uint16_t target, bool en) {
-    AutoAnimPayload p{target, (uint8_t)(en ? 1 : 0)};
-    Mesh.send(MSG_AUTOANIM, &p, sizeof(p));
-    if (target == MESH_TARGET_ALL || target == Mesh.myId()) applyAutoAnim(en);
 }
 
 // Console hook: toggle a target's "locate" LED (master).
@@ -566,12 +511,6 @@ static void processMeshMessage(uint8_t type, const uint8_t* payload, uint8_t len
         if (!validMeshTarget(p.targetId) || p.enabled > 1) return;
         if (p.targetId == MESH_TARGET_ALL || p.targetId == Mesh.myId())
             applyServos(p.enabled != 0);
-    } else if (type == MSG_AUTOANIM && len == sizeof(AutoAnimPayload)) {
-        AutoAnimPayload p;
-        memcpy(&p, payload, sizeof(p));
-        if (!validMeshTarget(p.targetId) || p.enabled > 1) return;
-        if (p.targetId == MESH_TARGET_ALL || p.targetId == Mesh.myId())
-            applyAutoAnim(p.enabled != 0);
     } else if (type == MSG_LOCATE && len == sizeof(LocatePayload)) {
         LocatePayload p;
         memcpy(&p, payload, sizeof(p));
@@ -610,20 +549,6 @@ static void processMeshMessage(uint8_t type, const uint8_t* payload, uint8_t len
             applyCalib(ServoCalib{p.panMin, p.panCenter, p.panMax,
                                   p.tiltMin, p.tiltCenter, p.tiltMax,
                                   p.panReversed, p.tiltReversed});
-    } else if (type == MSG_CONFIG && len == sizeof(ConfigPayload)) {
-        ConfigPayload p;
-        memcpy(&p, payload, sizeof(p));
-        if (!validConfigPayload(p)) {
-            LOGF("invalid CONFIG payload from %04X", srcId);
-            return;
-        }
-        if (p.targetId == MESH_TARGET_ALL || p.targetId == Mesh.myId()) {
-            const uint8_t freq = (uint8_t)p.freq, amp = (uint8_t)p.amplitude, speed = (uint8_t)p.speed;
-            // Immediate persistence: the receiving droid has no "commit" command of its
-            // own to ever flush a draft with (see ConfigStore::setAnimParamsImmediate).
-            Config.setAnimParamsImmediate(freq, amp, speed);
-            applyAnimParamsEffect(freq, amp, speed);
-        }
     } else if (type == MSG_PREVIEW && len == sizeof(PreviewPayload)) {
         PreviewPayload p;
         memcpy(&p, payload, sizeof(p));
@@ -635,7 +560,6 @@ static void processMeshMessage(uint8_t type, const uint8_t* payload, uint8_t len
         HeartbeatPayload hb;
         memcpy(&hb, payload, sizeof(hb));
         Droids.setServos(srcId, hb.state & 0x01);
-        Droids.setAutoAnim(srcId, hb.state & 0x02);
         Droids.setLocate(srcId, hb.state & 0x04);
         Droids.setFwIdentity(srcId, hb.fwMajor, hb.fwMinor, hb.fwPatch, hb.buildId);
 #endif
@@ -644,7 +568,6 @@ static void processMeshMessage(uint8_t type, const uint8_t* payload, uint8_t len
         LegacyHeartbeatPayload hb;
         memcpy(&hb, payload, sizeof(hb));
         Droids.setServos(srcId, hb.state & 0x01);
-        Droids.setAutoAnim(srcId, hb.state & 0x02);
         Droids.setLocate(srcId, false);
         Droids.setFwIdentity(srcId, hb.fwMajor, hb.fwMinor, hb.fwPatch, 0);
 #endif
@@ -817,14 +740,12 @@ void setup() {
     Config.begin();
 
     head.begin();
-    head.setIdleNoise(true);
     anim.begin(&head);
 
     // A virgin/full-erased ESP32 always starts inert. Once the operator has
     // explicitly changed these switches, their NVS values still survive normal
     // firmware updates and reboots.
     gServos = Config.servosEnabled(false);
-    gAutoAnim = Config.autoAnimEnabled(false);
     head.setEnabled(gServos);
 
 #if IS_MASTER
@@ -833,8 +754,6 @@ void setup() {
     Console.onAnimLeaseRenew(onAnimLeaseRenewCmd);
     Console.onSafeStop(onSafeStopCmd);
     Console.onServo(onServoCmd);
-    Console.onAutoAnim(onAutoAnimCmd);
-    Console.onConfig(applyAnimParamsEffect);
     Console.onLocate(onLocateCmd);
     Console.onCalib(onCalibCmd);
     Console.onPreview(onPreviewCmd);
@@ -842,21 +761,10 @@ void setup() {
     Console.onOtaChunk(onOtaChunkCmd);
     Console.onOtaAbort(onOtaAbortCmd);
     Console.setMasterServos(gServos);
-    Console.setMasterAutoAnim(gAutoAnim);
     Console.setMasterLocate(gLocateOn);
 #endif
 
     const bool meshReady = Mesh.begin(GROUP_KEY);
-    Config.setLocalId(Mesh.myId());
-
-    // Restores this droid's own keyed freq/amp/speed. ConfigStore falls back
-    // to the <=1.9.0 global keys on the first upgraded boot.
-    {
-        uint8_t f, a, s;
-        Config.animParams(f, a, s);
-        applyAnimParamsEffect(f, a, s);
-    }
-
     if (meshReady) {
         Mesh.onReceive(onMeshMessage);
         // Persisted calibration of THIS droid (default limits if never set).
@@ -901,8 +809,7 @@ void loop() {
     if (now > nextHeartbeat) {
         nextHeartbeat = now + HEARTBEAT_MS;
         HeartbeatPayload hb{now,
-                            (uint8_t)((gServos ? 1 : 0) | (gAutoAnim ? 2 : 0) |
-                                      (gLocateOn ? 4 : 0)),
+                            (uint8_t)((gServos ? 1 : 0) | (gLocateOn ? 4 : 0)),
                             gFwMajor, gFwMinor, gFwPatch,
                             (uint32_t)FW_BUILD_ID};
         Mesh.send(MSG_HEARTBEAT, &hb, sizeof(hb));
@@ -951,21 +858,5 @@ void loop() {
         Console.pushMeshTopology();
     }
 
-    // The master picks a random anim, plays it, and broadcasts it to the group.
-    if (gServos && gAutoAnim && !gSafetyHold && !anim.isPlaying() && now > nextMeshSend) {
-        nextMeshSend = now + (uint32_t)(random(2500, 5000) * idleFreqScale());
-        const uint32_t seed = (uint32_t)esp_random();
-        const uint8_t animId = AnimationPlayer::randomAnimId(seed);
-        AnimPayload p{MESH_TARGET_ALL, animId, 0, seed};
-        Mesh.send(MSG_ANIM, &p, sizeof(p));
-        anim.play(animId, seed);
-    }
-#else
-    // An isolated slave (no master) also animates itself on its own.
-    if (gServos && gAutoAnim && !gSafetyHold && !anim.isPlaying() && now > nextMove) {
-        nextMove = now + (uint32_t)(random(3000, 7000) * idleFreqScale());
-        const uint32_t seed = (uint32_t)esp_random();
-        anim.play(AnimationPlayer::randomAnimId(seed), seed);
-    }
 #endif
 }

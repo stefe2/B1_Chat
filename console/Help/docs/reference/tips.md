@@ -62,7 +62,7 @@ before clicking a chip, or drag it when target and timing must be explicit.*
 
 - Write down whether a board has ever completed OTA. Its next USB flash should
   use full erase + flash.
-- Record calibration before any full erase; Droids Backup does not contain it.
+- Record the droid name and calibration before any full erase.
 - Prefer From GitHub for release binaries with SHA-256 verification.
 - For local files, confirm role, group key, and the presence of support images
   before enabling full erase.

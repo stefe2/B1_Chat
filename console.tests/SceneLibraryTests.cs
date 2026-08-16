@@ -22,7 +22,7 @@ public sealed class SceneLibraryTests
         Assert.Equal(LibraryService.SchemaType, json.RootElement.GetProperty("type").GetString());
         Assert.Equal(LibraryService.CurrentVersion, json.RootElement.GetProperty("version").GetInt32());
         Assert.Equal(id, json.RootElement.GetProperty("id").GetString());
-        Assert.Equal("b1-sequence", json.RootElement.GetProperty("document").GetProperty("type").GetString());
+        Assert.Equal("b1-scene", json.RootElement.GetProperty("document").GetProperty("type").GetString());
         Assert.Empty(Directory.GetFiles(fixture.DirectoryPath, "*.tmp"));
 
         var scan = service.Scan();
@@ -30,13 +30,13 @@ public sealed class SceneLibraryTests
         Assert.Equal("Bench Wakeup", Assert.Single(scan.Items).Name);
         var loaded = Assert.IsType<SequenceLibraryItem>(service.Get(id));
         Assert.Equal(id, loaded.Id);
-        Assert.Equal((3, (ushort)0x1234, 250),
+        Assert.Equal((2, (ushort)0x1234, 250),
             (Assert.Single(loaded.Steps).AnimId, loaded.Steps[0].Target, loaded.Steps[0].StartMs));
         Assert.Equal(4_000, loaded.EndMs);
     }
 
     [Fact]
-    public void LegacyEntry_IsValidatedMigratedAndOriginalMovedToTrash()
+    public void LegacyEntry_IsReportedAndLeftUntouched()
     {
         using var fixture = new TemporaryJsonFixture();
         var legacy = Scene("old-human-id", "Legacy Scene");
@@ -45,13 +45,9 @@ public sealed class SceneLibraryTests
 
         var scan = service.Scan();
 
-        Assert.Empty(scan.Issues);
-        var migrated = Assert.Single(scan.Items);
-        Assert.True(Guid.TryParse(migrated.Id, out _));
-        Assert.Equal("Legacy Scene", migrated.Name);
-        Assert.False(File.Exists(legacyPath));
-        Assert.True(File.Exists(Path.Combine(fixture.DirectoryPath, $"{migrated.Id}.b1scene.json")));
-        Assert.Single(Directory.GetFiles(Path.Combine(fixture.DirectoryPath, "trash"), "legacy-*.json"));
+        Assert.Empty(scan.Items);
+        Assert.Contains("V2 Scene Library envelope", Assert.Single(scan.Issues).Message);
+        Assert.True(File.Exists(legacyPath));
     }
 
     [Fact]
@@ -114,7 +110,7 @@ public sealed class SceneLibraryTests
         var dialogs = new FakeSequencerPersistenceDialogs();
         using var vm = CreateViewModel(library, settings, dialogs);
         Assert.True(vm.SetSequenceName("Opening Scene"));
-        vm.InsertGestureAt(4, vm.Tracks.Single(track => track.IsBroadcast), 300);
+        vm.InsertGestureAt(2, vm.Tracks.Single(track => track.IsBroadcast), 300);
 
         vm.SaveSceneCommand.Execute(null);
 
@@ -299,7 +295,7 @@ public sealed class SceneLibraryTests
         Assert.Contains("UNTITLED · NEW · CLEAN", vm.SequenceBadgeText);
         Assert.Contains("1 file issue", vm.LibraryStatusText);
 
-        vm.ImportFrom(Path.Combine(AppContext.BaseDirectory, "Fixtures", "Sequences", "sequence-v4.json"));
+        vm.ImportFrom(Path.Combine(AppContext.BaseDirectory, "Fixtures", "V2", "scene-v1.json"));
         Assert.Contains("IMPORTED / EXTERNAL FILE · SAVED", vm.SequenceBadgeText);
 
         vm.EditableLoop = !vm.Loop;
@@ -339,7 +335,7 @@ public sealed class SceneLibraryTests
         };
         using var vm = CreateViewModel(library, settings, dialogs);
         Assert.True(vm.SetSequenceName("Draft Scene"));
-        vm.InsertGestureAt(4, vm.Tracks.Single(track => track.IsBroadcast), 300);
+        vm.InsertGestureAt(2, vm.Tracks.Single(track => track.IsBroadcast), 300);
 
         vm.NewSceneCommand.Execute(null);
 
@@ -404,7 +400,7 @@ public sealed class SceneLibraryTests
             SceneNameResult = null,
         };
         using var vm = CreateViewModel(library, dialogs: dialogs);
-        vm.InsertGestureAt(4, vm.Tracks.Single(track => track.IsBroadcast), 300);
+        vm.InsertGestureAt(2, vm.Tracks.Single(track => track.IsBroadcast), 300);
 
         vm.NewSceneCommand.Execute(null);
 
@@ -442,7 +438,7 @@ public sealed class SceneLibraryTests
         EndMs = 4_000,
         Tracks = new List<SequenceTrackDto> { new() { Id = 0x1234, Name = "R2-D2" } },
         AudioLanes = new List<AudioLaneDto>(),
-        Steps = new List<SequenceStepDto> { new() { AnimId = 3, Target = 0x1234, StartMs = 250 } },
+        Steps = new List<SequenceStepDto> { new() { AnimId = 2, Target = 0x1234, StartMs = 250 } },
         SavedAt = DateTime.UtcNow,
     };
 

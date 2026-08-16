@@ -61,22 +61,30 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     // overlap within their own lane. Never sent to the master — console-side only.
     public ObservableCollection<AudioLane> AudioLanes { get; } = new();
 
-    // The 18 built-in gestures, reused as-is from AnimationViewModel — never redefined here.
-    public IReadOnlyList<string> GestureNames { get; } =
-        AnimationViewModel.AnimNames.Select((n, i) => $"{i} — {n}").ToList();
+    // The authoring surface now offers the V2 catalog slice only. Its temporary
+    // execution bridge is confined to GestureSceneV2Persistence.
     public IReadOnlyList<GestureLibraryEntry> GestureLibrary { get; } =
-        AnimationViewModel.AnimNames.Select((n, i) => new GestureLibraryEntry { Id = i, Name = n }).ToList();
+    [
+        new() { Id = 0, Name = "Center" },
+        new() { Id = 2, Name = "Nod" },
+        new() { Id = 17, Name = "Talk" },
+    ];
 
-    // Same 18 gestures, grouped into labeled rows (mockup-matched "GESTURE LIBRARY" layout) —
-    // grouping/labels come from AnimFamilyToBrushConverter.Families, the single source of truth
-    // also used to color every clip/chip, so the two can't drift apart.
-    public IReadOnlyList<GestureFamily> GestureFamilies { get; } = AnimFamilyToBrushConverter.Families
-        .Select(f => new GestureFamily
+    public IReadOnlyList<GestureFamily> GestureFamilies { get; } =
+    [
+        new GestureFamily
         {
-            Label = f.Label,
-            ColorAnimId = f.AnimIds[0],
-            Gestures = f.AnimIds.Select(id => new GestureLibraryEntry { Id = id, Name = AnimationViewModel.AnimNames[id] }).ToList(),
-        }).ToList();
+            Label = "ESSENTIAL",
+            ColorAnimId = 0,
+            Gestures = [new GestureLibraryEntry { Id = 0, Name = "Center" }, new GestureLibraryEntry { Id = 2, Name = "Nod" }],
+        },
+        new GestureFamily
+        {
+            Label = "DIALOGUE",
+            ColorAnimId = 17,
+            Gestures = [new GestureLibraryEntry { Id = 17, Name = "Talk" }],
+        },
+    ];
 
     public IReadOnlyDictionary<int, int> AnimDurationMsLookup => _protocol.AnimDurationMs;
     private double _totalDurationMs;
@@ -425,7 +433,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         _audioProbe = audioProbe ?? new AudioProbe();
         _waveformDecoder = waveformDecoder ?? WaveformService.Shared;
         _preflightService = preflightService ?? new SequencerPreflightService(
-            gestureNames: AnimationViewModel.AnimNames);
+            gestureNames: new[] { "Center", "", "Nod", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "Talk" });
         _audioPlayer.PlaybackFailed += OnAudioPlaybackFailed;
         _timerScheduler = timerScheduler ?? new ThreadPoolPlaybackTimerScheduler();
         _executionTimerScheduler = executionTimerScheduler ?? new ThreadPoolPlaybackTimerScheduler();
@@ -435,7 +443,6 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         _library = library ?? new LibraryService();
         _protocol.DroidsChanged += OnDroidsChanged;
         _protocol.AnimDurationsReceived += OnAnimDurationsReceived;
-        _protocol.AnimConfigurationChanged += OnAnimConfigurationChanged;
         _protocol.AnimMasterAccepted += OnAnimMasterAccepted;
         _protocol.AnimExecutionReceived += OnAnimExecutionReceived;
         _protocol.LinkClosed += OnProtocolLinkClosed;
@@ -474,8 +481,6 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(AnimDurationMsLookup));
         RefreshDurationDerivedState();
     }
-
-    private void OnAnimConfigurationChanged() => RefreshDurationDerivedState();
 
     private void RefreshDurationDerivedState()
     {
@@ -861,7 +866,6 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         _executionTrackers.Clear();
         _protocol.DroidsChanged -= OnDroidsChanged;
         _protocol.AnimDurationsReceived -= OnAnimDurationsReceived;
-        _protocol.AnimConfigurationChanged -= OnAnimConfigurationChanged;
         _protocol.AnimMasterAccepted -= OnAnimMasterAccepted;
         _protocol.AnimExecutionReceived -= OnAnimExecutionReceived;
         _protocol.LinkClosed -= OnProtocolLinkClosed;
@@ -1015,9 +1019,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         _durationTargetSignature = DurationTargetSignature();
         var provider = new AnimationDurationProvider(
             _protocol.AnimDurationMetadata,
-            _protocol.AnimDurationMs,
-            _protocol.AnimSpeedPct,
-            _protocol.Droids);
+            _protocol.AnimDurationMs);
         long stepsEnd = 0;
         foreach (var step in Steps)
         {
@@ -1110,7 +1112,19 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         if (!CanEditSequence || track == null) return;
         ExecuteSequenceEdit(() =>
         {
-            var step = new SequenceStep { AnimId = animId, Target = track.Id, StartMs = Math.Max(0, startMs) };
+            var step = new SequenceStep
+            {
+                AnimId = animId,
+                GestureKey = animId switch
+                {
+                    0 => "idle.center",
+                    2 => "communicate.nod",
+                    17 => "dialogue.talk",
+                    _ => "",
+                },
+                Target = track.Id,
+                StartMs = Math.Max(0, startMs),
+            };
             Steps.Add(step);
             SelectedStep = step;
         });
@@ -1506,6 +1520,12 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     private SequenceSnapshot Snapshot() => new(Name, Loop, AudioLanesToDto(),
         Steps.Select(s => new SequenceStepDto
         {
+            Id = s.ClipId,
+            GestureKey = s.GestureKey,
+            Intensity = s.Intensity,
+            Tempo = s.Tempo,
+            Variant = s.Variant,
+            Seed = s.Seed,
             AnimId = s.AnimId,
             Target = s.Target,
             StartMs = s.StartMs,
@@ -1631,6 +1651,12 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
             foreach (var s in snap.Steps)
                 Steps.Add(new SequenceStep
                 {
+                    ClipId = s.Id,
+                    GestureKey = s.GestureKey,
+                    Intensity = s.Intensity,
+                    Tempo = s.Tempo,
+                    Variant = s.Variant,
+                    Seed = s.Seed,
                     AnimId = s.AnimId,
                     Target = s.Target,
                     StartMs = s.StartMs,
@@ -1959,6 +1985,12 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         Steps.Clear();
         foreach (var s in item.Steps) Steps.Add(new SequenceStep
         {
+            ClipId = s.Id,
+            GestureKey = s.GestureKey,
+            Intensity = s.Intensity,
+            Tempo = s.Tempo,
+            Variant = s.Variant,
+            Seed = s.Seed,
             AnimId = s.AnimId,
             Target = s.Target,
             StartMs = s.StartMs,
@@ -2015,7 +2047,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     private void Export()
     {
         var path = _persistenceDialogs.ChooseExportPath(
-            $"{(string.IsNullOrEmpty(Name) ? "sequence" : Name)}.b1seq.json");
+            $"{(string.IsNullOrEmpty(Name) ? "scene" : Name)}.b1scene.json");
         if (path == null) return;
         try
         {
@@ -2033,11 +2065,11 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         var fileTracks = Tracks.Where(track => !track.IsBroadcast)
             .Select(track => new SequenceTrackDto { Id = track.Id, Name = track.Label })
             .ToList();
-        var contents = SequenceExportSerializer.Serialize(document, fileTracks);
+        var contents = GestureSceneV2Persistence.Serialize(document, fileTracks);
         // Never write a file our own strict importer would reject. This also catches editor
         // values created by direct bindings (for example a blank lane label) before touching
         // the previous destination or saved checkpoint.
-        _ = SequenceImportService.Parse(contents);
+        _ = GestureSceneV2Persistence.Parse(contents);
 
         _atomicFileWriter.WriteAllText(path, contents);
         // Export is an external-copy escape hatch. For a library-backed Scene it must not
@@ -2125,27 +2157,31 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
 
     internal void ImportFrom(string path)
     {
-        // Parsing, schema migration and validation are deliberately side-effect free. Nothing
+        // Parsing and validation are deliberately side-effect free. Nothing
         // below runs unless the complete source document has already passed every check.
-        var imported = SequenceImportService.ParseFile(path);
+        var imported = GestureSceneV2Persistence.ParseFile(path);
         ApplyImportedDocument(imported);
         SetDocumentOrigin(SequencerDocumentOrigin.ExternalFile, null);
     }
 
-    private void ApplyImportedDocument(ImportedSequenceDocument imported)
+    private void ApplyImportedDocument(ImportedSceneV2Document imported)
     {
         Name = imported.Name;
         Loop = imported.Loop;
         SequenceEndMs = imported.EndMs;
         _fileTracks.Clear();
         _fileTracks.AddRange(imported.Tracks);
-        ApplyAudioLanesFromDto(
-            imported.AudioLanes,
-            seedDefaultsWhenEmpty: imported.SourceVersion < 3);
+        ApplyAudioLanesFromDto(imported.AudioLanes, seedDefaultsWhenEmpty: false);
         Steps.Clear();
         foreach (var step in imported.Steps)
             Steps.Add(new SequenceStep
             {
+                ClipId = step.Id,
+                GestureKey = step.GestureKey,
+                Intensity = step.Intensity,
+                Tempo = step.Tempo,
+                Variant = step.Variant,
+                Seed = step.Seed,
                 AnimId = step.AnimId,
                 Target = step.Target,
                 StartMs = step.StartMs,

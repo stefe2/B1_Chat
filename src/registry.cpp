@@ -46,7 +46,6 @@ bool Registry::seen(uint16_t id, int rssi, uint32_t now) {
         _e[_count].lastSeen = now;
         // Fail closed until the first heartbeat reports the actual state.
         _e[_count].servos = false;
-        _e[_count].autoAnim = false;
         _e[_count].locate = false;
         _e[_count].adopted = adopted;
         _e[_count].fwMajor = 0;
@@ -71,13 +70,6 @@ void Registry::setServos(uint16_t id, bool on) {
     CriticalGuard guard(_mux);
     for (uint8_t i = 0; i < _count; i++) {
         if (_e[i].id == id) { _e[i].servos = on; return; }
-    }
-}
-
-void Registry::setAutoAnim(uint16_t id, bool on) {
-    CriticalGuard guard(_mux);
-    for (uint8_t i = 0; i < _count; i++) {
-        if (_e[i].id == id) { _e[i].autoAnim = on; return; }
     }
 }
 

@@ -25,7 +25,6 @@ public:
         int16_t  rssi;
         uint32_t lastSeen;
         bool     servos;    // servo state reported by the droid
-        bool     autoAnim;  // spontaneous idle anims active, reported by the droid
         bool     locate;    // transient onboard-LED override reported by the droid
         bool     adopted;   // false = pending adoption (see config_store)
         uint8_t  fwMajor = 0, fwMinor = 0, fwPatch = 0;  // version reported via heartbeat
@@ -38,9 +37,6 @@ public:
 
     // Updates a droid's servo state (via heartbeat).
     void setServos(uint16_t id, bool on);
-
-    // Updates a droid's auto-anim state (via heartbeat).
-    void setAutoAnim(uint16_t id, bool on);
 
     void setLocate(uint16_t id, bool on);
 

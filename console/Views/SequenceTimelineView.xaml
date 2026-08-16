@@ -403,7 +403,7 @@
                                                  ButtonBase marks its Click handled, which stops it bubbling to the row's
                                                  MouseBinding — otherwise a click on the switch would also arm the track
                                                  underneath it. IsChecked shows "active" (inverse of Muted) so ON/green
-                                                 matches this app's existing on=green/active convention (Servos, Auto anims). -->
+                                                 matches this app's existing on=green/active convention (Servos). -->
                                             <ToggleButton Grid.Column="3" Style="{StaticResource OnOffSwitchStyle}" Margin="0,0,8,0"
                                                           IsChecked="{Binding Muted, Converter={StaticResource BoolInvertConv}, Mode=OneWay}"
                                                           Command="{Binding DataContext.ToggleMuteCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
@@ -979,8 +979,9 @@
                         <TextBlock Text="SELECTED CLIP" Style="{StaticResource FieldLabelStyle}" Margin="0,0,0,10" />
 
                         <TextBlock Text="GESTURE" Style="{StaticResource FieldLabelStyle}" Margin="0,0,0,4" />
-                        <ComboBox Style="{StaticResource DarkComboBoxStyle}" ItemsSource="{Binding GestureNames}"
-                                  SelectedIndex="{Binding SelectedStepAnimId}" Margin="0,0,0,4"
+                        <ComboBox Style="{StaticResource DarkComboBoxStyle}" ItemsSource="{Binding GestureLibrary}"
+                                  DisplayMemberPath="Name" SelectedValuePath="Id"
+                                  SelectedValue="{Binding SelectedStepAnimId}" Margin="0,0,0,4"
                                   ToolTip="Replace the selected clip's gesture while keeping its start time and target track." />
                         <!-- Family color strip under the gesture picker (mockup .clip-color). -->
                         <Rectangle Height="4" RadiusX="2" RadiusY="2" Margin="0,0,0,10"

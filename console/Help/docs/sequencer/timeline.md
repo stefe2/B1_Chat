@@ -106,10 +106,9 @@ audio-synchronized Talk loop.*
   text-entry fields in the current release.
 
 One shared timing estimate drives clip width, active highlighting, total time
-and inspector text. Finite gestures use firmware nominal timing adjusted for
-the target droid's Speed and keyframe jitter; mixed-speed broadcasts display a
-range and use its conservative upper bound. Before metadata/config arrives, the
-same 1.5 s provisional fallback appears everywhere.
+and inspector text. Finite gestures use the firmware's fixed nominal duration;
+deterministic pose variation does not shift the timeline. Before metadata
+arrives, the same 1.5 s provisional fallback appears everywhere.
 
 The loop badge identifies `POWER_DOWN` and `TALK`. Their width is a persisted
 fixed duration (2 s by default), not an indication: at the right edge the
@@ -145,6 +144,6 @@ single-click selects a Scene and double-click opens it. **Save As**
 (`Ctrl+Shift+S`) is in the **…** menu and creates a separate Scene with a new
 stable identity. The Scene bar shows whether the document is new, saved or
 modified. **Export a copy** in the same menu creates an optional
-`.b1seq.json` external snapshot without updating a library-backed Scene. See
+`.b1scene.json` external snapshot without updating a library-backed Scene. See
 [Playback](playback.md) for details and [Audio](audio.md) for portable-file
 considerations.

@@ -7,6 +7,54 @@ an archival split. `CLAUDE.md`'s *Current open work* section lists what is
 still open; [`SEQUENCER-HARDENING.md`](SEQUENCER-HARDENING.md) tracks the
 Sequencer backlog item by item.
 
+## 2026-08-16 — Gesture Sequencer V2: stage 3B complete
+
+- Replaced active Scene Export, Import and Local Library persistence with strict
+  `b1-scene` V1. Old `b1-sequence` files and flat legacy library entries are
+  now reported as incompatible and are never migrated.
+- Persisted V2 clips now retain a GUID, textual gesture key, intensity, tempo,
+  variant, seed and explicit continuous hold. Exported JSON contains no numeric
+  animation identity.
+- The authoring catalog now presents Center, Nod and Talk only. A temporary,
+  internal dispatch adapter maps those three names to the current firmware so
+  the console remains usable before Stage 4 replaces the motion engine.
+- Validated 304 console tests, including V2 Export/Import/Library round trips,
+  catalog binding and legacy-schema rejection.
+
+## 2026-08-16 — Gesture Sequencer V2: stage 3A complete
+
+- Added strict, side-effect-free V2 catalog and Scene schema readers plus
+  catalog-vs-Scene validation fixtures. They are intentionally isolated from
+  the live legacy Sequencer until the Stage 4 vertical slice.
+- Confirmed local clip tempo as explicit named duration, never a global speed
+  multiplier. The initial three catalog gestures expose only `normal` tempo.
+- Established persisted textual gesture keys, exact catalog binding, explicit
+  seed/default variant and continuous-gesture hold semantics. Numeric gesture
+  identities are rejected at the V2 boundary.
+
+## 2026-08-15 — Gesture Sequencer V2: stage 2C complete
+
+- Removed global animation frequency, amplitude and speed from firmware NVS,
+  the USB and mesh protocol, console state/UI, topology traffic and validation
+  tools. Old NVS keys are ignored and never repurposed.
+- Finite gesture timing now uses a fixed catalog nominal duration; deterministic
+  pose variation remains but cannot alter Sequencer planning.
+- Removed the Droids Backup/Restore path, whose only remaining payload was the
+  retired animation configuration. Scene Export remains the portable console
+  workflow; names and calibration must be recorded before a full erase.
+- Bumped `FW_PROTO` to 6 for this coordinated breaking transition.
+
+## 2026-08-15 — Gesture Sequencer V2: stage 2B complete
+
+- Removed Auto anims from the Droids UI, USB bridge, mesh message types,
+  registry, heartbeat inventory and NVS access.
+- Removed master/slave spontaneous gesture schedulers and ServoEngine idle
+  noise. `IDLE` now centers the calibrated head and remains still.
+- Retained the Safe Stop latch only as a temporary guard against stale or
+  untracked motion until the planned `DroidController` ownership layer exists.
+- Kept heartbeat bit 1 reserved at zero during the coordinated OTA transition;
+  it no longer represents a runtime state.
+
 ## Progress (archived entries)
 
 - [x] Steps 1-5, 7-10: servo_engine, mesh_comm (HMAC, relay), animation (18
@@ -1169,6 +1217,29 @@ Sequencer backlog item by item.
       `fe2207baaa86582b190557b5073d2d26d5c24dee0650ca0edfa0ef2b0e1c58d0`.
       GitHub reports the identical uploaded-asset digest; the release is public
       and non-prerelease. No firmware or protocol release was required.
+- [x] Breaking Sequencer/gesture V2 direction approved (2026-08-15).
+      The project is in intensive development with no production users, so the
+      next generation no longer carries compatibility obligations for the 18
+      historical movement definitions/IDs, `b1-sequence` schemas or permanent
+      mixed firmware versions. The product center is now the Sequencer plus a
+      predefined gesture catalog. The Animation card, autonomous animation and
+      global frequency/amplitude/speed settings may be removed rather than
+      preserved. `GESTURE-SEQUENCER-V2.md` records the staged, discussion-gated
+      plan. Safety invariants remain, obsolete NVS fields cannot be
+      reinterpreted, and a bounded transition path is still required if OTA is
+      used to move the fleet between incompatible generations.
+- [x] Gesture/Sequencer V2 stage 2A — standalone Animation surface removed
+      (2026-08-15). `AnimationCardView` and `AnimationViewModel` were deleted;
+      the main grid now promotes the Sequencer directly below Droids and Mesh
+      Topology. The unchanged 18 firmware gesture names moved to a clearly
+      transitional `LegacyGestureCatalog`, keeping the existing timeline,
+      preflight and execution path functional without making the removed card
+      the catalog owner. The Animation Help page/card screenshot and its
+      card-specific tooltip assertion were removed, while setup/Playback copy
+      now directs gesture work through the Sequencer. WPF tests passed 293/293;
+      the non-destructive offline self-test passed 21/21 with master, slave and
+      WPF builds clean and console build 361 preserved. No firmware behavior or
+      hardware state changed; stages 2B and 2C remain separate approved work.
 
 ## Incidents (full narratives)
 

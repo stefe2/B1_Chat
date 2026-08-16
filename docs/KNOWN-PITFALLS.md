@@ -41,14 +41,19 @@ relevant behavior.
 
 ## Protocol and compatibility
 
-- Preserve the dual current/legacy heartbeat decoder while old nodes remain in
-  service. Any future payload-size change needs an explicit compatibility form.
+- The current runtime preserves the dual current/legacy heartbeat decoder until
+  the coordinated V2 fleet cutover. After every board is aligned, the approved
+  breaking redesign may remove it instead of carrying permanent compatibility.
+  The sequential OTA transition itself must still have an explicitly tested
+  identity/heartbeat path.
 - Unknown JSON command fields are ignored. Responses use the stable `evt`
   discriminator and the serial line limit announced as `lineMax` (4 KB).
 - `requestId` is mapped to the existing mesh sequence; do not widen the
   byte-compatible animation payload just to correlate console commands.
-- New behavior must degrade safely on older firmware. Capability-gate additive
-  features such as `safeStop`, animation leases and execution telemetry.
+- Before the V2 cutover, current additive behavior such as `safeStop`, animation
+  leases and execution telemetry must retain its existing safe fallback. V2 may
+  instead require one uniform protocol/catalog generation and fail closed on a
+  mismatch after the complete fleet has been updated.
 - The console's line handler must catch malformed input per line so one bad
   firmware message cannot kill the serial read loop.
 - The two release trains share one GitHub repository. Never use

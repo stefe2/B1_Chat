@@ -27,12 +27,6 @@
       ]
     },
     {
-      "title": "Animation",
-      "pages": [
-        { "title": "Gestures & Idle Behavior", "file": "animation.md" }
-      ]
-    },
-    {
       "title": "Sequencer",
       "pages": [
         { "title": "Timeline", "file": "sequencer/timeline.md" },

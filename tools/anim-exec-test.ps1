@@ -136,7 +136,6 @@ function Wait-MasterAcceptance(
 function Restore-State {
     if ($null -eq $script:Port -or -not $script:Port.IsOpen) { return }
     foreach ($droid in $script:Snapshot) {
-        try { Set-Boolean "autoAnim" ([int]$droid.id) ([bool]$droid.autoAnim) } catch { }
         try { Set-Boolean "servo" ([int]$droid.id) ([bool]$droid.servos) } catch { }
     }
     Start-Sleep -Seconds 2
@@ -166,7 +165,7 @@ try {
     $inventory = Read-Inventory
     Assert-Bench ($null -ne $inventory) "inventory missing"
     $script:Snapshot = @($inventory.list | ForEach-Object {
-        [pscustomobject]@{ id = [int]$_.id; role = "$($_.role)"; servos = [bool]$_.servos; autoAnim = [bool]$_.autoAnim }
+        [pscustomobject]@{ id = [int]$_.id; role = "$($_.role)"; servos = [bool]$_.servos }
     })
     $master = @($script:Snapshot | Where-Object role -eq "master")
     $slaves = @($script:Snapshot | Where-Object role -eq "slave")
@@ -176,9 +175,7 @@ try {
     # Keep the only physically attached servos motionless. The slaves have no
     # physical servos, so enabling their outputs is a headless software test.
     Set-Boolean "servo" ([int]$master[0].id) $false
-    Set-Boolean "autoAnim" ([int]$master[0].id) $false
     foreach ($slave in $slaves) {
-        Set-Boolean "autoAnim" ([int]$slave.id) $false
         Set-Boolean "servo" ([int]$slave.id) $true
     }
     $armed = Wait-Inventory {
@@ -186,10 +183,10 @@ try {
         $m = @($list | Where-Object role -eq "master")
         $s = @($list | Where-Object role -eq "slave")
         $m.Count -eq 1 -and -not [bool]$m[0].servos -and
-        @($s | Where-Object { -not [bool]$_.servos -or [bool]$_.autoAnim }).Count -eq 0
+        @($s | Where-Object { -not [bool]$_.servos }).Count -eq 0
     } 12
-    Assert-Bench ($null -ne $armed) "headless servo/auto-animation state did not propagate"
-    Add-Result "Safe headless preparation" "PASS" "master servos off; slave software engines on; auto animations off"
+    Assert-Bench ($null -ne $armed) "headless servo state did not propagate"
+    Add-Result "Safe headless preparation" "PASS" "master servos off; slave software engines on"
 
     foreach ($slave in $slaves) {
         $request = Send-TrackedAnim ([int]$slave.id) 2

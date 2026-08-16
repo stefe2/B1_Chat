@@ -10,6 +10,7 @@ short: durable detail belongs in the linked documents.
 | --- | --- | --- |
 | Firmware/console module map and storage | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Locating a responsibility or adding a module |
 | Sequencer runtime behavior | [docs/SEQUENCER-BEHAVIOR.md](docs/SEQUENCER-BEHAVIOR.md) | Changing the console Sequencer |
+| Sequencer/gesture V2 target | [docs/GESTURE-SEQUENCER-V2.md](docs/GESTURE-SEQUENCER-V2.md) | Planning or implementing the breaking Sequencer/gesture redesign |
 | Sequencer backlog and decisions | [docs/SEQUENCER-HARDENING.md](docs/SEQUENCER-HARDENING.md) | Picking up Sequencer work |
 | Console ↔ firmware contract/history | [docs/FIRMWARE-CONTRACT.md](docs/FIRMWARE-CONTRACT.md) | Changing serial or mesh protocol |
 | Current protocol reference | [docs/PROTOCOL-REFERENCE.md](docs/PROTOCOL-REFERENCE.md) | Checking message types or JSON commands |
@@ -45,23 +46,29 @@ Console tags use `vX.Y.Z`; firmware tags use `fw-vX.Y.Z`.
   callback-to-loop message handling, and an OTA anti-brick guard.
 - The console owns audio and Sequencer execution. The firmware no longer owns
   DFPlayer audio or persistent sequence slots.
-- The serial link is JSON-lines at 115200 baud, guarded by `hello`/`ping`; the
-  current protocol is additive and must remain compatible with older nodes.
+- The serial link is JSON-lines at 115200 baud, guarded by `hello`/`ping`.
+  The current protocol remains authoritative until the approved breaking V2
+  redesign replaces it through a coordinated whole-fleet transition.
 
 Hardware: DOIT ESP32 DevKit V1; PAN GPIO25, TILT GPIO26, life LED GPIO2;
 servos use an external 5 V supply, common ground and recommended bulk
 capacitance. Avoid ESP32 strapping pins and input-only GPIO34–39.
 
-## Non-negotiable safety and compatibility rules
+## Non-negotiable safety and development-transition rules
 
 - Never rewrite a partition table on a board whose NVS must survive. A table
   change is allowed only with an intentional full chip erase.
 - Keep `OtaGuard::earlyCheck()` as the first line of `setup()`.
 - Never perform real OTA flash writes from the ESP-NOW callback or a critical
   section; use the mailbox and `loop()` path.
-- Preserve legacy heartbeat decoding and additive capability-gated behavior.
-- Do not reinterpret a persisted field under a new meaning; rename and migrate
-  it instead.
+- V2 does not owe permanent compatibility to old gestures, IDs, Scene schemas
+  or firmware protocol generations. Preserve only the temporary mechanism
+  explicitly required to complete a coordinated whole-fleet upgrade.
+- Never reinterpret a persisted field under a new meaning. A breaking redesign
+  may ignore/delete obsolete keys or use a new namespace; migration is required
+  only when the approved V2 plan explicitly calls for it.
+- Once the V2 cutover is complete, fail closed on an incompatible protocol or
+  gesture-catalog generation instead of silently degrading fleet behavior.
 - Keep normal mesh application handling in the bounded loop inbox, and keep
   NVS access outside locks and callbacks.
 - Read [docs/KNOWN-PITFALLS.md](docs/KNOWN-PITFALLS.md) before changing firmware
@@ -81,6 +88,9 @@ never flashes, moves servos or bumps `console/build.number`.
 
 ## Current open work
 
+- The approved breaking Sequencer/gesture redesign is staged in
+  [docs/GESTURE-SEQUENCER-V2.md](docs/GESTURE-SEQUENCER-V2.md). Discuss and
+  approve one stage before implementing it.
 - `droid.{h,cpp}` high-level firmware state machine remains unfinished.
 - Sequencer hardening backlog and evidence are tracked in
   [docs/SEQUENCER-HARDENING.md](docs/SEQUENCER-HARDENING.md), not duplicated

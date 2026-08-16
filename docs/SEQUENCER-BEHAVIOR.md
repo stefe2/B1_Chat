@@ -64,7 +64,9 @@ the droid to IDLE and reports `interrupted/leaseExpired`; renewals are
 correlated to the originating mesh sequence so stale packets cannot extend a
 replacement gesture. Pause and whole-pass Loop continue renewal, while
 Stop/end/restart/disconnect/shutdown cancel it before targeted IDLE cleanup.
-Manual Animation-card commands and autonomous animations remain unleased.
+There is no autonomous firmware gesture path. The standalone Animation card was
+removed during the V2 transition; the current gesture library remains inside the
+Sequencer.
 
 On firmware advertising `animLease`, that independent lease is the fail-closed
 fallback if cleanup cannot cross a lost serial or mesh path.
@@ -305,25 +307,19 @@ without any WPF or playback dependency; `SequencerPlaybackPlan` captures
 immutable runtime events. `SequencerViewModel` coordinates them while retaining
 transient selection, viewport, drag visuals, waveform and execution telemetry.
 
-## Import and schema versions
+## Import and Scene schema
 
-File import is validate-then-apply. `SequenceImportService` strictly parses
-`b1-sequence` schemas 1–6 into a temporary `ImportedSequenceDocument`, checks
-identities, bounded counts/strings/timing and target/gesture ranges, and runs
-named migrations before the ViewModel mutates. V1 `delayMs` values are
-cumulative waits after the current gesture, producing absolute starts from the
-sum of prior delays. Retired numeric DFPlayer `audioTrack` metadata is validated
-but intentionally discarded; it cannot identify a console-side audio file.
+File import is validate-then-apply. `GestureSceneV2Persistence` strictly parses
+only `b1-scene` V1, binds it to the installed named catalog and applies a
+temporary document only after every field, clip and endpoint is valid. An old
+`b1-sequence` document is incompatible and rejected without migration. Export
+uses the same validator before the atomic write.
 
-**Schema v5** adds `endAfterMs`: POWER_DOWN/TALK persist a real user-visible endpoint
-(default/migration 2 s, edited in 100 ms steps in the inspector) instead of a
-purely indicative clip width. A v5 document containing an infinite gesture
-without that field is rejected rather than silently re-guessed; older schemas
-migrate to the default.
-
-**Schema v6** (`SequenceImportService.CurrentVersion`, also the version Export
-writes) adds root `endMs`: JSON `null` means automatic content-tail mode; a
-bounded integer is the user-set endpoint. Versions 1–5 migrate to automatic mode.
+Every stored clip carries a GUID, `gestureKey`, target, start, intensity, tempo,
+variant and seed. Continuous gestures carry their explicit `holdMs`; finite and
+immediate gestures must not. The currently authorable catalog slice is Center,
+Nod and Talk. A small dispatch-only adapter still turns those names into the
+current firmware commands until Stage 4; the numbers do not exist in Scene JSON.
 
 ## Dirty state and atomic persistence
 
@@ -342,12 +338,12 @@ remain locked throughout Play/Pause; startup restore stays silent.
 ## Scene library and document workflow
 
 The current Sequencer document is a Scene. `LibraryService` stores versioned
-`b1-scene-library-item` envelopes under stable GUID filenames, with the
-validated `b1-sequence` document nested inside. Save updates the active
-identity; Save As creates another and case-insensitive name conflicts never
-overwrite. Valid flat legacy entries migrate atomically and their originals move
-to `library\trash`; confirmed removal uses the same recoverable trash directory.
-Corrupt entries remain untouched and are counted in the UI. `settings.json`
+`b1-scene-library-item` envelopes under stable GUID filenames, with a validated
+`b1-scene` V1 document nested inside. Save updates the active identity; Save As
+creates another and case-insensitive name conflicts never overwrite. A legacy
+library entry is reported and left untouched, never migrated. Confirmed removal
+uses the recoverable `library\trash` directory. Corrupt entries remain untouched
+and are counted in the UI. `settings.json`
 discriminates the last library Scene identity from the last external file path.
 
 **The Scene is edited like a conventional document** (2026-08-12): the permanent

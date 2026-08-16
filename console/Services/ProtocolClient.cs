@@ -20,12 +20,8 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
     private System.Threading.Timer? _keepalive;
     private readonly HashSet<string> _caps = new();
     private readonly Dictionary<ushort, Droid> _droidsById = new();
-    private readonly Dictionary<ushort, AnimConfig> _animConfigs = new();
-    private readonly Dictionary<ushort, int> _animSpeedPct = new();
     private ushort? _masterId;
     private int _nextAnimRequestId;
-
-    public readonly record struct AnimConfig(int Freq, int Amp, int Speed);
 
     public ObservableCollection<Droid> Droids { get; } = new();
     public ObservableCollection<MeshLink> MeshLinks { get; } = new();
@@ -33,8 +29,6 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
     public Dictionary<int, AnimationDurationMetadata> AnimDurationMetadata { get; } = new();
     IReadOnlyDictionary<int, int> ISequencerProtocol.AnimDurationMs => AnimDurationMs;
     IReadOnlyDictionary<int, AnimationDurationMetadata> ISequencerProtocol.AnimDurationMetadata => AnimDurationMetadata;
-    public IReadOnlyDictionary<ushort, int> AnimSpeedPct => _animSpeedPct;
-    public IReadOnlyDictionary<ushort, AnimConfig> AnimConfigs => _animConfigs;
 
     [ObservableProperty] private bool _portOpen;
     [ObservableProperty] private bool _sessionReady;
@@ -43,10 +37,6 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
     [ObservableProperty] private int _fwProto;
     [ObservableProperty] private int _lineMax;
     [ObservableProperty] private bool _dirty;
-
-    [ObservableProperty] private int _lastFreq;
-    [ObservableProperty] private int _lastAmp;
-    [ObservableProperty] private int _lastSpeed;
 
     public bool HasCap(string c) => _caps.Contains(c);
     public bool SupportsAnimLease => HasCap("animLease");
@@ -58,9 +48,7 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
     public event Action<string>? LogErr;
     public event Action? HelloReceived;
     public event Action<JsonElement>? CalibDataReceived;
-    public event Action<ushort, int, int, int>? ConfigDataReceived;
     public event Action? AnimDurationsReceived;
-    public event Action? AnimConfigurationChanged;
     public event Action? MeshTopologyChanged;
     public event Action? DroidsChanged;
     public event Action<ushort, int>? AnimSent; // target, animId — used to drive the mesh topology's broadcast ripple
@@ -120,8 +108,6 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
     {
         Droids.Clear();
         _droidsById.Clear();
-        _animConfigs.Clear();
-        _animSpeedPct.Clear();
         _masterId = null;
         FwVersion = null;
         FwBuildId = null;
@@ -177,8 +163,6 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
 
     // Typed helpers for the commands the ViewModels use most.
     public void RequestList() => SendCmd(new JsonObject { ["cmd"] = "list" });
-    public void RequestConfig(ushort target = 0xFFFF) =>
-        SendCmd(new JsonObject { ["cmd"] = "getConfig", ["target"] = target });
     public void RequestGetAll() => SendCmd(new JsonObject { ["cmd"] = "getAll" });
     public void RequestAnimDurations() => SendCmd(new JsonObject { ["cmd"] = "getAnimDurations" });
     public void RequestMeshTopology() => SendCmd(new JsonObject { ["cmd"] = "getMeshTopology" });
@@ -193,11 +177,6 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
     {
         SendCmd(new JsonObject { ["cmd"] = "servo", ["target"] = target, ["enabled"] = enabled });
         PacketSent?.Invoke(target, "servo");
-    }
-    public void SetAutoAnim(ushort target, bool enabled)
-    {
-        SendCmd(new JsonObject { ["cmd"] = "autoAnim", ["target"] = target, ["enabled"] = enabled });
-        PacketSent?.Invoke(target, "autoAnim");
     }
     public void SetLocate(ushort target, bool enabled)
     {
@@ -255,21 +234,15 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
         });
         PacketSent?.Invoke(target, "calib");
     }
-    public void SetConfig(ushort target, int freq, int amp, int speed)
-    {
-        SendCmd(new JsonObject { ["cmd"] = "config", ["target"] = target, ["freq"] = freq, ["amp"] = amp, ["speed"] = speed });
-        PacketSent?.Invoke(target, "config");
-        ScheduleAutoCommit();
-    }
     public void Commit() => SendCmd(new JsonObject { ["cmd"] = "commit" });
 
     // Also catches a draft that was ALREADY dirty when this console connected (e.g. an
-    // edit left uncommitted by an earlier session) — SetName/SetConfig alone would never
+    // edit left uncommitted by an earlier session) — SetName alone would never
     // notice that case, since neither was called this session, and the badge would stay
     // lit forever with no way left to clear it (the manual Save button is gone).
     partial void OnDirtyChanged(bool value) { if (value) ScheduleAutoCommit(); }
 
-    // Debounced auto-commit: SetName/SetConfig are the only two setters that leave the
+    // Debounced auto-commit: SetName is the only setter that leaves the
     // master's draft "dirty" (see the header's unsaved badge, ShowCommitUi). Re-armed on
     // every such call so it fires once, 2s after the LAST one — not on every single
     // keystroke/slider tick, to avoid hammering the master's NVS.
@@ -290,32 +263,6 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
 
     // (seqLoad/seqSave/seqRun/... helpers removed 2026-07-16 with the rest of the slot
     // machinery — sequences are console-only now, fw 1.7.0 dropped the commands too.)
-
-    public void SetMulti(JsonArray ops)
-    {
-        // Per-droid backups can contain names + animation settings for the
-        // whole fleet. Split them without ever exceeding the lineMax announced
-        // by the firmware; each batch is fully validated before application.
-        var maxLine = LineMax > 0 ? LineMax - 1 : 4095;
-        var batch = new JsonArray();
-        foreach (var op in ops)
-        {
-            batch.Add(op?.DeepClone());
-            var candidate = new JsonObject { ["cmd"] = "setMulti", ["ops"] = batch.DeepClone() };
-            if (candidate.ToJsonString().Length <= maxLine) continue;
-
-            batch.RemoveAt(batch.Count - 1);
-            if (batch.Count == 0)
-            {
-                LogErr?.Invoke("One restore operation exceeds the firmware line limit.");
-                return;
-            }
-            SendCmd(new JsonObject { ["cmd"] = "setMulti", ["ops"] = batch });
-            batch = new JsonArray { op?.DeepClone() };
-        }
-        if (batch.Count > 0)
-            SendCmd(new JsonObject { ["cmd"] = "setMulti", ["ops"] = batch });
-    }
 
     // --- Receiving (equivalent to handleEvent() in JS) ------------------------
 
@@ -347,7 +294,6 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
             case "droids": HandleDroids(root); break;
             case "log": LogRx?.Invoke(root.TryGetProperty("msg", out var m) ? m.GetString() ?? "" : ""); break;
             case "err": LogErr?.Invoke(root.TryGetProperty("msg", out var em) ? em.GetString() ?? "" : ""); break;
-            case "config": HandleConfig(root); break;
             case "dirty": Dirty = root.TryGetProperty("dirty", out var dv) && dv.GetBoolean(); break;
             case "calibData": CalibDataReceived?.Invoke(root); break;
             case "meshTopology": HandleMeshTopology(root); break;
@@ -425,7 +371,6 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
         if (SessionReady)
         {
             RequestList();
-            RequestConfig();
             RequestAnimDurations();
             RequestMeshTopology();
         }
@@ -457,7 +402,6 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
             if (droid.IsMaster) _masterId = id;
             if (droid.IsMaster) droid.PortName = _link.PortName;
             if (item.TryGetProperty("servos", out var sv)) droid.ServosOn = sv.GetBoolean();
-            if (item.TryGetProperty("autoAnim", out var aa)) droid.AutoAnimOn = aa.GetBoolean();
             if (item.TryGetProperty("locate", out var lo)) droid.LocateOn = lo.GetBoolean();
             droid.SupportsServoReverse = item.TryGetProperty("servoReverse", out var sr) && sr.GetBoolean();
             if (item.TryGetProperty("adopted", out var ad)) droid.Adopted = ad.GetBoolean();
@@ -478,41 +422,7 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
             _droidsById.Remove(staleId);
         }
 
-        // The master answers these from its local per-ID cache; no mesh
-        // round-trip is generated. Ask only once per newly discovered droid.
-        foreach (var id in seen)
-            if (!_animConfigs.ContainsKey(id)) RequestConfig(id);
-
         DroidsChanged?.Invoke();
-    }
-
-    private void HandleConfig(JsonElement root)
-    {
-        var target = (ushort)(root.TryGetProperty("target", out var t)
-            ? t.GetInt32()
-            : _masterId ?? 0);
-        if (target == 0) return;
-        var freq = root.TryGetProperty("freq", out var f) ? f.GetInt32() : 50;
-        var amp = root.TryGetProperty("amp", out var a) ? a.GetInt32() : 60;
-        var speed = root.TryGetProperty("speed", out var s) ? s.GetInt32() : 50;
-        _animConfigs[target] = new AnimConfig(freq, amp, speed);
-        _animSpeedPct[target] = speed;
-        if (target == ushort.MaxValue)
-        {
-            foreach (var droid in Droids)
-            {
-                _animConfigs[droid.Id] = new AnimConfig(freq, amp, speed);
-                _animSpeedPct[droid.Id] = speed;
-            }
-        }
-        if (_masterId == target)
-        {
-            LastFreq = freq;
-            LastAmp = amp;
-            LastSpeed = speed;
-        }
-        ConfigDataReceived?.Invoke(target, freq, amp, speed);
-        AnimConfigurationChanged?.Invoke();
     }
 
     private void HandleMeshTopology(JsonElement root)

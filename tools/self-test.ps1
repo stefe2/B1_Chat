@@ -52,6 +52,11 @@ function Assert-Source([string]$relativePath, [string]$pattern, [string]$message
     if ($content -notmatch $pattern) { throw $message }
 }
 
+function Assert-NotSource([string]$relativePath, [string]$pattern, [string]$message) {
+    $text = Get-Content (Join-Path $repo $relativePath) -Raw
+    if ($text -match $pattern) { throw $message }
+}
+
 function Invoke-Build([string]$label, [scriptblock]$command) {
     Invoke-Test $label {
         $output = & $command 2>&1
@@ -172,26 +177,25 @@ Invoke-Test "Callback-to-loop mesh isolation present" {
     "bounded inbox detected"
 }
 
-Invoke-Test "Per-droid animation persistence present" {
-    Assert-Source "src/config_store.cpp" "animParamsFor\(uint16_t id" "per-ID animation getter missing"
-    Assert-Source "src/serial_console.cpp" 'doc\["target"\] = resolvedTarget' "targeted config response missing"
-    "per-ID NVS + targeted protocol detected"
+Invoke-Test "Legacy animation configuration removed" {
+    Assert-NotSource "src/config_store.cpp" "animParamsFor" "obsolete animation persistence remains"
+    Assert-NotSource "src/serial_console.cpp" '"getConfig"' "obsolete animation configuration command remains"
+    Assert-NotSource "src/mesh_comm.h" "MSG_CONFIG" "obsolete animation configuration mesh message remains"
+    "no NVS, serial, or mesh animation configuration path"
 }
 
 Invoke-Test "Strict serial and mesh validation present" {
     Assert-Source "src/serial_console.cpp" "readIntField" "serial range validation missing"
-    Assert-Source "src/main.cpp" "validConfigPayload" "mesh config validation missing"
     Assert-Source "src/ota_slave.cpp" "p\.dataLen > OTA_CHUNK_DATA_MAX" "OTA chunk bound missing"
-    "serial, mesh and OTA guards detected"
+    "serial and OTA guards detected"
 }
 
 Invoke-Test "Virgin-board motion defaults fail closed" {
     Assert-Source "src/main.cpp" "Config\.servosEnabled\(false\)" "virgin servo default is not off"
-    Assert-Source "src/main.cpp" "Config\.autoAnimEnabled\(false\)" "virgin automatic-animation default is not off"
     Assert-Source "src/main.cpp" "static bool gLocateOn = false" "locate default is not off"
     Assert-Source "src/main.cpp" "gLocateOn \? 4 : 0" "Locate state is not reported in heartbeat"
     Assert-Source "src/servo_engine.h" "bool _enabled = false" "servo PWM engine does not start detached"
-    "servos + automatic animations + locate default off; PWM detached"
+    "servos + locate default off; PWM detached"
 }
 
 Invoke-Test "Per-axis servo reverse pipeline present" {
@@ -262,11 +266,10 @@ Invoke-Test "Installer prerequisites checked" {
     "OS + architecture + media + installed binary checks detected"
 }
 
-Invoke-Test "Debounces snapshot their target" {
-    Assert-Source "console/ViewModels/AnimationViewModel.cs" "var target = TargetId;" "animation target snapshot missing"
+Invoke-Test "Calibration debounce snapshots its target" {
     Assert-Source "console/ViewModels/CalibrationViewModel.cs" "var target = SelectedTarget\.Id;" "calibration target snapshot missing"
     Assert-Source "console/ViewModels/CalibrationViewModel.cs" "_loadingCalibration" "calibration load suppression missing"
-    "target snapshots + load suppression detected"
+    "calibration target snapshot + load suppression detected"
 }
 
 Invoke-Test "Audio failures are bounded and typed" {
@@ -333,18 +336,6 @@ if (-not $SkipSerial) {
                 "master $($hello.build); fleet identities present"
             }
 
-            $configJson = '{"cmd":"getConfig","target":' + $masterId + '}'
-            $configBefore = Send-And-Wait $port $configJson {
-                param($e) $e.evt -eq "config" -and [int]$e.target -eq $masterId
-            }
-            Invoke-Test "Targeted config read" {
-                Assert-True ($null -ne $configBefore) "no targeted config response"
-                foreach ($v in @([int]$configBefore.freq, [int]$configBefore.amp, [int]$configBefore.speed)) {
-                    Assert-True ($v -ge 0 -and $v -le 100) "config value outside 0..100"
-                }
-                "freq=$($configBefore.freq), amp=$($configBefore.amp), speed=$($configBefore.speed)"
-            }
-
             $calibJson = '{"cmd":"getCalib","target":' + $masterId + '}'
             $calibBefore = Send-And-Wait $port $calibJson {
                 param($e) $e.evt -eq "calibData" -and [int]$e.target -eq $masterId
@@ -371,7 +362,7 @@ if (-not $SkipSerial) {
             # Capability strings and version labels are not sufficient proof that the binary
             # actually contains strict validation. Probe a read-only command first: old/stale
             # firmware may accept invalid setters and mutate the bench instead of returning err.
-            $validationProbe = Send-And-Wait $port '{"cmd":"getConfig","target":70000}' { param($e) $e.evt -eq "err" }
+            $validationProbe = Send-And-Wait $port '{"cmd":"getCalib","target":70000}' { param($e) $e.evt -eq "err" }
             $strictValidation = $null -ne $validationProbe
             Invoke-Test "Runtime validation preflight" {
                 Assert-True $strictValidation "read-only invalid target was not rejected; mutating rejection tests suppressed"
@@ -401,17 +392,6 @@ if (-not $SkipSerial) {
                 Invoke-Test "Invalid Safe Stop rejected" {
                     Assert-True ($null -ne $badSafeStop) "invalid Safe Stop produced no err event"
                     "$($badSafeStop.msg)"
-                }
-
-                $badConfig = Send-And-Wait $port '{"cmd":"config","target":65535,"freq":101,"amp":60,"speed":50}' { param($e) $e.evt -eq "err" }
-                $configAfter = Send-And-Wait $port $configJson {
-                    param($e) $e.evt -eq "config" -and [int]$e.target -eq $masterId
-                }
-                Invoke-Test "Invalid config rejected without mutation" {
-                    Assert-True ($null -ne $badConfig) "invalid config produced no err event"
-                    Assert-True ($null -ne $configAfter) "config could not be reread"
-                    Assert-True ([int]$configBefore.freq -eq [int]$configAfter.freq -and [int]$configBefore.amp -eq [int]$configAfter.amp -and [int]$configBefore.speed -eq [int]$configAfter.speed) "invalid config changed stored values"
-                    "$($badConfig.msg)"
                 }
 
                 $badCalibJson = '{"cmd":"calib","target":' + $masterId + ',"panMin":120,"panCenter":90,"panMax":60,"tiltMin":60,"tiltCenter":90,"tiltMax":120}'
@@ -451,7 +431,6 @@ if (-not $SkipSerial) {
                 Add-Result "Invalid leased animation rejected" "SKIP" $reason
                 Add-Result "Invalid lease renewal rejected" "SKIP" $reason
                 Add-Result "Invalid Safe Stop rejected" "SKIP" $reason
-                Add-Result "Invalid config rejected without mutation" "SKIP" $reason
                 Add-Result "Invalid calibration rejected without mutation" "SKIP" $reason
                 Add-Result "Invalid servo reverse rejected without mutation" "SKIP" $reason
             }

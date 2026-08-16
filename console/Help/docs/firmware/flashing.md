@@ -85,8 +85,7 @@ to `0x10000` may succeed yet leave the board booting the older image from the
 other partition. Full erase resets that state.
 
 > **Permanent data loss:** full erase removes the board's name, servo calibration,
-> animation parameters stored there, OTA state, and all other NVS data. Droids
-> Backup does not include calibration. Record mechanical limits first.
+> OTA state, and all other NVS data. Record the name and mechanical limits first.
 
 Never rewrite a possibly different partition table without erasing the chip.
 Moving the NVS region under existing data can expose stale settings or lose

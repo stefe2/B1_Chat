@@ -8,7 +8,7 @@ public enum AnimationDurationKind
 }
 
 /// <summary>
-/// Firmware-authored timing facts before a target's speed configuration is applied.
+/// Firmware-authored timing facts for gestures with fixed nominal durations.
 /// Older firmware is represented with Provisional=true so every consumer can expose the
 /// same honest fallback instead of silently inventing a different duration.
 /// </summary>

@@ -8,23 +8,15 @@ public sealed class AnimationDurationProvider
 {
     public const int FallbackFiniteMs = 1500;
     public const int DefaultInfiniteEndMs = 2000;
-    public const int MoveJitterPerFrameMs = 60;
-
     private readonly IReadOnlyDictionary<int, AnimationDurationMetadata> _metadata;
     private readonly IReadOnlyDictionary<int, int> _legacyDurations;
-    private readonly IReadOnlyDictionary<ushort, int> _speedPct;
-    private readonly IReadOnlyCollection<Droid> _droids;
 
     public AnimationDurationProvider(
         IReadOnlyDictionary<int, AnimationDurationMetadata> metadata,
-        IReadOnlyDictionary<int, int> legacyDurations,
-        IReadOnlyDictionary<ushort, int> speedPct,
-        IReadOnlyCollection<Droid> droids)
+        IReadOnlyDictionary<int, int> legacyDurations)
     {
         _metadata = metadata;
         _legacyDurations = legacyDurations;
-        _speedPct = speedPct;
-        _droids = droids;
     }
 
     public ResolvedAnimationDuration Resolve(SequenceStep step)
@@ -52,23 +44,14 @@ public sealed class AnimationDurationProvider
                 (metadata.Provisional ? " Firmware metadata has not been received yet." : ""));
         }
 
-        var speeds = ResolveSpeeds(step.Target, out var targetDescription, out var provisional);
-        var ranges = speeds.Select(speed => EstimateFiniteRange(metadata, speed)).ToArray();
-        var minimum = ranges.Min(range => range.MinimumMs);
-        var maximum = ranges.Max(range => range.MaximumMs);
-        provisional |= metadata.Provisional;
-        var mixed = speeds.Distinct().Count() > 1;
-        var summary = minimum == maximum
-            ? Seconds(maximum)
-            : $"{Seconds(minimum)}–{Seconds(maximum)}";
-        if (provisional) summary += " · provisional";
-        var detail = $"Nominal {Seconds(metadata.NominalMs)}; estimated {summary.Split(" ·")[0]} for {targetDescription}.";
-        if (mixed) detail += " Broadcast targets use different speed settings; the conservative upper bound drives the clip tail.";
-        if (provisional) detail += " Missing firmware/config data uses the shared default estimate.";
+        var nominal = Math.Max(0, metadata.NominalMs);
+        var summary = Seconds(nominal) + (metadata.Provisional ? " · provisional" : "");
+        var detail = $"Fixed nominal duration {Seconds(nominal)}." +
+            (metadata.Provisional ? " Firmware metadata has not been received yet." : "");
 
         return new ResolvedAnimationDuration(
-            metadata.Kind, metadata.NominalMs, minimum, maximum, maximum,
-            provisional, summary, detail);
+            metadata.Kind, nominal, nominal, nominal, nominal,
+            metadata.Provisional, summary, detail);
     }
 
     private AnimationDurationMetadata GetMetadata(int animId)
@@ -88,51 +71,6 @@ public sealed class AnimationDurationProvider
             0,
             animId == 0 ? 600 : 0,
             Provisional: true);
-    }
-
-    private int[] ResolveSpeeds(ushort target, out string targetDescription, out bool provisional)
-    {
-        provisional = false;
-        if (target != ushort.MaxValue)
-        {
-            targetDescription = $"droid {target:X4}";
-            if (_speedPct.TryGetValue(target, out var speed)) return new[] { speed };
-            provisional = true;
-            return new[] { 50 };
-        }
-
-        targetDescription = "broadcast targets";
-        var online = _droids.Where(droid => droid.Online || droid.IsMaster).Select(droid => droid.Id).Distinct().ToArray();
-        if (online.Length == 0)
-        {
-            provisional = true;
-            return new[] { 50 };
-        }
-
-        var result = new int[online.Length];
-        for (var i = 0; i < online.Length; i++)
-        {
-            if (_speedPct.TryGetValue(online[i], out var speed)) result[i] = speed;
-            else
-            {
-                result[i] = 50;
-                provisional = true;
-            }
-        }
-        return result;
-    }
-
-    internal static (int MinimumMs, int MaximumMs) EstimateFiniteRange(
-        AnimationDurationMetadata metadata,
-        int speedPct)
-    {
-        var clampedSpeed = Math.Max(10, speedPct);
-        var scale = Math.Clamp(50.0 / clampedSpeed, 0.4, 4.0);
-        var scaledNominal = metadata.NominalMs * scale;
-        var jitter = Math.Max(0, metadata.FrameCount) * MoveJitterPerFrameMs;
-        return (
-            (int)Math.Max(0, Math.Floor(scaledNominal - jitter)),
-            (int)Math.Min(int.MaxValue, Math.Ceiling(scaledNominal + jitter)));
     }
 
     private static string Seconds(int milliseconds) =>

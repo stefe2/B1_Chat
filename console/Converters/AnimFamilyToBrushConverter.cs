@@ -5,7 +5,7 @@ using System.Windows.Media;
 namespace b1_chat_console.Converters;
 
 /// <summary>
-/// Colors a gesture (by animId, 0-17, matching AnimationViewModel.AnimNames) by family, for
+/// Colors a legacy gesture (by animId, 0-17) by family, for
 /// Sequencer timeline clips and gesture-library chips — same grouping/palette as the approved
 /// HTML mockup, so a gesture reads as the same color everywhere in the app.
 /// </summary>
@@ -20,7 +20,7 @@ public class AnimFamilyToBrushConverter : IValueConverter
     private static readonly Color Rust = (Color)ColorConverter.ConvertFromString("#D6673F")!;
     private static readonly Color Accent = (Color)ColorConverter.ConvertFromString("#FF9D2E")!;
 
-    // Index = animId (0-17), matching AnimationViewModel.AnimNames order.
+    // Index = legacy animId (0-17), matching LegacyGestureCatalog.Names order.
     private static readonly Color[] ByAnimId =
     {
         Steel,  // 0  IDLE

@@ -1113,7 +1113,7 @@ public sealed class SequencerPlaybackIntegrationTests
     }
 
     [Fact]
-    public void DurationMetadataAndTargetConfigRefreshOneSharedStepProjectionAndCachedExtent()
+    public void DurationMetadataRefreshesOneSharedStepProjectionAndCachedExtent()
     {
         var protocol = new FakeSequencerProtocol();
         protocol.Droids.Add(new Droid { Id = 0x1234, Online = true });
@@ -1127,18 +1127,12 @@ public sealed class SequencerPlaybackIntegrationTests
 
         protocol.DurationMetadata[2] = new AnimationDurationMetadata(
             2, AnimationDurationKind.Finite, 1_000, 2);
-        protocol.Speeds[0x1234] = 50;
         protocol.RaiseAnimDurationsReceived();
 
         Assert.False(vm.Steps[0].DurationProvisional);
-        Assert.Equal(1_120, vm.Steps[0].ResolvedDurationMs);
-        Assert.Equal(1_220, vm.TotalDurationMsValue);
-        Assert.Contains("0.88", vm.Steps[0].DurationSummary);
-
-        protocol.Speeds[0x1234] = 100;
-        protocol.RaiseAnimConfigurationChanged();
-        Assert.Equal(620, vm.Steps[0].ResolvedDurationMs);
-        Assert.Equal(720, vm.TotalDurationMsValue);
+        Assert.Equal(1_000, vm.Steps[0].ResolvedDurationMs);
+        Assert.Equal(1_100, vm.TotalDurationMsValue);
+        Assert.Contains("1.00", vm.Steps[0].DurationSummary);
     }
 
     [Fact]

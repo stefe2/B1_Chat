@@ -5,6 +5,14 @@ namespace b1_chat_console.Models;
 /// <summary>Target = 0xFFFF means "all droids".</summary>
 public partial class SequenceStep : ObservableObject
 {
+    // Persistent V2 authoring values. AnimId remains a short-lived execution
+    // adapter detail until the generated motion engine replaces it in Stage 4.
+    [ObservableProperty] private Guid _clipId = Guid.NewGuid();
+    [ObservableProperty] private string _gestureKey = "";
+    [ObservableProperty] private string _intensity = "normal";
+    [ObservableProperty] private string _tempo = "normal";
+    [ObservableProperty] private string _variant = "default";
+    [ObservableProperty] private uint _seed;
     [ObservableProperty] private int _animId;
     [ObservableProperty] private ushort _target = 0xFFFF;
     // Absolute offset from the sequence's own t=0 (not a delay from the
@@ -46,6 +54,12 @@ public partial class SequenceStep : ObservableObject
 
     public SequenceStep Clone() => new()
     {
+        ClipId = Guid.NewGuid(),
+        GestureKey = GestureKey,
+        Intensity = Intensity,
+        Tempo = Tempo,
+        Variant = Variant,
+        Seed = Seed,
         AnimId = AnimId,
         Target = Target,
         StartMs = StartMs,

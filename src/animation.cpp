@@ -14,19 +14,6 @@ struct KeyFrame {
 
 namespace {
 
-// Keep randomized movement durations inside the domain accepted by the servo
-// engine. In particular, a negative jitter must be clamped while it is still
-// signed: converting it to uint16_t first used to wrap a short movement to
-// roughly 65 seconds.
-constexpr uint16_t clampMoveDurationMs(int32_t durationMs) {
-    return durationMs < 1 ? 1
-         : durationMs > UINT16_MAX ? UINT16_MAX
-         : (uint16_t)durationMs;
-}
-
-static_assert(clampMoveDurationMs(-10) == 1, "negative move duration must not wrap");
-static_assert(clampMoveDurationMs(250) == 250, "valid move duration must be preserved");
-
 // -- Animation definitions (offsets from center) ------------------
 const KeyFrame LOOK_AROUND[] = {
     {-40,   5, 900, 500}, { 40,   5, 1200, 500}, {  0,   0, 800, 300},
@@ -94,7 +81,7 @@ struct AnimDef {
     bool            loop;
 };
 
-// The order must follow the AnimId enum. IDLE = no keyframes (idle noise only).
+// The order must follow the AnimId enum. IDLE = no keyframes (center only).
 const AnimDef ANIMS[ANIM_COUNT] = {
     {nullptr,          0,                                     false},  // ANIM_IDLE
     {LOOK_AROUND,      sizeof(LOOK_AROUND) / sizeof(KeyFrame),      false},
@@ -133,28 +120,6 @@ int AnimationPlayer::jitter(uint8_t amp) {
     return (int)rnd(2 * amp + 1) - (int)amp;
 }
 
-void AnimationPlayer::setAmpSpeedPct(uint8_t ampPct, uint8_t speedPct) {
-    // 60 = the historical default (index.html's original slider value) -> scale 1.0,
-    // i.e. passing back the default reproduces today's exact tuning untouched.
-    _ampScale = ampPct / 60.0f;
-    if (_ampScale < 0.0f) _ampScale = 0.0f;
-    if (_ampScale > 1.7f) _ampScale = 1.7f;
-
-    // 50 = the historical default -> scale 1.0. Floored at speedPct=10 (not 0) so a
-    // near-zero slider can't blow the multiplier up past a merely "very slow" droid.
-    float s = 50.0f / (float)(speedPct < 10 ? 10 : speedPct);
-    if (s < 0.4f) s = 0.4f;
-    if (s > 4.0f) s = 4.0f;
-    _speedScale = s;
-}
-
-uint8_t AnimationPlayer::randomAnimId(uint32_t seed) {
-    // "Active" anims eligible for random draw: 1..ANIM_POWER_DOWN-1 (excludes IDLE, and
-    // excludes POWER_DOWN/TALK which are manual-trigger-only gestures).
-    uint32_t r = seed * 1103515245u + 12345u;
-    return 1 + (uint8_t)((r >> 16) % (ANIM_POWER_DOWN - 1));
-}
-
 uint32_t AnimationPlayer::totalDurationMs(uint8_t animId) {
     if (animId >= ANIM_COUNT) return 0;
     const AnimDef& a = ANIMS[animId];
@@ -180,7 +145,7 @@ void AnimationPlayer::play(uint8_t animId, uint32_t seed) {
     _idx = 0;
     _holding = false;
 
-    // IDLE or empty animation: leave the head in idle noise.
+    // IDLE or empty animation: center and remain still.
     if (ANIMS[animId].count == 0) {
         _playing = false;
         _engine->center(600);
@@ -195,19 +160,13 @@ void AnimationPlayer::issueCurrentFrame() {
     const KeyFrame& f = a.frames[_idx];
 
     // Offsets are relative to THIS droid's calibrated center (ServoEngine),
-    // not the compile-time 90-degree defaults. Jitter itself is not scaled:
-    // it is a fixed organic-realism detail, not the gesture's amplitude.
-    const float panOffset  = f.panOff  * _ampScale + jitter(4);
-    const float tiltOffset = f.tiltOff * _ampScale + jitter(3);
+    // not the compile-time 90-degree defaults. The seed varies only the pose;
+    // keyframe timings stay nominal and therefore match the Sequencer plan.
+    const float panOffset  = f.panOff  + jitter(4);
+    const float tiltOffset = f.tiltOff + jitter(3);
 
-    // Do the whole randomized calculation signed, then clamp before narrowing.
-    // The shortest 50 ms frames can otherwise become negative at high speed
-    // and wrap to ~65 seconds when converted to uint16_t.
-    const int32_t randomizedMoveMs = (int32_t)(f.moveMs * _speedScale) + jitter(6) * 10;
-    const uint16_t move = clampMoveDurationMs(randomizedMoveMs);
-
-    _engine->setTargetOffset(panOffset, tiltOffset, move);
-    _holdDur = (uint16_t)(f.holdMs * _speedScale);
+    _engine->setTargetOffset(panOffset, tiltOffset, f.moveMs);
+    _holdDur = f.holdMs;
     _needMove = false;
     _holding = false;
 }

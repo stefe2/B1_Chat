@@ -42,14 +42,6 @@
                     <TextBlock Text="Servo" FontSize="9.5" Foreground="{StaticResource Muted2Brush}" Margin="3,0,0,0" VerticalAlignment="Center" />
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Margin="0,0,10,2">
-                    <Ellipse Width="6" Height="6" Fill="#4DD0E1" VerticalAlignment="Center" />
-                    <TextBlock Text="Auto anim" FontSize="9.5" Foreground="{StaticResource Muted2Brush}" Margin="3,0,0,0" VerticalAlignment="Center" />
-                </StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,0,10,2">
-                    <Ellipse Width="6" Height="6" Fill="#FFCC4D" VerticalAlignment="Center" />
-                    <TextBlock Text="Config" FontSize="9.5" Foreground="{StaticResource Muted2Brush}" Margin="3,0,0,0" VerticalAlignment="Center" />
-                </StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,0,10,2">
                     <Ellipse Width="6" Height="6" Fill="#B39DDB" VerticalAlignment="Center" />
                     <TextBlock Text="Calib" FontSize="9.5" Foreground="{StaticResource Muted2Brush}" Margin="3,0,0,0" VerticalAlignment="Center" />
                 </StackPanel>

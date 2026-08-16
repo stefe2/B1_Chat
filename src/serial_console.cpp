@@ -141,7 +141,6 @@ void SerialConsole::pushDroids() {
     me["age"] = 0;
     me["role"] = "master";
     me["servos"] = _masterServos;
-    me["autoAnim"] = _masterAutoAnim;
     me["locate"] = _masterLocate;
     me["adopted"] = true;
     me["fw"] = FW_VERSION;
@@ -166,7 +165,6 @@ void SerialConsole::pushDroids() {
         o["age"] = ((int32_t)(now - last) > 0) ? (now - last) : 0; // ms since last seen
         o["role"] = "slave";
         o["servos"] = e.servos;
-        o["autoAnim"] = e.autoAnim;
         o["locate"] = e.locate;
         o["adopted"] = e.adopted;
         o["fw"] = String(e.fwMajor) + "." + String(e.fwMinor) + "." + String(e.fwPatch);
@@ -175,42 +173,6 @@ void SerialConsole::pushDroids() {
     }
     serializeJson(doc, Serial);
     Serial.print('\n');
-}
-
-void SerialConsole::pushState(uint16_t target) {
-    if (!_clientReady) return;
-
-    const uint16_t resolvedTarget = target == MESH_TARGET_ALL ? Mesh.myId() : target;
-    uint8_t f, a, s;
-    Config.animParamsFor(resolvedTarget, f, a, s);
-    JsonDocument doc;
-    // "config" (contract §3): the console populates its freq/amp/speed
-    // sliders on connection. (Formerly evt:"state", never interpreted.)
-    doc["evt"] = "config";
-    doc["target"] = resolvedTarget;
-    doc["freq"] = f;
-    doc["amp"] = a;
-    doc["speed"] = s;
-    serializeJson(doc, Serial);
-    Serial.print('\n');
-}
-
-bool SerialConsole::applyConfig(uint16_t target, uint8_t freq, uint8_t amp, uint8_t speed) {
-    if (target == MESH_TARGET_ALL) {
-        Config.setAnimParamsFor(Mesh.myId(), freq, amp, speed);
-        for (uint8_t i = 0; i < Droids.count(); i++) {
-            Config.setAnimParamsFor(Droids.at(i).id, freq, amp, speed);
-        }
-    } else {
-        Config.setAnimParamsFor(target, freq, amp, speed);
-    }
-
-    ConfigPayload p{target, (float)freq, (float)amp, (float)speed};
-    const bool sent = Mesh.send(MSG_CONFIG, &p, sizeof(p));
-    if ((target == MESH_TARGET_ALL || target == Mesh.myId()) && _cfgCb) {
-        _cfgCb(freq, amp, speed);
-    }
-    return sent;
 }
 
 void SerialConsole::pushAnimDurations() {
@@ -401,115 +363,6 @@ void SerialConsole::update() {
     }
 }
 
-// --- setMulti ----------------------------------------------------------------
-// Scope: the persisted-state ops used by backup restore. Atomicity is
-// achieved by full validation BEFORE any application: a rejected batch
-// changes nothing. (An NVS write failure mid-application — extremely rare —
-// is reported via failedAt with no rollback.)
-
-bool SerialConsole::validateOp(JsonObjectConst op, char* why, size_t whyLen) {
-    const char* c = op["cmd"] | "";
-    if (!strcmp(c, "name")) {
-        int id;
-        if (!readIntField(op, "id", 1, 65534, id, why, whyLen)) return false;
-        JsonVariantConst nameValue = op["name"];
-        if (!nameValue.is<const char*>()) {
-            snprintf(why, whyLen, "name must be a string");
-            return false;
-        }
-        const char* name = nameValue.as<const char*>();
-        if (strlen(name) >= sizeof(((NamePayload*)nullptr)->name)) {
-            snprintf(why, whyLen, "name too long (max %u)",
-                     (unsigned)(sizeof(((NamePayload*)nullptr)->name) - 1));
-            return false;
-        }
-        return true;
-    }
-    if (!strcmp(c, "config")) {
-        uint16_t target;
-        int freq, amp, speed;
-        return readTargetField(op, true, target, why, whyLen) &&
-               readIntField(op, "freq", 0, 100, freq, why, whyLen) &&
-               readIntField(op, "amp", 0, 100, amp, why, whyLen) &&
-               readIntField(op, "speed", 0, 100, speed, why, whyLen);
-    }
-    if (!strcmp(c, "calib")) {
-        uint16_t target;
-        int panMin, panCenter, panMax, tiltMin, tiltCenter, tiltMax;
-        if (!readTargetField(op, true, target, why, whyLen) ||
-            !readIntField(op, "panMin", 0, 180, panMin, why, whyLen) ||
-            !readIntField(op, "panCenter", 0, 180, panCenter, why, whyLen) ||
-            !readIntField(op, "panMax", 0, 180, panMax, why, whyLen) ||
-            !readIntField(op, "tiltMin", 0, 180, tiltMin, why, whyLen) ||
-            !readIntField(op, "tiltCenter", 0, 180, tiltCenter, why, whyLen) ||
-            !readIntField(op, "tiltMax", 0, 180, tiltMax, why, whyLen)) return false;
-        if (panMin > panCenter || panCenter > panMax ||
-            tiltMin > tiltCenter || tiltCenter > tiltMax) {
-            snprintf(why, whyLen, "calib requires min <= center <= max");
-            return false;
-        }
-        if ((!op["panReversed"].isNull() && !op["panReversed"].is<bool>()) ||
-            (!op["tiltReversed"].isNull() && !op["tiltReversed"].is<bool>())) {
-            snprintf(why, whyLen, "calib reverse flags must be boolean");
-            return false;
-        }
-        return true;
-    }
-    // (seqSave/seqDelete ops removed in fw 1.7.0 — an old backup file carrying
-    // them is rejected here with an explicit reason, nothing partially applies.)
-    snprintf(why, whyLen, "unsupported op: %s", c[0] ? c : "(no cmd)");
-    return false;
-}
-
-bool SerialConsole::applyOp(JsonObjectConst op) {
-    const char* c = op["cmd"] | "";
-
-    if (!strcmp(c, "name")) {
-        const uint16_t id = op["id"] | 0;
-        const char* name = op["name"] | "";
-        Config.setName(id, name);
-        // Same relay as the plain "name" cmd (see there) — keeps a restored
-        // backup's names resilient on each droid too, not just the master.
-        NamePayload np{id, {0}};
-        strncpy(np.name, name, sizeof(np.name) - 1);
-        Mesh.send(MSG_NAME, &np, sizeof(np));
-        return true;
-    }
-    if (!strcmp(c, "config")) {
-        const uint16_t target = op["target"] | (uint16_t)MESH_TARGET_ALL;
-        const uint8_t freq  = op["freq"] | 50;
-        const uint8_t amp   = op["amp"]  | 60;
-        const uint8_t speed = op["speed"] | 50;
-        return applyConfig(target, freq, amp, speed);
-    }
-    if (!strcmp(c, "calib")) {
-        const uint16_t target = op["target"] | (uint16_t)MESH_TARGET_ALL;
-        const uint8_t panMin     = op["panMin"]     | SERVO_PAN_MIN;
-        const uint8_t panCenter  = op["panCenter"]  | SERVO_PAN_CENTER;
-        const uint8_t panMax     = op["panMax"]     | SERVO_PAN_MAX;
-        const uint8_t tiltMin    = op["tiltMin"]    | SERVO_TILT_MIN;
-        const uint8_t tiltCenter = op["tiltCenter"] | SERVO_TILT_CENTER;
-        const uint8_t tiltMax    = op["tiltMax"]    | SERVO_TILT_MAX;
-        const uint16_t cacheId = target == MESH_TARGET_ALL ? Mesh.myId() : target;
-        const ServoCalib previous = Config.getCalib(cacheId);
-        const bool panReversed = op["panReversed"] | (previous.panReversed != 0);
-        const bool tiltReversed = op["tiltReversed"] | (previous.tiltReversed != 0);
-        Config.setCalib(cacheId, ServoCalib{panMin, panCenter, panMax,
-                                            tiltMin, tiltCenter, tiltMax,
-                                            (uint8_t)panReversed, (uint8_t)tiltReversed});
-        CalibPayload p{target, panMin, panCenter, panMax, tiltMin, tiltCenter, tiltMax};
-        Mesh.send(MSG_CALIB, &p, sizeof(p));
-        CalibV2Payload p2{target, panMin, panCenter, panMax, tiltMin, tiltCenter, tiltMax,
-                          (uint8_t)panReversed, (uint8_t)tiltReversed};
-        Mesh.send(MSG_CALIB_V2, &p2, sizeof(p2));
-        if ((target == MESH_TARGET_ALL || target == Mesh.myId()) && _calibCb)
-            _calibCb(target, panMin, panCenter, panMax, tiltMin, tiltCenter, tiltMax,
-                     panReversed, tiltReversed);
-        return true;
-    }
-    return false;   // impossible after validateOp
-}
-
 void SerialConsole::handleLine(const char* line) {
     JsonDocument doc;
     if (deserializeJson(doc, line)) {
@@ -537,8 +390,6 @@ void SerialConsole::handleLine(const char* line) {
         JsonArray caps = ack["caps"].to<JsonArray>();
         caps.add("err");
         caps.add("getAll");
-        caps.add("config");
-        caps.add("setMulti");
         caps.add("commit");
         caps.add("animExec");
         caps.add("animAccepted");
@@ -566,15 +417,6 @@ void SerialConsole::handleLine(const char* line) {
     if (!strcmp(cmd, "list")) {
         pushDroids();
 
-    } else if (!strcmp(cmd, "getConfig")) {
-        uint16_t target = MESH_TARGET_ALL;
-        if (!command["target"].isNull() &&
-            !readTargetField(command, true, target, validationWhy, sizeof(validationWhy))) {
-            pushErr("invalid getConfig: %s", validationWhy);
-            return;
-        }
-        pushState(target);
-
     } else if (!strcmp(cmd, "getAnimDurations")) {
         pushAnimDurations();
 
@@ -582,14 +424,10 @@ void SerialConsole::handleLine(const char* line) {
         pushMeshTopology();
 
     } else if (!strcmp(cmd, "getAll")) {
-        // Full dump: burst of existing events ending with allDone. Replaces
-        // the dozen or so intercepted per-target requests (getCalib) the
-        // console used to make for backup/restore.
-        pushState();
+        // Full dump: current roster, calibrations and topology.
         pushDroids();
         pushCalibData(Mesh.myId());
         for (uint8_t i = 0; i < Droids.count(); i++) {
-            pushState(Droids.at(i).id);
             pushCalibData(Droids.at(i).id);
         }
         pushMeshTopology();
@@ -657,32 +495,22 @@ void SerialConsole::handleLine(const char* line) {
         }
         if (_safeStopCb) _safeStopCb(target);
 
-    } else if (!strcmp(cmd, "config")) {
-        if (!validateOp(command, validationWhy, sizeof(validationWhy))) {
-            pushErr("invalid config: %s", validationWhy);
-            return;
-        }
-        const uint16_t target = doc["target"] | (uint16_t)MESH_TARGET_ALL;
-        const uint8_t freq  = doc["freq"] | 50;
-        const uint8_t amp   = doc["amp"]  | 60;
-        const uint8_t speed = doc["speed"] | 50;
-        applyConfig(target, freq, amp, speed);
-        if (target == MESH_TARGET_ALL) {
-            pushState();
-            for (uint8_t i = 0; i < Droids.count(); i++) pushState(Droids.at(i).id);
-        } else {
-            pushState(target);
-        }
-        log("params freq=%u amp=%u speed=%u", freq, amp, speed);
-        syncDirty();
-
     } else if (!strcmp(cmd, "name")) {
-        if (!validateOp(command, validationWhy, sizeof(validationWhy))) {
-            pushErr("invalid name: %s", validationWhy);
+        int idValue;
+        JsonVariantConst nameValue = command["name"];
+        if (!readIntField(command, "id", 1, 65534, idValue,
+                          validationWhy, sizeof(validationWhy)) ||
+            !nameValue.is<const char*>()) {
+            pushErr("invalid name: %s", validationWhy[0] ? validationWhy : "name must be a string");
             return;
         }
-        const uint16_t id = doc["id"] | 0;
-        const char* name = doc["name"] | "";
+        const char* name = nameValue.as<const char*>();
+        if (strlen(name) >= sizeof(((NamePayload*)nullptr)->name)) {
+            pushErr("invalid name: name too long (max %u)",
+                    (unsigned)(sizeof(((NamePayload*)nullptr)->name) - 1));
+            return;
+        }
+        const uint16_t id = (uint16_t)idValue;
         Config.setName(id, name);
         // Relayed so the targeted droid persists its OWN name locally too (see
         // MSG_NAME/applyName in main.cpp) — survives a master NVS reset.
@@ -703,17 +531,6 @@ void SerialConsole::handleLine(const char* line) {
         const bool en = doc["enabled"] | false;
         if (_servoCb) _servoCb(target, en);
         log("servos %s -> %04X", en ? "ON" : "OFF", target);
-
-    } else if (!strcmp(cmd, "autoAnim")) {
-        uint16_t target;
-        if (!readTargetField(command, true, target, validationWhy, sizeof(validationWhy)) ||
-            !command["enabled"].is<bool>()) {
-            pushErr("invalid autoAnim: %s", validationWhy[0] ? validationWhy : "enabled must be boolean");
-            return;
-        }
-        const bool en = doc["enabled"] | false;
-        if (_autoAnimCb) _autoAnimCb(target, en);
-        log("anims auto %s -> %04X", en ? "ON" : "OFF", target);
 
     } else if (!strcmp(cmd, "locate")) {
         uint16_t target;
@@ -789,17 +606,35 @@ void SerialConsole::handleLine(const char* line) {
         if (_otaAbortCb) _otaAbortCb();
 
     } else if (!strcmp(cmd, "calib")) {
-        if (!validateOp(command, validationWhy, sizeof(validationWhy))) {
+        uint16_t target;
+        int panMinValue, panCenterValue, panMaxValue;
+        int tiltMinValue, tiltCenterValue, tiltMaxValue;
+        if (!readTargetField(command, true, target, validationWhy, sizeof(validationWhy)) ||
+            !readIntField(command, "panMin", 0, 180, panMinValue, validationWhy, sizeof(validationWhy)) ||
+            !readIntField(command, "panCenter", 0, 180, panCenterValue, validationWhy, sizeof(validationWhy)) ||
+            !readIntField(command, "panMax", 0, 180, panMaxValue, validationWhy, sizeof(validationWhy)) ||
+            !readIntField(command, "tiltMin", 0, 180, tiltMinValue, validationWhy, sizeof(validationWhy)) ||
+            !readIntField(command, "tiltCenter", 0, 180, tiltCenterValue, validationWhy, sizeof(validationWhy)) ||
+            !readIntField(command, "tiltMax", 0, 180, tiltMaxValue, validationWhy, sizeof(validationWhy))) {
             pushErr("invalid calib: %s", validationWhy);
             return;
         }
-        const uint16_t target = doc["target"] | (uint16_t)MESH_TARGET_ALL;
-        const uint8_t panMin     = doc["panMin"]     | SERVO_PAN_MIN;
-        const uint8_t panCenter  = doc["panCenter"]  | SERVO_PAN_CENTER;
-        const uint8_t panMax     = doc["panMax"]     | SERVO_PAN_MAX;
-        const uint8_t tiltMin    = doc["tiltMin"]    | SERVO_TILT_MIN;
-        const uint8_t tiltCenter = doc["tiltCenter"] | SERVO_TILT_CENTER;
-        const uint8_t tiltMax    = doc["tiltMax"]    | SERVO_TILT_MAX;
+        if (panMinValue > panCenterValue || panCenterValue > panMaxValue ||
+            tiltMinValue > tiltCenterValue || tiltCenterValue > tiltMaxValue) {
+            pushErr("invalid calib: min <= center <= max required");
+            return;
+        }
+        if ((!command["panReversed"].isNull() && !command["panReversed"].is<bool>()) ||
+            (!command["tiltReversed"].isNull() && !command["tiltReversed"].is<bool>())) {
+            pushErr("invalid calib: reverse flags must be boolean");
+            return;
+        }
+        const uint8_t panMin = (uint8_t)panMinValue;
+        const uint8_t panCenter = (uint8_t)panCenterValue;
+        const uint8_t panMax = (uint8_t)panMaxValue;
+        const uint8_t tiltMin = (uint8_t)tiltMinValue;
+        const uint8_t tiltCenter = (uint8_t)tiltCenterValue;
+        const uint8_t tiltMax = (uint8_t)tiltMaxValue;
 
         // Central cache (like the names): lets getCalib answer without
         // depending on a mesh round-trip to a remote slave.
@@ -845,57 +680,8 @@ void SerialConsole::handleLine(const char* line) {
         if ((target == MESH_TARGET_ALL || target == Mesh.myId()) && _previewCb)
             _previewCb(target, pan, tilt);
 
-    } else if (!strcmp(cmd, "setMulti")) {
-        JsonArrayConst ops = doc["ops"].as<JsonArrayConst>();
-        JsonDocument res;
-        res["evt"] = "setMultiDone";
-        if (ops.isNull()) {
-            res["ok"] = false;
-            res["failedAt"] = 0;
-            res["error"] = "ops missing or not an array";
-            serializeJson(res, Serial);
-            Serial.print('\n');
-            return;
-        }
-
-        // Pass 1: full validation — a rejected batch changes nothing.
-        char why[96];
-        uint16_t idx = 0;
-        for (JsonObjectConst op : ops) {
-            if (!validateOp(op, why, sizeof(why))) {
-                res["ok"] = false;
-                res["failedAt"] = idx;
-                res["error"] = why;
-                serializeJson(res, Serial);
-                Serial.print('\n');
-                return;
-            }
-            idx++;
-        }
-
-        // Pass 2: application.
-        uint16_t applied = 0;
-        bool ok = true;
-        for (JsonObjectConst op : ops) {
-            if (!applyOp(op)) { ok = false; break; }
-            applied++;
-        }
-        res["ok"] = ok;
-        res["applied"] = applied;
-        if (!ok) {
-            res["failedAt"] = applied;
-            res["error"] = "application failed (NVS write?)";
-        }
-        serializeJson(res, Serial);
-        Serial.print('\n');
-        log("setMulti: %u/%u ops", applied, idx);
-        pushDroids();
-        pushState();
-        for (uint8_t i = 0; i < Droids.count(); i++) pushState(Droids.at(i).id);
-        syncDirty();
-
     } else if (!strcmp(cmd, "commit")) {
-        // Commits the RAM overlay (params/names) to NVS.
+        // Commits the pending name edits to NVS.
         Config.commitPending();
         log("configuration committed (NVS)");
         syncDirty();

@@ -12,8 +12,6 @@ public class PacketKindToBrushConverter : IValueConverter
         ["anim"] = (Color)ColorConverter.ConvertFromString("#FF9D2E")!,
         ["servo"] = (Color)ColorConverter.ConvertFromString("#3DDC84")!,
         ["safeStop"] = (Color)ColorConverter.ConvertFromString("#FFB14E")!,
-        ["autoAnim"] = (Color)ColorConverter.ConvertFromString("#4DD0E1")!,
-        ["config"] = (Color)ColorConverter.ConvertFromString("#FFCC4D")!,
         ["calib"] = (Color)ColorConverter.ConvertFromString("#B39DDB")!,
         ["preview"] = (Color)ColorConverter.ConvertFromString("#7E9CFF")!,
         ["locate"] = (Color)ColorConverter.ConvertFromString("#C6FF4D")!,

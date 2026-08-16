@@ -29,7 +29,9 @@
 //    were retired — sequences are entirely console-driven now).
 // 5: "revert" command removed — the console auto-commits 2s after the last
 //    change instead of offering a manual save/revert choice.
-#define FW_PROTO 5
+// 6: global animation frequency/amplitude/speed and their configuration
+//    commands/events were removed; gesture durations are nominal and fixed.
+#define FW_PROTO 6
 
 // ---------------------------------------------------------------------------
 //  DROID ROLE  —  SET HERE BEFORE FLASHING (pio run -e b1 -t upload)

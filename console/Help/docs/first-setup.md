@@ -71,11 +71,10 @@ A full flash erases all saved data on that board and writes the bootloader,
 partition table, and application. See [Flashing over USB](firmware/flashing.md)
 before using this option on an existing droid.
 
-Current firmware treats a blank/full-erased board as uncommissioned: **Servos**,
-**Auto anims**, and the transient **Locate** override all begin off. Servo PWM
-remains detached, so startup does not briefly command center. These are virgin-
-board defaults only; a normal firmware update preserves choices already stored
-on an existing board.
+Current firmware treats a blank/full-erased board as uncommissioned: **Servos**
+and the transient **Locate** override begin off. Servo PWM remains detached, so
+startup does not briefly command center. These are virgin-board defaults only;
+a normal firmware update preserves choices already stored on an existing board.
 
 ## Step 4 — Flash every slave
 
@@ -134,10 +133,8 @@ Continue with the full [Servo Calibration](calibration.md) guide.
 
 ## Step 8 — Test and save a baseline
 
-Play a small gesture at modest amplitude, confirm every required mesh path, and
-use **Backup…** in the Droids card to save names and animation parameters. The
-backup does not include calibration, so keep a separate written record of
-mechanical limits if rebuilding a droid would be difficult.
+Place a small gesture on one explicit droid track in the Sequencer and confirm
+every required mesh path. Keep a separate written record of names and mechanical
+limits if rebuilding a droid would be difficult.
 
-You are now ready for the [Animation](animation.md) and
-[Sequencer](sequencer/timeline.md) workflows.
+You are now ready for the [Sequencer](sequencer/timeline.md) workflow.

@@ -5,7 +5,7 @@
              d:DataContext="{d:DesignInstance vm:DroidsViewModel}"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008/design"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" mc:Ignorable="d">
-    <Border Style="{StaticResource CardBorderStyle}" Width="850" HorizontalAlignment="Left">
+    <Border Style="{StaticResource CardBorderStyle}" Width="780" HorizontalAlignment="Left">
         <DockPanel>
             <DockPanel DockPanel.Dock="Top" LastChildFill="False" Margin="0,0,0,12">
                 <Border Style="{StaticResource CardIconBoxStyle}" DockPanel.Dock="Left" Margin="0,0,10,0">
@@ -17,10 +17,6 @@
                     </Canvas>
                 </Border>
                 <TextBlock Text="DETECTED DROIDS" Style="{StaticResource CardTitleStyle}" FontSize="13" Margin="0" DockPanel.Dock="Left" VerticalAlignment="Center" />
-                <Button Content="Backup…" Style="{StaticResource MiniButtonStyle}" DockPanel.Dock="Left" Margin="12,0,0,0" VerticalAlignment="Center"
-                        Command="{Binding BackupCommand}" ToolTip="Export droid names and known idle-animation settings to JSON. Calibration, adoption, sequences, audio, and firmware are not included." />
-                <Button Content="Restore…" Style="{StaticResource MiniButtonStyle}" DockPanel.Dock="Left" Margin="6,0,0,0" VerticalAlignment="Center"
-                        Command="{Binding RestoreCommand}" ToolTip="Restore names and idle-animation settings from a B1 Chat backup. Existing values for those fields will be overwritten after confirmation." />
                 <TextBlock DockPanel.Dock="Right" VerticalAlignment="Center" Foreground="{StaticResource Muted2Brush}" FontSize="10.5">
                     <Run Text="{Binding Droids.Count, Mode=OneWay}" /><Run Text=" on the network" />
                 </TextBlock>
@@ -39,7 +35,6 @@
                             <ColumnDefinition Width="80" />
                             <ColumnDefinition Width="70" />
                             <ColumnDefinition Width="60" />
-                            <ColumnDefinition Width="70" />
                             <ColumnDefinition Width="56" />
                             <ColumnDefinition Width="92" />
                             <ColumnDefinition Width="40" />
@@ -52,9 +47,8 @@
                         <TextBlock Grid.Column="3" Text="STATE" Style="{StaticResource TableHeaderTextStyle}" TextAlignment="Center" />
                         <TextBlock Grid.Column="4" Text="ROLE" Style="{StaticResource TableHeaderTextStyle}" TextAlignment="Center" />
                         <TextBlock Grid.Column="5" Text="SERVOS" Style="{StaticResource TableHeaderTextStyle}" TextAlignment="Center" />
-                        <TextBlock Grid.Column="6" Text="AUTO ANIMS" Style="{StaticResource TableHeaderTextStyle}" TextAlignment="Center" />
-                        <TextBlock Grid.Column="7" Text="LOCATE" Style="{StaticResource TableHeaderTextStyle}" TextAlignment="Center" />
-                        <TextBlock Grid.Column="8" Text="UPDATE" Style="{StaticResource TableHeaderTextStyle}" TextAlignment="Center" />
+                        <TextBlock Grid.Column="6" Text="LOCATE" Style="{StaticResource TableHeaderTextStyle}" TextAlignment="Center" />
+                        <TextBlock Grid.Column="7" Text="UPDATE" Style="{StaticResource TableHeaderTextStyle}" TextAlignment="Center" />
                     </Grid>
                     <Border BorderBrush="#5C000000" BorderThickness="0,0,0,1" Margin="0,0,0,2" />
 
@@ -70,7 +64,6 @@
                                             <ColumnDefinition Width="80" />
                                             <ColumnDefinition Width="70" />
                                             <ColumnDefinition Width="60" />
-                                            <ColumnDefinition Width="70" />
                                             <ColumnDefinition Width="56" />
                                             <ColumnDefinition Width="92" />
                                             <ColumnDefinition Width="40" />
@@ -133,13 +126,6 @@
                                             <TextBlock Text="Adopt" FontSize="11" />
                                         </Button>
 
-                                        <ToggleButton Grid.Column="6" Style="{StaticResource OnOffSwitchStyle}"
-                                                      IsChecked="{Binding AutoAnimOn, Mode=OneWay}"
-                                                      Command="{Binding DataContext.ToggleAutoAnimCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                      CommandParameter="{Binding}"
-                                                      HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                      ToolTip="Allow or prevent this droid from playing spontaneous idle gestures and save the setting. Manual gestures still work."
-                                                      Visibility="{Binding IsPending, Converter={StaticResource BoolToVisConv}, ConverterParameter=Invert}" />
                                         <Button Grid.Column="6" Style="{StaticResource MiniButtonStyle}"
                                                 Command="{Binding DataContext.ForgetDroidCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                  CommandParameter="{Binding}"
@@ -149,7 +135,7 @@
                                             <TextBlock Text="Ignore" FontSize="11" />
                                         </Button>
 
-                                        <ToggleButton Grid.Column="7" Style="{StaticResource OnOffSwitchStyle}"
+                                        <ToggleButton Grid.Column="6" Style="{StaticResource OnOffSwitchStyle}"
                                                       IsChecked="{Binding LocateOn, Mode=OneWay}"
                                                       Command="{Binding DataContext.ToggleLocateCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                       CommandParameter="{Binding}"
@@ -157,14 +143,14 @@
                                                       ToolTip="Override this droid's identification LED with solid on so you can match the row to the physical PCB; switch it off to resume the normal activity blink."
                                                       Visibility="{Binding IsPending, Converter={StaticResource BoolToVisConv}, ConverterParameter=Invert}" />
 
-                                        <Button Grid.Column="8" Style="{StaticResource MiniButtonStyle}"
+                                        <Button Grid.Column="7" Style="{StaticResource MiniButtonStyle}"
                                                 Command="{Binding DataContext.OpenFirmwareCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                 ToolTip="Open the Firmware window to update the USB-connected master."
                                                 HorizontalAlignment="Center"
                                                 Visibility="{Binding CanFlashUsb, Converter={StaticResource BoolToVisConv}}">
                                             <TextBlock Text="Flash" FontSize="11" />
                                         </Button>
-                                        <Button Grid.Column="8" Style="{StaticResource MiniButtonStyle}"
+                                        <Button Grid.Column="7" Style="{StaticResource MiniButtonStyle}"
                                                 Command="{Binding DataContext.FlashOtaCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                 CommandParameter="{Binding}"
                                                 ToolTip="Download the verified current slave image and update this online adopted droid over the mesh. No USB cable is required; confirmation appears first."
@@ -172,18 +158,18 @@
                                                 Visibility="{Binding CanFlashOta, Converter={StaticResource BoolToVisConv}}">
                                             <TextBlock Text="Flash (OTA)" FontSize="11" />
                                         </Button>
-                                        <StackPanel Grid.Column="8" HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                                        <StackPanel Grid.Column="7" HorizontalAlignment="Stretch" VerticalAlignment="Center"
                                                     Visibility="{Binding OtaInProgress, Converter={StaticResource BoolToVisConv}}">
                                             <ProgressBar Minimum="0" Maximum="100" Value="{Binding OtaProgressPct, Mode=OneWay}" Height="8" />
                                             <TextBlock Text="{Binding OtaStatusText}" FontSize="9.5" Foreground="{StaticResource MutedBrush}"
                                                        Margin="0,2,0,0" TextTrimming="CharacterEllipsis" />
                                         </StackPanel>
-                                        <Border Grid.Column="8" Style="{StaticResource HaloBadgeOkStyle}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                        <Border Grid.Column="7" Style="{StaticResource HaloBadgeOkStyle}" HorizontalAlignment="Center" VerticalAlignment="Center"
                                                 Visibility="{Binding ShowFwUpToDateBadge, Converter={StaticResource BoolToVisConv}}">
                                             <TextBlock Text="Up to date ✓" FontSize="10.5" Foreground="{StaticResource TextStrongBrush}" TextAlignment="Center" />
                                         </Border>
 
-                                        <Button Grid.Column="9" Style="{StaticResource MiniButtonStyle}"
+                                        <Button Grid.Column="8" Style="{StaticResource MiniButtonStyle}"
                                                 Command="{Binding DataContext.OpenCalibrationCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                 CommandParameter="{Binding}"
                                                 ToolTip="Open the Servo Calibration window with this droid already selected."
@@ -192,7 +178,7 @@
                                             <TextBlock Text="⛭" FontSize="12" Foreground="{StaticResource AccentBrush}" FontWeight="Bold" />
                                         </Button>
 
-                                        <Button Grid.Column="10" Style="{StaticResource MiniButtonStyle}"
+                                        <Button Grid.Column="9" Style="{StaticResource MiniButtonStyle}"
                                                 Command="{Binding DataContext.ForgetDroidCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                 CommandParameter="{Binding}"
                                                 ToolTip="Forget this adopted slave. It returns as a pending droid and asks to be adopted again if it reports to the master."

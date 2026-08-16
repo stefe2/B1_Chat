@@ -236,20 +236,20 @@ public sealed class SequenceImportServiceTests
     {
         using var fixture = new TemporaryJsonFixture();
         using var vm = CreateViewModel();
-        vm.ImportFrom(FixturePath("sequence-v4.json"));
+        vm.ImportFrom(V2FixturePath());
         var selected = vm.Steps[0];
         vm.SelectedStep = selected;
-        vm.ArmedTrack = vm.Tracks.Single(track => track.Id == 0x4002);
+        vm.ArmedTrack = vm.Tracks.Single(track => track.Id == 43140);
         vm.PlayheadMs = 777;
         Assert.True(vm.SetSequenceName("Working copy"));
         var before = Fingerprint(vm);
         var invalidPath = fixture.Write("invalid.b1seq.json", InvalidMajorSection(failingSection));
 
-        Assert.Throws<SequenceImportException>(() => vm.ImportFrom(invalidPath));
+        Assert.Throws<GestureSceneV2SchemaException>(() => vm.ImportFrom(invalidPath));
 
         Assert.Equal(before, Fingerprint(vm));
         Assert.Same(selected, vm.SelectedStep);
-        Assert.Equal((ushort)0x4002, vm.ArmedTrack?.Id);
+        Assert.Equal((ushort)43140, vm.ArmedTrack?.Id);
         Assert.Equal(777, vm.PlayheadMs);
         Assert.True(vm.Dirty);
         Assert.True(vm.UndoCommand.CanExecute(null));
@@ -264,11 +264,11 @@ public sealed class SequenceImportServiceTests
         vm.SelectedStep = vm.Steps[0];
         Assert.True(vm.SetSequenceName("Unsaved"));
 
-        vm.ImportFrom(FixturePath("sequence-v1.json"));
+        vm.ImportFrom(V2FixturePath());
 
-        Assert.Equal("Legacy relative", vm.Name);
-        Assert.Equal(new[] { 0, 100, 350 }, vm.Steps.Select(step => step.StartMs));
-        Assert.Equal(new[] { "AMBIENT", "AUDIO" }, vm.AudioLanes.Select(lane => lane.Label));
+        Assert.Equal("First V2 scene", vm.Name);
+        Assert.Equal(new[] { 1_200, 4_000 }, vm.Steps.Select(step => step.StartMs));
+        Assert.Empty(vm.AudioLanes);
         Assert.Null(vm.SelectedStep);
         Assert.False(vm.Dirty);
         Assert.False(vm.UndoCommand.CanExecute(null));
@@ -280,10 +280,10 @@ public sealed class SequenceImportServiceTests
     {
         using var fixture = new TemporaryJsonFixture();
         using var vm = CreateViewModel();
-        var root = ValidCurrentDocument();
+        var root = JsonNode.Parse(File.ReadAllText(V2FixturePath()))!.AsObject();
         root["audioLanes"] = new JsonArray();
 
-        vm.ImportFrom(fixture.Write("empty-audio.b1seq.json", root.ToJsonString()));
+        vm.ImportFrom(fixture.Write("empty-audio.b1scene.json", root.ToJsonString()));
 
         Assert.Empty(vm.AudioLanes);
         vm.AddAudioLaneCommand.Execute(null);
@@ -406,4 +406,7 @@ public sealed class SequenceImportServiceTests
 
     private static string FixturePath(string fileName) =>
         Path.Combine(AppContext.BaseDirectory, "Fixtures", "Sequences", fileName);
+
+    private static string V2FixturePath() =>
+        Path.Combine(AppContext.BaseDirectory, "Fixtures", "V2", "scene-v1.json");
 }

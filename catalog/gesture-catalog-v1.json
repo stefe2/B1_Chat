@@ -1,0 +1,57 @@
+{
+  "type": "b1-gesture-catalog",
+  "version": 1,
+  "catalogId": "b1.core",
+  "revision": "v1",
+  "hash": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "gestures": [
+    {
+      "key": "idle.center",
+      "displayName": "Center",
+      "description": "Return to the calibrated center and remain still.",
+      "family": "rest",
+      "tags": ["center", "safe"],
+      "execution": "immediate",
+      "endPolicy": "returnToCenter",
+      "tempos": [{ "key": "normal", "durationMs": 0 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 1,
+      "auditionSafe": true,
+      "broadcastSafe": true
+    },
+    {
+      "key": "communicate.nod",
+      "displayName": "Nod",
+      "description": "A clear affirmative nod.",
+      "family": "communication",
+      "tags": ["affirmative", "response"],
+      "execution": "finite",
+      "endPolicy": "returnToCenter",
+      "tempos": [{ "key": "normal", "durationMs": 800 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "required",
+      "minimumMotionEngine": 1,
+      "auditionSafe": true,
+      "broadcastSafe": true
+    },
+    {
+      "key": "dialogue.talk",
+      "displayName": "Talk",
+      "description": "A repeating dialogue movement until its explicit end.",
+      "family": "dialogue",
+      "tags": ["speech"],
+      "execution": "continuous",
+      "endPolicy": "returnToCenter",
+      "tempos": [{ "key": "normal", "durationMs": 750 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "required",
+      "minimumMotionEngine": 1,
+      "auditionSafe": true,
+      "broadcastSafe": false
+    }
+  ]
+}

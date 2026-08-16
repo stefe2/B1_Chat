@@ -610,11 +610,12 @@ public class WaveformStalenessTests
         File.WriteAllText(present, "audio");
         var missing = Path.Combine(fixture.DirectoryPath, "gone.wav");
         var json = $$"""
-        {"type":"b1-sequence","version":5,"name":"Loaded","loop":false,"tracks":[],
+        {"type":"b1-scene","version":1,"name":"Loaded","loop":false,"endMs":null,
+         "catalog":{"id":"b1.core","revision":"v1","hash":"sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"},"tracks":[],
          "audioLanes":[{"label":"VOICE","clips":[
            {"filePath":{{System.Text.Json.JsonSerializer.Serialize(present)}},"durationMs":100,"startMs":0,"loop":false},
            {"filePath":{{System.Text.Json.JsonSerializer.Serialize(missing)}},"durationMs":100,"startMs":200,"loop":false}]}],
-         "steps":[]}
+         "gestureClips":[]}
         """;
 
         using var viewModel = new SequencerViewModel(
@@ -626,7 +627,7 @@ public class WaveformStalenessTests
             // Load fires waveform decoding per clip; a real decoder would still hold the file
             // open when this fixture's directory is deleted at teardown.
             waveformDecoder: new DelegateWaveformDecoder(_ => Task.FromResult<float[]?>(null)));
-        viewModel.ImportFrom(fixture.Write("scene.b1seq.json", json));
+        viewModel.ImportFrom(fixture.Write("scene.b1scene.json", json));
 
         var clips = viewModel.AudioLanes.Single().Clips;
         Assert.False(clips[0].HasDurationWarning);
@@ -644,10 +645,11 @@ public class WaveformStalenessTests
         var corrupt = Path.Combine(fixture.DirectoryPath, "corrupt.mp3");
         File.WriteAllText(corrupt, "not audio");
         var json = $$"""
-        {"type":"b1-sequence","version":5,"name":"Loaded","loop":false,"tracks":[],
+        {"type":"b1-scene","version":1,"name":"Loaded","loop":false,"endMs":null,
+         "catalog":{"id":"b1.core","revision":"v1","hash":"sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"},"tracks":[],
          "audioLanes":[{"label":"AUDIO","clips":[
            {"filePath":{{System.Text.Json.JsonSerializer.Serialize(corrupt)}},"durationMs":9000,"startMs":500,"loop":false}]}],
-         "steps":[]}
+         "gestureClips":[]}
         """;
         var failed = AudioProbeResult.Failure(AudioProbeStatus.DecodeFailed, "unsupported stream");
 
@@ -658,7 +660,7 @@ public class WaveformStalenessTests
             audioProbe: new DelegateAudioProbe(_ => Task.FromResult(failed)),
             waveformDecoder: new DelegateWaveformDecoder(_ => Task.FromResult<float[]?>(null)));
 
-        viewModel.ImportFrom(fixture.Write("corrupt.b1seq.json", json));
+        viewModel.ImportFrom(fixture.Write("corrupt.b1scene.json", json));
 
         var clip = viewModel.AudioLanes.Single().Clips.Single();
         Assert.True(clip.HasDurationWarning);
@@ -675,10 +677,11 @@ public class WaveformStalenessTests
         var path = Path.Combine(fixture.DirectoryPath, "pending.wav");
         File.WriteAllText(path, "audio");
         var json = $$"""
-        {"type":"b1-sequence","version":5,"name":"Loaded","loop":false,"tracks":[],
+        {"type":"b1-scene","version":1,"name":"Loaded","loop":false,"endMs":null,
+         "catalog":{"id":"b1.core","revision":"v1","hash":"sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"},"tracks":[],
          "audioLanes":[{"label":"AUDIO","clips":[
            {"filePath":{{System.Text.Json.JsonSerializer.Serialize(path)}},"durationMs":9000,"startMs":500,"loop":false}]}],
-         "steps":[]}
+         "gestureClips":[]}
         """;
         var probeCompletion = new TaskCompletionSource<AudioProbeResult>(
             TaskCreationOptions.RunContinuationsAsynchronously);
@@ -689,7 +692,7 @@ public class WaveformStalenessTests
             audioProbe: new DelegateAudioProbe(_ => probeCompletion.Task),
             waveformDecoder: new DelegateWaveformDecoder(_ => Task.FromResult<float[]?>(null)));
 
-        viewModel.ImportFrom(fixture.Write("pending.b1seq.json", json));
+        viewModel.ImportFrom(fixture.Write("pending.b1scene.json", json));
         var clip = viewModel.AudioLanes.Single().Clips.Single();
 
         Assert.True(clip.ValidationPending);

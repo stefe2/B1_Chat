@@ -60,6 +60,13 @@
     <Resource Include="Assets\AppIcon.ico" />
     <Resource Include="Assets\AppLogo.png" />
     <None Include="wwwroot\**" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The V2 Scene reader binds every Scene to this source catalog. Generated
+         firmware artifacts replace the temporary Stage 3 bridge in Stage 4. -->
+    <None Include="..\catalog\gesture-catalog-v1.json"
+          Link="catalog\gesture-catalog-v1.json"
+          CopyToOutputDirectory="PreserveNewest"
+          CopyToPublishDirectory="PreserveNewest"
+          ExcludeFromSingleFile="true" />
     <!-- HelpViewModel reads these files from AppContext.BaseDirectory at runtime. Keep every
          page and image physically beside the single-file executable; CopyToOutputDirectory
          alone did not reliably place nested images in dotnet publish output. -->

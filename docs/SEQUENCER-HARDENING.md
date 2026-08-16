@@ -9,6 +9,14 @@ This document is the persistent source of truth for making the Animation
 Sequencer reliable. It carries **only actionable work** — the 22 items that are
 open, in progress or awaiting hardware validation.
 
+The product direction changed on 2026-08-15: development may now break old
+gesture IDs, Scene schemas and runtime protocol generations, and the Sequencer
+plus a predefined gesture catalog becomes the primary application workflow.
+[GESTURE-SEQUENCER-V2.md](GESTURE-SEQUENCER-V2.md) owns that approved target and
+its stage gates. This backlog still owns unfinished reliability work in the
+current implementation; do not assume its compatibility/migration items are V2
+requirements unless the V2 plan explicitly retains them.
+
 Three companion documents hold the rest, so this one stays cheap to read:
 
 - [SEQUENCER-BEHAVIOR.md](SEQUENCER-BEHAVIOR.md) — what currently *ships*, at
@@ -181,6 +189,11 @@ along is the Sequencer".
 7 completed items moved to [SEQUENCER-DONE.md](SEQUENCER-DONE.md): SEQ-F02, SEQ-F03, SEQ-F04, SEQ-F05, SEQ-F06, SEQ-F07, SEQ-F08.
 
 ### [H] SEQ-F01 — Model finite, immediate and infinite gesture duration correctly
+
+> Superseded by Gesture Sequencer V2 stage 2C on 2026-08-15: global speed
+> configuration and timing jitter were removed. Finite gestures now use their
+> fixed catalog nominal duration. The historical implementation notes below are
+> retained only to explain prior tests and measurements.
 
 - **Priority:** P1
 - **Problem:** firmware reports a nominal static sum; target speed scaling and
@@ -428,17 +441,17 @@ but remain in this tracked plan so they cannot be lost between backlog batches.
 
 - **Priority:** P0
 - **Problem:** an erased/new slave previously defaulted Servos and Auto anims to
-  ON, and the servo engine emitted a center PWM pulse before those preferences
+  ON, and the servo engine emitted a center PWM pulse before the servo preference
   loaded. Locate already began OFF but had no explicit regression contract.
-- **Acceptance:** on missing NVS keys, Servos, Auto anims and Locate are OFF for
-  both roles; PWM stays detached throughout startup. Normal updates/reboots
+- **Acceptance:** on missing NVS keys, Servos and Locate are OFF for both roles;
+  PWM stays detached throughout startup. Normal updates/reboots
   preserve choices that an operator already stored.
 - **Validation:** master/slave builds and source invariants, then full-erase one
   bench ESP32 and observe no servo PWM/motion or Locate override before enabling
   them explicitly.
-- **Implemented:** missing NVS state now resolves Servos and Auto anims to OFF
-  for both roles; the servo engine starts detached and never emits its former
-  pre-preference center pulse. Locate starts OFF and is now included in live
+- **Implemented:** Auto anims were removed in V2 stage 2B. Missing NVS state
+  resolves Servos to OFF for both roles; the servo engine starts detached and
+  never emits its former pre-preference center pulse. Locate starts OFF and is now included in live
   heartbeat/inventory state so the console corrects stale optimistic display
   after a reboot.
 - **Remaining hardware gate:** full-erase one bench ESP32 and directly observe
@@ -503,7 +516,7 @@ detailed commit after its full regression passes.
 | P1 — Safe import pipeline | SEQ-D01, SEQ-D02, SEQ-D03 | Parse into a temporary document, validate schema/content/bounds, migrate every supported legacy version, then apply once. One fixture-driven import commit. |
 | P2 — Saved-state integrity | SEQ-C05, SEQ-D04, SEQ-D05 | Implement the saved checkpoint and atomic export together, then use that authoritative Dirty state to guard Import and library Load. C05 and D04 are intentionally one batch because their stated dependencies are circular. |
 | Decision gate | DEC-003 | Resolved: retain the Local Library as the normal Scene store; keep Export only as an explicit external-copy escape hatch. |
-| P3 — Scene Library and wording | SEQ-D06, SEQ-D07, SEQ-D08 | **Complete.** Scene Save/Save As uses stable IDs and atomic/versioned storage; legacy entries migrate, deletion is recoverable, and naming/source/Dirty badges plus Help agree. External Export remains clearly secondary. |
+| P3 — Scene Library and wording | SEQ-D06, SEQ-D07, SEQ-D08 | **Complete.** Scene Save/Save As uses stable IDs and atomic/versioned V2 storage; legacy entries are reported as incompatible, deletion is recoverable, and naming/source/Dirty badges plus Help agree. External Export remains clearly secondary. |
 | S1 — Single deterministic scheduler | SEQ-E02, SEQ-E03 | **Complete.** One rearmable timer drains monotonic timestamp batches in immutable source order, compensates late wakes, warns about same-target/broadcast overlap and releases completely on cancellation. |
 | T1 — Coherent duration and infinite ends | SEQ-F01, SEQ-F02, SEQ-C06, SEQ-B04 | **Code complete; F01 hardware measurement pending.** Structured firmware timing metadata feeds one target-aware provider and cached extent; schema v5 promotes looping-gesture width into a persisted endpoint with ownership-safe IDLE termination. |
 
@@ -529,7 +542,7 @@ options.
 | DEC-004 | Superseded by DEC-024 | An active targeted gesture whose droid is unknown/offline was initially a blocking preflight error. The later advisory-only policy removes live connectivity from Preflight entirely. |
 | DEC-005 | Resolved 2026-08-11 | Same-time events form one batch in immutable source order: gesture clips in editor order, then audio clips by lane/clip order. Multiple gestures for one target are last-received-wins. Broadcast plus targeted overlap is serialized but warned because mesh arrival can differ from console order. |
 | DEC-006 | Superseded by DEC-024 | Audio-only Scenes were the first disconnected exception. Play is now independent of Preflight for every Scene; actual sends report their runtime result on each gesture clip. |
-| DEC-007 | Deferred | Scene identity and migration from `.b1seq.json` to `.b1scene.json`? |
+| DEC-007 | Resolved 2026-08-16 | Scene persistence is `b1-scene` V1 with stable library GUIDs and exact catalog identity. `.b1seq.json` is incompatible; no migration path exists. |
 | DEC-008 | Deferred | Show authoring uses linked scenes, embedded snapshots, or a publish-time hybrid? |
 | DEC-009 | Deferred | Scene targets remain physical IDs, become semantic roles, or support both? |
 | DEC-010 | Deferred | Default scene exit policy: Safe, Preserve, or author-selected per scene? |
@@ -547,3 +560,4 @@ options.
 | DEC-022 | Resolved 2026-08-12 | Treat Scenes like conventional editor documents: New/Open/Save are primary, Local Library storage stays behind a searchable Open browser, Save As/rename/import/export/trash are secondary, and replacement explicitly handles active playback plus save/discard/cancel. The browser is reusable by the future Show editor. |
 | DEC-023 | Direction recorded 2026-08-12; details deferred | Add a Project mode as the mutable working boundary for one production: manifest, Scenes, Shows and managed assets live under one movable folder with relative references. A Project remains distinct from the immutable portable package created by Publish; Show mode must arm the published package, not mutable Project drafts. |
 | DEC-024 | Resolved 2026-08-14 | Preflight is an operator-requested, advisory Scene-content check. While its panel is open, relevant timeline edits refresh the findings in place and only a second click on the toolbar's Preflight button hides it; while closed, no scan runs. It has no persistent toolbar badge, never gates Play/Restart/Resume, and deliberately ignores port, handshake, master and online-droid state. Live dispatch/execution feedback owns connection failures. Strict readiness/arming is deferred to a future explicitly approved performance mode. |
+| DEC-025 | Resolved 2026-08-15 | Treat the next Sequencer/gesture generation as a coordinated development reset: no compatibility obligation for old movement definitions/IDs, `b1-sequence` documents or permanent mixed firmware generations. The new product centers on the Sequencer and a predefined catalog; the Animation card, Auto anims and global freq/amp/speed settings are removal candidates. Persisted keys are never reinterpreted, and only a bounded transition mechanism needed to update the complete fleet may temporarily bridge generations. Detailed stage gates live in `GESTURE-SEQUENCER-V2.md`. |
