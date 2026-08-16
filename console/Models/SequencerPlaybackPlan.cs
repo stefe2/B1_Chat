@@ -55,7 +55,8 @@ public sealed class SequencerPlaybackPlan
         var infiniteGestures = new List<(GesturePlaybackEvent Gesture, int EndMs)>();
         foreach (var step in steps)
         {
-            var duration = step.AnimId is 16 or 17
+            var isContinuous = step.GestureKey == "dialogue.talk" || step.AnimId is 16 or 17;
+            var duration = isContinuous
                 ? Math.Max(100, step.EndAfterMs)
                 : resolveDurationMs != null
                     ? Math.Max(0, resolveDurationMs(step))
@@ -65,9 +66,9 @@ public sealed class SequencerPlaybackPlan
                         : DefaultGestureDurationMs;
             var gesture = new GesturePlaybackEvent(
                 Math.Max(0, step.StartMs), sourceOrder++, step.Target, step.AnimId,
-                nextSeed(), duration);
+                nextSeed(), duration, isContinuous);
             captured.Add(gesture);
-            if (step.AnimId is 16 or 17)
+            if (isContinuous)
                 infiniteGestures.Add((gesture, EventEndMs(gesture)));
         }
 
@@ -176,7 +177,8 @@ public sealed record GesturePlaybackEvent(
     ushort Target,
     int AnimId,
     uint Seed,
-    int DurationMs) : SequencerPlaybackEvent(StartMs, SourceOrder);
+    int DurationMs,
+    bool IsContinuous = false) : SequencerPlaybackEvent(StartMs, SourceOrder);
 
 public sealed record GestureTerminationPlaybackEvent(
     int StartMs,

@@ -26,6 +26,12 @@ public:
     // the compile-time 90-degree defaults.
     void setTargetOffset(float panOffsetDeg, float tiltOffsetDeg, uint32_t durationMs);
 
+    // Normalized authored coordinates (-100..100) map around each calibrated
+    // center into the available half-range. Returns true only if malformed
+    // authoring was clipped; a valid normalized trajectory never exceeds its
+    // mechanical limits.
+    bool setTargetNormalized(int8_t panPct, int8_t tiltPct, uint32_t durationMs);
+
     // Recenters the head.
     void center(uint32_t durationMs = 800);
 

@@ -66,8 +66,8 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     public IReadOnlyList<GestureLibraryEntry> GestureLibrary { get; } =
     [
         new() { Id = 0, Name = "Center" },
-        new() { Id = 2, Name = "Nod" },
-        new() { Id = 17, Name = "Talk" },
+        new() { Id = 1, Name = "Nod" },
+        new() { Id = 2, Name = "Talk" },
     ];
 
     public IReadOnlyList<GestureFamily> GestureFamilies { get; } =
@@ -76,13 +76,13 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         {
             Label = "ESSENTIAL",
             ColorAnimId = 0,
-            Gestures = [new GestureLibraryEntry { Id = 0, Name = "Center" }, new GestureLibraryEntry { Id = 2, Name = "Nod" }],
+            Gestures = [new GestureLibraryEntry { Id = 0, Name = "Center" }, new GestureLibraryEntry { Id = 1, Name = "Nod" }],
         },
         new GestureFamily
         {
             Label = "DIALOGUE",
-            ColorAnimId = 17,
-            Gestures = [new GestureLibraryEntry { Id = 17, Name = "Talk" }],
+            ColorAnimId = 2,
+            Gestures = [new GestureLibraryEntry { Id = 2, Name = "Talk" }],
         },
     ];
 
@@ -312,9 +312,8 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         }
     }
 
-    private readonly record struct GestureTargetState(uint RequestId, int AnimId)
+    private readonly record struct GestureTargetState(uint RequestId, int AnimId, bool IsInfinite = false)
     {
-        public bool IsInfinite => AnimId is 16 or 17;
     }
 
     private sealed class ExecutionTracker
@@ -323,6 +322,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         public required SequenceStep Step { get; init; }
         public required HashSet<ushort> ExpectedDroids { get; init; }
         public required int AnimId { get; init; }
+        public required bool IsContinuous { get; init; }
         public required bool IsBroadcast { get; init; }
         public Dictionary<ushort, GestureTargetState?> PreviousTargetStates { get; } = new();
         public AnimMasterReceipt? MasterReceipt { get; set; }
@@ -530,6 +530,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
             Step = step,
             ExpectedDroids = expected,
             AnimId = gesture.AnimId,
+            IsContinuous = gesture.IsContinuous,
             IsBroadcast = isBroadcast,
         };
         _executionTrackers[dispatch.RequestId] = tracker;
@@ -544,7 +545,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
 
         // POWER_DOWN and TALK deliberately loop until another gesture interrupts them. Once
         // their START arrives, absence of COMPLETED is therefore healthy rather than a timeout.
-        if (gesture.AnimId is not (16 or 17))
+        if (!gesture.IsContinuous)
         {
             var completionDueMs = (int)Math.Min(
                 int.MaxValue, Math.Max(ExecutionStartTimeoutMs,
@@ -570,7 +571,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
             tracker.PreviousTargetStates[droidId] =
                 _latestGestureByDroid.TryGetValue(droidId, out var previous) ? previous : null;
             _latestGestureByDroid[droidId] = new GestureTargetState(
-                tracker.RequestId, tracker.AnimId);
+                tracker.RequestId, tracker.AnimId, tracker.IsContinuous);
         }
     }
 
@@ -1118,8 +1119,8 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
                 GestureKey = animId switch
                 {
                     0 => "idle.center",
-                    2 => "communicate.nod",
-                    17 => "dialogue.talk",
+                    1 => "communicate.nod",
+                    2 or 17 => "dialogue.talk",
                     _ => "",
                 },
                 Target = track.Id,
@@ -2407,14 +2408,14 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         switch (playbackEvent)
         {
             case GesturePlaybackEvent gesture when !IsTrackMuted(gesture.Target):
-                var leaseMs = _protocol.SupportsAnimLease && gesture.AnimId is 16 or 17
+                var leaseMs = _protocol.SupportsAnimLease && gesture.IsContinuous
                     ? InfiniteAnimLeaseMs
                     : (ushort)0;
                 var dispatch = _protocol.PlayAnim(
                     gesture.Target, gesture.AnimId, gesture.Seed, leaseMs);
                 TrackExecution(dispatch, gesture);
                 TrackAnimLease(dispatch, gesture, leaseMs);
-                if (dispatch.Written && gesture.AnimId is 16 or 17)
+                if (dispatch.Written && gesture.IsContinuous)
                     _infiniteRequestBySourceOrder[gesture.SourceOrder] = dispatch.RequestId;
                 break;
             case GestureTerminationPlaybackEvent termination:

@@ -1,4 +1,7 @@
 using System.Text.Json;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.RegularExpressions;
 using b1_chat_console.Models;
 
 namespace b1_chat_console.Services;
@@ -35,12 +38,16 @@ internal static class GestureCatalogV2Parser
             {
                 "key", "displayName", "description", "family", "tags", "execution", "endPolicy",
                 "tempos", "intensities", "variants", "seedPolicy", "minimumMotionEngine",
-                "auditionSafe", "broadcastSafe"
+                "auditionSafe", "broadcastSafe", "trajectory"
             });
             var key = Schema.Key(Schema.String(value, "key", path, 96), $"{path}.key");
             if (!values.TryAdd(key, ReadGesture(value, path, key)))
                 throw Schema.Error($"{path}.key", $"duplicate gesture key \"{key}\"");
         }
+        var declaredHash = CatalogIntegrity.DeclaredHash(json);
+        var computedHash = CatalogIntegrity.ComputeHash(json);
+        if (!string.Equals(declaredHash, computedHash, StringComparison.Ordinal))
+            throw Schema.Error("$.hash", "catalog content does not match its declared hash");
         return new GestureCatalogV2(identity, values);
     }
 
@@ -85,7 +92,61 @@ internal static class GestureCatalogV2Parser
             Schema.StringArray(value, "tags", path, 0, 16, 48), execution, endPolicy, tempos,
             intensities, variants, seedPolicy,
             Schema.Int(value, "minimumMotionEngine", path, 1, 255),
-            Schema.Bool(value, "auditionSafe", path), Schema.Bool(value, "broadcastSafe", path));
+            Schema.Bool(value, "auditionSafe", path), Schema.Bool(value, "broadcastSafe", path),
+            ReadTrajectory(value, path, execution, tempos));
+    }
+
+    private static GestureTrajectoryV2 ReadTrajectory(JsonElement value, string path,
+        GestureExecutionKind execution, IReadOnlyDictionary<string, GestureTempoDefinition> tempos)
+    {
+        var trajectory = Schema.Object(value, "trajectory", path);
+        var trajectoryPath = $"{path}.trajectory";
+        Schema.Fields(trajectory, trajectoryPath, new[] { "coordinate", "frames" });
+        Schema.Equal(Schema.String(trajectory, "coordinate", trajectoryPath, 16), "normalized",
+            $"{trajectoryPath}.coordinate");
+        var frames = new List<GestureTrajectoryFrameV2>();
+        var index = 0;
+        foreach (var frame in Schema.Array(trajectory, "frames", trajectoryPath, 0, 64).EnumerateArray())
+        {
+            var framePath = $"{trajectoryPath}.frames[{index++}]";
+            Schema.Fields(frame, framePath, new[] { "pan", "tilt", "moveMs", "holdMs", "easing" });
+            frames.Add(new GestureTrajectoryFrameV2(
+                Schema.Int(frame, "pan", framePath, -100, 100),
+                Schema.Int(frame, "tilt", framePath, -100, 100),
+                Schema.Int(frame, "moveMs", framePath, 0, Schema.MaxTimelineMs),
+                Schema.Int(frame, "holdMs", framePath, 0, Schema.MaxTimelineMs),
+                Schema.Enum(Schema.String(frame, "easing", framePath, 16), $"{framePath}.easing",
+                    ("smooth", "smooth"))));
+        }
+        var total = frames.Sum(frame => (long)frame.MoveMs + frame.HoldMs);
+        if (execution == GestureExecutionKind.Immediate && frames.Count != 0)
+            throw Schema.Error($"{trajectoryPath}.frames", "immediate gestures must not have trajectory frames");
+        if (execution != GestureExecutionKind.Immediate && frames.Count == 0)
+            throw Schema.Error($"{trajectoryPath}.frames", "motion gestures require trajectory frames");
+        if (execution != GestureExecutionKind.Immediate && total != tempos["normal"].DurationMs)
+            throw Schema.Error($"{trajectoryPath}.frames", "trajectory duration must equal the normal tempo duration");
+        return new GestureTrajectoryV2(frames);
+    }
+}
+
+internal static class CatalogIntegrity
+{
+    private static readonly Regex HashValue = new(
+        "(\\\"hash\\\"\\s*:\\s*\\\"sha256:)[0-9a-f]{64}", RegexOptions.Compiled);
+
+    internal static string DeclaredHash(string json)
+    {
+        var match = HashValue.Match(json);
+        return match.Success ? "sha256:" + match.Value[^64..] : string.Empty;
+    }
+
+    internal static string ComputeHash(string json)
+    {
+        var normalized = json.Replace("\r\n", "\n").Replace("\r", "\n");
+        var masked = HashValue.Replace(normalized,
+            match => match.Groups[1].Value + new string('0', 64));
+        var digest = SHA256.HashData(Encoding.UTF8.GetBytes(masked));
+        return "sha256:" + Convert.ToHexString(digest).ToLowerInvariant();
     }
 }
 

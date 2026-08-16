@@ -15,7 +15,7 @@ current authoritative implementation, use `src/mesh_comm.h` and
 their implementation status. For how each item evolved over time, see the
 Progress archive.
 
-## ⚑ Resolution summary (current firmware: 1.11.0, proto 5)
+## ⚑ Resolution summary (current firmware: 1.11.0, proto 7)
 
 | Section | Outcome |
 | --- | --- |
@@ -28,7 +28,8 @@ Progress archive.
 **Beyond the original contract** (also resolved, inspired by the KyberEditor
 protocol, not part of the initial proposal): line buffer raised to 4 KB
 (`lineMax` announced); `{evt:"err", msg}` for any invalid command; enriched
-`hello` handshake (`fw`, `build`, `proto`, `lineMax`, `anims`, `caps[]`, `dirty` —
+`hello` handshake (`fw`, `build`, `proto`, `lineMax`, `gestures`, catalog identity,
+`caps[]`, `dirty` —
 `seqSlots` dropped in fw 1.7.0 with the slot machinery);
 `{cmd:"getAll"}` = full dump (burst of existing events ending with `{evt:"allDone"}`);
 a commit model for anim params/names (`{cmd:"commit"}` / `{evt:"dirty"}` —

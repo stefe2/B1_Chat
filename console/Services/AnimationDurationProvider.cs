@@ -21,7 +21,7 @@ public sealed class AnimationDurationProvider
 
     public ResolvedAnimationDuration Resolve(SequenceStep step)
     {
-        var metadata = GetMetadata(step.AnimId);
+        var metadata = GetMetadata(step);
         if (metadata.Kind == AnimationDurationKind.Infinite)
         {
             var endMs = Math.Max(100, step.EndAfterMs);
@@ -54,10 +54,13 @@ public sealed class AnimationDurationProvider
             metadata.Provisional, summary, detail);
     }
 
-    private AnimationDurationMetadata GetMetadata(int animId)
+    private AnimationDurationMetadata GetMetadata(SequenceStep step)
     {
+        var animId = step.AnimId;
         if (_metadata.TryGetValue(animId, out var value)) return value;
-        var inferredKind = animId == 0
+        var inferredKind = step.GestureKey == "dialogue.talk"
+            ? AnimationDurationKind.Infinite
+            : animId == 0
             ? AnimationDurationKind.Immediate
             : animId is 16 or 17
                 ? AnimationDurationKind.Infinite

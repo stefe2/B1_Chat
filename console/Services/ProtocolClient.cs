@@ -22,6 +22,10 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
     private readonly Dictionary<ushort, Droid> _droidsById = new();
     private ushort? _masterId;
     private int _nextAnimRequestId;
+    private bool _gestureCatalogCompatible;
+    private const string RequiredGestureCatalogId = "b1.core";
+    private const string RequiredGestureCatalogRevision = "v1";
+    private const string RequiredGestureCatalogHash = "sha256:5b0ff9dd13ef89ec7bf85c41908409b93b581c47e05eb49e53a73ac1bd767633";
 
     public ObservableCollection<Droid> Droids { get; } = new();
     public ObservableCollection<MeshLink> MeshLinks { get; } = new();
@@ -39,7 +43,7 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
     [ObservableProperty] private bool _dirty;
 
     public bool HasCap(string c) => _caps.Contains(c);
-    public bool SupportsAnimLease => HasCap("animLease");
+    public bool SupportsAnimLease => HasCap("gestureLease");
     public bool SupportsSafeStop => HasCap("safeStop");
 
     public event Action<string>? LogTx;
@@ -164,7 +168,7 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
     // Typed helpers for the commands the ViewModels use most.
     public void RequestList() => SendCmd(new JsonObject { ["cmd"] = "list" });
     public void RequestGetAll() => SendCmd(new JsonObject { ["cmd"] = "getAll" });
-    public void RequestAnimDurations() => SendCmd(new JsonObject { ["cmd"] = "getAnimDurations" });
+    public void RequestAnimDurations() => SendCmd(new JsonObject { ["cmd"] = "getGestureCatalog" });
     public void RequestMeshTopology() => SendCmd(new JsonObject { ["cmd"] = "getMeshTopology" });
     public void RequestCalib(ushort target) => SendCmd(new JsonObject { ["cmd"] = "getCalib", ["target"] = target });
 
@@ -194,15 +198,32 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
     {
         if (_nextAnimRequestId == int.MaxValue) _nextAnimRequestId = 0;
         var requestId = (uint)++_nextAnimRequestId;
+        if (!_gestureCatalogCompatible || !GestureKeyFor(animId, out var key))
+        {
+            LogErr?.Invoke("Gesture playback refused: the connected firmware does not expose the required V2 gesture catalog.");
+            return new AnimDispatchResult(requestId, AnimDispatchState.CatalogMismatch);
+        }
         var command = new JsonObject
         {
-            ["cmd"] = "anim", ["target"] = target, ["animId"] = animId,
+            ["cmd"] = "gesture", ["target"] = target, ["key"] = key,
             ["seed"] = seed, ["requestId"] = requestId,
         };
         if (leaseMs > 0) command["leaseMs"] = leaseMs;
         var state = SendCmdRaw(command);
         if (state == AnimDispatchState.Written) AnimSent?.Invoke(target, animId);
         return new AnimDispatchResult(requestId, state);
+    }
+
+    private static bool GestureKeyFor(int gestureId, out string key)
+    {
+        key = gestureId switch
+        {
+            0 => "idle.center",
+            1 => "communicate.nod",
+            2 => "dialogue.talk",
+            _ => string.Empty,
+        };
+        return key.Length != 0;
     }
     public AnimDispatchState RenewAnimLease(ushort target, int meshSeq, ushort leaseMs) =>
         SendCmdRaw(new JsonObject
@@ -297,13 +318,13 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
             case "dirty": Dirty = root.TryGetProperty("dirty", out var dv) && dv.GetBoolean(); break;
             case "calibData": CalibDataReceived?.Invoke(root); break;
             case "meshTopology": HandleMeshTopology(root); break;
-            case "animDurations": HandleAnimDurations(root); break;
+            case "gestureCatalog": HandleAnimDurations(root); break;
             case "animAccepted":
                 AnimMasterAccepted?.Invoke(new AnimMasterReceipt(
                     root.TryGetProperty("requestId", out var amaRequest)
                         && amaRequest.TryGetUInt32(out var acceptedRequestId) ? acceptedRequestId : 0,
                     (ushort)(root.TryGetProperty("target", out var amaTarget) ? amaTarget.GetInt32() : 0),
-                    root.TryGetProperty("animId", out var amaAnim) ? amaAnim.GetInt32() : -1,
+                    root.TryGetProperty("gestureId", out var amaAnim) ? amaAnim.GetInt32() : -1,
                     root.TryGetProperty("meshSeq", out var amaSeq) ? amaSeq.GetInt32() : 0,
                     root.TryGetProperty("meshQueued", out var amaMesh) && amaMesh.GetBoolean(),
                     root.TryGetProperty("local", out var amaLocal) && amaLocal.GetBoolean(),
@@ -313,7 +334,7 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
                 AnimExecutionReceived?.Invoke(new AnimExecutionReport(
                     root.TryGetProperty("requestId", out var aer) && aer.TryGetUInt32(out var requestId) ? requestId : 0,
                     (ushort)(root.TryGetProperty("droid", out var aed) ? aed.GetInt32() : 0),
-                    root.TryGetProperty("animId", out var aea) ? aea.GetInt32() : -1,
+                    root.TryGetProperty("gestureId", out var aea) ? aea.GetInt32() : -1,
                     root.TryGetProperty("phase", out var aep) ? aep.GetString() ?? "unknown" : "unknown",
                     root.TryGetProperty("reason", out var aerr) ? aerr.GetString() : null,
                     root.TryGetProperty("atMs", out var aet) && aet.TryGetUInt32(out var atMs) ? atMs : 0,
@@ -362,6 +383,12 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
         FwProto = root.TryGetProperty("proto", out var proto) ? proto.GetInt32() : 0;
         LineMax = root.TryGetProperty("lineMax", out var lm) ? lm.GetInt32() : 0;
         Dirty = root.TryGetProperty("dirty", out var d) && d.GetBoolean();
+        _gestureCatalogCompatible = root.TryGetProperty("catalogId", out var catalogId)
+            && catalogId.GetString() == RequiredGestureCatalogId
+            && root.TryGetProperty("catalogRevision", out var catalogRevision)
+            && catalogRevision.GetString() == RequiredGestureCatalogRevision
+            && root.TryGetProperty("catalogHash", out var catalogHash)
+            && catalogHash.GetString() == RequiredGestureCatalogHash;
 
         _caps.Clear();
         if (root.TryGetProperty("caps", out var caps) && caps.ValueKind == JsonValueKind.Array)
@@ -444,15 +471,16 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
         if (root.TryGetProperty("list", out var list) && list.ValueKind == JsonValueKind.Array)
             foreach (var item in list.EnumerateArray())
             {
-                var animId = item.GetProperty("animId").GetInt32();
-                var legacyMs = item.GetProperty("ms").GetInt32();
+                var animId = item.GetProperty("gestureId").GetInt32();
+                var legacyMs = item.TryGetProperty("nominalMs", out var legacyDuration)
+                    ? legacyDuration.GetInt32() : 0;
                 AnimDurationMs[animId] = legacyMs;
                 var hasStructuredMetadata = item.TryGetProperty("kind", out var kindElement);
                 var kind = hasStructuredMetadata
                     ? kindElement.GetString() switch
                     {
                         "immediate" => AnimationDurationKind.Immediate,
-                        "infinite" => AnimationDurationKind.Infinite,
+                        "continuous" => AnimationDurationKind.Infinite,
                         _ => AnimationDurationKind.Finite,
                     }
                     : animId == 0
@@ -471,7 +499,7 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
                     : animId == 0 ? 600 : 0;
                 AnimDurationMetadata[animId] = new AnimationDurationMetadata(
                     animId, kind, nominalMs, frameCount, settleMs,
-                    Provisional: !hasStructuredMetadata);
+                    Provisional: !_gestureCatalogCompatible || !hasStructuredMetadata);
             }
         AnimDurationsReceived?.Invoke();
     }

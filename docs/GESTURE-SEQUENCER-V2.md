@@ -1,6 +1,6 @@
 # B1 Chat — Gesture Catalog and Sequencer V2
 
-Status: stages 1–3 complete; Stage 4 is next for discussion
+Status: stages 1–5 implemented; reduced-amplitude bench validation pending before Stage 6
 Approved: 2026-08-15
 
 This document owns the target product direction, breaking-development policy and
@@ -117,8 +117,8 @@ Old `b1-sequence` documents are unsupported rather than migrated.
 ### Approved Stage 3A rules (2026-08-16)
 
 The strict V2 schema is specified in [GESTURE-CATALOG-SCHEMA-V1.md](GESTURE-CATALOG-SCHEMA-V1.md).
-The first source catalog is `catalog/gesture-catalog-v1.json`; it is a contract
-fixture, not yet a runtime replacement for the legacy 18-gesture table.
+The source catalog is `catalog/gesture-catalog-v1.json`; it generates the
+runtime firmware table and is loaded by the console for Scene validation.
 
 - `gestureKey` is the sole persisted gesture identity. `wireId` is generated
   later and is rejected in catalog and Scene source data.
@@ -144,13 +144,14 @@ declarative gesture catalog
 
 Sequencer / Audition
     -> protocol command
-    -> DroidController ownership and safety arbitration
-    -> MotionPlanner trajectory and limits
+    -> current safety arbitration in main.cpp (future DroidController)
+    -> MotionEngine trajectory and limits
     -> ServoEngine PWM
     -> correlated execution telemetry
 ```
 
-`DroidController` is the single motion owner. V2 priority is:
+The V2 target is for `DroidController` to own this boundary. Until that small
+extraction is completed, the same priority is explicitly enforced in `main.cpp`:
 
 ```text
 Emergency Stop > Safe Stop > Sequencer/Audition > neutral rest
@@ -212,9 +213,7 @@ Status: complete, delivered in two reviewable sub-stages.
 - **3B complete (2026-08-16):** Export, Import and Local Library now use only
   `b1-scene` V1. Old `b1-sequence` files are rejected without migration. Each
   stored clip retains its named gesture, intensity, tempo, variant, seed and
-  hold. Until Stage 4 replaces the motion engine, a strictly internal,
-  forward-only adapter dispatches the three V2 keys as the current Center,
-  Nod and Talk commands; no numeric command identity is persisted.
+  hold. Numeric wire IDs are never persisted.
 
 - Finalize the catalog schema and validation rules.
 - Finalize `gestureKey` versus generated `wireId` ownership.
@@ -225,6 +224,12 @@ Exit: V2 Scenes round-trip through Export, Import and Local Library with no
 legacy schema path; strict fixtures pass before Stage 4 runtime adoption.
 
 ### Stage 4 — Minimal vertical slice
+
+Status: implementation complete (2026-08-16); hardware audition pending.
+
+The source catalog now generates the compact firmware catalog. The console,
+master and mesh execute `idle.center`, `communicate.nod` and `dialogue.talk`
+by key, with catalog identity checked in the handshake before playback.
 
 Prove catalog -> generation -> firmware -> protocol -> WPF catalog -> audition
 -> timeline -> telemetry with only:
@@ -238,12 +243,18 @@ old Animation-card dependency.
 
 ### Stage 5 — Motion ownership and engine V2
 
-- Implement `DroidController` arbitration.
-- Normalize poses to calibrated asymmetric ranges.
-- Add per-segment easing and declared variation.
-- Enforce velocity, acceleration and motion-envelope limits.
-- Make interruption, end policy and duration deterministic.
-- Detect and report trajectory clipping.
+Status: implementation complete (2026-08-16), with `DroidController` extraction deferred and reduced-amplitude bench validation pending.
+
+`MotionEngine` owns one normalized trajectory at a time; calibrated asymmetric
+ranges, smootherstep segment easing, a velocity ceiling, deterministic end
+policy and clipping telemetry are implemented. The existing main-loop safety
+priority remains the controller boundary until it is extracted as a class.
+
+- **Deferred:** extract the current priority logic into `DroidController`.
+- **Implemented:** normalized poses to calibrated asymmetric ranges and smooth
+  segment easing.
+- **Implemented:** velocity ceiling, deterministic interruption/end policy and
+  clipping telemetry. The initial catalog deliberately declares no variation.
 
 Exit: pure trajectory tests plus reduced-amplitude hardware checks pass.
 

@@ -48,26 +48,26 @@ Console commands:
 
 ```text
 hello, ping, list, getAll, name, servo,
-locate, adopt, forget, anim, animLease, safeStop, preview, calib, getCalib,
-getAnimDurations, getMeshTopology, commit, otaStart, otaChunk,
+locate, adopt, forget, gesture, animLease, safeStop, preview, calib, getCalib,
+getGestureCatalog, getMeshTopology, commit, otaStart, otaChunk,
 otaAbort
 ```
 
 Important event families are `hello`, `droids`, `log`, `err`,
-`calibData`, `meshTopology`, `animDurations`, `animAccepted`, `animExec`,
+`calibData`, `meshTopology`, `gestureCatalog`, `animAccepted`, `animExec`,
 `dirty`, `allDone`, `otaReady`, `otaChunkAck`, `otaDone`,
 `otaResult` and `otaError`. See `serial_console.cpp` for exact field names and
 validation.
 
-## Animation and Sequencer boundaries
+## Gesture V2 and Sequencer boundaries
 
-The 18 animation IDs are aligned with the firmware table and the frozen web
-reference: `IDLE`, `LOOK_AROUND`, `NOD_YES`, `SHAKE_NO`, `CURIOUS_TILT`,
-`SCAN_SLOW`, `ALERT_SNAP`, `TRACK`, `GLITCH_STUTTER`, `CONFUSED_TILT`,
-`DOUBLE_TAKE`, `SLEEPY_DROOP`, `TARGET_LOCK`, `WHIRR_SEARCH`, `SIGNAL_GLITCH`,
-`GREETING_NOD`, `POWER_DOWN` and `TALK`. `POWER_DOWN` and `TALK` loop.
+The generated V2 catalog currently exposes `idle.center`, `communicate.nod`
+and `dialogue.talk`. Scenes and USB commands use the key; compact wire IDs are
+generated firmware details. `getGestureCatalog` returns the exact catalog
+identity/hash, kind, nominal duration and frame count. `hello` carries the
+same catalog identity; the console refuses Scene playback if it differs.
 
-The console owns sequences and fires per-step `anim` commands. Firmware no
+The console owns sequences and fires per-step `gesture` commands. Firmware no
 longer has `seq*` commands, onboard sequence playback or the old eight NVS
 sequence slots. Audio and DFPlayer commands were also removed from firmware;
 audio is client-side.
@@ -81,7 +81,7 @@ Safety invariants:
 - Execution telemetry is observational; it never gates or stops the timeline.
 - Pause is not a hardware stop; already dispatched gestures continue.
 - Stop, Safe Stop and Emergency Stop remain three distinct controls.
-- Sequencer-started infinite gestures use a 5-second lease renewed every 2
+- Sequencer-started continuous gestures use a 5-second lease renewed every 2
   seconds; there is no autonomous gesture path.
 - Persistent editing happens only while stopped. Console Scene Export/Import is
   `b1-scene` V1 and binds the named gesture catalog; old `b1-sequence` files

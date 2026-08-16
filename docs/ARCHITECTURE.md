@@ -22,8 +22,8 @@ a board is plug in → flash → done, with no ID to assign or track.
 | `config.h` | role, pins, default servo limits, mesh and topology constants, `FW_VERSION` |
 | `mesh_comm.{h,cpp}` | ESP-NOW: header `{srcId, seq, ttl, type}`, dedup on `(srcId, seq)`, TTL relay, truncated 8-byte HMAC-SHA256, direct radio neighborhood (physical sender MAC + RSSI) |
 | `mesh_topology.{h,cpp}` | (master) aggregates the directed `{from, to, rssi}` edges into the neighborhood graph |
-| `servo_engine.{h,cpp}` | native 50 Hz LEDC PWM, smootherstep easing, calibratable limits, per-axis reverse |
-| `animation.{h,cpp}` | 18 keyframe gestures, non-blocking player, variation seed, `totalDurationMs()`, execution lifecycle reporting and infinite-gesture leases |
+| `servo_engine.{h,cpp}` | native 50 Hz LEDC PWM, normalized calibrated poses, bounded velocity and smootherstep easing |
+| `motion_engine.{h,cpp}` + `generated/gesture_catalog_v2.h` | generated V2 catalog trajectories, one non-blocking safe gesture owner and continuous-gesture lifecycle |
 | `registry.{h,cpp}` | (master) live inventory: `srcId`, RSSI, `lastSeen`, servo and Locate state — synchronized access, see the pitfalls document |
 | `config_store.{h,cpp}` | NVS: per-droid names, servo calibration, adoption |
 | `serial_console.{h,cpp}` | (master) USB JSON ↔ mesh bridge for the console |
@@ -31,8 +31,8 @@ a board is plug in → flash → done, with no ID to assign or track.
 | `ota_master.{h,cpp}` | (master) drives an OTA session toward one slave: stop-and-wait, retry, post-reboot confirmation through the heartbeat |
 | `ota_slave.{h,cpp}` | (slave) receives the relayed image and writes it through `Update` |
 
-`droid.{h,cpp}` — the planned high-level state machine — does not exist yet; it
-is the one structural item still open on the firmware side.
+The full `DroidController` extraction remains open. For now the explicit safety
+arbitration remains in `main.cpp`; `MotionEngine` is the sole trajectory owner.
 `sequence_store.{h,cpp}` was **deleted in fw 1.7.0** with the master's 8 NVS
 sequence slots and its onboard player; sequences are console-only now.
 
@@ -80,7 +80,7 @@ design reference and is never loaded at runtime.
 | `Services/MediaPlayerHandle.cs` | the real `IMediaHandle` over WPF `MediaPlayer`. Its events only fire on a thread with a running dispatcher, which is why callers reach it from the UI thread |
 | `Services/SequencerAbstractions.cs` | the test seams: injectable monotonic clock, timer, protocol sender, audio player and dialog boundaries — what lets `console.tests` run playback headlessly |
 | `Services/SequencerEditHistory.cs` | begin/commit/cancel edit transactions plus bounded newest-first Undo/Redo (50 each), with no WPF or playback dependency |
-| `Services/GestureSceneV2Schema.cs` · `GestureSceneV2Persistence.cs` | strict named catalog/Scene parser, V2 Export/Import projection and the narrow temporary Center/Nod/Talk execution bridge; numeric command IDs are never persisted |
+| `Services/GestureSceneV2Schema.cs` · `GestureSceneV2Persistence.cs` | strict named catalog/Scene parser, content-hash verification and V2 Export/Import projection; numeric command IDs are never persisted |
 | `Services/SequenceImportService.cs` · `SequencerPersistenceServices.cs` | archived parser coverage for retired `b1-sequence` v1–v6, plus atomic sibling-temp-plus-rename writing used by the active V2 persistence path |
 | `Services/AnimationDurationProvider.cs` | single source for each gesture's kind (immediate/finite/infinite), fixed nominal tail, provisional state and inspector text |
 | `Services/SequencerPreflightService.cs` | side-effect-free manual Scene-content analyzer and injectable file-existence seam: represented gesture-span/target conflicts, audio availability/duration, and infinite-gesture endpoint hints. It has no connection/roster input and never gates transport |

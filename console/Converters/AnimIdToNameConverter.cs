@@ -4,13 +4,13 @@ using b1_chat_console.Models;
 
 namespace b1_chat_console.Converters;
 
-/// <summary>animId (int) -> transitional firmware gesture name for Sequencer clips.</summary>
+/// <summary>Generated V2 gesture ID -> the small catalog's display name.</summary>
 public class AnimIdToNameConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
     {
         var id = value is int i ? i : -1;
-        return id >= 0 && id < LegacyGestureCatalog.Names.Count ? LegacyGestureCatalog.Names[id] : "?";
+        return id switch { 0 => "Center", 1 => "Nod", 2 => "Talk", _ => "?" };
     }
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotSupportedException();

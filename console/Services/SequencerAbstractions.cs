@@ -17,6 +17,7 @@ public enum AnimDispatchState
     Written,
     NotConnected,
     HandshakePending,
+    CatalogMismatch,
     WriteFailed,
 }
 

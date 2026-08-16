@@ -50,6 +50,7 @@ enum AnimExecReason : uint8_t {
     ANIM_EXEC_REASON_NONE       = 0,
     ANIM_EXEC_REASON_SERVOS_OFF = 1,
     ANIM_EXEC_REASON_LEASE_EXPIRED = 2,
+    ANIM_EXEC_REASON_CLIPPED = 3,
 };
 
 enum DroidCapability : uint32_t {

@@ -3,7 +3,7 @@
   "version": 1,
   "catalogId": "b1.core",
   "revision": "v1",
-  "hash": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "hash": "sha256:5b0ff9dd13ef89ec7bf85c41908409b93b581c47e05eb49e53a73ac1bd767633",
   "gestures": [
     {
       "key": "idle.center",
@@ -19,7 +19,11 @@
       "seedPolicy": "ignored",
       "minimumMotionEngine": 1,
       "auditionSafe": true,
-      "broadcastSafe": true
+      "broadcastSafe": true,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": []
+      }
     },
     {
       "key": "communicate.nod",
@@ -35,7 +39,16 @@
       "seedPolicy": "required",
       "minimumMotionEngine": 1,
       "auditionSafe": true,
-      "broadcastSafe": true
+      "broadcastSafe": true,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": 0, "tilt": 32, "moveMs": 150, "holdMs": 50, "easing": "smooth" },
+          { "pan": 0, "tilt": -32, "moveMs": 150, "holdMs": 50, "easing": "smooth" },
+          { "pan": 0, "tilt": 20, "moveMs": 150, "holdMs": 50, "easing": "smooth" },
+          { "pan": 0, "tilt": 0, "moveMs": 150, "holdMs": 50, "easing": "smooth" }
+        ]
+      }
     },
     {
       "key": "dialogue.talk",
@@ -51,7 +64,17 @@
       "seedPolicy": "required",
       "minimumMotionEngine": 1,
       "auditionSafe": true,
-      "broadcastSafe": false
+      "broadcastSafe": false,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": 0, "tilt": -18, "moveMs": 75, "holdMs": 75, "easing": "smooth" },
+          { "pan": 0, "tilt": 12, "moveMs": 75, "holdMs": 75, "easing": "smooth" },
+          { "pan": 0, "tilt": -12, "moveMs": 75, "holdMs": 75, "easing": "smooth" },
+          { "pan": 0, "tilt": 8, "moveMs": 75, "holdMs": 75, "easing": "smooth" },
+          { "pan": 0, "tilt": 0, "moveMs": 75, "holdMs": 75, "easing": "smooth" }
+        ]
+      }
     }
   ]
 }

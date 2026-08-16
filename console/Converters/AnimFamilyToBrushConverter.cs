@@ -5,9 +5,7 @@ using System.Windows.Media;
 namespace b1_chat_console.Converters;
 
 /// <summary>
-/// Colors a legacy gesture (by animId, 0-17) by family, for
-/// Sequencer timeline clips and gesture-library chips — same grouping/palette as the approved
-/// HTML mockup, so a gesture reads as the same color everywhere in the app.
+/// Colors the generated V2 gesture IDs by family for Sequencer clips and chips.
 /// </summary>
 public class AnimFamilyToBrushConverter : IValueConverter
 {
@@ -20,39 +18,20 @@ public class AnimFamilyToBrushConverter : IValueConverter
     private static readonly Color Rust = (Color)ColorConverter.ConvertFromString("#D6673F")!;
     private static readonly Color Accent = (Color)ColorConverter.ConvertFromString("#FF9D2E")!;
 
-    // Index = legacy animId (0-17), matching LegacyGestureCatalog.Names order.
+    // Index = generated V2 gesture ID.
     private static readonly Color[] ByAnimId =
     {
-        Steel,  // 0  IDLE
-        Teal,   // 1  LOOK_AROUND
-        Violet, // 2  NOD_YES
-        Violet, // 3  SHAKE_NO
-        Teal,   // 4  CURIOUS_TILT
-        Brass,  // 5  SCAN_SLOW
-        Rust,   // 6  ALERT_SNAP
-        Brass,  // 7  TRACK
-        Rust,   // 8  GLITCH_STUTTER
-        Teal,   // 9  CONFUSED_TILT
-        Teal,   // 10 DOUBLE_TAKE
-        Steel,  // 11 SLEEPY_DROOP
-        Brass,  // 12 TARGET_LOCK
-        Brass,  // 13 WHIRR_SEARCH
-        Rust,   // 14 SIGNAL_GLITCH
-        Violet, // 15 GREETING_NOD
-        Steel,  // 16 POWER_DOWN
-        Accent, // 17 TALK
+        Steel,  // 0 idle.center
+        Violet, // 1 communicate.nod
+        Accent, // 2 dialogue.talk
     };
 
-    // Family grouping/labels, single source of truth reused by SequencerViewModel.GestureFamilies
-    // (mockup-matched "GESTURE LIBRARY" rows) so the two never drift apart.
+    // Retained as a catalog-color lookup for consumers outside the V2 view model.
     public static readonly (string Label, int[] AnimIds)[] Families =
     {
-        ("IDLE & REST", new[] { 0, 11, 16 }),
-        ("LOOK & CURIOSITY", new[] { 1, 4, 9, 10 }),
-        ("AFFIRMATION", new[] { 2, 3, 15 }),
-        ("SCAN & TRACK", new[] { 5, 7, 12, 13 }),
-        ("ALERT & GLITCH", new[] { 6, 8, 14 }),
-        ("TALK (AUDIO-SYNCED, LOOPS)", new[] { 17 }),
+        ("REST", new[] { 0 }),
+        ("COMMUNICATION", new[] { 1 }),
+        ("DIALOGUE", new[] { 2 }),
     };
 
     // One frozen gradient per family color — clips re-render often (drag, zoom), no point

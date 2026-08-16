@@ -1538,3 +1538,13 @@ The firmware protocol (`cmd`/`evt`, above) is carried there through `write`
 transport vocabulary (`listPorts`/`open`/`write`/`flash`/`libList`/...) no longer
 applies on the WPF side, replaced by a direct call to `Services/SerialLinkService.cs` +
 `Services/ProtocolClient.cs` (no postMessage bridge).
+
+### Gesture Catalog V2 integrity — 2026-08-16
+
+Stages 4–5 replaced the historical 18-entry firmware animation table with a
+generated V2 catalog and `MotionEngine`. The catalog identity is now also a
+real content-derived SHA-256 value: line endings are normalized and the hash
+field itself is masked before hashing. Both the PowerShell generator and the
+console parser reject a mismatch. Catalog authors run
+`tools/generate-gesture-catalog.ps1 -UpdateHash` after any approved edit, then
+commit the source catalog and generated firmware header together.

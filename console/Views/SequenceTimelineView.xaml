@@ -879,8 +879,7 @@
                                                             <TextBlock.Text><Binding Path="DurationSummary" /></TextBlock.Text>
                                                         </TextBlock>
                                                     </StackPanel>
-                                                    <!-- Loop badge (mockup .loop-badge) — POWER_DOWN (16) and TALK (17)
-                                                         are the two looping gestures, see CLAUDE.md's anims table. -->
+                                                    <!-- Loop badge: dialogue.talk (generated gesture ID 2) is continuous. -->
                                                     <TextBlock HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,0,2,0"
                                                                Text="⟲" FontSize="9" FontWeight="Bold" Foreground="#B3140E04"
                                                                IsHitTestVisible="False">
@@ -888,10 +887,7 @@
                                                             <Style TargetType="TextBlock">
                                                                 <Setter Property="Visibility" Value="Collapsed" />
                                                                 <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding AnimId}" Value="16">
-                                                                        <Setter Property="Visibility" Value="Visible" />
-                                                                    </DataTrigger>
-                                                                    <DataTrigger Binding="{Binding AnimId}" Value="17">
+                                                                    <DataTrigger Binding="{Binding AnimId}" Value="2">
                                                                         <Setter Property="Visibility" Value="Visible" />
                                                                     </DataTrigger>
                                                                 </Style.Triggers>

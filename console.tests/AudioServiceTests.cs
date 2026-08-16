@@ -611,7 +611,7 @@ public class WaveformStalenessTests
         var missing = Path.Combine(fixture.DirectoryPath, "gone.wav");
         var json = $$"""
         {"type":"b1-scene","version":1,"name":"Loaded","loop":false,"endMs":null,
-         "catalog":{"id":"b1.core","revision":"v1","hash":"sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"},"tracks":[],
+         "catalog":{"id":"b1.core","revision":"v1","hash":"sha256:5b0ff9dd13ef89ec7bf85c41908409b93b581c47e05eb49e53a73ac1bd767633"},"tracks":[],
          "audioLanes":[{"label":"VOICE","clips":[
            {"filePath":{{System.Text.Json.JsonSerializer.Serialize(present)}},"durationMs":100,"startMs":0,"loop":false},
            {"filePath":{{System.Text.Json.JsonSerializer.Serialize(missing)}},"durationMs":100,"startMs":200,"loop":false}]}],
@@ -646,7 +646,7 @@ public class WaveformStalenessTests
         File.WriteAllText(corrupt, "not audio");
         var json = $$"""
         {"type":"b1-scene","version":1,"name":"Loaded","loop":false,"endMs":null,
-         "catalog":{"id":"b1.core","revision":"v1","hash":"sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"},"tracks":[],
+         "catalog":{"id":"b1.core","revision":"v1","hash":"sha256:5b0ff9dd13ef89ec7bf85c41908409b93b581c47e05eb49e53a73ac1bd767633"},"tracks":[],
          "audioLanes":[{"label":"AUDIO","clips":[
            {"filePath":{{System.Text.Json.JsonSerializer.Serialize(corrupt)}},"durationMs":9000,"startMs":500,"loop":false}]}],
          "gestureClips":[]}
@@ -678,7 +678,7 @@ public class WaveformStalenessTests
         File.WriteAllText(path, "audio");
         var json = $$"""
         {"type":"b1-scene","version":1,"name":"Loaded","loop":false,"endMs":null,
-         "catalog":{"id":"b1.core","revision":"v1","hash":"sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"},"tracks":[],
+         "catalog":{"id":"b1.core","revision":"v1","hash":"sha256:5b0ff9dd13ef89ec7bf85c41908409b93b581c47e05eb49e53a73ac1bd767633"},"tracks":[],
          "audioLanes":[{"label":"AUDIO","clips":[
            {"filePath":{{System.Text.Json.JsonSerializer.Serialize(path)}},"durationMs":9000,"startMs":500,"loop":false}]}],
          "gestureClips":[]}

@@ -32,7 +32,8 @@ public partial class SequenceStep : ObservableObject
     [ObservableProperty] private bool _durationProvisional = true;
     [ObservableProperty] private AnimationDurationKind _durationKind = AnimationDurationKind.Finite;
 
-    public bool IsInfinite => DurationKind == AnimationDurationKind.Infinite || AnimId is 16 or 17;
+    public bool IsInfinite => DurationKind == AnimationDurationKind.Infinite ||
+        GestureKey == "dialogue.talk" || AnimId is 16 or 17;
 
     // Transient view state: true while the clip is being held/dragged on the timeline
     // (dimmed to show it's "in hand"). Never serialized — same idea as AudioClip.Dragging.
@@ -50,6 +51,7 @@ public partial class SequenceStep : ObservableObject
     [ObservableProperty] private string _executionTone = "none";
 
     partial void OnAnimIdChanged(int value) => OnPropertyChanged(nameof(IsInfinite));
+    partial void OnGestureKeyChanged(string value) => OnPropertyChanged(nameof(IsInfinite));
     partial void OnDurationKindChanged(AnimationDurationKind value) => OnPropertyChanged(nameof(IsInfinite));
 
     public SequenceStep Clone() => new()

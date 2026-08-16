@@ -141,12 +141,12 @@ If an available B1 master is detected, the script opens it automatically and:
 - validates the JSON handshake, firmware/protocol metadata and master Build ID;
 - reads the droid inventory and confirms every node publishes a Build ID;
 - reads targeted calibration;
-- checks the 18-entry animation-duration catalog; structured clients additionally
-  require `kind`, `nominalMs`, `frameCount` and IDLE `settleMs`, while `ms` remains
-  the backward-compatible legacy field;
+- checks the three-entry V2 gesture catalog, including the continuous Talk
+  definition, generated key, `kind`, `nominalMs`, `frameCount` and Center
+  `settleMs`;
 - proves strict runtime validation with a read-only invalid-target probe before
   sending any invalid setter or animation command;
-- sends invalid animation and calibration commands and requires
+- sends invalid gesture and calibration commands and requires
   an `evt:"err"` response;
 - rereads calibration to prove rejected commands changed nothing;
 - observes the inventory briefly and fails if it changes unexpectedly or a
@@ -178,12 +178,11 @@ Each run writes a JSON report under the current user's temporary directory and
 prints its exact path. The process exits with code `1` if any required test
 fails, making it usable from CI or another automation.
 
-## Active Sequencer bench test
+## Archived Sequencer bench test
 
-`tools/sequencer-bench-test.ps1` is deliberately separate from the default
-self-test. Without a flag it performs only a strict read-only preflight:
-firmware/protocol consistency, expected fleet, targeted calibration responses,
-durations, runtime validation and mesh topology.
+`tools/sequencer-bench-test.ps1` still targets the retired numeric animation
+protocol and must be migrated before it is used with V2. The default self-test
+is the current non-destructive protocol preflight.
 
 ```powershell
 # Read-only preflight for one master plus two slaves
@@ -207,18 +206,19 @@ command. There is still no position telemetry, so visible movement,
 deterministic physical trajectory and inter-droid mechanical skew require an
 operator observation.
 
-## Headless animation execution test
+## Archived headless animation execution test
 
-`tools/anim-exec-test.ps1` is the active test for slaves without physical
-servos. It forces the master's attached servos off, temporarily enables only
-the slave software engines and restores every captured servo state in `finally`.
+`tools/anim-exec-test.ps1` also targets the retired numeric animation protocol.
+It remains documented as historical evidence only until it is migrated to named
+V2 gestures and the `gestureExec` / `gestureLease` capabilities.
 
 ```powershell
 .\tools\anim-exec-test.ps1 -ComPort COM3
 ```
 
-It requires the `animExec`, `animAccepted`, `animLease`, and `safeStop`
-capabilities. Every tracked
+Its historical version requires the former animation capabilities. The V2
+replacement must require `gestureV2`, `gestureExec`, `gestureLease`, and
+`safeStop`. Every tracked
 command must first be accepted by the master with the expected request, target,
 animation and mesh/local routing, then the test validates targeted finite
 animation start/completion on every slave, a broadcast where the disabled master

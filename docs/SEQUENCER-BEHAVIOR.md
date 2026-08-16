@@ -26,13 +26,13 @@ in the same commit.
 
 Execution telemetry is observational and never gates the console-side timeline.
 `WRITE` means the OS serial write completed, not that the master received it.
-New masters then emit `animAccepted` after parsing and validating the command
+New masters then emit `animAccepted` after parsing and validating the named V2 gesture command
 (`MASTER` in the timeline), including whether ESP-NOW accepted the broadcast
 frame and whether the master itself is a local target. The master maps the
-console's `requestId` to the existing mesh-header sequence, so `AnimPayload`
-remains byte-compatible with older slaves.
+console's `requestId` to the mesh-header sequence. Mesh transport carries the
+generated compact gesture ID only after the master has resolved the named key.
 
-New droids report when the software animation engine starts, finishes, is
+New droids report when `MotionEngine` starts, finishes, is
 interrupted, or refuses the command because servos are disabled; broadcast
 replies are deterministically jittered to avoid a response burst. The timeline
 aggregates reports per online target (`ACK 2/3`, `DONE 3/3`, `REJ 1/3`). Local
@@ -43,22 +43,22 @@ A missing start report expires after 1.5 s (`UNCONF`/`MISS n/N`); finite
 gestures that start but do not send a terminal report expire after their
 reported duration plus 1.5 s (`TIMEOUT`). Late reports recover the display, and
 delayed duplicate `started` reports cannot regress a terminal state. These
-warnings never delay or stop the show. Looping POWER_DOWN/TALK require only a
-start report because completion requires a later interruption.
+warnings never delay or stop the show. Continuous Talk requires only a start
+report because completion requires a later interruption.
 
 This proves firmware execution, not physical servo movement or mechanical
 inter-droid skew.
 
-## Infinite gestures: tracking, cleanup and lease
+## Continuous gestures: tracking, cleanup and lease
 
 The WPF playback controller records the latest successfully written gesture per
-concrete droid. Broadcast TALK or POWER_DOWN expands to the online roster; later
-targeted finite/IDLE commands replace only their target. Stop, a non-looping
+concrete droid. Broadcast Talk expands to the online roster; later targeted
+finite/Center commands replace only their target. Stop, a non-looping
 natural end, application disposal, and Play restart send tracked IDLE commands
 only to droids whose latest state is still infinite. A whole-pass Loop boundary
 and Pause deliberately do not clean up. Failed serial cleanup remains retryable.
 
-Sequencer playback starts those two gestures with a 5 s firmware lease and
+Sequencer playback starts Talk with a 5 s firmware lease and
 renews it every 2 s while the owning pass remains valid. Missing renewal returns
 the droid to IDLE and reports `interrupted/leaseExpired`; renewals are
 correlated to the originating mesh sequence so stale packets cannot extend a
@@ -68,7 +68,7 @@ There is no autonomous firmware gesture path. The standalone Animation card was
 removed during the V2 transition; the current gesture library remains inside the
 Sequencer.
 
-On firmware advertising `animLease`, that independent lease is the fail-closed
+On firmware advertising `gestureLease`, that independent lease is the fail-closed
 fallback if cleanup cannot cross a lost serial or mesh path.
 
 ## Three stop levels
@@ -318,8 +318,8 @@ uses the same validator before the atomic write.
 Every stored clip carries a GUID, `gestureKey`, target, start, intensity, tempo,
 variant and seed. Continuous gestures carry their explicit `holdMs`; finite and
 immediate gestures must not. The currently authorable catalog slice is Center,
-Nod and Talk. A small dispatch-only adapter still turns those names into the
-current firmware commands until Stage 4; the numbers do not exist in Scene JSON.
+Nod and Talk. Their names are dispatched directly to the V2 firmware catalog;
+generated wire IDs do not exist in Scene JSON.
 
 ## Dirty state and atomic persistence
 

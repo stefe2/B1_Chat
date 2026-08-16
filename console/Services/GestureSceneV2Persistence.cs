@@ -8,9 +8,9 @@ namespace b1_chat_console.Services;
 
 /// <summary>
 /// The only persistence boundary used by the Sequencer from Stage 3B onward.
-/// It writes named V2 clips and projects them through a deliberately small,
-/// forward-only adapter for the three gestures available before Stage 4 replaces
-/// the firmware motion engine. Numeric firmware commands never enter a Scene.
+/// It writes named V2 clips and projects them to generated wire identifiers only
+/// at the transient Sequencer execution boundary. Numeric identifiers never enter
+/// a Scene and are regenerated from the active catalog after every load.
 /// </summary>
 internal static class GestureSceneV2Persistence
 {
@@ -19,7 +19,7 @@ internal static class GestureSceneV2Persistence
 
     internal static GestureCatalogV2 Catalog => CatalogLoader.Value;
 
-    internal static bool IsSupportedTemporaryAnimId(int animId) => animId is 0 or 2 or 17;
+    internal static bool IsSupportedTemporaryAnimId(int animId) => animId is 0 or 1 or 2;
 
     internal static string Serialize(SequenceSnapshot document, IReadOnlyList<SequenceTrackDto> tracks)
     {
@@ -128,20 +128,20 @@ internal static class GestureSceneV2Persistence
         return animId switch
         {
             0 => "idle.center",
-            2 => "communicate.nod",
-            17 => "dialogue.talk",
+            1 => "communicate.nod",
+            2 => "dialogue.talk",
             _ => throw new GestureSceneV2PersistenceException(
-                "This temporary V2 catalog currently offers Center, Nod and Talk only. Replace the clip before saving."),
+                "The active V2 catalog currently offers Center, Nod and Talk only. Replace the clip before saving."),
         };
     }
 
     private static int ResolveAnimId(string gestureKey) => gestureKey switch
     {
         "idle.center" => 0,
-        "communicate.nod" => 2,
-        "dialogue.talk" => 17,
+        "communicate.nod" => 1,
+        "dialogue.talk" => 2,
         _ => throw new GestureSceneV2PersistenceException(
-            $"No temporary execution adapter exists for V2 gesture \"{gestureKey}\"."),
+            $"No generated execution identifier exists for V2 gesture \"{gestureKey}\"."),
     };
 
     private static uint SeedFor(Guid id)

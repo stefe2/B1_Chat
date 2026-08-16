@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include "config.h"
 #include "servo_engine.h"
-#include "animation.h"
+#include "motion_engine.h"
 #include "mesh_comm.h"
 #include "mesh_topology.h"
 #include "registry.h"
@@ -23,7 +23,7 @@
 #endif
 
 static ServoEngine head;
-static AnimationPlayer anim;
+static MotionEngine anim;
 
 // Runtime servo state of THIS droid (controllable from the web console).
 static bool gServos = false;
@@ -167,7 +167,7 @@ static const AnimRequestRecord* findAnimRequest(uint16_t meshSeq, uint8_t animId
 struct ActiveAnimExecution {
     bool active = false;
     uint16_t originSeq = 0;
-    uint8_t animId = ANIM_IDLE;
+    uint8_t animId = GESTURE_IDLE_CENTER;
     bool broadcast = false;
     bool leased = false;
     uint32_t leaseDeadlineMs = 0;
@@ -255,7 +255,11 @@ static void startAnimationCommand(uint16_t targetId, uint8_t animId, uint32_t se
 
     // A tracked operator/Sequencer gesture is the deliberate release action.
     gSafetyHold = false;
-    anim.play(animId, seed);
+    if (!anim.play((GestureWireId)animId, seed)) {
+        if (tracked) reportAnimExec(originSeq, animId, ANIM_EXEC_REJECTED,
+                                    ANIM_EXEC_REASON_NONE, broadcast);
+        return;
+    }
     if (!tracked) return;
 
     reportAnimExec(originSeq, animId, ANIM_EXEC_STARTED,
@@ -281,7 +285,7 @@ static void startAnimationCommand(const AnimPayload& payload, uint16_t originSeq
 
 static bool validLeasedAnimPayload(const LeasedAnimPayload& payload) {
     return validMeshTarget(payload.targetId) &&
-           (payload.animId == ANIM_POWER_DOWN || payload.animId == ANIM_TALK) &&
+           payload.animId == GESTURE_DIALOGUE_TALK &&
            payload.leaseMs >= ANIM_LEASE_MIN_MS &&
            payload.leaseMs <= ANIM_LEASE_MAX_MS;
 }
@@ -307,12 +311,13 @@ static void finishTrackedAnimationIfNeeded() {
                        ANIM_EXEC_INTERRUPTED, ANIM_EXEC_REASON_LEASE_EXPIRED,
                        gActiveAnimExec.broadcast);
         gActiveAnimExec.active = false;
-        anim.play(ANIM_IDLE, esp_random());
+        anim.play(GESTURE_IDLE_CENTER, esp_random());
         return;
     }
     if (anim.isPlaying()) return;
     reportAnimExec(gActiveAnimExec.originSeq, gActiveAnimExec.animId,
-                   ANIM_EXEC_COMPLETED, ANIM_EXEC_REASON_NONE,
+                   ANIM_EXEC_COMPLETED,
+                   anim.wasClipped() ? ANIM_EXEC_REASON_CLIPPED : ANIM_EXEC_REASON_NONE,
                    gActiveAnimExec.broadcast);
     gActiveAnimExec.active = false;
 }
@@ -346,7 +351,7 @@ static void applyServos(bool en) {
 static void applySafeStop() {
     interruptTrackedAnimation();
     anim.stop();
-    if (gServos) anim.play(ANIM_IDLE, esp_random());
+    if (gServos) anim.play(GESTURE_IDLE_CENTER, esp_random());
     gSafetyHold = true;
     LOGF("safe stop: centered and holding");
 }
@@ -468,7 +473,7 @@ static void processMeshMessage(uint8_t type, const uint8_t* payload, uint8_t len
     if (type == MSG_ANIM && len == sizeof(AnimPayload)) {
         AnimPayload p;
         memcpy(&p, payload, sizeof(p));
-        if (!validMeshTarget(p.targetId) || p.animId >= ANIM_COUNT) {
+        if (!validMeshTarget(p.targetId) || p.animId >= GESTURE_COUNT) {
             LOGF("invalid ANIM payload from %04X", srcId);
             return;
         }
@@ -501,8 +506,8 @@ static void processMeshMessage(uint8_t type, const uint8_t* payload, uint8_t len
 #if IS_MASTER
         AnimExecPayload p;
         memcpy(&p, payload, sizeof(p));
-        if (p.animId >= ANIM_COUNT || p.phase < ANIM_EXEC_STARTED ||
-            p.phase > ANIM_EXEC_REJECTED || p.reason > ANIM_EXEC_REASON_LEASE_EXPIRED) return;
+        if (p.animId >= GESTURE_COUNT || p.phase < ANIM_EXEC_STARTED ||
+            p.phase > ANIM_EXEC_REJECTED || p.reason > ANIM_EXEC_REASON_CLIPPED) return;
         publishAnimExec(srcId, p, false);
 #endif
     } else if (type == MSG_SERVO && len == sizeof(ServoPayload)) {

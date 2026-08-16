@@ -2,9 +2,9 @@
 
 This document owns the strict V2 data boundary introduced in Stage 3A and made
 the only Scene persistence format in Stage 3B. The current firmware motion
-engine is still transitional until Stage 4; a narrow console-only execution
-adapter maps the three initial catalog keys at dispatch time. Numeric values are
-never persisted in a Scene.
+engine is now generated from this source catalog. The console dispatches the
+three initial catalog keys directly; numeric values are never persisted in a
+Scene.
 
 ## Catalog
 
@@ -21,8 +21,17 @@ never persisted in a Scene.
 }
 ```
 
-`hash` is an announced catalog identity in this contract. Stage 4's generator
-will calculate and replace the fixture placeholder before runtime adoption.
+`hash` is an announced, content-derived catalog identity. It hashes UTF-8
+catalog text after normalizing line endings and replacing the hash value itself
+with 64 zeroes. This avoids a self-reference while making every other byte
+significant. After editing the catalog, run:
+
+```powershell
+.\tools\generate-gesture-catalog.ps1 -UpdateHash
+```
+
+Then commit both the catalog and generated firmware header. `-Verify` rejects a
+stale generated header or an invalid catalog hash.
 The source format has no `wireId` or `animId`; generated wire IDs are a build
 artifact and are never hand-authored or persisted in Scenes.
 
@@ -38,10 +47,9 @@ end policy, safety flags and a minimum motion-engine generation. It also lists:
 - `variants`: permitted variant tokens. `default` is mandatory.
 - `seedPolicy`: `required` or `ignored`.
 
-The three initial catalog entries are intentionally metadata-only: trajectory
-tables and generated firmware code are introduced in Stage 4/5, not guessed in
-the schema layer. The 3B adapter supports only Center, Nod and Talk, so the
-authoring library exposes only those three gestures until the catalog grows.
+The three initial catalog entries contain normalized trajectory tables and
+generate the current firmware header. The authoring library exposes Center, Nod
+and Talk until the catalog grows.
 
 ## Scene
 

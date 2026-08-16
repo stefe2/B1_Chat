@@ -35,6 +35,10 @@ const uint32_t SERVO_LEDC_FREQ = 50;
 const uint8_t  SERVO_LEDC_BITS = 16;
 const uint32_t SERVO_PERIOD_US = 1000000UL / SERVO_LEDC_FREQ;  // 20000 µs
 const uint32_t SERVO_MAX_DUTY  = (1UL << SERVO_LEDC_BITS) - 1;
+// A trajectory segment can never demand a sharper physical move than this.
+// smootherstep supplies zero velocity at both ends, which also bounds the
+// acceleration transition rather than making a step-change at a waypoint.
+const float SERVO_MAX_DEGREES_PER_SECOND = 180.0f;
 
 // Converts a pulse width (µs) into an LEDC duty cycle.
 inline uint32_t usToDuty(float us) {
@@ -60,13 +64,29 @@ void ServoEngine::setTarget(float panDeg, float tiltDeg, uint32_t durationMs) {
     _startTilt = _curTilt;
     _targetPan = clampf(panDeg, _panMin, _panMax);
     _targetTilt = clampf(tiltDeg, _tiltMin, _tiltMax);
+    const float panTravel = fabsf(_targetPan - _curPan);
+    const float tiltTravel = fabsf(_targetTilt - _curTilt);
+    const float maxTravel = panTravel > tiltTravel ? panTravel : tiltTravel;
+    const uint32_t safeDuration = (uint32_t)ceilf(
+        maxTravel * 1000.0f / SERVO_MAX_DEGREES_PER_SECOND);
     _moveStart = millis();
-    _moveDur = durationMs == 0 ? 1 : durationMs;
+    _moveDur = max(1UL, max(durationMs, safeDuration));
     _moving = true;
 }
 
 void ServoEngine::setTargetOffset(float panOffsetDeg, float tiltOffsetDeg, uint32_t durationMs) {
     setTarget(_panCenter + panOffsetDeg, _tiltCenter + tiltOffsetDeg, durationMs);
+}
+
+bool ServoEngine::setTargetNormalized(int8_t panPct, int8_t tiltPct, uint32_t durationMs) {
+    const int panSafe = constrain((int)panPct, -100, 100);
+    const int tiltSafe = constrain((int)tiltPct, -100, 100);
+    const float panSpan = panSafe < 0 ? (float)(_panCenter - _panMin) : (float)(_panMax - _panCenter);
+    const float tiltSpan = tiltSafe < 0 ? (float)(_tiltCenter - _tiltMin) : (float)(_tiltMax - _tiltCenter);
+    setTarget(_panCenter + panSpan * panSafe / 100.0f,
+              _tiltCenter + tiltSpan * tiltSafe / 100.0f,
+              durationMs);
+    return panSafe != panPct || tiltSafe != tiltPct;
 }
 
 void ServoEngine::center(uint32_t durationMs) {

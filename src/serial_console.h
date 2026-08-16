@@ -4,8 +4,8 @@
 //  SerialConsole — JSON bridge over USB for the web console (master)
 //
 //  Protocol: one line = one JSON message (see CLAUDE.md).
-//  - PC → master: {cmd:"list"|"anim"|"name"|
-//                   "calib"|"preview"|"getCalib"|"getAnimDurations"|
+//  - PC → master: {cmd:"list"|"gesture"|"name"|
+//                   "calib"|"preview"|"getCalib"|"getGestureCatalog"|
 //                   "animLease"|"safeStop"|"servo"|"locate"|"getMeshTopology"|"getAll"|
 //                   "commit", ...}
 //  - master → PC: {evt:"droids"|"log"|"meshTopology"|"animAccepted"|
@@ -39,7 +39,7 @@ public:
 
     void pushDroids();
 
-    // Emits the indicative duration (ms) of each gesture ({evt:"animDurations",...}).
+    // Emits the generated V2 catalog ({evt:"gestureCatalog",...}).
     void pushAnimDurations();
 
     // Emits one correlated animation lifecycle report from the master or a slave.

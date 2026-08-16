@@ -171,6 +171,12 @@ Invoke-Test "No whitespace errors" {
     "git diff --check clean"
 }
 
+Invoke-Test "V2 gesture catalog integrity" {
+    $output = & .\tools\generate-gesture-catalog.ps1 -Verify 2>&1
+    if ($LASTEXITCODE -ne 0) { throw ($output -join [Environment]::NewLine) }
+    "content hash and generated firmware header match"
+}
+
 Invoke-Test "Callback-to-loop mesh isolation present" {
     Assert-Source "src/main.cpp" "enqueueMeshMessage" "mesh inbox enqueue missing"
     Assert-Source "src/main.cpp" "pumpMeshInbox\(\)" "mesh inbox pump missing"
@@ -309,11 +315,11 @@ if (-not $SkipSerial) {
             $masterId = [int]$hello.id
 
             Invoke-Test "Animation safety capabilities" {
-                Assert-True (@($hello.caps) -contains "animExec") "master does not advertise animExec"
-                Assert-True (@($hello.caps) -contains "animAccepted") "master does not advertise animAccepted"
-                Assert-True (@($hello.caps) -contains "animLease") "master does not advertise animLease"
+                Assert-True (@($hello.caps) -contains "gestureV2") "master does not advertise gestureV2"
+                Assert-True (@($hello.caps) -contains "gestureExec") "master does not advertise gestureExec"
+                Assert-True (@($hello.caps) -contains "gestureLease") "master does not advertise gestureLease"
                 Assert-True (@($hello.caps) -contains "safeStop") "master does not advertise safeStop"
-                "animExec + animAccepted + animLease + safeStop advertised"
+                "gestureV2 + gestureExec + gestureLease + safeStop advertised"
             }
 
             $droids = Send-And-Wait $port '{"cmd":"list"}' { param($e) $e.evt -eq "droids" }
@@ -351,12 +357,12 @@ if (-not $SkipSerial) {
                 "pan $($calibBefore.panMin)/$($calibBefore.panCenter)/$($calibBefore.panMax), tilt $($calibBefore.tiltMin)/$($calibBefore.tiltCenter)/$($calibBefore.tiltMax)"
             }
 
-            $durations = Send-And-Wait $port '{"cmd":"getAnimDurations"}' { param($e) $e.evt -eq "animDurations" }
-            Invoke-Test "Animation duration catalog" {
+            $durations = Send-And-Wait $port '{"cmd":"getGestureCatalog"}' { param($e) $e.evt -eq "gestureCatalog" }
+            Invoke-Test "Gesture V2 catalog" {
                 Assert-True ($null -ne $durations) "no duration catalog"
-                Assert-True (@($durations.list).Count -eq 18) "expected 18 animations"
-                Assert-True (@($durations.list | Where-Object { [int]$_.ms -le 0 }).Count -eq 0) "zero/negative duration found"
-                "18 positive durations"
+                Assert-True (@($durations.list).Count -eq 3) "expected 3 V2 gestures"
+                Assert-True (@($durations.list | Where-Object { $_.key -eq "dialogue.talk" -and $_.kind -eq "continuous" }).Count -eq 1) "Talk is not continuous"
+                "3 V2 gestures including continuous Talk"
             }
 
             # Capability strings and version labels are not sufficient proof that the binary
@@ -370,13 +376,13 @@ if (-not $SkipSerial) {
             }
 
             if ($strictValidation) {
-                $badAnim = Send-And-Wait $port '{"cmd":"anim","target":65535,"animId":99}' { param($e) $e.evt -eq "err" }
+                $badAnim = Send-And-Wait $port '{"cmd":"gesture","target":65535,"key":"unknown.gesture"}' { param($e) $e.evt -eq "err" }
                 Invoke-Test "Invalid animation rejected" {
                     Assert-True ($null -ne $badAnim) "invalid anim produced no err event"
                     "$($badAnim.msg)"
                 }
 
-                $badLeasedAnim = Send-And-Wait $port '{"cmd":"anim","target":65535,"animId":2,"leaseMs":5000}' { param($e) $e.evt -eq "err" }
+                $badLeasedAnim = Send-And-Wait $port '{"cmd":"gesture","target":65535,"key":"communicate.nod","leaseMs":5000}' { param($e) $e.evt -eq "err" }
                 Invoke-Test "Invalid leased animation rejected" {
                     Assert-True ($null -ne $badLeasedAnim) "finite leased anim produced no err event"
                     "$($badLeasedAnim.msg)"

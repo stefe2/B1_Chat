@@ -31,7 +31,9 @@
 //    change instead of offering a manual save/revert choice.
 // 6: global animation frequency/amplitude/speed and their configuration
 //    commands/events were removed; gesture durations are nominal and fixed.
-#define FW_PROTO 6
+// 7: named V2 gesture catalog and trajectory motion engine replace numeric
+//    animation commands and the historical 18-entry animation table.
+#define FW_PROTO 7
 
 // ---------------------------------------------------------------------------
 //  DROID ROLE  —  SET HERE BEFORE FLASHING (pio run -e b1 -t upload)

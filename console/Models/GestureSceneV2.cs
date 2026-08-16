@@ -9,6 +9,8 @@ public sealed record GestureCatalogIdentity(string Id, string Revision, string H
 public enum GestureExecutionKind { Immediate, Finite, Continuous }
 
 public sealed record GestureTempoDefinition(string Key, int DurationMs);
+public sealed record GestureTrajectoryFrameV2(int Pan, int Tilt, int MoveMs, int HoldMs, string Easing);
+public sealed record GestureTrajectoryV2(IReadOnlyList<GestureTrajectoryFrameV2> Frames);
 
 public sealed record GestureDefinitionV2(
     string Key,
@@ -24,7 +26,8 @@ public sealed record GestureDefinitionV2(
     bool RequiresSeed,
     int MinimumMotionEngine,
     bool AuditionSafe,
-    bool BroadcastSafe);
+    bool BroadcastSafe,
+    GestureTrajectoryV2 Trajectory);
 
 public sealed record GestureCatalogV2(
     GestureCatalogIdentity Identity,

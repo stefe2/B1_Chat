@@ -58,6 +58,18 @@ public sealed class GestureSceneV2SchemaTests
     }
 
     [Fact]
+    public void Catalog_RejectsContentWhoseDeclaredHashWasNotRegenerated()
+    {
+        var root = JsonNode.Parse(ReadFixture("catalog-v1.json"))!.AsObject();
+        root["gestures"]![1]!["description"] = "A modified motion without a regenerated catalog hash.";
+
+        var error = Assert.Throws<GestureSceneV2SchemaException>(
+            () => GestureCatalogV2Parser.Parse(root.ToJsonString()));
+
+        Assert.Equal("$.hash", error.FieldPath);
+    }
+
+    [Fact]
     public void Scene_RejectsNumericAnimationIdentity()
     {
         var root = JsonNode.Parse(ReadFixture("scene-v1.json"))!.AsObject();

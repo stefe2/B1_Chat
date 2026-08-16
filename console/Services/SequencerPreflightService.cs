@@ -59,7 +59,7 @@ public sealed class SequencerPreflightService : ISequencerPreflightService
         IEnumerable<SequenceStep> activeSteps,
         ICollection<SequencerPreflightIssue> issues)
     {
-        foreach (var step in activeSteps.Where(step => step.AnimId is 16 or 17))
+        foreach (var step in activeSteps.Where(step => step.IsInfinite))
         {
             var terminationMs = (long)Math.Max(0, step.StartMs) + step.EndAfterMs;
             if (step.EndAfterMs >= 100 && terminationMs <= input.EffectiveSequenceEndMs) continue;

@@ -4,7 +4,7 @@
 #include "mesh_topology.h"
 #include "registry.h"
 #include "config_store.h"
-#include "animation.h"
+#include "motion_engine.h"
 
 #include <ArduinoJson.h>
 #include <stdarg.h>
@@ -69,6 +69,7 @@ const char* animExecReasonName(uint8_t reason) {
     switch (reason) {
     case ANIM_EXEC_REASON_SERVOS_OFF: return "servosOff";
     case ANIM_EXEC_REASON_LEASE_EXPIRED: return "leaseExpired";
+    case ANIM_EXEC_REASON_CLIPPED: return "clipped";
     default: return "";
     }
 }
@@ -179,20 +180,18 @@ void SerialConsole::pushAnimDurations() {
     if (!_clientReady) return;
 
     JsonDocument doc;
-    doc["evt"] = "animDurations";
+    doc["evt"] = "gestureCatalog";
     JsonArray arr = doc["list"].to<JsonArray>();
-    for (uint8_t i = 0; i < ANIM_COUNT; i++) {
+    for (uint8_t i = 0; i < GESTURE_COUNT; i++) {
         JsonObject o = arr.add<JsonObject>();
-        o["animId"] = i;
-        const uint32_t nominalMs = AnimationPlayer::totalDurationMs(i);
-        const bool infinite = AnimationPlayer::isInfinite(i);
-        // Preserve the legacy UI's historical indicative tail while structured clients use
-        // nominalMs/kind and never confuse it with a natural endpoint.
-        o["ms"] = (i == ANIM_IDLE || infinite) ? 2000 : nominalMs;
-        o["kind"] = i == ANIM_IDLE ? "immediate" : infinite ? "infinite" : "finite";
+        o["gestureId"] = i;
+        o["key"] = MotionEngine::key((GestureWireId)i);
+        const uint32_t nominalMs = MotionEngine::normalDurationMs((GestureWireId)i);
+        const bool continuous = MotionEngine::isContinuous((GestureWireId)i);
+        o["kind"] = i == GESTURE_IDLE_CENTER ? "immediate" : continuous ? "continuous" : "finite";
         o["nominalMs"] = nominalMs;
-        o["frameCount"] = AnimationPlayer::frameCount(i);
-        if (i == ANIM_IDLE) o["settleMs"] = 600;
+        o["frameCount"] = GESTURES_V2[i].frameCount;
+        if (i == GESTURE_IDLE_CENTER) o["settleMs"] = 120;
     }
     serializeJson(doc, Serial);
     Serial.print('\n');
@@ -207,7 +206,8 @@ void SerialConsole::pushAnimExec(uint32_t requestId, uint16_t droidId,
     doc["requestId"] = requestId;
     doc["droid"] = droidId;
     doc["meshSeq"] = meshSeq;
-    doc["animId"] = animId;
+    doc["gestureId"] = animId;
+    doc["gestureKey"] = MotionEngine::key((GestureWireId)animId);
     doc["phase"] = animExecPhaseName(phase);
     const char* reasonName = animExecReasonName(reason);
     if (reasonName[0]) doc["reason"] = reasonName;
@@ -225,7 +225,8 @@ void SerialConsole::pushAnimAccepted(uint32_t requestId, uint16_t target,
     doc["evt"] = "animAccepted";
     doc["requestId"] = requestId;
     doc["target"] = target;
-    doc["animId"] = animId;
+    doc["gestureId"] = animId;
+    doc["gestureKey"] = MotionEngine::key((GestureWireId)animId);
     doc["meshSeq"] = meshSeq;
     doc["meshQueued"] = meshQueued;
     doc["local"] = localHandled;
@@ -386,14 +387,17 @@ void SerialConsole::handleLine(const char* line) {
         putBuildId(ack.as<JsonObject>(), "build", (uint32_t)FW_BUILD_ID);
         ack["proto"] = FW_PROTO;
         ack["lineMax"] = SERIAL_LINE_MAX;
-        ack["anims"] = ANIM_COUNT;
+        ack["gestures"] = GESTURE_COUNT;
+        ack["catalogId"] = GESTURE_CATALOG_ID;
+        ack["catalogRevision"] = GESTURE_CATALOG_REVISION;
+        ack["catalogHash"] = GESTURE_CATALOG_HASH;
         JsonArray caps = ack["caps"].to<JsonArray>();
         caps.add("err");
         caps.add("getAll");
         caps.add("commit");
-        caps.add("animExec");
-        caps.add("animAccepted");
-        caps.add("animLease");
+        caps.add("gestureV2");
+        caps.add("gestureExec");
+        caps.add("gestureLease");
         caps.add("safeStop");
         caps.add("servoReverse");
         ack["dirty"] = Config.dirty();
@@ -417,7 +421,7 @@ void SerialConsole::handleLine(const char* line) {
     if (!strcmp(cmd, "list")) {
         pushDroids();
 
-    } else if (!strcmp(cmd, "getAnimDurations")) {
+    } else if (!strcmp(cmd, "getGestureCatalog")) {
         pushAnimDurations();
 
     } else if (!strcmp(cmd, "getMeshTopology")) {
@@ -436,41 +440,47 @@ void SerialConsole::handleLine(const char* line) {
         serializeJson(done, Serial);
         Serial.print('\n');
 
-    } else if (!strcmp(cmd, "anim")) {
+    } else if (!strcmp(cmd, "gesture")) {
         uint16_t target;
-        int animIdValue;
+        const char* gestureKey = command["key"] | "";
+        int gestureIdValue = -1;
+        for (uint8_t i = 0; i < GESTURE_COUNT; i++) {
+            if (!strcmp(gestureKey, MotionEngine::key((GestureWireId)i))) {
+                gestureIdValue = i;
+                break;
+            }
+        }
         int requestIdValue = 0;
         int leaseMsValue = 0;
         if (!readTargetField(command, true, target, validationWhy, sizeof(validationWhy)) ||
-            !readIntField(command, "animId", 0, ANIM_COUNT - 1, animIdValue,
-                          validationWhy, sizeof(validationWhy))) {
-            pushErr("invalid anim: %s", validationWhy);
+            gestureIdValue < 0) {
+            pushErr("invalid gesture: target or key is invalid");
             return;
         }
         if (!command["requestId"].isNull() &&
             !readIntField(command, "requestId", 1, 0x7FFFFFFF, requestIdValue,
                           validationWhy, sizeof(validationWhy))) {
-            pushErr("invalid anim: %s", validationWhy);
+            pushErr("invalid gesture: %s", validationWhy);
             return;
         }
         if (!command["leaseMs"].isNull() &&
             !readIntField(command, "leaseMs", 0, ANIM_LEASE_MAX_MS, leaseMsValue,
                           validationWhy, sizeof(validationWhy))) {
-            pushErr("invalid anim: %s", validationWhy);
+            pushErr("invalid gesture: %s", validationWhy);
             return;
         }
-        const uint8_t animId = (uint8_t)animIdValue;
+        const uint8_t animId = (uint8_t)gestureIdValue;
         if (leaseMsValue > 0 &&
             (leaseMsValue < ANIM_LEASE_MIN_MS ||
-             (animId != ANIM_POWER_DOWN && animId != ANIM_TALK))) {
-            pushErr("invalid anim: lease requires TALK/POWER_DOWN and %u..%u ms",
+             animId != GESTURE_DIALOGUE_TALK)) {
+            pushErr("invalid gesture: lease requires dialogue.talk and %u..%u ms",
                     ANIM_LEASE_MIN_MS, ANIM_LEASE_MAX_MS);
             return;
         }
         const uint32_t seed   = doc["seed"] | (uint32_t)esp_random();
         if (_animCb) _animCb(target, animId, seed, (uint32_t)requestIdValue,
                              (uint16_t)leaseMsValue);
-        log("anim %u -> %04X", animId, target);
+        log("gesture %s -> %04X", gestureKey, target);
 
     } else if (!strcmp(cmd, "animLease")) {
         uint16_t target;
