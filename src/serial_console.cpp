@@ -398,6 +398,8 @@ void SerialConsole::handleLine(const char* line) {
         caps.add("gestureV2");
         caps.add("gestureExec");
         caps.add("gestureLease");
+        caps.add("gestureCompose");
+        caps.add("gestureStop");
         caps.add("safeStop");
         caps.add("servoReverse");
         ack["dirty"] = Config.dirty();
@@ -481,6 +483,24 @@ void SerialConsole::handleLine(const char* line) {
         if (_animCb) _animCb(target, animId, seed, (uint32_t)requestIdValue,
                              (uint16_t)leaseMsValue);
         log("gesture %s -> %04X", gestureKey, target);
+
+    } else if (!strcmp(cmd, "stopGesture")) {
+        uint16_t target;
+        const char* gestureKey = command["key"] | "";
+        int gestureIdValue = -1;
+        for (uint8_t i = 0; i < GESTURE_COUNT; i++) {
+            if (!strcmp(gestureKey, MotionEngine::key((GestureWireId)i))) {
+                gestureIdValue = i;
+                break;
+            }
+        }
+        if (!readTargetField(command, true, target, validationWhy, sizeof(validationWhy)) ||
+            gestureIdValue < 0 || gestureIdValue == GESTURE_IDLE_CENTER) {
+            pushErr("invalid stopGesture: target or key is invalid");
+            return;
+        }
+        if (_gestureStopCb) _gestureStopCb(target, (uint8_t)gestureIdValue);
+        log("stopGesture %s -> %04X", gestureKey, target);
 
     } else if (!strcmp(cmd, "animLease")) {
         uint16_t target;

@@ -1,6 +1,6 @@
 # B1 Chat — Gesture Catalog and Sequencer V2
 
-Status: stages 1–5 implemented; reduced-amplitude bench validation pending before Stage 6
+Status: stages 1–5 implemented; reduced-amplitude bench validation pending
 Approved: 2026-08-15
 
 This document owns the target product direction, breaking-development policy and
@@ -31,6 +31,22 @@ supporting tools, not peers competing with the Sequencer for the main workspace.
 All physical motion must have an explicit owner: Emergency Stop, Safe Stop,
 Sequencer/audition, or neutral rest. The first V2 generation has no hidden
 autonomous gesture scheduler and no implicit broadcast target.
+
+### Current scope decision (2026-08-16)
+
+The current Sequencer already responds well to the product's needs. It is not
+being redesigned during the current work: its layout, workflow and controls are
+out of scope until the animation work is complete.
+
+The active work is exclusively the built-in gesture system shared by the
+console and firmware: its catalog, trajectories, tempo definitions, limits,
+execution and physical audition. There is no end-user movement editor in this
+scope.
+
+When a future Sequencer workspace review is appropriate, retain the visual
+direction **"per droid"** as a discussion reference: small robot identities at
+the left of individual timeline rows, making it immediately clear who moves and
+when. This is a preference only, not an approved UI implementation.
 
 ## Approved breaking-development policy
 
@@ -92,7 +108,8 @@ A catalog entry is expected to define:
 
 - key, display name, description, family and tags;
 - finite, hold or loop execution kind;
-- pan/tilt trajectory and segment easing;
+- pan/tilt trajectory and segment easing, including a declared base or overlay
+  composition layer and its controlled axis;
 - nominal duration and end policy;
 - allowed intensity, tempo, variant and deterministic-seed behavior;
 - calibrated motion envelope and mechanical constraints;
@@ -243,33 +260,28 @@ old Animation-card dependency.
 
 ### Stage 5 — Motion ownership and engine V2
 
-Status: implementation complete (2026-08-16), with `DroidController` extraction deferred and reduced-amplitude bench validation pending.
+Status: composition foundation implemented (2026-08-16), with `DroidController` extraction deferred and reduced-amplitude bench validation pending.
 
-`MotionEngine` owns one normalized trajectory at a time; calibrated asymmetric
-ranges, smootherstep segment easing, a velocity ceiling, deterministic end
-policy and clipping telemetry are implemented. The existing main-loop safety
+`MotionEngine` composes a persistent base pose and expression overlays per
+axis. A PAN orientation such as `attention.look-right` therefore remains in
+place while a TILT overlay such as `dialogue.talk` runs. The resulting one
+normalized pan/tilt target remains bounded by calibrated asymmetric ranges,
+smootherstep easing and the velocity ceiling. The existing main-loop safety
 priority remains the controller boundary until it is extracted as a class.
 
 - **Deferred:** extract the current priority logic into `DroidController`.
 - **Implemented:** normalized poses to calibrated asymmetric ranges and smooth
   segment easing.
 - **Implemented:** velocity ceiling, deterministic interruption/end policy and
-  clipping telemetry. The initial catalog deliberately declares no variation.
+  clipping telemetry. `idle.center` clears every layer; `communicate.nod` and
+  `dialogue.talk` clear only their TILT overlay; `attention.look-left` and
+  `attention.look-right` hold PAN base poses; `attention.look-up` and
+  `attention.look-down` hold TILT base poses. Positive TILT is explicitly up.
+  The initial catalog deliberately declares no variation.
 
 Exit: pure trajectory tests plus reduced-amplitude hardware checks pass.
 
-### Stage 6 — Sequencer-first workspace
-
-- Make the timeline the primary workspace.
-- Place tracks, catalog and clip inspector around it.
-- Keep target/broadcast choice explicit.
-- Move calibration, topology and firmware to supporting surfaces.
-- Validate a wireframe before major XAML implementation.
-
-Exit: a first-time user can author and audition a Scene without the removed
-Animation workflow.
-
-### Stage 7 — Deterministic clip properties
+### Stage 6 — Deterministic clip properties
 
 - Wire the approved intensity and tempo presets into the editor and runtime.
 - Wire the approved variant, seed controls and continuous-gesture hold duration
@@ -280,28 +292,28 @@ Animation workflow.
 Exit: saved Scenes replay the same planned gestures independent of hidden
 per-droid animation configuration.
 
-### Stage 8 — New catalog content
+### Stage 7 — New catalog content
 
 Build and bench coherent batches: rest/transitions, attention, communication,
 emotion, dialogue, reaction and mechanical effects. Each entry must have a
 clear intent and pass simulation, trajectory validation and physical audition.
 Redundant or weak gestures are removed rather than preserved for compatibility.
 
-### Stage 9 — Simulation and observability
+### Stage 8 — Simulation and observability
 
 - Add a no-motion Dry Run using the real compiled plan.
 - Visualize pan/tilt trajectory and calibrated limits.
 - Correlate planned time, serial write, master acceptance, droid start and end.
 - Surface clipping, rejection, timeout and measured latency honestly.
 
-### Stage 10 — Multi-droid synchronization
+### Stage 9 — Multi-droid synchronization
 
 - Define a new uniform-generation protocol.
 - Add catalog identity negotiation and planned start time.
 - Synchronize clocks or measure offsets explicitly.
 - Measure and report inter-droid skew.
 
-### Stage 11 — Ambient behavior decision gate
+### Stage 10 — Ambient behavior decision gate
 
 After real use of the explicit workflow, choose one:
 
@@ -311,7 +323,7 @@ After real use of the explicit workflow, choose one:
 
 No Ambient implementation is approved yet.
 
-### Stage 12 — Coordinated cutover and full bench gate
+### Stage 11 — Coordinated cutover and full bench gate
 
 - Tag the pre-V2 baseline.
 - Execute the approved bridge/USB transition.
@@ -319,6 +331,23 @@ No Ambient implementation is approved yet.
 - Reject incompatible generations after cutover.
 - Run software, migration/reset and physical safety validation.
 - Remove temporary transition code.
+
+### Stage 12 — Sequencer workspace review (deferred to the end)
+
+This stage is deliberately postponed until the built-in gesture catalog and its
+real-world behavior are established. The present Sequencer remains the active
+authoring surface; no Sequencer UI replacement is implied by the V2 motion
+work.
+
+- Reassess the existing Sequencer only after the catalog, observability,
+  synchronization and coordinated cutover work are complete.
+- If a redesign is then useful, validate a wireframe before any major XAML
+  implementation.
+- Start from the retained **"per droid"** visual direction, but treat it as a
+  starting point for discussion rather than a committed design.
+
+Exit: either keep the existing Sequencer, or approve and implement a separately
+validated workspace improvement.
 
 ## Reordering rules
 

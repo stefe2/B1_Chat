@@ -68,6 +68,10 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         new() { Id = 0, Name = "Center" },
         new() { Id = 1, Name = "Nod" },
         new() { Id = 2, Name = "Talk" },
+        new() { Id = 3, Name = "Look right" },
+        new() { Id = 4, Name = "Look left" },
+        new() { Id = 5, Name = "Look up" },
+        new() { Id = 6, Name = "Look down" },
     ];
 
     public IReadOnlyList<GestureFamily> GestureFamilies { get; } =
@@ -83,6 +87,18 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
             Label = "DIALOGUE",
             ColorAnimId = 2,
             Gestures = [new GestureLibraryEntry { Id = 2, Name = "Talk" }],
+        },
+        new GestureFamily
+        {
+            Label = "ATTENTION",
+            ColorAnimId = 3,
+            Gestures =
+            [
+                new GestureLibraryEntry { Id = 3, Name = "Look right" },
+                new GestureLibraryEntry { Id = 4, Name = "Look left" },
+                new GestureLibraryEntry { Id = 5, Name = "Look up" },
+                new GestureLibraryEntry { Id = 6, Name = "Look down" },
+            ],
         },
     ];
 
@@ -696,12 +712,13 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
             .ToArray();
         foreach (var (droidId, previous) in active)
         {
-            var seed = (uint)Random.Shared.NextInt64(1, (long)uint.MaxValue + 1);
-            var dispatch = _protocol.PlayAnim(droidId, 0, seed);
-            if (!dispatch.Written) continue;
+            var state = _protocol.SupportsGestureStop
+                ? _protocol.StopGesture(droidId, previous.AnimId)
+                : _protocol.PlayAnim(droidId, 0, (uint)Random.Shared.NextInt64(1, (long)uint.MaxValue + 1)).State;
+            if (state != AnimDispatchState.Written) continue;
             if (_latestGestureByDroid.TryGetValue(droidId, out var current)
                 && current == previous)
-                _latestGestureByDroid[droidId] = new GestureTargetState(dispatch.RequestId, 0);
+                _latestGestureByDroid.Remove(droidId);
         }
     }
 
@@ -1121,6 +1138,10 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
                     0 => "idle.center",
                     1 => "communicate.nod",
                     2 or 17 => "dialogue.talk",
+                    3 => "attention.look-right",
+                    4 => "attention.look-left",
+                    5 => "attention.look-up",
+                    6 => "attention.look-down",
                     _ => "",
                 },
                 Target = track.Id,
@@ -2440,12 +2461,15 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
             .ToArray();
         foreach (var droidId in ownedTargets)
         {
-            var dispatch = _protocol.PlayAnim(
-                droidId, 0, (uint)Random.Shared.NextInt64(1, (long)uint.MaxValue + 1));
-            if (!dispatch.Written) continue;
-            if (_latestGestureByDroid.TryGetValue(droidId, out var current) &&
-                current.RequestId == requestId)
-                _latestGestureByDroid[droidId] = new GestureTargetState(dispatch.RequestId, 0);
+            if (!_latestGestureByDroid.TryGetValue(droidId, out var current) ||
+                current.RequestId != requestId || !current.IsInfinite) continue;
+            var state = _protocol.SupportsGestureStop
+                ? _protocol.StopGesture(droidId, current.AnimId)
+                : _protocol.PlayAnim(droidId, 0, (uint)Random.Shared.NextInt64(1, (long)uint.MaxValue + 1)).State;
+            if (state != AnimDispatchState.Written) continue;
+            if (_latestGestureByDroid.TryGetValue(droidId, out var latest) &&
+                latest.RequestId == requestId)
+                _latestGestureByDroid.Remove(droidId);
         }
     }
 

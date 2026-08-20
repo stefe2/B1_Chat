@@ -51,7 +51,7 @@ public sealed class GestureSceneV2PersistenceTests
     public void Serialize_RejectsGestureThatIsOutsideTheActiveV2Catalog()
     {
         var document = new SequenceSnapshot("Unsupported", false, new(),
-            new List<SequenceStepDto> { new() { AnimId = 4, Target = ushort.MaxValue } });
+            new List<SequenceStepDto> { new() { AnimId = 99, Target = ushort.MaxValue } });
 
         Assert.Throws<GestureSceneV2PersistenceException>(() =>
             GestureSceneV2Persistence.Serialize(document, Array.Empty<SequenceTrackDto>()));

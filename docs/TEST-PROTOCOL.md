@@ -141,9 +141,9 @@ If an available B1 master is detected, the script opens it automatically and:
 - validates the JSON handshake, firmware/protocol metadata and master Build ID;
 - reads the droid inventory and confirms every node publishes a Build ID;
 - reads targeted calibration;
-- checks the three-entry V2 gesture catalog, including the continuous Talk
-  definition, generated key, `kind`, `nominalMs`, `frameCount` and Center
-  `settleMs`;
+- checks the seven-entry V2 gesture catalog, including the five base
+  orientations, the continuous Talk overlay definition, generated key, `kind`,
+  `nominalMs`, `frameCount` and Center `settleMs`;
 - proves strict runtime validation with a read-only invalid-target probe before
   sending any invalid setter or animation command;
 - sends invalid gesture and calibration commands and requires

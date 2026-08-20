@@ -318,8 +318,10 @@ if (-not $SkipSerial) {
                 Assert-True (@($hello.caps) -contains "gestureV2") "master does not advertise gestureV2"
                 Assert-True (@($hello.caps) -contains "gestureExec") "master does not advertise gestureExec"
                 Assert-True (@($hello.caps) -contains "gestureLease") "master does not advertise gestureLease"
+                Assert-True (@($hello.caps) -contains "gestureCompose") "master does not advertise gestureCompose"
+                Assert-True (@($hello.caps) -contains "gestureStop") "master does not advertise gestureStop"
                 Assert-True (@($hello.caps) -contains "safeStop") "master does not advertise safeStop"
-                "gestureV2 + gestureExec + gestureLease + safeStop advertised"
+                "gestureV2 + gestureExec + gestureLease + gestureCompose + gestureStop + safeStop advertised"
             }
 
             $droids = Send-And-Wait $port '{"cmd":"list"}' { param($e) $e.evt -eq "droids" }
@@ -360,9 +362,13 @@ if (-not $SkipSerial) {
             $durations = Send-And-Wait $port '{"cmd":"getGestureCatalog"}' { param($e) $e.evt -eq "gestureCatalog" }
             Invoke-Test "Gesture V2 catalog" {
                 Assert-True ($null -ne $durations) "no duration catalog"
-                Assert-True (@($durations.list).Count -eq 3) "expected 3 V2 gestures"
+                Assert-True (@($durations.list).Count -eq 7) "expected 7 V2 gestures"
                 Assert-True (@($durations.list | Where-Object { $_.key -eq "dialogue.talk" -and $_.kind -eq "continuous" }).Count -eq 1) "Talk is not continuous"
-                "3 V2 gestures including continuous Talk"
+                Assert-True (@($durations.list | Where-Object { $_.key -eq "attention.look-right" -and $_.kind -eq "finite" }).Count -eq 1) "Look right is missing"
+                Assert-True (@($durations.list | Where-Object { $_.key -eq "attention.look-left" -and $_.kind -eq "finite" }).Count -eq 1) "Look left is missing"
+                Assert-True (@($durations.list | Where-Object { $_.key -eq "attention.look-up" -and $_.kind -eq "finite" }).Count -eq 1) "Look up is missing"
+                Assert-True (@($durations.list | Where-Object { $_.key -eq "attention.look-down" -and $_.kind -eq "finite" }).Count -eq 1) "Look down is missing"
+                "7 V2 gestures including the five basic orientations and continuous Talk"
             }
 
             # Capability strings and version labels are not sufficient proof that the binary

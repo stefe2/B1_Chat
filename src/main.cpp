@@ -243,8 +243,6 @@ static void startAnimationCommand(uint16_t targetId, uint8_t animId, uint32_t se
     // Ignore stale or external untracked traffic while held so Safe Stop cannot
     // be undone before a tracked operator/Sequencer gesture deliberately releases it.
     if (gSafetyHold && !tracked) return;
-    interruptTrackedAnimation();
-
     if (!gServos) {
         if (tracked) {
             reportAnimExec(originSeq, animId, ANIM_EXEC_REJECTED,
@@ -255,16 +253,18 @@ static void startAnimationCommand(uint16_t targetId, uint8_t animId, uint32_t se
 
     // A tracked operator/Sequencer gesture is the deliberate release action.
     gSafetyHold = false;
-    if (!anim.play((GestureWireId)animId, seed)) {
+    GestureWireId interrupted = GESTURE_COUNT;
+    if (!anim.play((GestureWireId)animId, seed, &interrupted)) {
         if (tracked) reportAnimExec(originSeq, animId, ANIM_EXEC_REJECTED,
                                     ANIM_EXEC_REASON_NONE, broadcast);
         return;
     }
+    if (interrupted < GESTURE_COUNT) interruptTrackedAnimation();
     if (!tracked) return;
 
     reportAnimExec(originSeq, animId, ANIM_EXEC_STARTED,
                    ANIM_EXEC_REASON_NONE, broadcast);
-    if (anim.isPlaying()) {
+    if (anim.isPlaying((GestureWireId)animId)) {
         gActiveAnimExec.active = true;
         gActiveAnimExec.originSeq = originSeq;
         gActiveAnimExec.animId = animId;
@@ -311,13 +311,13 @@ static void finishTrackedAnimationIfNeeded() {
                        ANIM_EXEC_INTERRUPTED, ANIM_EXEC_REASON_LEASE_EXPIRED,
                        gActiveAnimExec.broadcast);
         gActiveAnimExec.active = false;
-        anim.play(GESTURE_IDLE_CENTER, esp_random());
+        anim.stopGesture((GestureWireId)gActiveAnimExec.animId);
         return;
     }
-    if (anim.isPlaying()) return;
+    if (anim.isPlaying((GestureWireId)gActiveAnimExec.animId)) return;
     reportAnimExec(gActiveAnimExec.originSeq, gActiveAnimExec.animId,
                    ANIM_EXEC_COMPLETED,
-                   anim.wasClipped() ? ANIM_EXEC_REASON_CLIPPED : ANIM_EXEC_REASON_NONE,
+                   anim.wasClipped((GestureWireId)gActiveAnimExec.animId) ? ANIM_EXEC_REASON_CLIPPED : ANIM_EXEC_REASON_NONE,
                    gActiveAnimExec.broadcast);
     gActiveAnimExec.active = false;
 }
@@ -354,6 +354,15 @@ static void applySafeStop() {
     if (gServos) anim.play(GESTURE_IDLE_CENTER, esp_random());
     gSafetyHold = true;
     LOGF("safe stop: centered and holding");
+}
+
+static void stopGestureCommand(uint16_t targetId, uint8_t animId) {
+    if (targetId != MESH_TARGET_ALL && targetId != Mesh.myId()) return;
+    if (animId >= GESTURE_COUNT || animId == GESTURE_IDLE_CENTER) return;
+    if (anim.stopGesture((GestureWireId)animId) &&
+        gActiveAnimExec.active && gActiveAnimExec.animId == animId) {
+        interruptTrackedAnimation();
+    }
 }
 
 // Pauses/resumes THIS droid's spontaneous idle animation. Persisted
@@ -419,6 +428,12 @@ static void onAnimLeaseRenewCmd(uint16_t target, uint16_t originSeq,
     const AnimLeaseRenewPayload payload{target, originSeq, leaseMs};
     Mesh.send(MSG_ANIM_LEASE_RENEW, &payload, sizeof(payload));
     renewAnimationLease(payload);
+}
+
+static void onGestureStopCmd(uint16_t target, uint8_t animId) {
+    const GestureStopPayload payload{target, animId};
+    Mesh.send(MSG_GESTURE_STOP, &payload, sizeof(payload));
+    stopGestureCommand(target, animId);
 }
 
 static void onSafeStopCmd(uint16_t target) {
@@ -496,6 +511,12 @@ static void processMeshMessage(uint8_t type, const uint8_t* payload, uint8_t len
         if (!validMeshTarget(p.targetId) || p.leaseMs < ANIM_LEASE_MIN_MS ||
             p.leaseMs > ANIM_LEASE_MAX_MS) return;
         renewAnimationLease(p);
+    } else if (type == MSG_GESTURE_STOP && len == sizeof(GestureStopPayload)) {
+        GestureStopPayload p;
+        memcpy(&p, payload, sizeof(p));
+        if (!validMeshTarget(p.targetId) || p.animId >= GESTURE_COUNT ||
+            p.animId == GESTURE_IDLE_CENTER) return;
+        stopGestureCommand(p.targetId, p.animId);
     } else if (type == MSG_SAFE_STOP && len == sizeof(SafeStopPayload)) {
         SafeStopPayload p;
         memcpy(&p, payload, sizeof(p));
@@ -757,6 +778,7 @@ void setup() {
     Console.begin();
     Console.onAnim(onAnimCmd);
     Console.onAnimLeaseRenew(onAnimLeaseRenewCmd);
+    Console.onGestureStop(onGestureStopCmd);
     Console.onSafeStop(onSafeStopCmd);
     Console.onServo(onServoCmd);
     Console.onLocate(onLocateCmd);

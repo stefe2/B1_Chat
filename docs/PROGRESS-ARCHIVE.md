@@ -1548,3 +1548,24 @@ field itself is masked before hashing. Both the PowerShell generator and the
 console parser reject a mismatch. Catalog authors run
 `tools/generate-gesture-catalog.ps1 -UpdateHash` after any approved edit, then
 commit the source catalog and generated firmware header together.
+
+### Composable gesture layers — 2026-08-16
+
+The V2 motion engine now separates a persistent base pose from expression
+overlays on each axis. The first proof is `attention.look-right` (PAN base) and
+`dialogue.talk` (TILT overlay): B1 can keep looking right while it talks.
+`idle.center` remains an explicit full reset. A new `stopGesture` USB/mesh path
+clears only the named layer, so the end of Talk and lease expiry preserve the
+look direction instead of issuing Center. The catalog revision is `v2` and the
+firmware protocol is 8; all nodes and the console must be updated together.
+
+Software validation passed for master and slave firmware, console build, the
+305-test console suite and the non-destructive 22-check self-test. Physical
+reduced-amplitude audition remains required before flashing the catalog to a
+motion-capable bench.
+
+The initial orientation set was then completed with `attention.look-left`,
+`attention.look-up` and `attention.look-down`. The authored coordinate contract
+is explicit: positive PAN is right and positive TILT is up. The first bench run
+must confirm these directions and the deliberately conservative 55 % PAN / 45
+% TILT envelopes before they are treated as auditioned movements.

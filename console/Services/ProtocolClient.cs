@@ -24,8 +24,8 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
     private int _nextAnimRequestId;
     private bool _gestureCatalogCompatible;
     private const string RequiredGestureCatalogId = "b1.core";
-    private const string RequiredGestureCatalogRevision = "v1";
-    private const string RequiredGestureCatalogHash = "sha256:5b0ff9dd13ef89ec7bf85c41908409b93b581c47e05eb49e53a73ac1bd767633";
+    private const string RequiredGestureCatalogRevision = "v2";
+    private const string RequiredGestureCatalogHash = "sha256:3935a7080315c2efdedd9e9d4012fb5c440806918fc2388cd5c7ac7ded1298d4";
 
     public ObservableCollection<Droid> Droids { get; } = new();
     public ObservableCollection<MeshLink> MeshLinks { get; } = new();
@@ -44,6 +44,7 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
 
     public bool HasCap(string c) => _caps.Contains(c);
     public bool SupportsAnimLease => HasCap("gestureLease");
+    public bool SupportsGestureStop => HasCap("gestureStop");
     public bool SupportsSafeStop => HasCap("safeStop");
 
     public event Action<string>? LogTx;
@@ -221,6 +222,10 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
             0 => "idle.center",
             1 => "communicate.nod",
             2 => "dialogue.talk",
+            3 => "attention.look-right",
+            4 => "attention.look-left",
+            5 => "attention.look-up",
+            6 => "attention.look-down",
             _ => string.Empty,
         };
         return key.Length != 0;
@@ -231,6 +236,12 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
             ["cmd"] = "animLease", ["target"] = target,
             ["meshSeq"] = meshSeq, ["leaseMs"] = leaseMs,
         });
+    public AnimDispatchState StopGesture(ushort target, int animId)
+    {
+        if (!_gestureCatalogCompatible || !GestureKeyFor(animId, out var key))
+            return AnimDispatchState.CatalogMismatch;
+        return SendCmdRaw(new JsonObject { ["cmd"] = "stopGesture", ["target"] = target, ["key"] = key });
+    }
     public AnimDispatchState SafeStop(ushort target)
     {
         var state = SendCmdRaw(new JsonObject { ["cmd"] = "safeStop", ["target"] = target });

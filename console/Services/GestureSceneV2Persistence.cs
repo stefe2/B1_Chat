@@ -19,7 +19,7 @@ internal static class GestureSceneV2Persistence
 
     internal static GestureCatalogV2 Catalog => CatalogLoader.Value;
 
-    internal static bool IsSupportedTemporaryAnimId(int animId) => animId is 0 or 1 or 2;
+    internal static bool IsSupportedTemporaryAnimId(int animId) => animId is >= 0 and <= 6;
 
     internal static string Serialize(SequenceSnapshot document, IReadOnlyList<SequenceTrackDto> tracks)
     {
@@ -130,6 +130,10 @@ internal static class GestureSceneV2Persistence
             0 => "idle.center",
             1 => "communicate.nod",
             2 => "dialogue.talk",
+            3 => "attention.look-right",
+            4 => "attention.look-left",
+            5 => "attention.look-up",
+            6 => "attention.look-down",
             _ => throw new GestureSceneV2PersistenceException(
                 "The active V2 catalog currently offers Center, Nod and Talk only. Replace the clip before saving."),
         };
@@ -140,6 +144,10 @@ internal static class GestureSceneV2Persistence
         "idle.center" => 0,
         "communicate.nod" => 1,
         "dialogue.talk" => 2,
+        "attention.look-right" => 3,
+        "attention.look-left" => 4,
+        "attention.look-up" => 5,
+        "attention.look-down" => 6,
         _ => throw new GestureSceneV2PersistenceException(
             $"No generated execution identifier exists for V2 gesture \"{gestureKey}\"."),
     };

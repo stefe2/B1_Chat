@@ -57,8 +57,11 @@ for ($i = 0; $i -lt $catalog.gestures.Count; $i++) {
 $lines.Add(('    GESTURE_COUNT = {0}' -f $catalog.gestures.Count))
 $lines.Add('};')
 $lines.Add('enum GestureExecutionKindV2 : uint8_t { GESTURE_IMMEDIATE, GESTURE_FINITE, GESTURE_CONTINUOUS };')
+$lines.Add('enum GestureCompositionLayerV2 : uint8_t { GESTURE_LAYER_RESET, GESTURE_LAYER_BASE, GESTURE_LAYER_OVERLAY };')
+$lines.Add('enum GestureAxisMaskV2 : uint8_t { GESTURE_AXIS_NONE = 0, GESTURE_AXIS_PAN = 1, GESTURE_AXIS_TILT = 2, GESTURE_AXIS_BOTH = 3 };')
+$lines.Add('enum GestureEndBehaviorV2 : uint8_t { GESTURE_END_RESET_ALL, GESTURE_END_HOLD_POSE, GESTURE_END_CLEAR_LAYER };')
 $lines.Add('struct GestureFrameV2 { int8_t panPct; int8_t tiltPct; uint16_t moveMs; uint16_t holdMs; };')
-$lines.Add('struct GestureDefinitionV2 { const char* key; GestureExecutionKindV2 execution; const GestureFrameV2* frames; uint8_t frameCount; uint16_t normalDurationMs; bool returnToCenter; };')
+$lines.Add('struct GestureDefinitionV2 { const char* key; GestureExecutionKindV2 execution; GestureCompositionLayerV2 layer; uint8_t axes; GestureEndBehaviorV2 endBehavior; const GestureFrameV2* frames; uint8_t frameCount; uint16_t normalDurationMs; };')
 $lines.Add('')
 foreach ($gesture in $catalog.gestures) {
     $name = (WireName $gesture.key) -replace '^GESTURE_', ''
@@ -77,8 +80,14 @@ foreach ($gesture in $catalog.gestures) {
     $frames = if ($gesture.trajectory.frames.Count -gt 0) { $name + '_FRAMES' } else { 'nullptr' }
     $count = $gesture.trajectory.frames.Count
     $duration = ($gesture.tempos | Where-Object key -eq 'normal').durationMs
-    $return = if ($gesture.endPolicy -eq 'returnToCenter') { 'true' } else { 'false' }
-    $lines.Add(('    {{ "{0}", {1}, {2}, {3}, {4}, {5} }},' -f $gesture.key, $execution, $frames, $count, $duration, $return))
+    $layer = switch ($gesture.composition.layer) { 'reset' { 'GESTURE_LAYER_RESET' } 'base' { 'GESTURE_LAYER_BASE' } 'overlay' { 'GESTURE_LAYER_OVERLAY' } default { throw "Unsupported composition layer $($gesture.composition.layer)" } }
+    $axes = 0
+    foreach ($axis in $gesture.composition.axes) {
+        switch ($axis) { 'pan' { $axes = $axes -bor 1 } 'tilt' { $axes = $axes -bor 2 } default { throw "Unsupported composition axis $axis" } }
+    }
+    $axisName = switch ($axes) { 1 { 'GESTURE_AXIS_PAN' } 2 { 'GESTURE_AXIS_TILT' } 3 { 'GESTURE_AXIS_BOTH' } default { throw "Gesture $($gesture.key) has no composition axis" } }
+    $endBehavior = switch ($gesture.endBehavior) { 'resetAll' { 'GESTURE_END_RESET_ALL' } 'holdPose' { 'GESTURE_END_HOLD_POSE' } 'clearLayer' { 'GESTURE_END_CLEAR_LAYER' } default { throw "Unsupported end behavior $($gesture.endBehavior)" } }
+    $lines.Add(('    {{ "{0}", {1}, {2}, {3}, {4}, {5}, {6}, {7} }},' -f $gesture.key, $execution, $layer, $axisName, $endBehavior, $frames, $count, $duration))
 }
 $lines.Add('};')
 $contents = ($lines -join "`n") + "`n"

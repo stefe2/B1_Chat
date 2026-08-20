@@ -44,6 +44,7 @@ public interface ISequencerProtocol
     bool PortOpen { get; }
     bool SessionReady { get; }
     bool SupportsAnimLease { get; }
+    bool SupportsGestureStop => false;
     bool SupportsSafeStop { get; }
     event Action? DroidsChanged;
     event Action? AnimDurationsReceived;
@@ -52,6 +53,8 @@ public interface ISequencerProtocol
     event Action<AnimExecutionReport>? AnimExecutionReceived;
     AnimDispatchResult PlayAnim(ushort target, int animId, uint seed, ushort leaseMs = 0);
     AnimDispatchState RenewAnimLease(ushort target, int meshSeq, ushort leaseMs);
+    AnimDispatchState StopGesture(ushort target, int animId) =>
+        PlayAnim(target, 0, 1).State;
     AnimDispatchState SafeStop(ushort target);
     void SetServo(ushort target, bool enabled);
 }

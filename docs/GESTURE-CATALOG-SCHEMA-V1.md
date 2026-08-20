@@ -15,7 +15,7 @@ Scene.
   "type": "b1-gesture-catalog",
   "version": 1,
   "catalogId": "b1.core",
-  "revision": "v1",
+  "revision": "v2",
   "hash": "sha256:<64 lowercase hexadecimal characters>",
   "gestures": []
 }
@@ -36,8 +36,9 @@ The source format has no `wireId` or `animId`; generated wire IDs are a build
 artifact and are never hand-authored or persisted in Scenes.
 
 Each gesture requires a lowercase dotted `key`, display text, family and tags,
-one execution kind (`immediate`, `finite`, or `continuous`), `returnToCenter`
-end policy, safety flags and a minimum motion-engine generation. It also lists:
+one execution kind (`immediate`, `finite`, or `continuous`), an explicit
+`composition` layer and axis, an `endBehavior`, safety flags and a minimum
+motion-engine generation. It also lists:
 
 - `tempos`: one to three named exact durations. `normal` is mandatory;
   `slow` and `fast` are permitted only after the motion implementation proves
@@ -47,9 +48,21 @@ end policy, safety flags and a minimum motion-engine generation. It also lists:
 - `variants`: permitted variant tokens. `default` is mandatory.
 - `seedPolicy`: `required` or `ignored`.
 
-The three initial catalog entries contain normalized trajectory tables and
-generate the current firmware header. The authoring library exposes Center, Nod
-and Talk until the catalog grows.
+`composition` makes gestures safely combinable. `reset` controls both axes and
+is reserved for immediate `resetAll` gestures such as Center. `base` controls
+one persistent orientation axis and must end with `holdPose`; `overlay`
+controls one expression offset and must end with `clearLayer`. The final target
+is `base PAN + overlay PAN`, `base TILT + overlay TILT`, bounded to the
+calibrated range before it reaches the servos. Two gestures never silently
+share a channel: a later gesture replaces only the gesture already owning that
+same layer and axis.
+
+The current catalog contains the five base orientations Center, Look left, Look
+right, Look up and Look down, plus Nod and Talk. Positive PAN means right;
+negative PAN means left. Positive TILT means up; negative TILT means down. The
+four Look gestures are base poses; Nod and Talk are TILT overlays. Therefore
+`look right` followed by `talk` preserves the rightward orientation while the
+head talks.
 
 ## Scene
 

@@ -36,6 +36,7 @@ enum MeshMsgType : uint8_t {
     MSG_SAFE_STOP = 20, // transient safe hold: center and block stale/untracked motion
     MSG_CALIB_V2  = 21, // calibration plus independent PAN/TILT direction flags
     MSG_CAPABILITIES = 22, // source droid's additive feature-bit report
+    MSG_GESTURE_STOP = 23, // stops one composable gesture without resetting other layers
 };
 
 // Lifecycle phases reported for console-originated animation commands.
@@ -111,6 +112,11 @@ struct AnimLeaseRenewPayload {
     uint16_t targetId;
     uint16_t originSeq;   // sequence of MSG_ANIM_LEASED; rejects stale renewals
     uint16_t leaseMs;
+};
+
+struct GestureStopPayload {
+    uint16_t targetId;
+    uint8_t animId;
 };
 
 struct SafeStopPayload {

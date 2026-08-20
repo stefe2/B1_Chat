@@ -11,6 +11,7 @@ public enum GestureExecutionKind { Immediate, Finite, Continuous }
 public sealed record GestureTempoDefinition(string Key, int DurationMs);
 public sealed record GestureTrajectoryFrameV2(int Pan, int Tilt, int MoveMs, int HoldMs, string Easing);
 public sealed record GestureTrajectoryV2(IReadOnlyList<GestureTrajectoryFrameV2> Frames);
+public sealed record GestureCompositionV2(string Layer, IReadOnlySet<string> Axes);
 
 public sealed record GestureDefinitionV2(
     string Key,
@@ -19,7 +20,8 @@ public sealed record GestureDefinitionV2(
     string Family,
     IReadOnlyList<string> Tags,
     GestureExecutionKind Execution,
-    string EndPolicy,
+    string EndBehavior,
+    GestureCompositionV2 Composition,
     IReadOnlyDictionary<string, GestureTempoDefinition> Tempos,
     IReadOnlySet<string> Intensities,
     IReadOnlySet<string> Variants,

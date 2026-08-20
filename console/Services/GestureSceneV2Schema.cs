@@ -36,7 +36,7 @@ internal static class GestureCatalogV2Parser
             var path = $"$.gestures[{index++}]";
             Schema.Fields(value, path, new[]
             {
-                "key", "displayName", "description", "family", "tags", "execution", "endPolicy",
+                "key", "displayName", "description", "family", "tags", "execution", "endBehavior", "composition",
                 "tempos", "intensities", "variants", "seedPolicy", "minimumMotionEngine",
                 "auditionSafe", "broadcastSafe", "trajectory"
             });
@@ -79,21 +79,40 @@ internal static class GestureCatalogV2Parser
         if (!variants.Contains("default")) throw Schema.Error($"{path}.variants", "a default variant is required");
         var seedPolicy = Schema.Enum(Schema.String(value, "seedPolicy", path, 16), $"{path}.seedPolicy",
             ("required", true), ("ignored", false));
-        var endPolicy = Schema.Enum(Schema.String(value, "endPolicy", path, 24), $"{path}.endPolicy",
-            ("returnToCenter", "returnToCenter"), ("holdPose", "holdPose"));
-        if (execution == GestureExecutionKind.Continuous && endPolicy != "returnToCenter")
-            throw Schema.Error($"{path}.endPolicy", "continuous gestures must return to center when their hold ends");
+        var endBehavior = Schema.Enum(Schema.String(value, "endBehavior", path, 24), $"{path}.endBehavior",
+            ("resetAll", "resetAll"), ("holdPose", "holdPose"), ("clearLayer", "clearLayer"));
+        var composition = ReadComposition(value, path, execution, endBehavior);
 
         return new GestureDefinitionV2(
             key,
             Schema.String(value, "displayName", path, 96),
             Schema.String(value, "description", path, 512),
             Schema.Token(Schema.String(value, "family", path, 48), $"{path}.family"),
-            Schema.StringArray(value, "tags", path, 0, 16, 48), execution, endPolicy, tempos,
+            Schema.StringArray(value, "tags", path, 0, 16, 48), execution, endBehavior, composition, tempos,
             intensities, variants, seedPolicy,
             Schema.Int(value, "minimumMotionEngine", path, 1, 255),
             Schema.Bool(value, "auditionSafe", path), Schema.Bool(value, "broadcastSafe", path),
             ReadTrajectory(value, path, execution, tempos));
+    }
+
+    private static GestureCompositionV2 ReadComposition(JsonElement value, string path,
+        GestureExecutionKind execution, string endBehavior)
+    {
+        var composition = Schema.Object(value, "composition", path);
+        var compositionPath = $"{path}.composition";
+        Schema.Fields(composition, compositionPath, new[] { "layer", "axes" });
+        var layer = Schema.Enum(Schema.String(composition, "layer", compositionPath, 16),
+            $"{compositionPath}.layer", ("reset", "reset"), ("base", "base"), ("overlay", "overlay"));
+        var axes = Schema.TokenSet(composition, "axes", compositionPath, 1, 2, "pan", "tilt");
+        if (layer == "reset" && (execution != GestureExecutionKind.Immediate || endBehavior != "resetAll" || axes.Count != 2))
+            throw Schema.Error(compositionPath, "reset gestures must be immediate, resetAll and control pan plus tilt");
+        if (layer != "reset" && (execution == GestureExecutionKind.Immediate || endBehavior == "resetAll" || axes.Count != 1))
+            throw Schema.Error(compositionPath, "base and overlay gestures must be moving single-axis layers");
+        if (layer == "overlay" && endBehavior != "clearLayer")
+            throw Schema.Error($"{path}.endBehavior", "overlay gestures must clear their own layer when finished");
+        if (layer == "base" && endBehavior != "holdPose")
+            throw Schema.Error($"{path}.endBehavior", "base gestures must hold their final pose");
+        return new GestureCompositionV2(layer, axes);
     }
 
     private static GestureTrajectoryV2 ReadTrajectory(JsonElement value, string path,

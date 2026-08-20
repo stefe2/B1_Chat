@@ -7,16 +7,20 @@ namespace b1_chat_console.Tests;
 public sealed class GestureSceneV2SchemaTests
 {
     [Fact]
-    public void CatalogFixture_DefinesTheThreeStage4GesturesWithNormalTempo()
+    public void CatalogFixture_DefinesComposableGesturesWithNormalTempo()
     {
         var catalog = GestureCatalogV2Parser.Parse(ReadFixture("catalog-v1.json"));
 
         Assert.Equal("b1.core", catalog.Identity.Id);
-        Assert.Equal(new[] { "communicate.nod", "dialogue.talk", "idle.center" },
+        Assert.Equal(new[] { "attention.look-down", "attention.look-left", "attention.look-right", "attention.look-up", "communicate.nod", "dialogue.talk", "idle.center" },
             catalog.Gestures.Keys.OrderBy(key => key));
         Assert.All(catalog.Gestures.Values, gesture => Assert.True(gesture.Tempos.ContainsKey("normal")));
         Assert.Equal(800, catalog.Gestures["communicate.nod"].Tempos["normal"].DurationMs);
         Assert.Equal(GestureExecutionKind.Continuous, catalog.Gestures["dialogue.talk"].Execution);
+        Assert.Equal("base", catalog.Gestures["attention.look-right"].Composition.Layer);
+        Assert.Contains("pan", catalog.Gestures["attention.look-right"].Composition.Axes);
+        Assert.Equal("overlay", catalog.Gestures["dialogue.talk"].Composition.Layer);
+        Assert.Contains("tilt", catalog.Gestures["dialogue.talk"].Composition.Axes);
     }
 
     [Fact]
@@ -107,7 +111,7 @@ public sealed class GestureSceneV2SchemaTests
         Assert.Equal("$.catalog", Assert.Throws<GestureSceneV2SchemaException>(
             () => SceneV2Parser.ValidateAgainstCatalog(mismatched, catalog)).FieldPath);
 
-        root["catalog"]!["revision"] = "v1";
+        root["catalog"]!["revision"] = "v2";
         root["endMs"] = 3000;
         var tooShort = SceneV2Parser.Parse(root.ToJsonString());
         Assert.Equal("$.endMs", Assert.Throws<GestureSceneV2SchemaException>(

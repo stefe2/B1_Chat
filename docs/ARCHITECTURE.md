@@ -23,7 +23,7 @@ a board is plug in → flash → done, with no ID to assign or track.
 | `mesh_comm.{h,cpp}` | ESP-NOW: header `{srcId, seq, ttl, type}`, dedup on `(srcId, seq)`, TTL relay, truncated 8-byte HMAC-SHA256, direct radio neighborhood (physical sender MAC + RSSI) |
 | `mesh_topology.{h,cpp}` | (master) aggregates the directed `{from, to, rssi}` edges into the neighborhood graph |
 | `servo_engine.{h,cpp}` | native 50 Hz LEDC PWM, normalized calibrated poses, bounded velocity and smootherstep easing |
-| `motion_engine.{h,cpp}` + `generated/gesture_catalog_v2.h` | generated V2 catalog trajectories, one non-blocking safe gesture owner and continuous-gesture lifecycle |
+| `motion_engine.{h,cpp}` + `generated/gesture_catalog_v2.h` | generated V2 catalog trajectories, base-pose plus expression-overlay composition per axis, targeted gesture stop and continuous-gesture lifecycle |
 | `registry.{h,cpp}` | (master) live inventory: `srcId`, RSSI, `lastSeen`, servo and Locate state — synchronized access, see the pitfalls document |
 | `config_store.{h,cpp}` | NVS: per-droid names, servo calibration, adoption |
 | `serial_console.{h,cpp}` | (master) USB JSON ↔ mesh bridge for the console |

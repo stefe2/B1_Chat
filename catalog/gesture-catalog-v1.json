@@ -2,8 +2,8 @@
   "type": "b1-gesture-catalog",
   "version": 1,
   "catalogId": "b1.core",
-  "revision": "v1",
-  "hash": "sha256:5b0ff9dd13ef89ec7bf85c41908409b93b581c47e05eb49e53a73ac1bd767633",
+  "revision": "v2",
+  "hash": "sha256:3935a7080315c2efdedd9e9d4012fb5c440806918fc2388cd5c7ac7ded1298d4",
   "gestures": [
     {
       "key": "idle.center",
@@ -12,12 +12,13 @@
       "family": "rest",
       "tags": ["center", "safe"],
       "execution": "immediate",
-      "endPolicy": "returnToCenter",
+      "endBehavior": "resetAll",
+      "composition": { "layer": "reset", "axes": ["pan", "tilt"] },
       "tempos": [{ "key": "normal", "durationMs": 0 }],
       "intensities": ["normal"],
       "variants": ["default"],
       "seedPolicy": "ignored",
-      "minimumMotionEngine": 1,
+      "minimumMotionEngine": 2,
       "auditionSafe": true,
       "broadcastSafe": true,
       "trajectory": {
@@ -32,12 +33,13 @@
       "family": "communication",
       "tags": ["affirmative", "response"],
       "execution": "finite",
-      "endPolicy": "returnToCenter",
+      "endBehavior": "clearLayer",
+      "composition": { "layer": "overlay", "axes": ["tilt"] },
       "tempos": [{ "key": "normal", "durationMs": 800 }],
       "intensities": ["normal"],
       "variants": ["default"],
       "seedPolicy": "required",
-      "minimumMotionEngine": 1,
+      "minimumMotionEngine": 2,
       "auditionSafe": true,
       "broadcastSafe": true,
       "trajectory": {
@@ -57,12 +59,13 @@
       "family": "dialogue",
       "tags": ["speech"],
       "execution": "continuous",
-      "endPolicy": "returnToCenter",
+      "endBehavior": "clearLayer",
+      "composition": { "layer": "overlay", "axes": ["tilt"] },
       "tempos": [{ "key": "normal", "durationMs": 750 }],
       "intensities": ["normal"],
       "variants": ["default"],
       "seedPolicy": "required",
-      "minimumMotionEngine": 1,
+      "minimumMotionEngine": 2,
       "auditionSafe": true,
       "broadcastSafe": false,
       "trajectory": {
@@ -73,6 +76,102 @@
           { "pan": 0, "tilt": -12, "moveMs": 75, "holdMs": 75, "easing": "smooth" },
           { "pan": 0, "tilt": 8, "moveMs": 75, "holdMs": 75, "easing": "smooth" },
           { "pan": 0, "tilt": 0, "moveMs": 75, "holdMs": 75, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "attention.look-right",
+      "displayName": "Look right",
+      "description": "Turn the head to the right and keep that orientation.",
+      "family": "attention",
+      "tags": ["look", "right", "orientation"],
+      "execution": "finite",
+      "endBehavior": "holdPose",
+      "composition": { "layer": "base", "axes": ["pan"] },
+      "tempos": [{ "key": "normal", "durationMs": 400 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": true,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": 0, "tilt": 0, "moveMs": 0, "holdMs": 0, "easing": "smooth" },
+          { "pan": 55, "tilt": 0, "moveMs": 350, "holdMs": 50, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "attention.look-left",
+      "displayName": "Look left",
+      "description": "Turn the head to the left and keep that orientation.",
+      "family": "attention",
+      "tags": ["look", "left", "orientation"],
+      "execution": "finite",
+      "endBehavior": "holdPose",
+      "composition": { "layer": "base", "axes": ["pan"] },
+      "tempos": [{ "key": "normal", "durationMs": 400 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": true,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": 0, "tilt": 0, "moveMs": 0, "holdMs": 0, "easing": "smooth" },
+          { "pan": -55, "tilt": 0, "moveMs": 350, "holdMs": 50, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "attention.look-up",
+      "displayName": "Look up",
+      "description": "Raise the head and keep that orientation.",
+      "family": "attention",
+      "tags": ["look", "up", "orientation"],
+      "execution": "finite",
+      "endBehavior": "holdPose",
+      "composition": { "layer": "base", "axes": ["tilt"] },
+      "tempos": [{ "key": "normal", "durationMs": 400 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": true,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": 0, "tilt": 0, "moveMs": 0, "holdMs": 0, "easing": "smooth" },
+          { "pan": 0, "tilt": 45, "moveMs": 350, "holdMs": 50, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "attention.look-down",
+      "displayName": "Look down",
+      "description": "Lower the head and keep that orientation.",
+      "family": "attention",
+      "tags": ["look", "down", "orientation"],
+      "execution": "finite",
+      "endBehavior": "holdPose",
+      "composition": { "layer": "base", "axes": ["tilt"] },
+      "tempos": [{ "key": "normal", "durationMs": 400 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": true,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": 0, "tilt": 0, "moveMs": 0, "holdMs": 0, "easing": "smooth" },
+          { "pan": 0, "tilt": -45, "moveMs": 350, "holdMs": 50, "easing": "smooth" }
         ]
       }
     }

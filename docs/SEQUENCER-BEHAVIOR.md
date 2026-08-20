@@ -54,16 +54,18 @@ inter-droid skew.
 The WPF playback controller records the latest successfully written gesture per
 concrete droid. Broadcast Talk expands to the online roster; later targeted
 finite/Center commands replace only their target. Stop, a non-looping
-natural end, application disposal, and Play restart send tracked IDLE commands
-only to droids whose latest state is still infinite. A whole-pass Loop boundary
+natural end, application disposal, and Play restart send a targeted gesture
+stop only to droids whose latest state is still infinite. That clears the
+continuous expression layer without discarding a held orientation such as Look
+right. A whole-pass Loop boundary
 and Pause deliberately do not clean up. Failed serial cleanup remains retryable.
 
 Sequencer playback starts Talk with a 5 s firmware lease and
-renews it every 2 s while the owning pass remains valid. Missing renewal returns
-the droid to IDLE and reports `interrupted/leaseExpired`; renewals are
+renews it every 2 s while the owning pass remains valid. Missing renewal clears
+the leased gesture layer and reports `interrupted/leaseExpired`; renewals are
 correlated to the originating mesh sequence so stale packets cannot extend a
 replacement gesture. Pause and whole-pass Loop continue renewal, while
-Stop/end/restart/disconnect/shutdown cancel it before targeted IDLE cleanup.
+Stop/end/restart/disconnect/shutdown cancel it before targeted gesture cleanup.
 There is no autonomous firmware gesture path. The standalone Animation card was
 removed during the V2 transition; the current gesture library remains inside the
 Sequencer.
@@ -73,8 +75,8 @@ fallback if cleanup cannot cross a lost serial or mesh path.
 
 ## Three stop levels
 
-Normal Sequencer **Stop** cancels the transport/audio and sends targeted IDLE
-only for its remaining infinite gestures; finite gestures finish naturally.
+Normal Sequencer **Stop** cancels the transport/audio and sends targeted gesture
+stops only for its remaining infinite gestures; finite gestures finish naturally.
 
 **Safe Stop** cancels all console work and broadcasts `safeStop`: each current
 droid interrupts motion, moves to calibrated center over the normal IDLE
@@ -318,7 +320,7 @@ uses the same validator before the atomic write.
 Every stored clip carries a GUID, `gestureKey`, target, start, intensity, tempo,
 variant and seed. Continuous gestures carry their explicit `holdMs`; finite and
 immediate gestures must not. The currently authorable catalog slice is Center,
-Nod and Talk. Their names are dispatched directly to the V2 firmware catalog;
+Nod, Talk, Look left, Look right, Look up and Look down. Their names are dispatched directly to the V2 firmware catalog;
 generated wire IDs do not exist in Scene JSON.
 
 ## Dirty state and atomic persistence

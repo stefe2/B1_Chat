@@ -6,7 +6,7 @@
 //  Protocol: one line = one JSON message (see CLAUDE.md).
 //  - PC → master: {cmd:"list"|"gesture"|"name"|
 //                   "calib"|"preview"|"getCalib"|"getGestureCatalog"|
-//                   "animLease"|"safeStop"|"servo"|"locate"|"getMeshTopology"|"getAll"|
+//                   "animLease"|"stopGesture"|"safeStop"|"servo"|"locate"|"getMeshTopology"|"getAll"|
 //                   "commit", ...}
 //  - master → PC: {evt:"droids"|"log"|"meshTopology"|"animAccepted"|
 //                   "animExec"|"err"|"allDone"|"dirty", ...}
@@ -65,6 +65,7 @@ public:
                            uint32_t requestId, uint16_t leaseMs)) { _animCb = cb; }
     void onAnimLeaseRenew(void (*cb)(uint16_t target, uint16_t originSeq,
                                      uint16_t leaseMs)) { _animLeaseRenewCb = cb; }
+    void onGestureStop(void (*cb)(uint16_t target, uint8_t animId)) { _gestureStopCb = cb; }
     void onSafeStop(void (*cb)(uint16_t target)) { _safeStopCb = cb; }
     void onServo(void (*cb)(uint16_t target, bool enabled)) { _servoCb = cb; }
     void onLocate(void (*cb)(uint16_t target, bool enabled)) { _locateCb = cb; }
@@ -95,6 +96,7 @@ private:
 
     void (*_animCb)(uint16_t, uint8_t, uint32_t, uint32_t, uint16_t) = nullptr;
     void (*_animLeaseRenewCb)(uint16_t, uint16_t, uint16_t) = nullptr;
+    void (*_gestureStopCb)(uint16_t, uint8_t) = nullptr;
     void (*_safeStopCb)(uint16_t) = nullptr;
     void (*_servoCb)(uint16_t, bool) = nullptr;
     void (*_locateCb)(uint16_t, bool) = nullptr;

@@ -24,6 +24,10 @@ public class AnimFamilyToBrushConverter : IValueConverter
         Steel,  // 0 idle.center
         Violet, // 1 communicate.nod
         Accent, // 2 dialogue.talk
+        Teal,   // 3 attention.look-right
+        Teal,   // 4 attention.look-left
+        Teal,   // 5 attention.look-up
+        Teal,   // 6 attention.look-down
     };
 
     // Retained as a catalog-color lookup for consumers outside the V2 view model.
@@ -32,6 +36,7 @@ public class AnimFamilyToBrushConverter : IValueConverter
         ("REST", new[] { 0 }),
         ("COMMUNICATION", new[] { 1 }),
         ("DIALOGUE", new[] { 2 }),
+        ("ATTENTION", new[] { 3, 4, 5, 6 }),
     };
 
     // One frozen gradient per family color — clips re-render often (drag, zoom), no point

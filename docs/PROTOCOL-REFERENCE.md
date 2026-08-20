@@ -33,6 +33,7 @@ The fixed message types are:
 | 20 `MSG_SAFE_STOP` | Centered hold with stale/untracked motion blocked |
 | 21 `MSG_CALIB_V2` | Calibration plus PAN/TILT reverse flags |
 | 22 `MSG_CAPABILITIES` | Source droid feature bits |
+| 23 `MSG_GESTURE_STOP` | Stop one gesture layer without resetting other layers |
 
 The master accepts both the current heartbeat and the frozen legacy 8-byte
 heartbeat, recording Build ID zero for legacy nodes.
@@ -48,7 +49,7 @@ Console commands:
 
 ```text
 hello, ping, list, getAll, name, servo,
-locate, adopt, forget, gesture, animLease, safeStop, preview, calib, getCalib,
+locate, adopt, forget, gesture, animLease, stopGesture, safeStop, preview, calib, getCalib,
 getGestureCatalog, getMeshTopology, commit, otaStart, otaChunk,
 otaAbort
 ```
@@ -61,8 +62,9 @@ validation.
 
 ## Gesture V2 and Sequencer boundaries
 
-The generated V2 catalog currently exposes `idle.center`, `communicate.nod`
-and `dialogue.talk`. Scenes and USB commands use the key; compact wire IDs are
+The generated V2 catalog currently exposes `idle.center`, `communicate.nod`,
+`dialogue.talk`, `attention.look-right`, `attention.look-left`,
+`attention.look-up` and `attention.look-down`. Scenes and USB commands use the key; compact wire IDs are
 generated firmware details. `getGestureCatalog` returns the exact catalog
 identity/hash, kind, nominal duration and frame count. `hello` carries the
 same catalog identity; the console refuses Scene playback if it differs.
@@ -83,6 +85,9 @@ Safety invariants:
 - Stop, Safe Stop and Emergency Stop remain three distinct controls.
 - Sequencer-started continuous gestures use a 5-second lease renewed every 2
   seconds; there is no autonomous gesture path.
+- `stopGesture` clears only the named gesture's composition layer. It lets Talk
+  end without discarding an active or held Look orientation; `idle.center`,
+  Safe Stop and Emergency Stop remain full-reset safety controls.
 - Persistent editing happens only while stopped. Console Scene Export/Import is
   `b1-scene` V1 and binds the named gesture catalog; old `b1-sequence` files
   are rejected without migration.

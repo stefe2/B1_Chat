@@ -33,7 +33,8 @@
 //    commands/events were removed; gesture durations are nominal and fixed.
 // 7: named V2 gesture catalog and trajectory motion engine replace numeric
 //    animation commands and the historical 18-entry animation table.
-#define FW_PROTO 7
+// 8: composable base/overlay gesture layers and targeted gesture stop.
+#define FW_PROTO 8
 
 // ---------------------------------------------------------------------------
 //  DROID ROLE  —  SET HERE BEFORE FLASHING (pio run -e b1 -t upload)
