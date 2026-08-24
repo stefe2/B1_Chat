@@ -113,7 +113,7 @@ void MotionEngine::stop(bool resetAll) {
     clearChannel(_panOverlay); clearChannel(_tiltOverlay);
     _panOverlayPct = 0; _tiltOverlayPct = 0;
     if (resetAll) _panBasePct = _tiltBasePct = 0;
-    applyComposedTarget(180);
+    applyComposedTarget(550);
 }
 
 bool MotionEngine::stopGesture(GestureWireId gesture) {

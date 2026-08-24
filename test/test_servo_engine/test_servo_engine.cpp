@@ -81,11 +81,11 @@ void test_move_never_exceeds_a_slower_than_ceiling_speed() {
     ServoEngine s = fresh();
     s.setEnabled(true);
     native_pwm::reset();
-    s.setTarget(SERVO_PAN_MAX, SERVO_TILT_CENTER, 1);  // travel 70deg, 1ms requested
-    // 70 degrees at 180 deg/s takes >= ~389ms: after only 50ms it must still
+    s.setTarget(SERVO_PAN_MAX, SERVO_TILT_CENTER, 1);  // travel 30deg, 1ms requested
+    // 30 degrees at 180 deg/s takes >= ~167ms: after only 50ms it must still
     // be under way and far short of the target duty.
     pump(s, 50);
-    TEST_ASSERT_TRUE_MESSAGE(s.isMoving(), "a 70-degree move must not complete in 50ms");
+    TEST_ASSERT_TRUE_MESSAGE(s.isMoving(), "a 30-degree move must not complete in 50ms");
     const uint32_t targetDuty = dutyForAngle(SERVO_PAN_MAX);
     const uint32_t centerDuty = dutyForAngle(SERVO_PAN_CENTER);
     const uint32_t currentDuty = native_pwm::writes()[native_pwm::writes().size() - 2].duty;  // PAN, not TILT

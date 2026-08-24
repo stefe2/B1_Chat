@@ -71,7 +71,7 @@ void test_idle_center_clears_every_channel_synchronously() {
     r.m.play(GESTURE_IDLE_CENTER, 0);
     TEST_ASSERT_FALSE_MESSAGE(r.m.isPlaying(), "idle.center must clear every channel synchronously, not on a future tick");
 
-    pump(r, 250);
+    pump(r, 600);  // physical glide back to center now takes 550ms
     TEST_ASSERT_UINT32_WITHIN(1, dutyForAngle(SERVO_PAN_CENTER), lastPanDuty());
     TEST_ASSERT_UINT32_WITHIN(1, dutyForAngle(SERVO_TILT_CENTER), lastTiltDuty());
 }
@@ -79,18 +79,18 @@ void test_idle_center_clears_every_channel_synchronously() {
 void test_pan_base_pose_holds_while_a_tilt_overlay_plays_and_clears() {
     Rig r = fresh();
     r.m.play(GESTURE_ATTENTION_LOOK_RIGHT, 0);
-    pump(r, 450);  // nominal 400ms
+    pump(r, 800);  // nominal 750ms
     TEST_ASSERT_FALSE_MESSAGE(r.m.isPlaying(), "a finite base pose must end on its own and hold");
     const float panAngle = angleForPct(55, SERVO_PAN_MIN, SERVO_PAN_CENTER, SERVO_PAN_MAX);
     TEST_ASSERT_UINT32_WITHIN(1, dutyForAngle(panAngle), lastPanDuty());
 
     r.m.play(GESTURE_COMMUNICATE_NOD, 0);
-    pump(r, 180);  // partway through nod's first frame
+    pump(r, 180);  // partway through nod's first frame (230ms move)
     TEST_ASSERT_TRUE(r.m.isPlaying(GESTURE_COMMUNICATE_NOD));
     TEST_ASSERT_UINT32_WITHIN_MESSAGE(1, dutyForAngle(panAngle), lastPanDuty(),
                                        "PAN must stay exactly at the held base pose while a TILT overlay runs");
 
-    pump(r, 700);  // nominal 800ms total for nod
+    pump(r, 1300);  // nominal 1400ms total for nod (cumulative with the 180ms above)
     TEST_ASSERT_FALSE_MESSAGE(r.m.isPlaying(GESTURE_COMMUNICATE_NOD), "nod must end on its own");
     TEST_ASSERT_UINT32_WITHIN_MESSAGE(1, dutyForAngle(panAngle), lastPanDuty(),
                                        "PAN base pose must survive the overlay clearing");
@@ -100,7 +100,7 @@ void test_pan_base_pose_holds_while_a_tilt_overlay_plays_and_clears() {
 void test_dialogue_talk_loops_until_explicitly_stopped() {
     Rig r = fresh();
     r.m.play(GESTURE_DIALOGUE_TALK, 0);
-    pump(r, 900);  // one full 750ms cycle plus margin, into a second lap
+    pump(r, 1300);  // one full 1145ms cycle plus margin, into a second lap
     TEST_ASSERT_TRUE_MESSAGE(r.m.isPlaying(GESTURE_DIALOGUE_TALK),
                               "a continuous gesture must keep looping on its own by design, "
                               "until something explicitly stops it");

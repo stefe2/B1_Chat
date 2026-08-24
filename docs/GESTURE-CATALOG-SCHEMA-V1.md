@@ -31,7 +31,12 @@ significant. After editing the catalog, run:
 ```
 
 Then commit both the catalog and generated firmware header. `-Verify` rejects a
-stale generated header or an invalid catalog hash.
+stale generated header or an invalid catalog hash. Also update
+`RequiredGestureCatalogId/Revision/Hash` in
+`console/Services/ProtocolClient.cs` in the same change — the console does not
+read the catalog's hash from the firmware or the JSON file to decide
+compatibility, it compares against this hardcoded constant, and a stale value
+fails closed silently (see `docs/KNOWN-PITFALLS.md`).
 The source format has no `wireId` or `animId`; generated wire IDs are a build
 artifact and are never hand-authored or persisted in Scenes.
 

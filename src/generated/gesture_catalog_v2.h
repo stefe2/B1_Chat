@@ -5,7 +5,7 @@
 
 static const char* const GESTURE_CATALOG_ID = "b1.core";
 static const char* const GESTURE_CATALOG_REVISION = "v2";
-static const char* const GESTURE_CATALOG_HASH = "sha256:3935a7080315c2efdedd9e9d4012fb5c440806918fc2388cd5c7ac7ded1298d4";
+static const char* const GESTURE_CATALOG_HASH = "sha256:e709083e68363b6df628b29ca9009af7a99251f4688f6279f23cf1d91bd9cc94";
 enum GestureWireId : uint8_t {
     GESTURE_IDLE_CENTER = 0,
     GESTURE_COMMUNICATE_NOD = 1,
@@ -24,40 +24,40 @@ struct GestureFrameV2 { int8_t panPct; int8_t tiltPct; uint16_t moveMs; uint16_t
 struct GestureDefinitionV2 { const char* key; GestureExecutionKindV2 execution; GestureCompositionLayerV2 layer; uint8_t axes; GestureEndBehaviorV2 endBehavior; const GestureFrameV2* frames; uint8_t frameCount; uint16_t normalDurationMs; };
 
 static const GestureFrameV2 COMMUNICATE_NOD_FRAMES[] = {
-    { 0, 32, 150, 50 },
-    { 0, -32, 150, 50 },
-    { 0, 20, 150, 50 },
-    { 0, 0, 150, 50 },
+    { 0, 32, 230, 50 },
+    { 0, -32, 460, 50 },
+    { 0, 20, 370, 50 },
+    { 0, 0, 140, 50 },
 };
 static const GestureFrameV2 DIALOGUE_TALK_FRAMES[] = {
-    { 0, -18, 75, 75 },
-    { 0, 12, 75, 75 },
-    { 0, -12, 75, 75 },
-    { 0, 8, 75, 75 },
-    { 0, 0, 75, 75 },
+    { 0, -18, 130, 75 },
+    { 0, 12, 210, 75 },
+    { 0, -12, 170, 75 },
+    { 0, 8, 140, 75 },
+    { 0, 0, 120, 75 },
 };
 static const GestureFrameV2 ATTENTION_LOOK_RIGHT_FRAMES[] = {
     { 0, 0, 0, 0 },
-    { 55, 0, 350, 50 },
+    { 55, 0, 700, 50 },
 };
 static const GestureFrameV2 ATTENTION_LOOK_LEFT_FRAMES[] = {
     { 0, 0, 0, 0 },
-    { -55, 0, 350, 50 },
+    { -55, 0, 700, 50 },
 };
 static const GestureFrameV2 ATTENTION_LOOK_UP_FRAMES[] = {
     { 0, 0, 0, 0 },
-    { 0, 45, 350, 50 },
+    { 0, 45, 700, 50 },
 };
 static const GestureFrameV2 ATTENTION_LOOK_DOWN_FRAMES[] = {
     { 0, 0, 0, 0 },
-    { 0, -45, 350, 50 },
+    { 0, -45, 700, 50 },
 };
 static const GestureDefinitionV2 GESTURES_V2[GESTURE_COUNT] = {
     { "idle.center", GESTURE_IMMEDIATE, GESTURE_LAYER_RESET, GESTURE_AXIS_BOTH, GESTURE_END_RESET_ALL, nullptr, 0, 0 },
-    { "communicate.nod", GESTURE_FINITE, GESTURE_LAYER_OVERLAY, GESTURE_AXIS_TILT, GESTURE_END_CLEAR_LAYER, COMMUNICATE_NOD_FRAMES, 4, 800 },
-    { "dialogue.talk", GESTURE_CONTINUOUS, GESTURE_LAYER_OVERLAY, GESTURE_AXIS_TILT, GESTURE_END_CLEAR_LAYER, DIALOGUE_TALK_FRAMES, 5, 750 },
-    { "attention.look-right", GESTURE_FINITE, GESTURE_LAYER_BASE, GESTURE_AXIS_PAN, GESTURE_END_HOLD_POSE, ATTENTION_LOOK_RIGHT_FRAMES, 2, 400 },
-    { "attention.look-left", GESTURE_FINITE, GESTURE_LAYER_BASE, GESTURE_AXIS_PAN, GESTURE_END_HOLD_POSE, ATTENTION_LOOK_LEFT_FRAMES, 2, 400 },
-    { "attention.look-up", GESTURE_FINITE, GESTURE_LAYER_BASE, GESTURE_AXIS_TILT, GESTURE_END_HOLD_POSE, ATTENTION_LOOK_UP_FRAMES, 2, 400 },
-    { "attention.look-down", GESTURE_FINITE, GESTURE_LAYER_BASE, GESTURE_AXIS_TILT, GESTURE_END_HOLD_POSE, ATTENTION_LOOK_DOWN_FRAMES, 2, 400 },
+    { "communicate.nod", GESTURE_FINITE, GESTURE_LAYER_OVERLAY, GESTURE_AXIS_TILT, GESTURE_END_CLEAR_LAYER, COMMUNICATE_NOD_FRAMES, 4, 1400 },
+    { "dialogue.talk", GESTURE_CONTINUOUS, GESTURE_LAYER_OVERLAY, GESTURE_AXIS_TILT, GESTURE_END_CLEAR_LAYER, DIALOGUE_TALK_FRAMES, 5, 1145 },
+    { "attention.look-right", GESTURE_FINITE, GESTURE_LAYER_BASE, GESTURE_AXIS_PAN, GESTURE_END_HOLD_POSE, ATTENTION_LOOK_RIGHT_FRAMES, 2, 750 },
+    { "attention.look-left", GESTURE_FINITE, GESTURE_LAYER_BASE, GESTURE_AXIS_PAN, GESTURE_END_HOLD_POSE, ATTENTION_LOOK_LEFT_FRAMES, 2, 750 },
+    { "attention.look-up", GESTURE_FINITE, GESTURE_LAYER_BASE, GESTURE_AXIS_TILT, GESTURE_END_HOLD_POSE, ATTENTION_LOOK_UP_FRAMES, 2, 750 },
+    { "attention.look-down", GESTURE_FINITE, GESTURE_LAYER_BASE, GESTURE_AXIS_TILT, GESTURE_END_HOLD_POSE, ATTENTION_LOOK_DOWN_FRAMES, 2, 750 },
 };

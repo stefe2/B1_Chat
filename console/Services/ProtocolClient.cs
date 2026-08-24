@@ -25,7 +25,7 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
     private bool _gestureCatalogCompatible;
     private const string RequiredGestureCatalogId = "b1.core";
     private const string RequiredGestureCatalogRevision = "v2";
-    private const string RequiredGestureCatalogHash = "sha256:3935a7080315c2efdedd9e9d4012fb5c440806918fc2388cd5c7ac7ded1298d4";
+    private const string RequiredGestureCatalogHash = "sha256:e709083e68363b6df628b29ca9009af7a99251f4688f6279f23cf1d91bd9cc94";
 
     public ObservableCollection<Droid> Droids { get; } = new();
     public ObservableCollection<MeshLink> MeshLinks { get; } = new();

@@ -1,6 +1,6 @@
 # B1 Chat — Gesture Catalog and Sequencer V2
 
-Status: stages 1–5 implemented; reduced-amplitude bench validation pending
+Status: stages 1–5 complete; Stage 6 (deterministic clip properties) next
 Approved: 2026-08-15
 
 This document owns the target product direction, breaking-development policy and
@@ -260,9 +260,11 @@ old Animation-card dependency.
 
 ### Stage 5 — Motion ownership and engine V2
 
-Status: composition foundation implemented (2026-08-16); pure trajectory
-tests complete (2026-08-23); `DroidController` extraction deferred and
-reduced-amplitude bench validation still pending before this stage can close.
+Status: complete (2026-08-23). Composition foundation implemented
+(2026-08-16); pure trajectory tests complete (2026-08-23); reduced-amplitude
+bench validation on real hardware confirmed (2026-08-23). `DroidController`
+extraction remains explicitly deferred, tracked as a standing item rather
+than a Stage 5 blocker.
 
 - **Pure trajectory tests (2026-08-23):** a host-native `env:native` Unity
   suite (`pio test -e native`, wired into `tools/self-test.ps1`) exercises
@@ -273,6 +275,24 @@ reduced-amplitude bench validation still pending before this stage can close.
   independence, and the intentional infinite loop of a `continuous` gesture
   until explicitly stopped. See `test/test_servo_engine/`,
   `test/test_motion_engine/` and docs/TEST-PROTOCOL.md.
+- **Reduced-amplitude bench validation (2026-08-23):** confirmed on real
+  hardware — `idle.center`, each `attention.look-*` base pose, and the
+  `communicate.nod`/`dialogue.talk` TILT overlays composing correctly over a
+  held PAN base pose, with clean same-channel interruption.
+- **Motion smoothness follow-up (2026-08-24):** bench feedback found several
+  gestures rode close enough to the 180°/s velocity ceiling that the existing
+  ease-in-out curve was compressed into an imperceptibly short window and
+  read as a snap to target. `communicate.nod`, `dialogue.talk` and the four
+  `attention.look-*` gestures had their frame timing and
+  `tempos.normal.durationMs` slowed down in `catalog/gesture-catalog-v1.json`
+  (see `docs/KNOWN-PITFALLS.md` for the moveMs-vs-ceiling constraint this
+  respects). `idle.center` has no trajectory frames and is handled separately
+  by `MotionEngine::stop()`'s fixed glide duration, also used by Safe Stop;
+  that duration moved from 180ms to 550ms after bench feedback, chosen to stay
+  well under expressive-gesture durations so Safe Stop remains visibly faster.
+  `SERVO_PAN_MIN/MAX` in `config.h` was also narrowed to match the existing
+  ±30°-from-center tilt default, for a safer virgin/uncalibrated-board
+  fallback; this does not affect an already-calibrated droid.
 
 `MotionEngine` composes a persistent base pose and expression overlays per
 axis. A PAN orientation such as `attention.look-right` therefore remains in
@@ -291,7 +311,8 @@ priority remains the controller boundary until it is extracted as a class.
   `attention.look-down` hold TILT base poses. Positive TILT is explicitly up.
   The initial catalog deliberately declares no variation.
 
-Exit: pure trajectory tests plus reduced-amplitude hardware checks pass.
+Exit: pure trajectory tests plus reduced-amplitude hardware checks pass. Met
+2026-08-23.
 
 ### Stage 6 — Deterministic clip properties
 

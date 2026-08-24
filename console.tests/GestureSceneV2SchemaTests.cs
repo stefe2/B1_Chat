@@ -15,7 +15,7 @@ public sealed class GestureSceneV2SchemaTests
         Assert.Equal(new[] { "attention.look-down", "attention.look-left", "attention.look-right", "attention.look-up", "communicate.nod", "dialogue.talk", "idle.center" },
             catalog.Gestures.Keys.OrderBy(key => key));
         Assert.All(catalog.Gestures.Values, gesture => Assert.True(gesture.Tempos.ContainsKey("normal")));
-        Assert.Equal(800, catalog.Gestures["communicate.nod"].Tempos["normal"].DurationMs);
+        Assert.Equal(1400, catalog.Gestures["communicate.nod"].Tempos["normal"].DurationMs);
         Assert.Equal(GestureExecutionKind.Continuous, catalog.Gestures["dialogue.talk"].Execution);
         Assert.Equal("base", catalog.Gestures["attention.look-right"].Composition.Layer);
         Assert.Contains("pan", catalog.Gestures["attention.look-right"].Composition.Axes);

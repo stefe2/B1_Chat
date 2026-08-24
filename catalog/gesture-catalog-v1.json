@@ -3,7 +3,7 @@
   "version": 1,
   "catalogId": "b1.core",
   "revision": "v2",
-  "hash": "sha256:3935a7080315c2efdedd9e9d4012fb5c440806918fc2388cd5c7ac7ded1298d4",
+  "hash": "sha256:e709083e68363b6df628b29ca9009af7a99251f4688f6279f23cf1d91bd9cc94",
   "gestures": [
     {
       "key": "idle.center",
@@ -35,7 +35,7 @@
       "execution": "finite",
       "endBehavior": "clearLayer",
       "composition": { "layer": "overlay", "axes": ["tilt"] },
-      "tempos": [{ "key": "normal", "durationMs": 800 }],
+      "tempos": [{ "key": "normal", "durationMs": 1400 }],
       "intensities": ["normal"],
       "variants": ["default"],
       "seedPolicy": "required",
@@ -45,10 +45,10 @@
       "trajectory": {
         "coordinate": "normalized",
         "frames": [
-          { "pan": 0, "tilt": 32, "moveMs": 150, "holdMs": 50, "easing": "smooth" },
-          { "pan": 0, "tilt": -32, "moveMs": 150, "holdMs": 50, "easing": "smooth" },
-          { "pan": 0, "tilt": 20, "moveMs": 150, "holdMs": 50, "easing": "smooth" },
-          { "pan": 0, "tilt": 0, "moveMs": 150, "holdMs": 50, "easing": "smooth" }
+          { "pan": 0, "tilt": 32, "moveMs": 230, "holdMs": 50, "easing": "smooth" },
+          { "pan": 0, "tilt": -32, "moveMs": 460, "holdMs": 50, "easing": "smooth" },
+          { "pan": 0, "tilt": 20, "moveMs": 370, "holdMs": 50, "easing": "smooth" },
+          { "pan": 0, "tilt": 0, "moveMs": 140, "holdMs": 50, "easing": "smooth" }
         ]
       }
     },
@@ -61,7 +61,7 @@
       "execution": "continuous",
       "endBehavior": "clearLayer",
       "composition": { "layer": "overlay", "axes": ["tilt"] },
-      "tempos": [{ "key": "normal", "durationMs": 750 }],
+      "tempos": [{ "key": "normal", "durationMs": 1145 }],
       "intensities": ["normal"],
       "variants": ["default"],
       "seedPolicy": "required",
@@ -71,11 +71,11 @@
       "trajectory": {
         "coordinate": "normalized",
         "frames": [
-          { "pan": 0, "tilt": -18, "moveMs": 75, "holdMs": 75, "easing": "smooth" },
-          { "pan": 0, "tilt": 12, "moveMs": 75, "holdMs": 75, "easing": "smooth" },
-          { "pan": 0, "tilt": -12, "moveMs": 75, "holdMs": 75, "easing": "smooth" },
-          { "pan": 0, "tilt": 8, "moveMs": 75, "holdMs": 75, "easing": "smooth" },
-          { "pan": 0, "tilt": 0, "moveMs": 75, "holdMs": 75, "easing": "smooth" }
+          { "pan": 0, "tilt": -18, "moveMs": 130, "holdMs": 75, "easing": "smooth" },
+          { "pan": 0, "tilt": 12, "moveMs": 210, "holdMs": 75, "easing": "smooth" },
+          { "pan": 0, "tilt": -12, "moveMs": 170, "holdMs": 75, "easing": "smooth" },
+          { "pan": 0, "tilt": 8, "moveMs": 140, "holdMs": 75, "easing": "smooth" },
+          { "pan": 0, "tilt": 0, "moveMs": 120, "holdMs": 75, "easing": "smooth" }
         ]
       }
     },
@@ -88,7 +88,7 @@
       "execution": "finite",
       "endBehavior": "holdPose",
       "composition": { "layer": "base", "axes": ["pan"] },
-      "tempos": [{ "key": "normal", "durationMs": 400 }],
+      "tempos": [{ "key": "normal", "durationMs": 750 }],
       "intensities": ["normal"],
       "variants": ["default"],
       "seedPolicy": "ignored",
@@ -99,7 +99,7 @@
         "coordinate": "normalized",
         "frames": [
           { "pan": 0, "tilt": 0, "moveMs": 0, "holdMs": 0, "easing": "smooth" },
-          { "pan": 55, "tilt": 0, "moveMs": 350, "holdMs": 50, "easing": "smooth" }
+          { "pan": 55, "tilt": 0, "moveMs": 700, "holdMs": 50, "easing": "smooth" }
         ]
       }
     },
@@ -112,7 +112,7 @@
       "execution": "finite",
       "endBehavior": "holdPose",
       "composition": { "layer": "base", "axes": ["pan"] },
-      "tempos": [{ "key": "normal", "durationMs": 400 }],
+      "tempos": [{ "key": "normal", "durationMs": 750 }],
       "intensities": ["normal"],
       "variants": ["default"],
       "seedPolicy": "ignored",
@@ -123,7 +123,7 @@
         "coordinate": "normalized",
         "frames": [
           { "pan": 0, "tilt": 0, "moveMs": 0, "holdMs": 0, "easing": "smooth" },
-          { "pan": -55, "tilt": 0, "moveMs": 350, "holdMs": 50, "easing": "smooth" }
+          { "pan": -55, "tilt": 0, "moveMs": 700, "holdMs": 50, "easing": "smooth" }
         ]
       }
     },
@@ -136,7 +136,7 @@
       "execution": "finite",
       "endBehavior": "holdPose",
       "composition": { "layer": "base", "axes": ["tilt"] },
-      "tempos": [{ "key": "normal", "durationMs": 400 }],
+      "tempos": [{ "key": "normal", "durationMs": 750 }],
       "intensities": ["normal"],
       "variants": ["default"],
       "seedPolicy": "ignored",
@@ -147,7 +147,7 @@
         "coordinate": "normalized",
         "frames": [
           { "pan": 0, "tilt": 0, "moveMs": 0, "holdMs": 0, "easing": "smooth" },
-          { "pan": 0, "tilt": 45, "moveMs": 350, "holdMs": 50, "easing": "smooth" }
+          { "pan": 0, "tilt": 45, "moveMs": 700, "holdMs": 50, "easing": "smooth" }
         ]
       }
     },
@@ -160,7 +160,7 @@
       "execution": "finite",
       "endBehavior": "holdPose",
       "composition": { "layer": "base", "axes": ["tilt"] },
-      "tempos": [{ "key": "normal", "durationMs": 400 }],
+      "tempos": [{ "key": "normal", "durationMs": 750 }],
       "intensities": ["normal"],
       "variants": ["default"],
       "seedPolicy": "ignored",
@@ -171,7 +171,7 @@
         "coordinate": "normalized",
         "frames": [
           { "pan": 0, "tilt": 0, "moveMs": 0, "holdMs": 0, "easing": "smooth" },
-          { "pan": 0, "tilt": -45, "moveMs": 350, "holdMs": 50, "easing": "smooth" }
+          { "pan": 0, "tilt": -45, "moveMs": 700, "holdMs": 50, "easing": "smooth" }
         ]
       }
     }

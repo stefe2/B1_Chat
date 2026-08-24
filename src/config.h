@@ -80,9 +80,11 @@ static const uint16_t LED_BLINK_MS   = 500; // blink period
 static const uint8_t PIN_SERVO_PAN  = B1_PIN_SERVO_PAN;
 static const uint8_t PIN_SERVO_TILT = B1_PIN_SERVO_TILT;
 
-// Mechanical limits (degrees). Adjust to fit the head assembly.
-static const uint8_t SERVO_PAN_MIN   = 20;
-static const uint8_t SERVO_PAN_MAX   = 160;
+// Mechanical limits (degrees). Adjust to fit the head assembly. Conservative
+// +/-30 default on both axes protects an uncalibrated/virgin board's mechanics;
+// a calibrated droid overrides this from NVS via setLimits().
+static const uint8_t SERVO_PAN_MIN   = 60;
+static const uint8_t SERVO_PAN_MAX   = 120;
 static const uint8_t SERVO_PAN_CENTER = 90;
 
 static const uint8_t SERVO_TILT_MIN   = 60;

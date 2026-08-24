@@ -59,6 +59,15 @@ relevant behavior.
 - The two release trains share one GitHub repository. Never use
   `/releases/latest`; filter app tags (`v...`) and firmware tags (`fw-v...`)
   separately, and select the semantic maximum rather than trusting list order.
+- `console/Services/ProtocolClient.cs` hardcodes the expected
+  `RequiredGestureCatalogId/Revision/Hash`. Editing
+  `catalog/gesture-catalog-v1.json` and running
+  `generate-gesture-catalog.ps1 -UpdateHash` changes the firmware's announced
+  hash but not this console constant; the console then fails closed exactly as
+  designed and silently refuses every gesture dispatch as `WRITE FAIL`, with no
+  further explanation in the UI. Update `RequiredGestureCatalogHash` (and the
+  id/revision if those changed) in the same change, and remember the
+  `console.tests` V2 scene fixtures embed their own catalog hash string too.
 
 ## Concurrency, timing and storage
 
@@ -89,6 +98,32 @@ relevant behavior.
   `servosEnabled=true` would snap to the generic pre-calibration default
   (`SERVO_PAN_CENTER`/`SERVO_TILT_CENTER`) instead of its real calibrated
   center on every restart.
+- A catalog gesture frame's declared `moveMs` must be at least the travel it
+  requests divided by `SERVO_MAX_DEGREES_PER_SECOND` (180°/s), in real
+  calibrated degrees for that frame's percent delta — not just a duration that
+  feels right. `MotionEngine::updateChannel()` advances to the next frame on a
+  fixed timer (`frame.moveMs + frame.holdMs`) regardless of whether
+  `ServoEngine` actually finished the move; if `moveMs` is too short for the
+  ceiling-clamped physical travel, the next frame retargets mid-flight,
+  restarting the ease from an unexpected intermediate position. This reads as
+  a stutter/kink even though each individual segment has a correct
+  ease-in-out curve. Tuned 2026-08-23/24: `communicate.nod`,
+  `dialogue.talk` and the four `attention.look-*` gestures had their frame
+  `moveMs`/`tempos.normal.durationMs` increased (they were riding close to the
+  180°/s ceiling in a too-short window) specifically to make the existing
+  easing visible instead of reading as a snap to target.
+- `MotionEngine::stop()`'s `applyComposedTarget()` duration (currently 550ms)
+  is not catalog-driven — `idle.center` has no trajectory frames — and it is
+  also the glide used by `applySafeStop()` in `main.cpp` for every Safe Stop.
+  Slowing it for a smoother-looking Center clip also slows the physical
+  response of Safe Stop; keep it well under the expressive-gesture durations
+  above (currently 700-1400ms) so Safe Stop stays visibly faster than a normal
+  gesture.
+- `SERVO_PAN_MIN/MAX` and `SERVO_TILT_MIN/MAX` in `config.h` (currently a
+  conservative ±30° from center on both axes) are only the virgin/uncalibrated
+  board fallback used until `setLimits()` loads a real per-droid calibration
+  from NVS; changing them does not affect the physical range of an
+  already-calibrated droid.
 
 ## WPF layout and input
 
