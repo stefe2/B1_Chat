@@ -9,6 +9,7 @@ public class GestureLibraryEntry
 {
     public int Id { get; init; }
     public string Name { get; init; } = "";
+    public string Description { get; init; } = "";
 
     // DarkComboBoxStyle displays the closed selection through ToString(), not DisplayMemberPath
     // (see docs/KNOWN-PITFALLS.md) — the inspector's GESTURE combo needs this the same way

@@ -33,7 +33,8 @@ public sealed record GestureDefinitionV2(
 
 public sealed record GestureCatalogV2(
     GestureCatalogIdentity Identity,
-    IReadOnlyDictionary<string, GestureDefinitionV2> Gestures);
+    IReadOnlyDictionary<string, GestureDefinitionV2> Gestures,
+    IReadOnlyList<GestureDefinitionV2> Ordered);
 
 public sealed record SceneTargetV2(bool IsBroadcast, ushort? DroidId)
 {

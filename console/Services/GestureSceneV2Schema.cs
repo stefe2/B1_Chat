@@ -29,6 +29,7 @@ internal static class GestureCatalogV2Parser
             Schema.Token(Schema.String(root, "revision", "$", 64), "$.revision"),
             Schema.Hash(Schema.String(root, "hash", "$", 72), "$.hash"));
         var values = new Dictionary<string, GestureDefinitionV2>(StringComparer.Ordinal);
+        var ordered = new List<GestureDefinitionV2>();
         var gestures = Schema.Array(root, "gestures", "$", 1, 512);
         var index = 0;
         foreach (var value in gestures.EnumerateArray())
@@ -41,14 +42,16 @@ internal static class GestureCatalogV2Parser
                 "auditionSafe", "broadcastSafe", "trajectory"
             });
             var key = Schema.Key(Schema.String(value, "key", path, 96), $"{path}.key");
-            if (!values.TryAdd(key, ReadGesture(value, path, key)))
+            var gesture = ReadGesture(value, path, key);
+            if (!values.TryAdd(key, gesture))
                 throw Schema.Error($"{path}.key", $"duplicate gesture key \"{key}\"");
+            ordered.Add(gesture);
         }
         var declaredHash = CatalogIntegrity.DeclaredHash(json);
         var computedHash = CatalogIntegrity.ComputeHash(json);
         if (!string.Equals(declaredHash, computedHash, StringComparison.Ordinal))
             throw Schema.Error("$.hash", "catalog content does not match its declared hash");
-        return new GestureCatalogV2(identity, values);
+        return new GestureCatalogV2(identity, values, ordered);
     }
 
     private static GestureDefinitionV2 ReadGesture(JsonElement value, string path, string key)

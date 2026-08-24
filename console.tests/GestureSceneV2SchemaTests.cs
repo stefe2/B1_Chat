@@ -12,8 +12,14 @@ public sealed class GestureSceneV2SchemaTests
         var catalog = GestureCatalogV2Parser.Parse(ReadFixture("catalog-v1.json"));
 
         Assert.Equal("b1.core", catalog.Identity.Id);
-        Assert.Equal(new[] { "attention.look-down", "attention.look-left", "attention.look-right", "attention.look-up", "communicate.nod", "dialogue.talk", "idle.center" },
-            catalog.Gestures.Keys.OrderBy(key => key));
+        // The catalog grows during Stage 7 content batches; this checks the original seven
+        // baseline gestures are still present and correct rather than pinning an exact set.
+        var baselineKeys = new[]
+        {
+            "attention.look-down", "attention.look-left", "attention.look-right", "attention.look-up",
+            "communicate.nod", "dialogue.talk", "idle.center",
+        };
+        foreach (var key in baselineKeys) Assert.Contains(key, catalog.Gestures.Keys);
         Assert.All(catalog.Gestures.Values, gesture => Assert.True(gesture.Tempos.ContainsKey("normal")));
         Assert.Equal(1400, catalog.Gestures["communicate.nod"].Tempos["normal"].DurationMs);
         Assert.Equal(GestureExecutionKind.Continuous, catalog.Gestures["dialogue.talk"].Execution);

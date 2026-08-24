@@ -270,14 +270,7 @@ public sealed class SequencerPreflightService : ISequencerPreflightService
 
     private string GestureName(int animId)
     {
-        var name = animId >= 0 && animId < _gestureNames.Count
-            ? _gestureNames[animId]
-            : animId switch
-            {
-                16 => "POWER_DOWN",
-                17 => "TALK",
-                _ => "gesture",
-            };
+        var name = animId >= 0 && animId < _gestureNames.Count ? _gestureNames[animId] : "gesture";
         return $"{name} · #{animId}";
     }
 

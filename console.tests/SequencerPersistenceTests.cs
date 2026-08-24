@@ -14,7 +14,11 @@ public sealed class SequencerPersistenceTests
         using var fixture = new TemporaryJsonFixture();
         var path = Path.Combine(fixture.DirectoryPath, "infinite.b1seq.json");
         using var vm = CreateViewModel(writer: new AtomicTextFileWriter());
-        vm.InsertGestureAt(17, vm.Tracks[0], 250);
+        // dialogue.talk is catalog index 2 (continuous execution, needed for the infinite-endpoint
+        // round trip this test covers). It used to also be reachable via the legacy alias animId 17;
+        // that alias was removed with the other hardcoded animId<->key tables now that the catalog
+        // itself is the single source of truth for that mapping.
+        vm.InsertGestureAt(2, vm.Tracks[0], 250);
         vm.NudgeEndLongerCommand.Execute(null);
         vm.NudgeEndLongerCommand.Execute(null);
 

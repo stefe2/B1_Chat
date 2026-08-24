@@ -3,7 +3,7 @@
   "version": 1,
   "catalogId": "b1.core",
   "revision": "v2",
-  "hash": "sha256:e709083e68363b6df628b29ca9009af7a99251f4688f6279f23cf1d91bd9cc94",
+  "hash": "sha256:e659b6a7a868732a53b9038912431f25b0e99f3fef6c9d240d35ed4afec25b7e",
   "gestures": [
     {
       "key": "idle.center",
@@ -172,6 +172,1148 @@
         "frames": [
           { "pan": 0, "tilt": 0, "moveMs": 0, "holdMs": 0, "easing": "smooth" },
           { "pan": 0, "tilt": -45, "moveMs": 700, "holdMs": 50, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "rest.droop",
+      "displayName": "Droop",
+      "description": "Lower the head into a low, low-energy resting posture.",
+      "family": "rest",
+      "tags": ["low-energy", "rest"],
+      "execution": "finite",
+      "endBehavior": "holdPose",
+      "composition": { "layer": "base", "axes": ["tilt"] },
+      "tempos": [{ "key": "normal", "durationMs": 420 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": true,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": 0, "tilt": 0, "moveMs": 0, "holdMs": 0, "easing": "smooth" },
+          { "pan": 0, "tilt": -28, "moveMs": 370, "holdMs": 50, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "rest.perk-up",
+      "displayName": "Perk up",
+      "description": "Bring the head level and alert without resetting orientation.",
+      "family": "rest",
+      "tags": ["alert", "transition"],
+      "execution": "finite",
+      "endBehavior": "holdPose",
+      "composition": { "layer": "base", "axes": ["tilt"] },
+      "tempos": [{ "key": "normal", "durationMs": 640 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": true,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": 0, "tilt": 0, "moveMs": 0, "holdMs": 0, "easing": "smooth" },
+          { "pan": 0, "tilt": 0, "moveMs": 590, "holdMs": 50, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "rest.settle",
+      "displayName": "Settle",
+      "description": "Ease the pan orientation back to center with a light overshoot.",
+      "family": "rest",
+      "tags": ["transition", "center"],
+      "execution": "finite",
+      "endBehavior": "holdPose",
+      "composition": { "layer": "base", "axes": ["pan"] },
+      "tempos": [{ "key": "normal", "durationMs": 380 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": true,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": 0, "tilt": 0, "moveMs": 0, "holdMs": 0, "easing": "smooth" },
+          { "pan": 6, "tilt": 0, "moveMs": 90, "holdMs": 30, "easing": "smooth" },
+          { "pan": -3, "tilt": 0, "moveMs": 120, "holdMs": 30, "easing": "smooth" },
+          { "pan": 0, "tilt": 0, "moveMs": 90, "holdMs": 20, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "rest.idle-sway",
+      "displayName": "Idle sway",
+      "description": "A continuous, barely perceptible drift while otherwise still.",
+      "family": "rest",
+      "tags": ["ambient", "subtle"],
+      "execution": "continuous",
+      "endBehavior": "clearLayer",
+      "composition": { "layer": "overlay", "axes": ["tilt"] },
+      "tempos": [{ "key": "normal", "durationMs": 790 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": false,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": 0, "tilt": 4, "moveMs": 90, "holdMs": 200, "easing": "smooth" },
+          { "pan": 0, "tilt": -4, "moveMs": 110, "holdMs": 200, "easing": "smooth" },
+          { "pan": 0, "tilt": 0, "moveMs": 90, "holdMs": 100, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "rest.wake",
+      "displayName": "Wake",
+      "description": "A short waking sequence from a low posture back to alert center.",
+      "family": "rest",
+      "tags": ["transition", "wake"],
+      "execution": "finite",
+      "endBehavior": "holdPose",
+      "composition": { "layer": "base", "axes": ["tilt"] },
+      "tempos": [{ "key": "normal", "durationMs": 360 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": true,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": 0, "tilt": 0, "moveMs": 0, "holdMs": 0, "easing": "smooth" },
+          { "pan": 0, "tilt": 10, "moveMs": 130, "holdMs": 50, "easing": "smooth" },
+          { "pan": 0, "tilt": 0, "moveMs": 130, "holdMs": 50, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "attention.scan",
+      "displayName": "Scan",
+      "description": "Sweep side to side continuously, as if searching or surveying.",
+      "family": "attention",
+      "tags": ["search", "continuous"],
+      "execution": "continuous",
+      "endBehavior": "holdPose",
+      "composition": { "layer": "base", "axes": ["pan"] },
+      "tempos": [{ "key": "normal", "durationMs": 2750 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": false,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": 0, "tilt": 0, "moveMs": 0, "holdMs": 0, "easing": "smooth" },
+          { "pan": -45, "tilt": 0, "moveMs": 590, "holdMs": 150, "easing": "smooth" },
+          { "pan": 45, "tilt": 0, "moveMs": 1170, "holdMs": 150, "easing": "smooth" },
+          { "pan": 0, "tilt": 0, "moveMs": 590, "holdMs": 100, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "attention.follow-sound",
+      "displayName": "Follow sound",
+      "description": "Snap toward a side quickly and hold, as if reacting to a stimulus.",
+      "family": "attention",
+      "tags": ["orient", "quick"],
+      "execution": "finite",
+      "endBehavior": "holdPose",
+      "composition": { "layer": "base", "axes": ["pan"] },
+      "tempos": [{ "key": "normal", "durationMs": 570 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": true,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": 0, "tilt": 0, "moveMs": 0, "holdMs": 0, "easing": "smooth" },
+          { "pan": 40, "tilt": 0, "moveMs": 520, "holdMs": 50, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "attention.follow-slow",
+      "displayName": "Follow slow",
+      "description": "A subtle continuous tracking drift, more restrained than Scan.",
+      "family": "attention",
+      "tags": ["track", "subtle"],
+      "execution": "continuous",
+      "endBehavior": "clearLayer",
+      "composition": { "layer": "overlay", "axes": ["pan"] },
+      "tempos": [{ "key": "normal", "durationMs": 830 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": false,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": 8, "tilt": 0, "moveMs": 110, "holdMs": 150, "easing": "smooth" },
+          { "pan": -8, "tilt": 0, "moveMs": 210, "holdMs": 150, "easing": "smooth" },
+          { "pan": 0, "tilt": 0, "moveMs": 110, "holdMs": 100, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "attention.snap-to-center",
+      "displayName": "Snap to center",
+      "description": "A fast, deliberate return of pan to center, sharper than Settle.",
+      "family": "attention",
+      "tags": ["quick", "center"],
+      "execution": "finite",
+      "endBehavior": "holdPose",
+      "composition": { "layer": "base", "axes": ["pan"] },
+      "tempos": [{ "key": "normal", "durationMs": 760 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": true,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": 0, "tilt": 0, "moveMs": 0, "holdMs": 0, "easing": "smooth" },
+          { "pan": 0, "tilt": 0, "moveMs": 720, "holdMs": 40, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "attention.quizzical",
+      "displayName": "Quizzical",
+      "description": "A small held tilt suggesting curiosity, without a pan component.",
+      "family": "attention",
+      "tags": ["curious", "hold"],
+      "execution": "finite",
+      "endBehavior": "holdPose",
+      "composition": { "layer": "base", "axes": ["tilt"] },
+      "tempos": [{ "key": "normal", "durationMs": 800 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": true,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": 0, "tilt": 0, "moveMs": 0, "holdMs": 0, "easing": "smooth" },
+          { "pan": 0, "tilt": 15, "moveMs": 200, "holdMs": 600, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "communicate.yes",
+      "displayName": "Yes",
+      "description": "A clear, emphatic affirmative nod, larger than the plain Nod.",
+      "family": "communication",
+      "tags": ["affirmative", "response"],
+      "execution": "finite",
+      "endBehavior": "clearLayer",
+      "composition": { "layer": "overlay", "axes": ["tilt"] },
+      "tempos": [{ "key": "normal", "durationMs": 2810 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": true,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": 0, "tilt": 38, "moveMs": 500, "holdMs": 60, "easing": "smooth" },
+          { "pan": 0, "tilt": -38, "moveMs": 990, "holdMs": 60, "easing": "smooth" },
+          { "pan": 0, "tilt": 22, "moveMs": 790, "holdMs": 60, "easing": "smooth" },
+          { "pan": 0, "tilt": 0, "moveMs": 290, "holdMs": 60, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "communicate.no",
+      "displayName": "No",
+      "description": "A clear headshake negation, the pan-axis counterpart to Yes.",
+      "family": "communication",
+      "tags": ["negative", "response"],
+      "execution": "finite",
+      "endBehavior": "clearLayer",
+      "composition": { "layer": "overlay", "axes": ["pan"] },
+      "tempos": [{ "key": "normal", "durationMs": 2400 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": true,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": -32, "tilt": 0, "moveMs": 420, "holdMs": 50, "easing": "smooth" },
+          { "pan": 32, "tilt": 0, "moveMs": 840, "holdMs": 50, "easing": "smooth" },
+          { "pan": -20, "tilt": 0, "moveMs": 680, "holdMs": 50, "easing": "smooth" },
+          { "pan": 0, "tilt": 0, "moveMs": 260, "holdMs": 50, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "communicate.acknowledge",
+      "displayName": "Acknowledge",
+      "description": "A brief, quiet nod used as a short acknowledgement.",
+      "family": "communication",
+      "tags": ["response", "brief"],
+      "execution": "finite",
+      "endBehavior": "clearLayer",
+      "composition": { "layer": "overlay", "axes": ["tilt"] },
+      "tempos": [{ "key": "normal", "durationMs": 560 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": true,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": 0, "tilt": 18, "moveMs": 240, "holdMs": 40, "easing": "smooth" },
+          { "pan": 0, "tilt": 0, "moveMs": 240, "holdMs": 40, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "communicate.beat",
+      "displayName": "Beat",
+      "description": "A single sharp tilt dip used to punctuate a moment.",
+      "family": "communication",
+      "tags": ["punctuation", "brief"],
+      "execution": "finite",
+      "endBehavior": "clearLayer",
+      "composition": { "layer": "overlay", "axes": ["tilt"] },
+      "tempos": [{ "key": "normal", "durationMs": 440 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": true,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": 0, "tilt": -14, "moveMs": 190, "holdMs": 30, "easing": "smooth" },
+          { "pan": 0, "tilt": 0, "moveMs": 190, "holdMs": 30, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "communicate.maybe",
+      "displayName": "Maybe",
+      "description": "An ambiguous side-to-side waver between yes and no.",
+      "family": "communication",
+      "tags": ["ambiguous", "response"],
+      "execution": "finite",
+      "endBehavior": "clearLayer",
+      "composition": { "layer": "overlay", "axes": ["pan"] },
+      "tempos": [{ "key": "normal", "durationMs": 860 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": true,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": 12, "tilt": 0, "moveMs": 160, "holdMs": 80, "easing": "smooth" },
+          { "pan": -12, "tilt": 0, "moveMs": 320, "holdMs": 80, "easing": "smooth" },
+          { "pan": 0, "tilt": 0, "moveMs": 160, "holdMs": 60, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "communicate.greet",
+      "displayName": "Greet",
+      "description": "A held dip and return, evoking a small greeting bow.",
+      "family": "communication",
+      "tags": ["greeting", "social"],
+      "execution": "finite",
+      "endBehavior": "clearLayer",
+      "composition": { "layer": "overlay", "axes": ["tilt"] },
+      "tempos": [{ "key": "normal", "durationMs": 1010 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": true,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": 0, "tilt": -25, "moveMs": 330, "holdMs": 300, "easing": "smooth" },
+          { "pan": 0, "tilt": 0, "moveMs": 330, "holdMs": 50, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "communicate.thanks",
+      "displayName": "Thanks",
+      "description": "A slow nod held longer than Yes, evoking gratitude.",
+      "family": "communication",
+      "tags": ["gratitude", "social"],
+      "execution": "finite",
+      "endBehavior": "clearLayer",
+      "composition": { "layer": "overlay", "axes": ["tilt"] },
+      "tempos": [{ "key": "normal", "durationMs": 1130 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": true,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": 0, "tilt": 22, "moveMs": 290, "holdMs": 500, "easing": "smooth" },
+          { "pan": 0, "tilt": 0, "moveMs": 290, "holdMs": 50, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "dialogue.listen",
+      "displayName": "Listen",
+      "description": "Subtle, irregular micro-movements suggesting active listening.",
+      "family": "dialogue",
+      "tags": ["listening", "subtle"],
+      "execution": "continuous",
+      "endBehavior": "clearLayer",
+      "composition": { "layer": "overlay", "axes": ["tilt"] },
+      "tempos": [{ "key": "normal", "durationMs": 1690 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": false,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": 0, "tilt": -6, "moveMs": 90, "holdMs": 300, "easing": "smooth" },
+          { "pan": 0, "tilt": 5, "moveMs": 150, "holdMs": 400, "easing": "smooth" },
+          { "pan": 0, "tilt": -3, "moveMs": 110, "holdMs": 350, "easing": "smooth" },
+          { "pan": 0, "tilt": 0, "moveMs": 90, "holdMs": 200, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "dialogue.emphasis",
+      "displayName": "Emphasis",
+      "description": "A single sharper beat used to stress a word mid-speech.",
+      "family": "dialogue",
+      "tags": ["emphasis", "speech"],
+      "execution": "finite",
+      "endBehavior": "clearLayer",
+      "composition": { "layer": "overlay", "axes": ["tilt"] },
+      "tempos": [{ "key": "normal", "durationMs": 600 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": true,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": 0, "tilt": -20, "moveMs": 260, "holdMs": 40, "easing": "smooth" },
+          { "pan": 0, "tilt": 0, "moveMs": 260, "holdMs": 40, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "dialogue.pause-think",
+      "displayName": "Pause and think",
+      "description": "A brief hesitant sway used for a mid-conversation pause.",
+      "family": "dialogue",
+      "tags": ["pause", "speech"],
+      "execution": "finite",
+      "endBehavior": "clearLayer",
+      "composition": { "layer": "overlay", "axes": ["pan"] },
+      "tempos": [{ "key": "normal", "durationMs": 980 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": true,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": -10, "tilt": 0, "moveMs": 130, "holdMs": 250, "easing": "smooth" },
+          { "pan": 6, "tilt": 0, "moveMs": 210, "holdMs": 200, "easing": "smooth" },
+          { "pan": 0, "tilt": 0, "moveMs": 90, "holdMs": 100, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "emotion.happy",
+      "displayName": "Happy",
+      "description": "A quick, light bounce conveying positive energy.",
+      "family": "emotion",
+      "tags": ["positive", "energetic"],
+      "execution": "finite",
+      "endBehavior": "clearLayer",
+      "composition": { "layer": "overlay", "axes": ["tilt"] },
+      "tempos": [{ "key": "normal", "durationMs": 1210 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": true,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": 0, "tilt": 20, "moveMs": 260, "holdMs": 40, "easing": "smooth" },
+          { "pan": 0, "tilt": -8, "moveMs": 370, "holdMs": 40, "easing": "smooth" },
+          { "pan": 0, "tilt": 12, "moveMs": 260, "holdMs": 40, "easing": "smooth" },
+          { "pan": 0, "tilt": 0, "moveMs": 160, "holdMs": 40, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "emotion.sad",
+      "displayName": "Sad",
+      "description": "A slow droop held low, conveying sadness.",
+      "family": "emotion",
+      "tags": ["negative", "low-energy"],
+      "execution": "finite",
+      "endBehavior": "holdPose",
+      "composition": { "layer": "base", "axes": ["tilt"] },
+      "tempos": [{ "key": "normal", "durationMs": 560 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": true,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": 0, "tilt": 0, "moveMs": 0, "holdMs": 0, "easing": "smooth" },
+          { "pan": 0, "tilt": -35, "moveMs": 460, "holdMs": 100, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "emotion.excited",
+      "displayName": "Excited",
+      "description": "A rapid, small continuous oscillation conveying nervous energy.",
+      "family": "emotion",
+      "tags": ["positive", "continuous"],
+      "execution": "continuous",
+      "endBehavior": "clearLayer",
+      "composition": { "layer": "overlay", "axes": ["tilt"] },
+      "tempos": [{ "key": "normal", "durationMs": 810 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": false,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": 0, "tilt": 10, "moveMs": 130, "holdMs": 30, "easing": "smooth" },
+          { "pan": 0, "tilt": -10, "moveMs": 260, "holdMs": 30, "easing": "smooth" },
+          { "pan": 0, "tilt": 6, "moveMs": 210, "holdMs": 30, "easing": "smooth" },
+          { "pan": 0, "tilt": 0, "moveMs": 90, "holdMs": 30, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "emotion.confused",
+      "displayName": "Confused",
+      "description": "A slow, irregular side sway, an idle 'hmm'.",
+      "family": "emotion",
+      "tags": ["uncertain", "continuous"],
+      "execution": "continuous",
+      "endBehavior": "clearLayer",
+      "composition": { "layer": "overlay", "axes": ["pan"] },
+      "tempos": [{ "key": "normal", "durationMs": 1470 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": false,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": -15, "tilt": 0, "moveMs": 200, "holdMs": 300, "easing": "smooth" },
+          { "pan": 12, "tilt": 0, "moveMs": 360, "holdMs": 300, "easing": "smooth" },
+          { "pan": 0, "tilt": 0, "moveMs": 160, "holdMs": 150, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "emotion.proud",
+      "displayName": "Proud",
+      "description": "A slow rise held longer than Look up, conveying pride.",
+      "family": "emotion",
+      "tags": ["positive", "hold"],
+      "execution": "finite",
+      "endBehavior": "holdPose",
+      "composition": { "layer": "base", "axes": ["tilt"] },
+      "tempos": [{ "key": "normal", "durationMs": 1120 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": true,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": 0, "tilt": 0, "moveMs": 0, "holdMs": 0, "easing": "smooth" },
+          { "pan": 0, "tilt": 40, "moveMs": 520, "holdMs": 600, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "emotion.scared",
+      "displayName": "Scared",
+      "description": "A quick tense retreat downward, held.",
+      "family": "emotion",
+      "tags": ["negative", "tense"],
+      "execution": "finite",
+      "endBehavior": "holdPose",
+      "composition": { "layer": "base", "axes": ["tilt"] },
+      "tempos": [{ "key": "normal", "durationMs": 990 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": true,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": 0, "tilt": 0, "moveMs": 0, "holdMs": 0, "easing": "smooth" },
+          { "pan": 0, "tilt": -45, "moveMs": 590, "holdMs": 400, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "emotion.affection",
+      "displayName": "Affection",
+      "description": "A slow, gentle continuous cycle conveying warmth.",
+      "family": "emotion",
+      "tags": ["positive", "continuous"],
+      "execution": "continuous",
+      "endBehavior": "clearLayer",
+      "composition": { "layer": "overlay", "axes": ["tilt"] },
+      "tempos": [{ "key": "normal", "durationMs": 1020 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": false,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": 0, "tilt": -10, "moveMs": 130, "holdMs": 200, "easing": "smooth" },
+          { "pan": 0, "tilt": 10, "moveMs": 260, "holdMs": 200, "easing": "smooth" },
+          { "pan": 0, "tilt": 0, "moveMs": 130, "holdMs": 100, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "emotion.bored",
+      "displayName": "Bored",
+      "description": "A slow, low-energy continuous droop and sway.",
+      "family": "emotion",
+      "tags": ["negative", "continuous"],
+      "execution": "continuous",
+      "endBehavior": "holdPose",
+      "composition": { "layer": "base", "axes": ["tilt"] },
+      "tempos": [{ "key": "normal", "durationMs": 1270 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": false,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": 0, "tilt": 0, "moveMs": 0, "holdMs": 0, "easing": "smooth" },
+          { "pan": 0, "tilt": -20, "moveMs": 260, "holdMs": 400, "easing": "smooth" },
+          { "pan": 0, "tilt": -28, "moveMs": 110, "holdMs": 500, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "emotion.annoyed",
+      "displayName": "Annoyed",
+      "description": "A sharp, terse pan flick and return.",
+      "family": "emotion",
+      "tags": ["negative", "brief"],
+      "execution": "finite",
+      "endBehavior": "clearLayer",
+      "composition": { "layer": "overlay", "axes": ["pan"] },
+      "tempos": [{ "key": "normal", "durationMs": 560 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": true,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": -18, "tilt": 0, "moveMs": 240, "holdMs": 40, "easing": "smooth" },
+          { "pan": 0, "tilt": 0, "moveMs": 240, "holdMs": 40, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "emotion.embarrassed",
+      "displayName": "Embarrassed",
+      "description": "A quick downward tilt held, an avoidance posture.",
+      "family": "emotion",
+      "tags": ["negative", "hold"],
+      "execution": "finite",
+      "endBehavior": "holdPose",
+      "composition": { "layer": "base", "axes": ["tilt"] },
+      "tempos": [{ "key": "normal", "durationMs": 890 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": true,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": 0, "tilt": 0, "moveMs": 0, "holdMs": 0, "easing": "smooth" },
+          { "pan": 0, "tilt": -30, "moveMs": 390, "holdMs": 500, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "emotion.curious",
+      "displayName": "Curious",
+      "description": "A held pan lean, a curious orientation distinct from Quizzical's tilt.",
+      "family": "emotion",
+      "tags": ["curious", "hold"],
+      "execution": "finite",
+      "endBehavior": "holdPose",
+      "composition": { "layer": "base", "axes": ["pan"] },
+      "tempos": [{ "key": "normal", "durationMs": 730 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": true,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": 0, "tilt": 0, "moveMs": 0, "holdMs": 0, "easing": "smooth" },
+          { "pan": 25, "tilt": 0, "moveMs": 330, "holdMs": 400, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "reaction.startle",
+      "displayName": "Startle",
+      "description": "A sudden tilt jerk that settles quickly.",
+      "family": "reaction",
+      "tags": ["sudden", "brief"],
+      "execution": "finite",
+      "endBehavior": "clearLayer",
+      "composition": { "layer": "overlay", "axes": ["tilt"] },
+      "tempos": [{ "key": "normal", "durationMs": 1270 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": true,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": 0, "tilt": 30, "moveMs": 390, "holdMs": 30, "easing": "smooth" },
+          { "pan": 0, "tilt": -15, "moveMs": 590, "holdMs": 30, "easing": "smooth" },
+          { "pan": 0, "tilt": 0, "moveMs": 200, "holdMs": 30, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "reaction.flinch",
+      "displayName": "Flinch",
+      "description": "A small, quick pan retreat.",
+      "family": "reaction",
+      "tags": ["sudden", "brief"],
+      "execution": "finite",
+      "endBehavior": "clearLayer",
+      "composition": { "layer": "overlay", "axes": ["pan"] },
+      "tempos": [{ "key": "normal", "durationMs": 440 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": true,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": -14, "tilt": 0, "moveMs": 190, "holdMs": 30, "easing": "smooth" },
+          { "pan": 0, "tilt": 0, "moveMs": 190, "holdMs": 30, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "reaction.recoil",
+      "displayName": "Recoil",
+      "description": "A larger pan retreat than Flinch.",
+      "family": "reaction",
+      "tags": ["sudden", "brief"],
+      "execution": "finite",
+      "endBehavior": "clearLayer",
+      "composition": { "layer": "overlay", "axes": ["pan"] },
+      "tempos": [{ "key": "normal", "durationMs": 900 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": true,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": -30, "tilt": 0, "moveMs": 390, "holdMs": 80, "easing": "smooth" },
+          { "pan": 0, "tilt": 0, "moveMs": 390, "holdMs": 40, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "reaction.double-take",
+      "displayName": "Double take",
+      "description": "Away, back, and away again, a comedic double take.",
+      "family": "reaction",
+      "tags": ["comedic", "brief"],
+      "execution": "finite",
+      "endBehavior": "clearLayer",
+      "composition": { "layer": "overlay", "axes": ["pan"] },
+      "tempos": [{ "key": "normal", "durationMs": 1610 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": true,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": -25, "tilt": 0, "moveMs": 330, "holdMs": 40, "easing": "smooth" },
+          { "pan": 0, "tilt": 0, "moveMs": 330, "holdMs": 30, "easing": "smooth" },
+          { "pan": -30, "tilt": 0, "moveMs": 390, "holdMs": 60, "easing": "smooth" },
+          { "pan": 0, "tilt": 0, "moveMs": 390, "holdMs": 40, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "reaction.alert",
+      "displayName": "Alert",
+      "description": "A sharp tilt snap upward, held.",
+      "family": "reaction",
+      "tags": ["sudden", "hold"],
+      "execution": "finite",
+      "endBehavior": "holdPose",
+      "composition": { "layer": "base", "axes": ["tilt"] },
+      "tempos": [{ "key": "normal", "durationMs": 540 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": true,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": 0, "tilt": 0, "moveMs": 0, "holdMs": 0, "easing": "smooth" },
+          { "pan": 0, "tilt": 35, "moveMs": 460, "holdMs": 80, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "reaction.surprise-look",
+      "displayName": "Surprise look",
+      "description": "A quick pan orientation toward a stimulus without retreat.",
+      "family": "reaction",
+      "tags": ["sudden", "orient"],
+      "execution": "finite",
+      "endBehavior": "holdPose",
+      "composition": { "layer": "base", "axes": ["pan"] },
+      "tempos": [{ "key": "normal", "durationMs": 650 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": true,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": 0, "tilt": 0, "moveMs": 0, "holdMs": 0, "easing": "smooth" },
+          { "pan": 45, "tilt": 0, "moveMs": 590, "holdMs": 60, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "reaction.laugh",
+      "displayName": "Laugh",
+      "description": "Small repeated tilt bounces conveying laughter.",
+      "family": "reaction",
+      "tags": ["comedic", "energetic"],
+      "execution": "finite",
+      "endBehavior": "clearLayer",
+      "composition": { "layer": "overlay", "axes": ["tilt"] },
+      "tempos": [{ "key": "normal", "durationMs": 1230 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": true,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": 0, "tilt": 15, "moveMs": 200, "holdMs": 30, "easing": "smooth" },
+          { "pan": 0, "tilt": -8, "moveMs": 300, "holdMs": 30, "easing": "smooth" },
+          { "pan": 0, "tilt": 12, "moveMs": 260, "holdMs": 30, "easing": "smooth" },
+          { "pan": 0, "tilt": -5, "moveMs": 230, "holdMs": 30, "easing": "smooth" },
+          { "pan": 0, "tilt": 0, "moveMs": 90, "holdMs": 30, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "reaction.wince",
+      "displayName": "Wince",
+      "description": "A sharp, brief downward tilt dip conveying discomfort.",
+      "family": "reaction",
+      "tags": ["negative", "brief"],
+      "execution": "finite",
+      "endBehavior": "clearLayer",
+      "composition": { "layer": "overlay", "axes": ["tilt"] },
+      "tempos": [{ "key": "normal", "durationMs": 510 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": true,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": 0, "tilt": -16, "moveMs": 210, "holdMs": 60, "easing": "smooth" },
+          { "pan": 0, "tilt": 0, "moveMs": 210, "holdMs": 30, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "mechanical.power-up",
+      "displayName": "Power up",
+      "description": "A slow, deliberate rise conveying a boot sequence.",
+      "family": "mechanical",
+      "tags": ["mechanical", "boot"],
+      "execution": "finite",
+      "endBehavior": "holdPose",
+      "composition": { "layer": "base", "axes": ["tilt"] },
+      "tempos": [{ "key": "normal", "durationMs": 410 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": true,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": 0, "tilt": 0, "moveMs": 0, "holdMs": 0, "easing": "smooth" },
+          { "pan": 0, "tilt": 20, "moveMs": 260, "holdMs": 150, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "mechanical.reboot",
+      "displayName": "Reboot",
+      "description": "A dip followed by a rise, a full mechanical reboot sequence.",
+      "family": "mechanical",
+      "tags": ["mechanical", "boot"],
+      "execution": "finite",
+      "endBehavior": "holdPose",
+      "composition": { "layer": "base", "axes": ["tilt"] },
+      "tempos": [{ "key": "normal", "durationMs": 1020 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": true,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": 0, "tilt": 0, "moveMs": 0, "holdMs": 0, "easing": "smooth" },
+          { "pan": 0, "tilt": -20, "moveMs": 260, "holdMs": 150, "easing": "smooth" },
+          { "pan": 0, "tilt": 15, "moveMs": 460, "holdMs": 150, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "mechanical.glitch",
+      "displayName": "Glitch",
+      "description": "Rapid small jitters conveying a mechanical malfunction.",
+      "family": "mechanical",
+      "tags": ["mechanical", "erratic"],
+      "execution": "finite",
+      "endBehavior": "clearLayer",
+      "composition": { "layer": "overlay", "axes": ["pan"] },
+      "tempos": [{ "key": "normal", "durationMs": 810 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": true,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": 8, "tilt": 0, "moveMs": 110, "holdMs": 20, "easing": "smooth" },
+          { "pan": -8, "tilt": 0, "moveMs": 210, "holdMs": 20, "easing": "smooth" },
+          { "pan": 5, "tilt": 0, "moveMs": 170, "holdMs": 20, "easing": "smooth" },
+          { "pan": -5, "tilt": 0, "moveMs": 130, "holdMs": 20, "easing": "smooth" },
+          { "pan": 0, "tilt": 0, "moveMs": 90, "holdMs": 20, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "mechanical.self-check",
+      "displayName": "Self check",
+      "description": "A deliberate full-range continuous sweep, a diagnostic sweep.",
+      "family": "mechanical",
+      "tags": ["mechanical", "continuous"],
+      "execution": "continuous",
+      "endBehavior": "holdPose",
+      "composition": { "layer": "base", "axes": ["pan"] },
+      "tempos": [{ "key": "normal", "durationMs": 3150 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": false,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": 0, "tilt": 0, "moveMs": 0, "holdMs": 0, "easing": "smooth" },
+          { "pan": -50, "tilt": 0, "moveMs": 650, "holdMs": 200, "easing": "smooth" },
+          { "pan": 50, "tilt": 0, "moveMs": 1300, "holdMs": 200, "easing": "smooth" },
+          { "pan": 0, "tilt": 0, "moveMs": 650, "holdMs": 150, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "mechanical.scan-vertical",
+      "displayName": "Scan vertical",
+      "description": "A repeated continuous up-down sweep, the tilt counterpart to Scan.",
+      "family": "mechanical",
+      "tags": ["mechanical", "continuous"],
+      "execution": "continuous",
+      "endBehavior": "clearLayer",
+      "composition": { "layer": "overlay", "axes": ["tilt"] },
+      "tempos": [{ "key": "normal", "durationMs": 2230 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": false,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": 0, "tilt": 35, "moveMs": 460, "holdMs": 150, "easing": "smooth" },
+          { "pan": 0, "tilt": -35, "moveMs": 910, "holdMs": 150, "easing": "smooth" },
+          { "pan": 0, "tilt": 0, "moveMs": 460, "holdMs": 100, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "mechanical.lock-on",
+      "displayName": "Lock on",
+      "description": "A sharp snap toward a target followed by a micro-adjustment settle.",
+      "family": "mechanical",
+      "tags": ["mechanical", "target"],
+      "execution": "finite",
+      "endBehavior": "holdPose",
+      "composition": { "layer": "base", "axes": ["pan"] },
+      "tempos": [{ "key": "normal", "durationMs": 850 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": true,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": 0, "tilt": 0, "moveMs": 0, "holdMs": 0, "easing": "smooth" },
+          { "pan": 40, "tilt": 0, "moveMs": 520, "holdMs": 40, "easing": "smooth" },
+          { "pan": 34, "tilt": 0, "moveMs": 90, "holdMs": 200, "easing": "smooth" }
+        ]
+      }
+    },
+    {
+      "key": "mechanical.error-shake",
+      "displayName": "Error shake",
+      "description": "A rapid, forceful side shake, sharper than No.",
+      "family": "mechanical",
+      "tags": ["mechanical", "erratic"],
+      "execution": "finite",
+      "endBehavior": "clearLayer",
+      "composition": { "layer": "overlay", "axes": ["pan"] },
+      "tempos": [{ "key": "normal", "durationMs": 1610 }],
+      "intensities": ["normal"],
+      "variants": ["default"],
+      "seedPolicy": "ignored",
+      "minimumMotionEngine": 2,
+      "auditionSafe": true,
+      "broadcastSafe": true,
+      "trajectory": {
+        "coordinate": "normalized",
+        "frames": [
+          { "pan": -22, "tilt": 0, "moveMs": 290, "holdMs": 20, "easing": "smooth" },
+          { "pan": 22, "tilt": 0, "moveMs": 580, "holdMs": 20, "easing": "smooth" },
+          { "pan": -14, "tilt": 0, "moveMs": 470, "holdMs": 20, "easing": "smooth" },
+          { "pan": 0, "tilt": 0, "moveMs": 190, "holdMs": 20, "easing": "smooth" }
         ]
       }
     }

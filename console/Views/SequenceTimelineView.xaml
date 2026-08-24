@@ -1102,7 +1102,7 @@
                                                 <Border Margin="0,0,7,4" Padding="9,5" CornerRadius="13" Cursor="Hand"
                                                         BorderThickness="3,1,1,1"
                                                         BorderBrush="{Binding Id, Converter={StaticResource AnimFamilyToBrushConv}}"
-                                                        ToolTip="Click to insert only on the explicitly armed target, or drag directly onto a target track and time. With no armed target, a click does nothing."
+                                                        ToolTip="{Binding Description}"
                                                         MouseLeftButtonDown="GestureChip_MouseLeftButtonDown"
                                                         MouseMove="GestureChip_MouseMove"
                                                         MouseLeftButtonUp="GestureChip_MouseLeftButtonUp"

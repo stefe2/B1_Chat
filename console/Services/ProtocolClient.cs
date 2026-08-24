@@ -25,7 +25,7 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
     private bool _gestureCatalogCompatible;
     private const string RequiredGestureCatalogId = "b1.core";
     private const string RequiredGestureCatalogRevision = "v2";
-    private const string RequiredGestureCatalogHash = "sha256:e709083e68363b6df628b29ca9009af7a99251f4688f6279f23cf1d91bd9cc94";
+    private const string RequiredGestureCatalogHash = "sha256:e659b6a7a868732a53b9038912431f25b0e99f3fef6c9d240d35ed4afec25b7e";
 
     public ObservableCollection<Droid> Droids { get; } = new();
     public ObservableCollection<MeshLink> MeshLinks { get; } = new();
@@ -217,18 +217,14 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
 
     private static bool GestureKeyFor(int gestureId, out string key)
     {
-        key = gestureId switch
+        var ordered = GestureSceneV2Persistence.Catalog.Ordered;
+        if (gestureId >= 0 && gestureId < ordered.Count)
         {
-            0 => "idle.center",
-            1 => "communicate.nod",
-            2 => "dialogue.talk",
-            3 => "attention.look-right",
-            4 => "attention.look-left",
-            5 => "attention.look-up",
-            6 => "attention.look-down",
-            _ => string.Empty,
-        };
-        return key.Length != 0;
+            key = ordered[gestureId].Key;
+            return true;
+        }
+        key = string.Empty;
+        return false;
     }
     public AnimDispatchState RenewAnimLease(ushort target, int meshSeq, ushort leaseMs) =>
         SendCmdRaw(new JsonObject

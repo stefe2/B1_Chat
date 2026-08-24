@@ -1,6 +1,6 @@
 # B1 Chat — Gesture Catalog and Sequencer V2
 
-Status: stages 1–6 complete; Stage 7 (new catalog content) next
+Status: stages 1–6 complete; Stage 7 (new catalog content) first batch built, bench audition pending
 Approved: 2026-08-15
 
 This document owns the target product direction, breaking-development policy and
@@ -359,6 +359,57 @@ Build and bench coherent batches: rest/transitions, attention, communication,
 emotion, dialogue, reaction and mechanical effects. Each entry must have a
 clear intent and pass simulation, trajectory validation and physical audition.
 Redundant or weak gestures are removed rather than preserved for compatibility.
+
+**First batch built, not yet bench-audited (2026-08-24):** 46 candidate
+gestures added to `catalog/gesture-catalog-v1.json` across all seven listed
+families (catalog now 53 entries; hash and `RequiredGestureCatalogHash` in
+`console/Services/ProtocolClient.cs` regenerated together, console and
+firmware `env:b1` both build clean). Every new entry is single-axis
+(`base`/`holdPose` for a held orientation, `overlay`/`clearLayer` for a
+transient expression that clears back to the persistent base) because the
+schema's composition rule forbids a two-axis `base`/`overlay` gesture; a
+diagonal or combined pose is a Scene-authoring composition of two existing
+single-axis gestures, not a new catalog entry. `seedPolicy` is `ignored` for
+all 46 — none has seed-driven variation implemented, so marking them
+`required` would show a non-functional Regenerate button. Every frame's
+`moveMs` was chosen so no segment moves faster than `attention.look-right`'s
+already bench-validated ~13 ms per percent-point of amplitude, deliberately
+slower than `communicate.nod`'s fastest segment, since none of these 46 has
+had a physical audition yet. **Not done:** simulation/trajectory-validation
+pass, physical audition on hardware, and pruning weak or redundant entries —
+the next step is bench testing this batch to decide what survives. Intensity,
+tempo and variant pickers remain deliberately unwired per Stage 6's note:
+every new entry, like the existing seven, declares exactly one option for
+each.
+
+**Console UI wiring fixed, same day:** the new batch was initially invisible
+in the running console — five separate places hardcoded an `animId`↔`key`
+table sized for the original 7 gestures (`SequencerViewModel.GestureLibrary`/
+`GestureFamilies`/`InsertGestureAt`, `ProtocolClient.GestureKeyFor`, and
+`GestureSceneV2Persistence.ResolveAnimId`/`ResolveGestureKey`, the last of
+which would throw on Save/Export for any of the 46). All five now derive from
+`GestureCatalogV2.Ordered` — the parsed catalog's own array order, which
+already matches the firmware generator's `GestureWireId` order — so the
+catalog file is the only place that needs to change to add, remove or
+reorder a gesture. The temporary legacy `animId 17` alias for
+`dialogue.talk` was dropped along with the hardcoded tables (no compatibility
+need per DEC-025's development-reset stance); one persistence test that used
+that alias was updated to reference `dialogue.talk` by its real, unchanged
+index (2). `AnimFamilyToBrushConverter`'s per-family palette gained `emotion`
+(rose) and `mechanical` (reusing brass) alongside the original `rest`/
+`attention`/`communication`/`dialogue`/`reaction`, and is now computed from
+the catalog's `family` field instead of a hardcoded animId table. Console
+build clean, full `console.tests` suite green (352/352).
+
+Each Gestures-palette chip's tooltip now shows that gesture's catalog
+`description` (`GestureLibraryEntry.Description`, new field) instead of the
+generic click/drag interaction hint — with 53 gestures, several with
+non-obvious names (`mechanical.lock-on`, `communicate.beat`,
+`attention.quizzical`...), knowing what a chip actually does before placing
+it matters more than before. The interaction hint itself was not lost; it
+just isn't repeated per chip (see
+[SEQUENCER-BEHAVIOR.md](SEQUENCER-BEHAVIOR.md)'s "Explicit gesture insertion
+target" section for that mechanic).
 
 ### Stage 8 — Simulation and observability
 

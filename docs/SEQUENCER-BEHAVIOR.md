@@ -70,6 +70,19 @@ There is no autonomous firmware gesture path. The standalone Animation card was
 removed during the V2 transition; the current gesture library remains inside the
 Sequencer.
 
+The Gestures palette, the inspector's GESTURE combo, click/drag insertion and
+serial dispatch all derive their `animId`↔`key` mapping from the same parsed
+catalog (`GestureCatalogV2.Ordered`, in catalog-file order, matching the
+firmware generator's `GestureWireId` order) instead of a hardcoded table —
+adding, removing or reordering a gesture only requires editing
+`catalog/gesture-catalog-v1.json`. Palette rows group by the catalog's
+`family` field and take their header/chip color from a small per-family
+palette (`AnimFamilyToBrushConverter`); an unrecognized family falls back to
+the neutral "rest" color rather than failing. Hovering a chip shows that
+gesture's catalog `description` (what the movement does), not an interaction
+hint — the click/drag mechanics are documented once, above, rather than
+repeated per chip.
+
 On firmware advertising `gestureLease`, that independent lease is the fail-closed
 fallback if cleanup cannot cross a lost serial or mesh path.
 
@@ -348,8 +361,10 @@ uses the same validator before the atomic write.
 
 Every stored clip carries a GUID, `gestureKey`, target, start, intensity, tempo,
 variant and seed. Continuous gestures carry their explicit `holdMs`; finite and
-immediate gestures must not. The currently authorable catalog slice is Center,
-Nod, Talk, Look left, Look right, Look up and Look down. Their names are dispatched directly to the V2 firmware catalog;
+immediate gestures must not. Every gesture the active catalog declares is
+authorable — the Gestures palette, the inspector's GESTURE combo, insertion
+and dispatch all read the parsed catalog directly rather than a fixed slice
+(see below). Gesture names are dispatched directly to the V2 firmware catalog;
 generated wire IDs do not exist in Scene JSON.
 
 ## Dirty state and atomic persistence

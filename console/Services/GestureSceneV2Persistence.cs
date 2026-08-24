@@ -16,10 +16,14 @@ internal static class GestureSceneV2Persistence
 {
     private const string CatalogRelativePath = "catalog/gesture-catalog-v1.json";
     private static readonly Lazy<GestureCatalogV2> CatalogLoader = new(LoadCatalog);
+    private static readonly Lazy<IReadOnlyDictionary<string, int>> AnimIdByKeyLoader = new(
+        () => Catalog.Ordered.Select((gesture, id) => (gesture.Key, Id: id))
+            .ToDictionary(pair => pair.Key, pair => pair.Id, StringComparer.Ordinal));
 
     internal static GestureCatalogV2 Catalog => CatalogLoader.Value;
+    private static IReadOnlyDictionary<string, int> AnimIdByKey => AnimIdByKeyLoader.Value;
 
-    internal static bool IsSupportedTemporaryAnimId(int animId) => animId is >= 0 and <= 6;
+    internal static bool IsSupportedTemporaryAnimId(int animId) => animId >= 0 && animId < Catalog.Ordered.Count;
 
     internal static string Serialize(SequenceSnapshot document, IReadOnlyList<SequenceTrackDto> tracks)
     {
@@ -125,32 +129,15 @@ internal static class GestureSceneV2Persistence
                     $"The gesture \"{authoredKey}\" is not in the active V2 catalog.");
             return authoredKey;
         }
-        return animId switch
-        {
-            0 => "idle.center",
-            1 => "communicate.nod",
-            2 => "dialogue.talk",
-            3 => "attention.look-right",
-            4 => "attention.look-left",
-            5 => "attention.look-up",
-            6 => "attention.look-down",
-            _ => throw new GestureSceneV2PersistenceException(
-                "The active V2 catalog currently offers Center, Nod and Talk only. Replace the clip before saving."),
-        };
+        if (animId >= 0 && animId < Catalog.Ordered.Count) return Catalog.Ordered[animId].Key;
+        throw new GestureSceneV2PersistenceException(
+            $"No gesture in the active V2 catalog corresponds to generated identifier {animId}. Replace the clip before saving.");
     }
 
-    private static int ResolveAnimId(string gestureKey) => gestureKey switch
-    {
-        "idle.center" => 0,
-        "communicate.nod" => 1,
-        "dialogue.talk" => 2,
-        "attention.look-right" => 3,
-        "attention.look-left" => 4,
-        "attention.look-up" => 5,
-        "attention.look-down" => 6,
-        _ => throw new GestureSceneV2PersistenceException(
-            $"No generated execution identifier exists for V2 gesture \"{gestureKey}\"."),
-    };
+    private static int ResolveAnimId(string gestureKey) => AnimIdByKey.TryGetValue(gestureKey, out var id)
+        ? id
+        : throw new GestureSceneV2PersistenceException(
+            $"No generated execution identifier exists for V2 gesture \"{gestureKey}\".");
 
     private static uint SeedFor(Guid id)
     {

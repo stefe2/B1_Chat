@@ -7,7 +7,7 @@
   "catalog": {
     "id": "b1.core",
     "revision": "v2",
-    "hash": "sha256:e709083e68363b6df628b29ca9009af7a99251f4688f6279f23cf1d91bd9cc94"
+    "hash": "sha256:e659b6a7a868732a53b9038912431f25b0e99f3fef6c9d240d35ed4afec25b7e"
   },
   "tracks": [{ "id": 43140, "name": "Master" }],
   "audioLanes": [],

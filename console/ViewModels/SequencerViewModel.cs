@@ -61,46 +61,33 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     // overlap within their own lane. Never sent to the master — console-side only.
     public ObservableCollection<AudioLane> AudioLanes { get; } = new();
 
-    // The authoring surface now offers the V2 catalog slice only. Its temporary
-    // execution bridge is confined to GestureSceneV2Persistence.
+    // The authoring surface offers every gesture the active catalog declares. AnimId is the
+    // gesture's index in catalog file order — the same order the firmware generator assigns
+    // GestureWireId from — computed fresh from GestureSceneV2Persistence.Catalog rather than
+    // hand-typed, so the catalog file is the only place that needs to change to add a gesture.
     public IReadOnlyList<GestureLibraryEntry> GestureLibrary { get; } =
-    [
-        new() { Id = 0, Name = "Center" },
-        new() { Id = 1, Name = "Nod" },
-        new() { Id = 2, Name = "Talk" },
-        new() { Id = 3, Name = "Look right" },
-        new() { Id = 4, Name = "Look left" },
-        new() { Id = 5, Name = "Look up" },
-        new() { Id = 6, Name = "Look down" },
-    ];
+        GestureSceneV2Persistence.Catalog.Ordered
+            .Select((gesture, id) => ToLibraryEntry(gesture, id))
+            .ToList();
 
-    public IReadOnlyList<GestureFamily> GestureFamilies { get; } =
-    [
-        new GestureFamily
-        {
-            Label = "ESSENTIAL",
-            ColorAnimId = 0,
-            Gestures = [new GestureLibraryEntry { Id = 0, Name = "Center" }, new GestureLibraryEntry { Id = 1, Name = "Nod" }],
-        },
-        new GestureFamily
-        {
-            Label = "DIALOGUE",
-            ColorAnimId = 2,
-            Gestures = [new GestureLibraryEntry { Id = 2, Name = "Talk" }],
-        },
-        new GestureFamily
-        {
-            Label = "ATTENTION",
-            ColorAnimId = 3,
-            Gestures =
-            [
-                new GestureLibraryEntry { Id = 3, Name = "Look right" },
-                new GestureLibraryEntry { Id = 4, Name = "Look left" },
-                new GestureLibraryEntry { Id = 5, Name = "Look up" },
-                new GestureLibraryEntry { Id = 6, Name = "Look down" },
-            ],
-        },
-    ];
+    public IReadOnlyList<GestureFamily> GestureFamilies { get; } = BuildGestureFamilies();
+
+    private static GestureLibraryEntry ToLibraryEntry(GestureDefinitionV2 gesture, int id) =>
+        new() { Id = id, Name = gesture.DisplayName, Description = gesture.Description };
+
+    private static List<GestureFamily> BuildGestureFamilies() =>
+        GestureSceneV2Persistence.Catalog.Ordered
+            .Select((gesture, id) => (Gesture: gesture, Id: id))
+            .GroupBy(entry => entry.Gesture.Family)
+            .Select(group => new GestureFamily
+            {
+                Label = group.Key.ToUpperInvariant(),
+                ColorAnimId = group.First().Id,
+                Gestures = group
+                    .Select(entry => ToLibraryEntry(entry.Gesture, entry.Id))
+                    .ToList(),
+            })
+            .ToList();
 
     public IReadOnlyDictionary<int, int> AnimDurationMsLookup => _protocol.AnimDurationMs;
     private double _totalDurationMs;
@@ -451,7 +438,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         _audioProbe = audioProbe ?? new AudioProbe();
         _waveformDecoder = waveformDecoder ?? WaveformService.Shared;
         _preflightService = preflightService ?? new SequencerPreflightService(
-            gestureNames: new[] { "Center", "", "Nod", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "Talk" });
+            gestureNames: GestureSceneV2Persistence.Catalog.Ordered.Select(g => g.DisplayName).ToList());
         _audioPlayer.PlaybackFailed += OnAudioPlaybackFailed;
         _timerScheduler = timerScheduler ?? new ThreadPoolPlaybackTimerScheduler();
         _executionTimerScheduler = executionTimerScheduler ?? new ThreadPoolPlaybackTimerScheduler();
@@ -1132,20 +1119,11 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         if (!CanEditSequence || track == null) return;
         ExecuteSequenceEdit(() =>
         {
+            var ordered = GestureSceneV2Persistence.Catalog.Ordered;
             var step = new SequenceStep
             {
                 AnimId = animId,
-                GestureKey = animId switch
-                {
-                    0 => "idle.center",
-                    1 => "communicate.nod",
-                    2 or 17 => "dialogue.talk",
-                    3 => "attention.look-right",
-                    4 => "attention.look-left",
-                    5 => "attention.look-up",
-                    6 => "attention.look-down",
-                    _ => "",
-                },
+                GestureKey = animId >= 0 && animId < ordered.Count ? ordered[animId].Key : "",
                 Target = track.Id,
                 StartMs = Math.Max(0, startMs),
                 Seed = (uint)Random.Shared.NextInt64(1, (long)uint.MaxValue + 1),
