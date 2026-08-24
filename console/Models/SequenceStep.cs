@@ -35,6 +35,10 @@ public partial class SequenceStep : ObservableObject
     public bool IsInfinite => DurationKind == AnimationDurationKind.Infinite ||
         GestureKey == "dialogue.talk" || AnimId is 16 or 17;
 
+    // Matches the catalog's seedPolicy:"required" gestures (communicate.nod, dialogue.talk) —
+    // see catalog/gesture-catalog-v1.json. Everything else declares seedPolicy:"ignored".
+    public bool RequiresSeed => GestureKey is "communicate.nod" or "dialogue.talk";
+
     // Transient view state: true while the clip is being held/dragged on the timeline
     // (dimmed to show it's "in hand"). Never serialized — same idea as AudioClip.Dragging.
     [ObservableProperty] private bool _dragging;
@@ -51,7 +55,11 @@ public partial class SequenceStep : ObservableObject
     [ObservableProperty] private string _executionTone = "none";
 
     partial void OnAnimIdChanged(int value) => OnPropertyChanged(nameof(IsInfinite));
-    partial void OnGestureKeyChanged(string value) => OnPropertyChanged(nameof(IsInfinite));
+    partial void OnGestureKeyChanged(string value)
+    {
+        OnPropertyChanged(nameof(IsInfinite));
+        OnPropertyChanged(nameof(RequiresSeed));
+    }
     partial void OnDurationKindChanged(AnimationDurationKind value) => OnPropertyChanged(nameof(IsInfinite));
 
     public SequenceStep Clone() => new()

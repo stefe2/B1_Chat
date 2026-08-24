@@ -981,7 +981,7 @@ public sealed class SequencerPlaybackIntegrationTests
     {
         static string Fingerprint(SequencerViewModel vm)
         {
-            var steps = string.Join(";", vm.Steps.Select(s => $"{s.AnimId},{s.Target},{s.StartMs},{s.EndAfterMs}"));
+            var steps = string.Join(";", vm.Steps.Select(s => $"{s.AnimId},{s.Target},{s.StartMs},{s.EndAfterMs},{s.Seed}"));
             var lanes = string.Join(";", vm.AudioLanes.Select(l =>
                 $"{l.Label}[{string.Join("/", l.Clips.Select(c => $"{c.FilePath},{c.DurationMs},{c.StartMs},{c.Loop}"))}]"));
             return $"{vm.Name}|{vm.Loop}|{vm.SequenceEndMs}|{steps}|{lanes}";
@@ -1016,6 +1016,14 @@ public sealed class SequencerPlaybackIntegrationTests
                 vm.Steps.Add(new SequenceStep { AnimId = 17, Target = 0xFFFF, StartMs = 100 });
                 vm.SelectedStep = vm.Steps[0];
             }, vm => vm.NudgeEndLongerCommand.Execute(null)),
+            ("regenerate gesture seed", vm =>
+            {
+                vm.Steps.Add(new SequenceStep
+                {
+                    AnimId = 1, GestureKey = "communicate.nod", Target = 0xFFFF, StartMs = 100, Seed = 111,
+                });
+                vm.SelectedStep = vm.Steps[0];
+            }, vm => vm.RegenerateSeedCommand.Execute(null)),
             ("duplicate gesture", vm =>
             {
                 vm.Steps.Add(new SequenceStep { AnimId = 2, Target = 0xFFFF, StartMs = 100 });

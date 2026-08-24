@@ -9,4 +9,9 @@ public class GestureLibraryEntry
 {
     public int Id { get; init; }
     public string Name { get; init; } = "";
+
+    // DarkComboBoxStyle displays the closed selection through ToString(), not DisplayMemberPath
+    // (see docs/KNOWN-PITFALLS.md) — the inspector's GESTURE combo needs this the same way
+    // TimelineTrack needs it for the TARGET TRACK combo.
+    public override string ToString() => Name;
 }

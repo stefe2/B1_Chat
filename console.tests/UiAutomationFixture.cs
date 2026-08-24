@@ -51,14 +51,26 @@ public sealed class UiAppFixture : IDisposable
         // land nowhere useful. Discovered empirically while building this harness.
         MainWindow.Patterns.Window.PatternOrDefault?.SetWindowVisualState(WindowVisualState.Maximized);
         Thread.Sleep(300);
-        var mainScroll = MainWindow.FindFirstDescendant(cf => cf.ByAutomationId("MainScroll"));
-        if (mainScroll != null)
-        {
-            var r = mainScroll.BoundingRectangle;
-            Mouse.MoveTo(new System.Drawing.Point(r.X + 50, r.Y + 50));
-            for (var i = 0; i < 20; i++) Mouse.Scroll(-5);
-        }
+        ScrollMainPageToBottom();
         Thread.Sleep(300);
+    }
+
+    /// <summary>
+    /// Scrolls the outer page ScrollViewer ("MainScroll") to the bottom, where the Sequencer
+    /// card — and inside it, the gesture-library chip row — lives. Done once at startup, but the
+    /// Sequencer card's own height changes as clips/lanes/panels (Preflight, VARIATION, etc.) are
+    /// added and removed across many tests sharing this one window instance, which can drift the
+    /// chip row's actual screen position away from where it was when a coordinate was last
+    /// computed. Called again before every chip click rather than trusting the one-time startup
+    /// scroll to still hold many tests later.
+    /// </summary>
+    private void ScrollMainPageToBottom()
+    {
+        var mainScroll = MainWindow.FindFirstDescendant(cf => cf.ByAutomationId("MainScroll"));
+        if (mainScroll == null) return;
+        var r = mainScroll.BoundingRectangle;
+        Mouse.MoveTo(new System.Drawing.Point(r.X + 50, r.Y + 50));
+        for (var i = 0; i < 20; i++) Mouse.Scroll(-5);
     }
 
     /// <summary>
@@ -89,6 +101,8 @@ public sealed class UiAppFixture : IDisposable
     /// </summary>
     public void ClickGestureChip(string gestureName)
     {
+        ScrollMainPageToBottom();
+        Thread.Sleep(100);
         var chip = MainWindow.FindFirstDescendant(cf => cf.ByName(gestureName).And(cf.ByControlType(ControlType.Text)))
             ?? throw new InvalidOperationException($"Gesture chip '{gestureName}' not found.");
         chip.Click();
@@ -144,13 +158,26 @@ public sealed class UiAppFixture : IDisposable
             cf => cf.ByName("New").And(cf.ByControlType(ControlType.Button)))
             ?? throw new InvalidOperationException("'New' button not found.");
         newButton.Click();
-        Thread.Sleep(300);
 
-        foreach (var w in App.GetAllTopLevelWindows(Automation))
+        // Poll for the discard dialog rather than a single fixed-delay check, and search for it
+        // as a descendant of MainWindow itself rather than (only) via App.GetAllTopLevelWindows.
+        // Real, empirically confirmed finding from this session (via screenshot capture, a raw
+        // Win32 EnumWindows probe, and Automation.GetDesktop() — all agreeing): in this
+        // environment, every owned window this app creates (SceneDecisionWindow, SceneNameWindow,
+        // SceneBrowserWindow, FirmwareWindow, HelpWindow — modal and non-modal alike) has its
+        // content exposed by UIA as part of MainWindow's own automation subtree, not as a
+        // separate top-level window — App.GetAllTopLevelWindows() and even
+        // Automation.GetDesktop() never list them, and no distinct HWND for one is ever found for
+        // this process. The windows genuinely open and render — they're just not independently
+        // reachable the way FindOpenContextMenu's top-level-window search finds a right-click
+        // ContextMenu Popup. Searching MainWindow's own subtree finds their content reliably
+        // instead (see UiAutomationSmokeTests2.cs's Firmware/Help tests for the same pattern, and
+        // CloseOwnedWindowByTitle there for why closing such a window needs a raw WM_CLOSE by
+        // HWND rather than Alt+F4 or a FlaUI Window.Close()).
+        for (var i = 0; i < 10; i++)
         {
-            string wName; try { wName = w.Name; } catch { continue; }
-            if (wName == MainWindow.Name) continue;
-            var discard = w.FindFirstDescendant(cf => cf.ByName("Continue Without Saving"));
+            Thread.Sleep(150);
+            var discard = MainWindow.FindFirstDescendant(cf => cf.ByName("Continue Without Saving"));
             if (discard == null) continue;
             discard.Click();
             Thread.Sleep(300);

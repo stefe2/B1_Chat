@@ -986,7 +986,7 @@
                         <TextBlock Text="SELECTED CLIP" Style="{StaticResource FieldLabelStyle}" Margin="0,0,0,10" />
 
                         <TextBlock Text="GESTURE" Style="{StaticResource FieldLabelStyle}" Margin="0,0,0,4" />
-                        <ComboBox Style="{StaticResource DarkComboBoxStyle}" ItemsSource="{Binding GestureLibrary}"
+                        <ComboBox x:Name="GestureComboBox" Style="{StaticResource DarkComboBoxStyle}" ItemsSource="{Binding GestureLibrary}"
                                   DisplayMemberPath="Name" SelectedValuePath="Id"
                                   SelectedValue="{Binding SelectedStepAnimId}" Margin="0,0,0,4"
                                   ToolTip="Replace the selected clip's gesture while keeping its start time and target track." />
@@ -995,7 +995,7 @@
                                    Fill="{Binding SelectedStep.AnimId, Converter={StaticResource AnimFamilyToBrushConv}}" />
 
                         <TextBlock Text="TARGET TRACK" Style="{StaticResource FieldLabelStyle}" Margin="0,0,0,4" />
-                        <ComboBox Style="{StaticResource DarkComboBoxStyle}" ItemsSource="{Binding Tracks}"
+                        <ComboBox x:Name="TargetTrackComboBox" Style="{StaticResource DarkComboBoxStyle}" ItemsSource="{Binding Tracks}"
                                   DisplayMemberPath="Label" SelectedItem="{Binding SelectedStepTrack}" Margin="0,0,0,10"
                                   ToolTip="Move the selected gesture clip to another target track." />
 
@@ -1029,6 +1029,19 @@
                                         Command="{Binding NudgeEndLongerCommand}"
                                         ToolTip="End this TALK or POWER_DOWN clip 0.1 second later." />
                             </UniformGrid>
+                        </StackPanel>
+
+                        <StackPanel Visibility="{Binding SelectedStep.RequiresSeed, Converter={StaticResource BoolToVisConv}}">
+                            <TextBlock Text="VARIATION" Style="{StaticResource FieldLabelStyle}" Margin="0,0,0,4" />
+                            <Border Style="{StaticResource ValuePillStyle}" HorizontalAlignment="Stretch" Margin="0,0,0,4"
+                                    ToolTip="The deterministic seed behind this clip's pose variation.">
+                                <TextBlock Style="{StaticResource ValuePillTextStyle}"
+                                           Text="{Binding SelectedStep.Seed, StringFormat=Seed {0}}" />
+                            </Border>
+                            <Button Content="Regenerate" Style="{StaticResource MiniButtonStyle}" Margin="0,0,0,10"
+                                    HorizontalAlignment="Stretch"
+                                    Command="{Binding RegenerateSeedCommand}"
+                                    ToolTip="Give this clip a new random seed. Duplicate always keeps the original clip's seed instead." />
                         </StackPanel>
 
                         <UniformGrid Columns="2">

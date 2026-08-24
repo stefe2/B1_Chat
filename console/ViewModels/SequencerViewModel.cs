@@ -410,6 +410,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         NudgeStartBackwardCommand.NotifyCanExecuteChanged();
         NudgeEndLongerCommand.NotifyCanExecuteChanged();
         NudgeEndShorterCommand.NotifyCanExecuteChanged();
+        RegenerateSeedCommand.NotifyCanExecuteChanged();
         AddAudioLaneCommand.NotifyCanExecuteChanged();
         DeleteAudioLaneCommand.NotifyCanExecuteChanged();
         ClearTimelineCommand.NotifyCanExecuteChanged();
@@ -1147,6 +1148,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
                 },
                 Target = track.Id,
                 StartMs = Math.Max(0, startMs),
+                Seed = (uint)Random.Shared.NextInt64(1, (long)uint.MaxValue + 1),
             };
             Steps.Add(step);
             SelectedStep = step;
@@ -1183,6 +1185,17 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         if (!CanEditSequence || SelectedStep is not { IsInfinite: true }) return;
         ExecuteSequenceEdit(() => SelectedStep.EndAfterMs = Math.Max(100, SelectedStep.EndAfterMs - 100));
         OnPropertyChanged(nameof(SelectedStepEndAfterMs));
+    }
+
+    // A fresh deterministic seed for a gesture whose catalog entry declares
+    // seedPolicy:"required" (SequenceStep.RequiresSeed) — Duplicate intentionally preserves the
+    // original seed instead (see GESTURE-CATALOG-SCHEMA-V1.md); this is the separate explicit
+    // variation action that document anticipates.
+    [RelayCommand(CanExecute = nameof(CanEditSequence))]
+    private void RegenerateSeed()
+    {
+        if (!CanEditSequence || SelectedStep is not { RequiresSeed: true }) return;
+        ExecuteSequenceEdit(() => SelectedStep.Seed = (uint)Random.Shared.NextInt64(1, (long)uint.MaxValue + 1));
     }
 
     // --- Audio lanes/clips -------------------------------------------------------

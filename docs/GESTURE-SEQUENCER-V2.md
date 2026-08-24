@@ -1,6 +1,6 @@
 # B1 Chat — Gesture Catalog and Sequencer V2
 
-Status: stages 1–5 complete; Stage 6 (deterministic clip properties) next
+Status: stages 1–6 complete; Stage 7 (new catalog content) next
 Approved: 2026-08-15
 
 This document owns the target product direction, breaking-development policy and
@@ -316,6 +316,8 @@ Exit: pure trajectory tests plus reduced-amplitude hardware checks pass. Met
 
 ### Stage 6 — Deterministic clip properties
 
+Status: complete for what the current catalog actually offers (2026-08-24).
+
 - Wire the approved intensity and tempo presets into the editor and runtime.
 - Wire the approved variant, seed controls and continuous-gesture hold duration
   into the editor and runtime.
@@ -324,6 +326,32 @@ Exit: pure trajectory tests plus reduced-amplitude hardware checks pass. Met
 
 Exit: saved Scenes replay the same planned gestures independent of hidden
 per-droid animation configuration.
+
+**What was already done before this stage was picked up:** continuous-gesture
+hold duration (`EndAfterMs`, the ±0.1s buttons in the "SELECTED CLIP"
+inspector), Dirty/Undo/Redo/duplication/persistence for every currently-
+editable property, and refuse-not-degrade (catalog-hash compatibility fails
+closed; `SceneV2Parser.ValidateAgainstCatalog` rejects an unsupported
+tempo/intensity/variant combination) were all already implemented.
+
+**Implemented this stage (2026-08-24):** the one real gap — every newly
+inserted gesture previously kept `Seed = 0` forever, with no way to change
+it. `InsertGestureAt` now assigns a fresh random seed on insertion, and a
+"Regenerate" button appears in the inspector's new VARIATION section for
+gestures whose catalog entry declares `seedPolicy:"required"`
+(`communicate.nod`, `dialogue.talk` today — driven by
+`SequenceStep.RequiresSeed`, not a hardcoded UI list), wired through the same
+Dirty/Undo transaction as every other clip edit. Duplicate still preserves
+the original seed, per `GESTURE-CATALOG-SCHEMA-V1.md`'s existing intent — this
+is the separate explicit variation action that document anticipated.
+
+**Deliberately not wired: intensity, tempo and variant pickers.** The
+current catalog declares exactly one option for each of these on every
+gesture (`normal`/`normal`/`default`) — see
+`catalog/gesture-catalog-v1.json`. A dropdown offering a single choice has no
+functional value. Building this UI is deferred until Stage 7 gives at least
+one gesture a real second option to choose between; wiring it now would be
+speculative work against a UI surface nothing yet needs.
 
 ### Stage 7 — New catalog content
 

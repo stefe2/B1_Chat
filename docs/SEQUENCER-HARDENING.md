@@ -99,7 +99,7 @@ along is the Sequencer".
 | E | Deterministic scheduler and performance | 6 / 6 | 0 / 1 |
 | F | Duration and audio robustness | 7 / 8 | — |
 | G | Preflight and ergonomics | 11 / 12 | 0 / 7 |
-| H | Automated and hardware validation | 4 / 8 | — |
+| H | Automated and hardware validation | 5 / 8 | — |
 | I | Scene & Show System (future) | — | 0 / 22 |
 | J | Commissioning and servo configuration safety | 0 / 2 | — |
 | K | Project workspace (future) | — | 0 / 8 |
@@ -426,7 +426,7 @@ SEQ-G17, SEQ-G18.
   migration path), this may be safe to delete rather than maintain, but that is
   a separate cleanup decision, not a SEQ-H04 gap.
 
-### [~] SEQ-H06 — Add UI interaction smoke tests/checklists
+### [x] SEQ-H06 — Add UI interaction smoke tests/checklists
 
 - **Priority:** P2
 - **Depends on:** SEQ-C07, SEQ-G01 through SEQ-G06.
@@ -435,33 +435,61 @@ SEQ-G17, SEQ-G18.
   context menus, and accessibility via keyboard where supported.
 - **Validation:** automated UI tests where stable; otherwise versioned manual
   checklist with evidence.
-- **Implemented (2026-08-24):** the project's first real UI-automation
-  infrastructure, via FlaUI/UIA3 driving the compiled `b1-chat-console.exe`
-  (`console.tests/UiAutomationFixture.cs`, `UiAutomationSmokeTests.cs`) rather
-  than the prior static-XAML-inspection style. One shared launched instance
-  per test run (WPF startup + UIA attach latency), collection-level
-  parallelization disabled. Real, repeatedly-verified passing coverage:
-  app launch/main window identity; disabled controls (Undo/Redo start
-  disabled, enable after a real document edit, Undo restores the disabled
-  baseline); Snap checkbox toggling and round-tripping its bound value;
-  right-click context menu on an inserted gesture clip showing
-  Duplicate/Delete; Delete-key removal of the selected clip via a real key
-  press (which required first discovering that clicking a clip's `Border`
-  never moves WPF keyboard focus — a real, documented finding, not a test
-  artifact). No production XAML changes were needed;
-  `AutomationProperties.AutomationId` already mirrors `x:Name` in this build.
-- **Deliberately not covered, with reasons (see the test file's trailing
-  remarks for detail):** Fit (no stable non-implementation-detail assertion
-  found); drag/capture-loss (harder to make non-flaky through synthetic
-  input, left for later); arming (SEQ-A08's Edit/Ready/Armed/Playing
-  lifecycle is deferred and doesn't exist to test — arming a *track*, a
-  different and already-implemented concept, is exercised via
-  `ArmBroadcastTrack`); broadcast confirmation, Play/Restart/Stop, SAFE/E-STOP
-  and preflight navigation (this dev machine's console auto-reconnects to a
-  real droid fleet over USB serial on launch, so exercising anything that
-  dispatches or risks dispatching a real anim/audio/servo command belongs to
-  the hardware-gated SEQ-H07 protocol, not this local smoke suite); inspector
-  (no reachable panel/AutomationId confirmed in this pass).
+- **Implemented (2026-08-24, two passes):** the project's first real
+  UI-automation infrastructure, via FlaUI/UIA3 driving the compiled
+  `b1-chat-console.exe` (`console.tests/UiAutomationFixture.cs`,
+  `UiAutomationSmokeTests.cs`, `UiAutomationSmokeTests2.cs`) rather than the
+  prior static-XAML-inspection style. One shared launched instance per test
+  run, collection-level parallelization disabled, and (added in the second
+  pass) `DisableTestParallelization` at the assembly level after cross-
+  collection CPU contention was found to make synthetic clicks silently miss
+  under full-suite load (see `docs/KNOWN-PITFALLS.md`). 29 tests, verified
+  reliable across 3+ consecutive full-suite runs, no residual flakiness.
+  Real, passing coverage now spans every item in the acceptance list except
+  Calibration's own panel (see below): app launch/window identity; disabled
+  controls (Undo/Redo, and the real — not assumed — Visibility-gated, not
+  disabled, contract for Delete/Duplicate/Regenerate); Snap and Fit (zoom
+  state changes, not a pinned formula); right-click context menus (clip
+  Duplicate/Delete, Scene "Save As…"); Delete/Copy/Paste/Undo/Redo via real
+  keyboard shortcuts; a real synthetic mouse drag moving a clip's `StartMs`;
+  Preflight open/close (re-examined and confirmed safe — DEC-024 establishes
+  it never dispatches anything); the Firmware panel's port combo and every
+  local-only control (Rescan, role toggle, Advanced options — never Flash);
+  the read-only Mesh Topology panel; the Scene Library browser and Scene name
+  dialog (both exercised without touching the real Local Library on disk);
+  the Help window; a rich tooltip rendering real text, not a stringified type
+  name (regression guard for the `ContentPresenter` tooltip fix); and the
+  shorter-clip-wins-the-click overlap/z-order behavior (regression guard for
+  the `ItemContainerStyle`/`Panel.ZIndex` fix), including the geometric sanity
+  check that it's real position-based hit-testing and not merely
+  "last-inserted always wins." Two `x:Name` additions in
+  `SequenceTimelineView.xaml` (mirrored to `AutomationId`, this project's
+  existing convention) were the only production changes needed.
+- **Two real bugs found and fixed while building this coverage, beyond the
+  GESTURE-combo `ToString()` bug already logged under SEQ-H02/KNOWN-PITFALLS:**
+  a `ResetToCleanNewScene` test-fixture bug (searched for a discard dialog via
+  `GetAllTopLevelWindows`, which never lists this app's owned windows in this
+  environment — see `docs/KNOWN-PITFALLS.md`), and a DPI-scale unit mismatch
+  in one geometry test's own click-point math (logical WPF pixels added
+  directly to a physical FlaUI screen coordinate) — both fixed, both
+  documented in `docs/KNOWN-PITFALLS.md` under "UI test automation" so future
+  test authors don't repeat either.
+- **Deliberately not covered, with reasons (see the test files' trailing
+  remarks for detail):** the Calibration panel/window — unlike Firmware and
+  Help, it has no unconditional entry point (only opens pre-targeted at a
+  live Droid row) and every one of its controls sends a real Preview/SetCalib
+  movement or `RequestCalib` command to hardware the instant it's touched, so
+  there is no safe, hardware-state-independent path to it through the real
+  UI; arming (SEQ-A08's Edit/Ready/Armed/Playing lifecycle is deferred and
+  doesn't exist to test — arming a *track*, a different, already-implemented
+  concept, is exercised via `ArmBroadcastTrack`); broadcast confirmation,
+  Play/Restart/Stop, SAFE/E-STOP (this dev machine's console auto-reconnects
+  to a real droid fleet over USB serial on launch, so exercising anything
+  that dispatches or risks dispatching a real anim/audio/servo command
+  belongs to the hardware-gated SEQ-H07 protocol, not this local smoke
+  suite); a dedicated "inspector" panel distinct from the Sequencer's own
+  "SELECTED CLIP" panel (which the Category A/E tests above already exercise
+  directly) was not otherwise found.
 
 ### [~] SEQ-H07 — Execute real-hardware timing and safety protocol
 
@@ -572,9 +600,9 @@ sequential. Unless a test seam must be introduced first, follow this order:
     reliability baseline is complete and their shared design is approved.
 
 Steps 1 through 7 are complete. Step 8 is code-complete; only SEQ-F01's bench
-measurement remains. Step 10 (validation gate): SEQ-H02 and SEQ-H04 are
-complete (2026-08-24); SEQ-H06 has real, if partial, automated coverage
-(2026-08-24, see its entry for what's covered vs. deliberately deferred);
+measurement remains. Step 10 (validation gate): SEQ-H02, SEQ-H04 and SEQ-H06
+are complete (2026-08-24, see SEQ-H06's entry for what's covered vs.
+deliberately out of automated reach — Calibration's hardware-only panel);
 SEQ-H03/H07 remain partially complete pending hardware; SEQ-H08 (final
 regression/release gate) is not started. Closed items are in
 [SEQUENCER-DONE.md](SEQUENCER-DONE.md). Further Sequencer feature work is

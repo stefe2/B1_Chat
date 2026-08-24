@@ -171,12 +171,79 @@ relevant behavior.
   the same explicitly.
 - `DarkComboBoxStyle` displays the closed selection through `ToString()`, so
   every model used as a `ComboBox.ItemsSource` needs an appropriate override.
+  `TimelineTrack` and `Droid` already had it; `GestureLibraryEntry` did not and
+  showed its full type name in the Sequencer inspector's GESTURE combo until
+  fixed. The closed box's rendered text has no independently reachable UIA
+  surface for this custom, non-editable `ControlTemplate` (confirmed: `Value`
+  pattern unsupported, `Name`/`LegacyIAccessible` blank, no descendant tree
+  while collapsed, `FromPoint` resolves no deeper than the `ComboBox` itself)
+  — a live UI test can only guard this class of bug at the model's `ToString()`
+  level, or by asserting the live `SelectionItem` pattern and dropdown-item
+  names never contain a type/namespace fragment (see
+  `console.tests/SequenceStepModelTests.cs` and
+  `console.tests/UiAutomationSmokeTests2.cs`'s Category A remarks).
 - Debounced sliders must snapshot target ID and values and cancel on selection
   changes; programmatic loads must suppress write-back hooks.
 - WPF `MediaPlayer` teardown is dispatcher-affine. A probe may await without a
   synchronization context, but `Stop`, `Close` and event detachment must be
   marshalled back to the player's owning dispatcher; catching the cross-thread
   exception only hides a live native media resource.
+
+## UI test automation (FlaUI/UIA3)
+
+- FlaUI's `BoundingRectangle`/`Mouse` coordinates are real physical screen
+  pixels; WPF's own layout values (`PxPerSecond`/`PxPerMs`, and anything
+  bound to them like the Sequencer zoom slider) are device-independent
+  (96-DPI logical) pixels. The two only match 1:1 at 100% display scaling.
+  Computing a click point by adding a distance derived from a logical
+  px/ms rate onto a physical-pixel base (read from a `BoundingRectangle`)
+  silently lands short on any scaled display — a real, reproducible failure
+  found this session in `OverlappingClips_TheShorterTopmostClipReceivesTheClick`.
+  Multiply the logical distance by the real DPI scale first
+  (`GetDpiForWindow(hwnd) / 96.0`, `hwnd` from
+  `AutomationElement.Properties.NativeWindowHandle`) before combining it with
+  a physical-pixel coordinate. A small fixed physical-pixel margin (e.g. "20px
+  from this element's edge") needs no such conversion and is the safer choice
+  wherever a precise logical distance isn't actually required.
+- A shared-instance UI-automation test collection
+  (`console.tests/UiAutomationFixture.cs`) drives one real running window with
+  timed synthetic input. Letting it run in parallel with the rest of the
+  test assembly (xUnit's default across different collections) was observed
+  to starve that window's UI thread of CPU under full-suite load and cause
+  synthetic clicks to silently miss — 100% reliable in isolation, reproducibly
+  flaky only alongside the ~330 other tests. Fixed with
+  `[assembly: CollectionBehavior(DisableTestParallelization = true)]`
+  (`console.tests/AssemblyInfo.cs`) rather than papering over the race with
+  more retries.
+- An `ItemsControl`-generated container whose `DataTemplate` root has no
+  explicit `Width`/`Height` (e.g. a bare `Canvas` positioning a `Border` via
+  `Canvas.Left`) does not itself report a `BoundingRectangle` spanning the
+  visible content — only its descendant elements with real rendered size
+  (a `TextBlock` label, say) do. Compute click points from a reliable
+  descendant's rectangle, not the item container's own.
+- A gesture clip's own accessible `Name` for a `TextBlock` bound to a model
+  object without a `ToString()` override is that model's full type name
+  (e.g. `"b1_chat_console.Models.SequenceStep"`) — useful as a stable,
+  content-independent selector for "find every inserted clip container"
+  (`FindStepItems()`), distinct from each clip's own visible gesture-name
+  label.
+- Every owned window this app creates (`SceneDecisionWindow`,
+  `SceneNameWindow`, `SceneBrowserWindow`, `FirmwareWindow`, `HelpWindow` —
+  modal and non-modal alike) has its content exposed by UIA as part of
+  `MainWindow`'s own automation subtree in this environment, not as an
+  independent entry in `Application.GetAllTopLevelWindows()` or even
+  `Automation.GetDesktop()`. Search `MainWindow`'s own descendants for their
+  content instead of treating them as separate windows; closing one needs a
+  raw `WM_CLOSE` posted to its own HWND (found via `EnumWindows` scoped to
+  the app's process ID), since neither Alt+F4 (depends on real OS keyboard
+  focus, and was observed to hit `MainWindow` instead under load) nor a FlaUI
+  `Window.Close()` reaches it.
+- A synthetic click that silently misses under load can be indistinguishable
+  from "correctly did nothing" unless verified by the actual expected
+  outcome (e.g. the newly-inserted clip's own label name), not merely a
+  count change — a stale retry that re-clicks on every observed miss risks a
+  genuine duplicate action if the original actually did land, just late. Only
+  retry once the relevant count has proven nothing happened at all.
 
 ## Historical decisions retained for safety
 

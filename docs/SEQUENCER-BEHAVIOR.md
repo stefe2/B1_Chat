@@ -215,6 +215,16 @@ Duplicate's own placement exactly (+200ms from the copied step's stored
 `StartMs`, selected), so the two paths read as one behavior regardless of
 which is used.
 
+A newly inserted gesture clip receives a fresh random `Seed` (not a fixed
+default), matching Duplicate's copy-preserves-seed rule from the other
+direction: insertion should not always reproduce the same pose variation
+either. For a gesture whose catalog entry declares `seedPolicy:"required"`
+(`communicate.nod`, `dialogue.talk` today), the inspector's "SELECTED CLIP"
+panel shows a VARIATION section with the clip's current seed and a
+"Regenerate" button that assigns a new random one through the same
+Dirty/Undo transaction as every other clip edit. Gestures that ignore their
+seed never show this section.
+
 Two clips overlapping in time on the same track are never ambiguous. The
 narrowest (shortest resolved duration) clip covering a click point is always
 the one selected, deterministically — never whichever happens to be topmost by
