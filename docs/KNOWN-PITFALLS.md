@@ -82,6 +82,13 @@ relevant behavior.
 - Animation keyframes are offsets and must use
   `ServoEngine::setTargetOffset()`, so persisted calibration centers are kept.
 - Audio is console-side only; the DFPlayer is retired from firmware.
+- `ServoEngine::setLimits()` only updates the calibrated range/center; it never
+  moves the current-position state. Any call site that loads calibration
+  (boot, mesh `MSG_CALIB`, console `calib`) must follow it with `head.center()`
+  the way `applyCalib()` does. Boot once skipped this: a droid that persisted
+  `servosEnabled=true` would snap to the generic pre-calibration default
+  (`SERVO_PAN_CENTER`/`SERVO_TILT_CENTER`) instead of its real calibrated
+  center on every restart.
 
 ## WPF layout and input
 

@@ -798,6 +798,12 @@ void setup() {
         const ServoCalib c = Config.getCalib(Mesh.myId());
         head.setLimits(c.panMin, c.panCenter, c.panMax, c.tiltMin, c.tiltCenter, c.tiltMax);
         head.setReversed(c.panReversed != 0, c.tiltReversed != 0);
+        // Matches applyCalib(): setLimits() alone does not move the servo's
+        // current-position state, which is still the generic pre-calibration
+        // default set by head.begin(). Without this, a droid that boots with
+        // servosEnabled already persisted true snaps to that generic center
+        // instead of its calibrated one.
+        head.center();
         LOGF("mesh ready, id=%04X (servos %s)", Mesh.myId(), gServos ? "ON" : "OFF");
     } else {
         LOGF("mesh: initialization failed");
