@@ -74,6 +74,29 @@ public sealed class GestureSceneV2SchemaTests
     }
 
     [Fact]
+    public void Catalog_RejectsAnUnsupportedFutureVersion()
+    {
+        var root = JsonNode.Parse(ReadFixture("catalog-v1.json"))!.AsObject();
+        root["version"] = 2;
+
+        var error = Assert.Throws<GestureSceneV2SchemaException>(
+            () => GestureCatalogV2Parser.Parse(root.ToJsonString()));
+
+        Assert.Equal("$.version", error.FieldPath);
+    }
+
+    [Fact]
+    public void Scene_RejectsAnUnsupportedFutureVersion()
+    {
+        var root = JsonNode.Parse(ReadFixture("scene-v1.json"))!.AsObject();
+        root["version"] = 2;
+
+        var error = Assert.Throws<GestureSceneV2SchemaException>(() => SceneV2Parser.Parse(root.ToJsonString()));
+
+        Assert.Equal("$.version", error.FieldPath);
+    }
+
+    [Fact]
     public void Scene_RejectsNumericAnimationIdentity()
     {
         var root = JsonNode.Parse(ReadFixture("scene-v1.json"))!.AsObject();

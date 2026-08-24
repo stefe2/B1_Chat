@@ -99,7 +99,7 @@ along is the Sequencer".
 | E | Deterministic scheduler and performance | 6 / 6 | 0 / 1 |
 | F | Duration and audio robustness | 7 / 8 | — |
 | G | Preflight and ergonomics | 11 / 12 | 0 / 7 |
-| H | Automated and hardware validation | 2 / 8 | — |
+| H | Automated and hardware validation | 4 / 8 | — |
 | I | Scene & Show System (future) | — | 0 / 22 |
 | J | Commissioning and servo configuration safety | 0 / 2 | — |
 | K | Project workspace (future) | — | 0 / 8 |
@@ -343,7 +343,7 @@ SEQ-G17, SEQ-G18.
 
 2 completed items moved to [SEQUENCER-DONE.md](SEQUENCER-DONE.md): SEQ-H01, SEQ-H05.
 
-### [ ] SEQ-H02 — Cover edit transactions, Dirty and history
+### [x] SEQ-H02 — Cover edit transactions, Dirty and history
 
 - **Priority:** P1
 - **Depends on:** SEQ-C01 through SEQ-C06, SEQ-H01.
@@ -351,6 +351,26 @@ SEQ-G17, SEQ-G18.
   no-op edits, capacity, saved checkpoints, Undo/Redo, and derived extent.
 - **Validation:** all matrix rows pass and fail if their corresponding behavior is
   intentionally broken.
+- **Implemented (2026-08-24):** `SequencerPlaybackIntegrationTests.EditTransactionMatrix_CommitsOneUndoableChangeAndOneDerivedRefresh`
+  already covered every currently-editable persistent property (name, loop,
+  end, gesture insert/anim/target/nudge/infinite-end/duplicate/delete/drag,
+  audio lane/clip add/replace/loop/move/delete/drag, clear timeline) plus
+  no-op edits, Undo/Redo, saved checkpoints and the derived timeline extent.
+  `SequencerGridSnapTests` closes the one real gap found: `RoundToGrid` (the
+  snap-to-grid pure function) had no direct coverage. Undo/Redo history
+  capacity (50 entries) is covered by `UndoAndRedoHistory_RetainExactlyTheNewestFiftyEditsInOrder`;
+  interactive document size (steps/tracks/clips) is deliberately unbounded
+  from the ViewModel, unlike import, since it reflects trusted live operator
+  action rather than an untrusted file — `SequenceImportService`'s
+  `MaxSteps`/`MaxTracks`/`MaxAudioLanes`/`MaxAudioClips` guard the untrusted
+  path and are already covered under SEQ-H04.
+- **Known scope boundary, not a gap:** `SequenceStep.GestureKey`/`Intensity`/
+  `Tempo`/`Variant`/`Seed` are persistent V2 fields with no editing command in
+  the ViewModel yet (only `AnimId`/`Target`/timing are editable today) — they
+  round-trip through DTO code but cannot be edited interactively. Wiring them
+  is Stage 6 of `GESTURE-SEQUENCER-V2.md`, not a Sequencer-hardening gap; add
+  their edit/Undo/Dirty coverage alongside that stage's editor work instead of
+  here.
 
 ### [~] SEQ-H03 — Cover scheduler, transport and safety timing
 
@@ -373,7 +393,7 @@ SEQ-G17, SEQ-G18.
   semantics are complete; the explicit Ready/Armed lifecycle remains open with
   SEQ-A08.
 
-### [ ] SEQ-H04 — Cover persistence validation and migrations
+### [x] SEQ-H04 — Cover persistence validation and migrations
 
 - **Priority:** P1
 - **Depends on:** SEQ-D01 through SEQ-D05, SEQ-H01.
@@ -381,8 +401,32 @@ SEQ-G17, SEQ-G18.
   overflow, unsupported and failed-write cases; current document is preserved on
   every failure.
 - **Validation:** fixture suite passes on a clean machine path.
+- **Implemented (2026-08-24):** golden round trips, malformed/overflow/unsupported
+  rejection and preserve-on-failure coverage already existed for the V2 Scene
+  schema (`GestureSceneV2SchemaTests.cs`), the local Scene Library
+  (`SceneLibraryTests.cs`) and Export (`SequencerPersistenceTests.cs`), all via
+  an injectable failing writer. `SequencerPersistenceFilesystemTests.cs` closes
+  the remaining gap by exercising the real `AtomicTextFileWriter` against real
+  filesystem conditions instead of an injected exception: a missing destination
+  directory, a successful round trip leaving no leftover temp file, a genuinely
+  invalid path (illegal filename character), and a stray `.tmp` left behind by
+  an earlier interrupted write, which the current implementation intentionally
+  neither treats as an obstacle nor sweeps up (documented, not changed, since
+  no code currently reconciles orphaned temp files). `GestureSceneV2SchemaTests.cs`
+  gained `Catalog_RejectsAnUnsupportedFutureVersion` and
+  `Scene_RejectsAnUnsupportedFutureVersion` for the "unsupported" case at the
+  current schema generation, mirroring the legacy importer's existing
+  future-version case.
+- **Follow-up worth a separate decision, not done here:** `SequenceImportService.Parse`
+  (the legacy `b1-sequence` v1-v6 parser, with its ~15-test golden/migration
+  suite in `SequenceImportServiceTests.cs`) is no longer called from
+  `SequencerViewModel.ImportFrom` — the shipped Import command only ever calls
+  `GestureSceneV2Persistence.ParseFile`. That legacy coverage is exercising a
+  parser the UI can no longer reach; per DEC-007 (`.b1seq.json` has no
+  migration path), this may be safe to delete rather than maintain, but that is
+  a separate cleanup decision, not a SEQ-H04 gap.
 
-### [ ] SEQ-H06 — Add UI interaction smoke tests/checklists
+### [~] SEQ-H06 — Add UI interaction smoke tests/checklists
 
 - **Priority:** P2
 - **Depends on:** SEQ-C07, SEQ-G01 through SEQ-G06.
@@ -391,6 +435,33 @@ SEQ-G17, SEQ-G18.
   context menus, and accessibility via keyboard where supported.
 - **Validation:** automated UI tests where stable; otherwise versioned manual
   checklist with evidence.
+- **Implemented (2026-08-24):** the project's first real UI-automation
+  infrastructure, via FlaUI/UIA3 driving the compiled `b1-chat-console.exe`
+  (`console.tests/UiAutomationFixture.cs`, `UiAutomationSmokeTests.cs`) rather
+  than the prior static-XAML-inspection style. One shared launched instance
+  per test run (WPF startup + UIA attach latency), collection-level
+  parallelization disabled. Real, repeatedly-verified passing coverage:
+  app launch/main window identity; disabled controls (Undo/Redo start
+  disabled, enable after a real document edit, Undo restores the disabled
+  baseline); Snap checkbox toggling and round-tripping its bound value;
+  right-click context menu on an inserted gesture clip showing
+  Duplicate/Delete; Delete-key removal of the selected clip via a real key
+  press (which required first discovering that clicking a clip's `Border`
+  never moves WPF keyboard focus — a real, documented finding, not a test
+  artifact). No production XAML changes were needed;
+  `AutomationProperties.AutomationId` already mirrors `x:Name` in this build.
+- **Deliberately not covered, with reasons (see the test file's trailing
+  remarks for detail):** Fit (no stable non-implementation-detail assertion
+  found); drag/capture-loss (harder to make non-flaky through synthetic
+  input, left for later); arming (SEQ-A08's Edit/Ready/Armed/Playing
+  lifecycle is deferred and doesn't exist to test — arming a *track*, a
+  different and already-implemented concept, is exercised via
+  `ArmBroadcastTrack`); broadcast confirmation, Play/Restart/Stop, SAFE/E-STOP
+  and preflight navigation (this dev machine's console auto-reconnects to a
+  real droid fleet over USB serial on launch, so exercising anything that
+  dispatches or risks dispatching a real anim/audio/servo command belongs to
+  the hardware-gated SEQ-H07 protocol, not this local smoke suite); inspector
+  (no reachable panel/AutomationId confirmed in this pass).
 
 ### [~] SEQ-H07 — Execute real-hardware timing and safety protocol
 
@@ -501,7 +572,11 @@ sequential. Unless a test seam must be introduced first, follow this order:
     reliability baseline is complete and their shared design is approved.
 
 Steps 1 through 7 are complete. Step 8 is code-complete; only SEQ-F01's bench
-measurement remains. Closed items are in
+measurement remains. Step 10 (validation gate): SEQ-H02 and SEQ-H04 are
+complete (2026-08-24); SEQ-H06 has real, if partial, automated coverage
+(2026-08-24, see its entry for what's covered vs. deliberately deferred);
+SEQ-H03/H07 remain partially complete pending hardware; SEQ-H08 (final
+regression/release gate) is not started. Closed items are in
 [SEQUENCER-DONE.md](SEQUENCER-DONE.md). Further Sequencer feature work is
 deliberately paused; remaining work is validation or individually approved need.
 
