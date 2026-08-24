@@ -749,6 +749,17 @@
                                 <ItemsControl.ItemsPanel>
                                     <ItemsPanelTemplate><Canvas /></ItemsPanelTemplate>
                                 </ItemsControl.ItemsPanel>
+                                <!-- Z-order must be set on the generated container (ContentPresenter,
+                                     the outer Canvas's actual direct child), not on anything inside the
+                                     DataTemplate — same "ItemsControl/Canvas" pitfall as Canvas.Left
+                                     above. Without this, the outer Canvas falls back to Steps insertion
+                                     order, which made a short clip randomly end up under a longer one. -->
+                                <ItemsControl.ItemContainerStyle>
+                                    <Style TargetType="ContentPresenter">
+                                        <Setter Property="Panel.ZIndex"
+                                                Value="{Binding ResolvedDurationMs, Converter={StaticResource DurationToZIndexConv}}" />
+                                    </Style>
+                                </ItemsControl.ItemContainerStyle>
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
                                         <Canvas>

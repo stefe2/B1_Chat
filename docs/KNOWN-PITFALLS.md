@@ -105,6 +105,21 @@ relevant behavior.
 - In an `ItemsControl` using a `Canvas`, position a child inside a template-root
   `Canvas`; `Canvas.Left/Top` on the template root are swallowed by the
   `ContentPresenter` wrapper.
+- Same `ItemsControl`/`Canvas` pitfall applies to `Panel.ZIndex`: the outer
+  `Canvas` only reads it from its own direct children (the generated
+  `ContentPresenter`s), never from anything inside the item `DataTemplate`.
+  Set it via `ItemContainerStyle` targeting `ContentPresenter`, not on an
+  element nested inside the template — the Sequencer timeline silently fell
+  back to Steps insertion order for stacked/overlapping clips until this was
+  caught (see SEQUENCER-BEHAVIOR.md, Timeline clip editing).
+- A `Style` with a `ContentTemplate` of `<TextBlock Text="{Binding}"/>` applied
+  to every `ToolTip` (e.g. for consistent wrapping/MaxWidth) breaks any
+  `ToolTip.Content` that is a rich `UIElement` (a `StackPanel`, say): `{Binding}`
+  on the string-typed `Text` property calls `.ToString()` on it, literally
+  rendering the type name (e.g. "System.Windows.Controls.StackPanel"). Use a
+  `ContentPresenter` instead, with the wrapping style applied through its own
+  `.Resources` — WPF's default string template still picks it up, and a rich
+  element is hosted as itself instead of being stringified.
 - WPF `Transparent` is transparent white. Use explicit `#00RRGGBB` values in
   dark gradients to avoid grey haze.
 - `Setter.TargetName` cannot target a nested `Freezable`; replace the parent

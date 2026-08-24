@@ -23,6 +23,7 @@
             <conv:AnimFamilyToBrushConverter x:Key="AnimFamilyToBrushConv" />
             <conv:ReferenceEqualsConverter x:Key="ReferenceEqualsConv" />
             <conv:AnimIdToNameConverter x:Key="AnimIdToNameConv" />
+            <conv:DurationToZIndexConverter x:Key="DurationToZIndexConv" />
             <conv:TrackMutedConverter x:Key="TrackMutedConv" />
             <conv:WaveformToGeometryConverter x:Key="WaveformToGeometryConv" />
             <conv:BoolInvertConverter x:Key="BoolInvertConv" />

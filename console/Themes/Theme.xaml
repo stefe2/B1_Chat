@@ -54,10 +54,23 @@
         <Setter Property="FontSize" Value="11.5" />
         <Setter Property="MaxWidth" Value="380" />
         <Setter Property="HasDropShadow" Value="True" />
+        <!-- ContentPresenter, not a hardcoded TextBlock: a plain string still gets WPF's
+             default auto-generated TextBlock (which picks up the TextWrapping/MaxWidth style
+             below from this scope), but a rich Content (e.g. a StackPanel, as the Sequencer's
+             gesture-clip tooltip uses) is hosted as itself instead of being stringified via
+             TextBlock.Text's implicit ToString() — which used to render as the literal
+             "System.Windows.Controls.StackPanel". -->
         <Setter Property="ContentTemplate">
             <Setter.Value>
                 <DataTemplate>
-                    <TextBlock Text="{Binding}" TextWrapping="Wrap" MaxWidth="360" />
+                    <ContentPresenter Content="{Binding}">
+                        <ContentPresenter.Resources>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="TextWrapping" Value="Wrap" />
+                                <Setter Property="MaxWidth" Value="360" />
+                            </Style>
+                        </ContentPresenter.Resources>
+                    </ContentPresenter>
                 </DataTemplate>
             </Setter.Value>
         </Setter>

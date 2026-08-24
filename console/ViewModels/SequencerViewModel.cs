@@ -420,6 +420,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
         RedoCommand.NotifyCanExecuteChanged();
         DeleteStepCommand.NotifyCanExecuteChanged();
         DuplicateStepCommand.NotifyCanExecuteChanged();
+        PasteStepCommand.NotifyCanExecuteChanged();
         DeleteFromLibraryCommand.NotifyCanExecuteChanged();
         DeleteCurrentSceneCommand.NotifyCanExecuteChanged();
         SaveSceneCommand.NotifyCanExecuteChanged();
@@ -1839,6 +1840,36 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
             clone.StartMs += 200;
             var idx = Steps.IndexOf(step);
             Steps.Insert(idx + 1, clone);
+            SelectedStep = clone;
+        });
+    }
+
+    // Copy/Paste: an in-memory clipboard, not the OS clipboard — the clip never needs to leave
+    // this Scene. Copy is non-destructive (allowed even while playing). Paste reproduces
+    // Duplicate's own placement exactly (+200ms from the copied StartMs, selected) so the two
+    // paths feel identical — the only difference is Paste can be repeated or used after the
+    // selection has moved on, since it works from the stored clipboard rather than a live step.
+    private SequenceStep? _clipboardStep;
+
+    [RelayCommand]
+    private void CopyStep(SequenceStep? step)
+    {
+        if (step == null || !Steps.Contains(step)) return;
+        _clipboardStep = step.Clone();
+        PasteStepCommand.NotifyCanExecuteChanged();
+    }
+
+    private bool CanPasteStep() => CanEditSequence && _clipboardStep != null;
+
+    [RelayCommand(CanExecute = nameof(CanPasteStep))]
+    private void PasteStep()
+    {
+        if (_clipboardStep == null || !CanEditSequence) return;
+        ExecuteSequenceEdit(() =>
+        {
+            var clone = _clipboardStep.Clone();
+            clone.StartMs = _clipboardStep.StartMs + 200;
+            Steps.Add(clone);
             SelectedStep = clone;
         });
     }

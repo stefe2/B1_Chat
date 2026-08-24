@@ -15,6 +15,18 @@ enables/disables a servo, previews a position, or starts an animation.
 ### Offline checks
 
 - builds `b1_master` and `b1_slave`;
+- runs the host-native `env:native` Unity suite (`pio test -e native`) covering
+  `ServoEngine`/`MotionEngine`'s pure trajectory logic with no ESP32 board
+  involved: ease-in/out shape, the 180 deg/s velocity ceiling, mechanical/
+  normalized-percentage clamping and clipping reporting, calibration
+  semantics (`setLimits()` never moves the current position; only `center()`
+  does — the exact regression documented in KNOWN-PITFALLS.md), axis
+  reversal, per-axis base/overlay composition, deterministic end policy
+  (`resetAll`/`holdPose`/`clearLayer`), same-channel interruption reporting,
+  axis/layer independence and the intentional infinite loop of a `continuous`
+  gesture until explicitly stopped. See `test/test_servo_engine/` and
+  `test/test_motion_engine/`, and the shim at `test/native/shim/Arduino.h`
+  that lets this ESP32 Arduino code build and run on the host;
 - builds the WPF console without changing `console/build.number`;
 - restores and runs the headless Sequencer unit/integration tests without
   changing `console/build.number`; the suite covers immutable playback plans,

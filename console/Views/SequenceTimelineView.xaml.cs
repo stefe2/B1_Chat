@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.ComponentModel;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -174,6 +175,33 @@ public partial class SequenceTimelineView : UserControl
                  && vm.ReturnToStartCommand.CanExecute(null))
         {
             vm.ReturnToStartCommand.Execute(null);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Delete && Keyboard.Modifiers == ModifierKeys.None
+                 && vm.SelectedStep is { } selected && vm.DeleteStepCommand.CanExecute(selected))
+        {
+            vm.DeleteStepCommand.Execute(selected);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Z && Keyboard.Modifiers == ModifierKeys.Control && vm.UndoCommand.CanExecute(null))
+        {
+            vm.UndoCommand.Execute(null);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Y && Keyboard.Modifiers == ModifierKeys.Control && vm.RedoCommand.CanExecute(null))
+        {
+            vm.RedoCommand.Execute(null);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.C && Keyboard.Modifiers == ModifierKeys.Control
+                 && vm.CopyStepCommand.CanExecute(vm.SelectedStep))
+        {
+            vm.CopyStepCommand.Execute(vm.SelectedStep);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.V && Keyboard.Modifiers == ModifierKeys.Control && vm.PasteStepCommand.CanExecute(null))
+        {
+            vm.PasteStepCommand.Execute(null);
             e.Handled = true;
         }
     }
@@ -357,18 +385,43 @@ public partial class SequenceTimelineView : UserControl
 
     private void Clip_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (sender is not FrameworkElement fe || fe.DataContext is not SequenceStep step || Vm is not { } vm) return;
+        if (sender is not FrameworkElement fe || fe.DataContext is not SequenceStep hitStep || Vm is not { } vm) return;
+        var pos = e.GetPosition(TracksCanvas);
+        var step = PickStepAt(vm, pos, Keyboard.Modifiers.HasFlag(ModifierKeys.Alt), hitStep);
         vm.SelectedStep = step;
         if (!vm.CanEditSequence) { e.Handled = true; return; }
         _clipCandidate = true;
         _draggingClip = false;
         _dragStep = step;
-        var pos = e.GetPosition(TracksCanvas);
         _dragStartMouseX = pos.X;
         _dragStartMouseY = pos.Y;
         _dragStartMs = step.StartMs;
         fe.CaptureMouse();
         e.Handled = true;
+    }
+
+    // Deterministic hit-testing for clips that overlap in time on the same row (e.g. a short
+    // TILT overlay sitting on top of a longer PAN base clip, the Stage 5 composition case): the
+    // NARROWEST clip whose [StartMs, StartMs+ResolvedDurationMs] contains the click point wins,
+    // rather than whichever happens to be topmost in z-order. Clicking the part of a longer clip
+    // that extends beyond every shorter one still reaches it normally, since nothing narrower
+    // covers that point. Alt+Click cycles to the next-larger candidate at the same point, for a
+    // same-width tie no width difference can resolve. Falls back to whatever WPF's own hit-test
+    // already picked (hitStep) if geometry recomputation somehow finds no candidate at all.
+    private static SequenceStep PickStepAt(SequencerViewModel vm, Point canvasPos, bool cycle, SequenceStep hitStep)
+    {
+        if (vm.PxPerMs <= 0) return hitStep;
+        var track = vm.TrackAtY(canvasPos.Y);
+        if (track == null) return hitStep;
+        var ms = canvasPos.X / vm.PxPerMs;
+        var candidates = vm.Steps
+            .Where(s => s.Target == track.Id && s.StartMs <= ms && ms <= s.StartMs + s.ResolvedDurationMs)
+            .OrderBy(s => s.ResolvedDurationMs)
+            .ToList();
+        if (candidates.Count == 0) return hitStep;
+        if (!cycle) return candidates[0];
+        var currentIndex = vm.SelectedStep != null ? candidates.IndexOf(vm.SelectedStep) : -1;
+        return candidates[(currentIndex + 1) % candidates.Count];
     }
 
     private void Clip_MouseMove(object sender, MouseEventArgs e)

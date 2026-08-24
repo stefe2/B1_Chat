@@ -138,6 +138,13 @@ if (-not $SkipBuild) {
     if (Test-Path $pio) {
         Invoke-Build "Firmware master build" { & $pio run -e b1_master }
         Invoke-Build "Firmware slave build" { & $pio run -e b1_slave }
+        Invoke-Test "Native trajectory tests (ServoEngine/MotionEngine)" {
+            $output = & $pio test -e native 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                throw (($output | Select-Object -Last 30) -join [Environment]::NewLine)
+            }
+            ($output | Select-String "test cases" | Select-Object -Last 1).Line
+        }
     }
 
     $tempBuildNumber = Join-Path ([IO.Path]::GetTempPath()) ("b1-build-{0}.number" -f [Guid]::NewGuid().ToString("N"))

@@ -204,6 +204,25 @@ itself the explicit target. The command and direct mutation guard enforce the
 same rule for mouse, keyboard and programmatic paths. Track rebuilds preserve an
 armed ID only while that row still exists.
 
+## Timeline clip editing
+
+A gesture clip is deleted (`Delete` key, or right-click Delete), duplicated
+(right-click Duplicate, or `Ctrl+C`/`Ctrl+V`) and edited within one Undo/Redo
+history (`Ctrl+Z`/`Ctrl+Y`) — every mutating path is gated identically by
+`CanEditSequence` (stopped), for mouse, keyboard and command invocation alike.
+Copy stores an in-memory clone, not the OS clipboard. Paste reproduces
+Duplicate's own placement exactly (+200ms from the copied step's stored
+`StartMs`, selected), so the two paths read as one behavior regardless of
+which is used.
+
+Two clips overlapping in time on the same track are never ambiguous. The
+narrowest (shortest resolved duration) clip covering a click point is always
+the one selected, deterministically — never whichever happens to be topmost by
+Steps insertion order. It also always renders visually on top (see
+KNOWN-PITFALLS.md for why `Panel.ZIndex` cannot live inside the clip's own
+`DataTemplate`). `Alt`+click cycles to the next-larger candidate at the same
+point, for an exact-width tie neither rule can resolve on its own.
+
 ## Scheduler
 
 Playback uses one rearmable OS timer per active pass, not one timer per event.

@@ -260,7 +260,19 @@ old Animation-card dependency.
 
 ### Stage 5 — Motion ownership and engine V2
 
-Status: composition foundation implemented (2026-08-16), with `DroidController` extraction deferred and reduced-amplitude bench validation pending.
+Status: composition foundation implemented (2026-08-16); pure trajectory
+tests complete (2026-08-23); `DroidController` extraction deferred and
+reduced-amplitude bench validation still pending before this stage can close.
+
+- **Pure trajectory tests (2026-08-23):** a host-native `env:native` Unity
+  suite (`pio test -e native`, wired into `tools/self-test.ps1`) exercises
+  `ServoEngine` and `MotionEngine` with no ESP32 board: easing shape, the
+  velocity ceiling, mechanical/normalized clamping and clipping reporting,
+  calibration semantics, axis reversal, per-axis base/overlay composition,
+  deterministic end policy, same-channel interruption reporting, axis/layer
+  independence, and the intentional infinite loop of a `continuous` gesture
+  until explicitly stopped. See `test/test_servo_engine/`,
+  `test/test_motion_engine/` and docs/TEST-PROTOCOL.md.
 
 `MotionEngine` composes a persistent base pose and expression overlays per
 axis. A PAN orientation such as `attention.look-right` therefore remains in
