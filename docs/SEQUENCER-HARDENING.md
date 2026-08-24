@@ -443,8 +443,20 @@ SEQ-G17, SEQ-G18.
   run, collection-level parallelization disabled, and (added in the second
   pass) `DisableTestParallelization` at the assembly level after cross-
   collection CPU contention was found to make synthetic clicks silently miss
-  under full-suite load (see `docs/KNOWN-PITFALLS.md`). 29 tests, verified
-  reliable across 3+ consecutive full-suite runs, no residual flakiness.
+  under full-suite load (see `docs/KNOWN-PITFALLS.md`). 29 tests.
+  **Reliability update (2026-08-24):** the "verified reliable, no residual
+  flakiness" claim below did not hold up under further full-suite repetition.
+  `OverlappingClips_TheShorterTopmostClipReceivesTheClick` had a real,
+  reproducible flake (~4 of 5 full-suite runs) traced to this environment
+  rendering the same launched window at a real physical display scale that
+  is not constant between launches — not the DPI-scale-constant fix
+  originally credited here. Rewritten to walk to the click target
+  empirically instead of predicting it from a DPI constant (see
+  `docs/KNOWN-PITFALLS.md`'s "UI test automation" section for the full
+  investigation); this cut the failure rate to roughly 1 in 14 full-suite
+  runs. That residual is a known, accepted limitation, not confirmed fully
+  eliminated — investigation was deliberately stopped there as disproportionate
+  effort for a P2 item.
   Real, passing coverage now spans every item in the acceptance list except
   Calibration's own panel (see below): app launch/window identity; disabled
   controls (Undo/Redo, and the real — not assumed — Visibility-gated, not

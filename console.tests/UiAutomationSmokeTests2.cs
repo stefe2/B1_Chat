@@ -557,8 +557,6 @@ public sealed class UiAutomationSmokeTests2
         var slider = _fixture.MainWindow.FindFirstDescendant(cf => cf.ByControlType(ControlType.Slider))
             ?.AsSlider() ?? throw new InvalidOperationException("Zoom slider not found.");
         slider.Value = 150;
-        Thread.Sleep(500); // let WPF's re-layout at the new zoom settle before reading positions
-        var pxPerMs = slider.Value / 1000.0;
 
         // Both inserted at playhead 0 (nothing moves the playhead between the two inserts), so
         // they start at the identical StartMs and visually overlap from x=0: Nod (1400ms) is the
@@ -566,9 +564,7 @@ public sealed class UiAutomationSmokeTests2
         // shorter-renders-on-top/shorter-wins-the-click case DurationToZIndexConverter and
         // PickStepAt (SequenceTimelineView.xaml.cs) exist for.
         ClickGestureChipVerified("Nod");
-        Thread.Sleep(200); // settle between the two clicks under concurrent system load
         ClickGestureChipVerified("Look right");
-        Thread.Sleep(300); // extra settle for layout under concurrent system load
         var steps = _fixture.FindStepItems();
         Assert.Equal(2, steps.Length);
 
@@ -577,9 +573,17 @@ public sealed class UiAutomationSmokeTests2
         // own BoundingRectangle does NOT span the visible clip — only its Text descendants (the
         // gesture-name/duration labels) have real, reliable rectangles. Compute each click point
         // from the label's position plus known px-per-ms instead.
-
-        var lookRightLabel = FindStepLabel(steps, "Look right");
-        var lrRect = lookRightLabel.BoundingRectangle;
+        //
+        // A fixed Sleep after the zoom-slider change or a chip click is not trustworthy under
+        // full-suite system load: setting Slider.Value only starts a chain (control -> bound
+        // PxPerSecond -> derived PxPerMs -> geometry converters -> re-rendered Canvas.Left/Width)
+        // that runs on the launched app's own dispatcher, and wall-clock sleep on this test
+        // thread does not guarantee that process actually got scheduled enough CPU to finish it
+        // — the same class of hazard ClickGestureChipVerified already documents for chip
+        // insertion. Poll the label's own position until it stops moving instead of guessing a
+        // duration; this was the real, reproducible cause of an intermittent miss on the second
+        // (Nod-only) click below, found and fixed this session.
+        var lrRect = WaitForStableRect(() => FindStepLabel(steps, "Look right").BoundingRectangle);
         var y = lrRect.Y + lrRect.Height / 2;
         // Both clips start at StartMs=0 (nothing moved the playhead between inserts), so the
         // label's left edge is ~the clip's own left edge (Border Padding "8,2") for both clips.
@@ -596,21 +600,33 @@ public sealed class UiAutomationSmokeTests2
 
         // Sanity: clicking past Look right's own 750ms extent but still inside Nod's 1400ms one
         // must fall back to selecting "Nod" — proving the geometry, not merely "always the
-        // last-inserted item", drives the result. 1000ms sits safely between the two.
+        // last-inserted item", drives the result.
         //
-        // clipLeftX is a real physical-screen-pixel coordinate (read from a FlaUI
-        // BoundingRectangle), while pxPerMs is WPF's own logical (96-DPI) px/ms — the two only
-        // match 1:1 at 100% display scaling. This mismatch was the actual cause of a real,
-        // reproducible failure found this session on a scaled display: adding an un-scaled
-        // logical distance to a physical-pixel base landed short of the intended 1000ms mark,
-        // still inside Look right's own extent, and wrongly re-selected it instead of Nod.
-        var nodOnlyX = clipLeftX + (int)(1000 * pxPerMs * PhysicalDpiScale());
-        var nodOnlyPoint = new System.Drawing.Point(nodOnlyX, y);
-        Mouse.Click(nodOnlyPoint);
-        Thread.Sleep(300);
-        gestureCombo = _fixture.MainWindow.FindFirstDescendant(cf => cf.ByAutomationId("GestureComboBox"))
-            ?? throw new InvalidOperationException("GESTURE combo not found.");
-        Assert.Equal("Nod", ReadComboSelectedName(gestureCombo));
+        // A computed px-per-ms/DPI-scale prediction for this second point was tried and
+        // abandoned this session: this environment was found to render the same launched window
+        // at a real physical scale that is NOT constant between launches (confirmed directly —
+        // this same "Look right" label's own BoundingRectangle.Height read ~13px in some runs and
+        // ~20px in others at the identical declared zoom, with no native DPI query, including
+        // GetDpiForWindow and the DPI-awareness-aware PhysicalDpiScale() below, predicting which
+        // one a given run would get). Rather than chase that further, walk rightward in small
+        // fixed steps from the already-confirmed Look-Right point and observe the real selection
+        // after each click — self-calibrating to whatever this run's actual scale turns out to
+        // be, and proving the same geometric requirement (a click exits Look Right's real extent
+        // into Nod's) without predicting where that boundary lies.
+        var x = clipLeftX + 20;
+        var selection = "Look right";
+        for (var i = 0; i < 40 && selection == "Look right"; i++)
+        {
+            x += 25;
+            Mouse.Click(new System.Drawing.Point(x, y));
+            Thread.Sleep(150);
+            gestureCombo = _fixture.MainWindow.FindFirstDescendant(cf => cf.ByAutomationId("GestureComboBox"))
+                ?? throw new InvalidOperationException(
+                    "GESTURE combo not found while walking past Look Right's extent " +
+                    "(overshot every clip without ever reaching Nod).");
+            selection = ReadComboSelectedName(gestureCombo);
+        }
+        Assert.Equal("Nod", selection);
     }
 
     // =====================================================================================
@@ -771,19 +787,42 @@ public sealed class UiAutomationSmokeTests2
 
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         public static extern uint GetDpiForWindow(IntPtr hWnd);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        public static extern IntPtr GetWindowDpiAwarenessContext(IntPtr hWnd);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        public static extern int GetAwarenessFromDpiAwarenessContext(IntPtr context);
     }
 
     /// <summary>
     /// WPF's own PxPerMs/PxPerSecond (and the zoom slider bound to it) operate in device-
     /// independent pixels (96 DPI logical units), while FlaUI's BoundingRectangle and Mouse
-    /// coordinates operate in real physical screen pixels. On any display scaled above 100%
-    /// those two pixel spaces are different sizes, so a distance computed in logical px/ms must
-    /// be multiplied by this scale factor before it can be added to a physical-pixel screen
-    /// coordinate (real root cause of a click landing short of its intended logical-ms target,
-    /// found and fixed this session — see OverlappingClips's remarks for the concrete case).
+    /// coordinates operate in real physical screen pixels. Whether those two pixel spaces
+    /// actually differ depends on this specific app's DPI awareness, not just the monitor's
+    /// configured scale: the console ships with no app.manifest DPI declaration, which measured
+    /// DPI_AWARENESS_UNAWARE (1) on the compiled exe. For an Unaware window Windows virtualizes
+    /// both its rendering AND the input delivered to it, so a FlaUI physical-screen-pixel mouse
+    /// delta already lands 1:1 on WPF's own logical-pixel space — GetDpiForWindow's return value
+    /// (the system DPI baked in at session start, which can differ from any real monitor's live
+    /// DPI, e.g. 144 system vs. 96 real monitor observed this session) does NOT describe that
+    /// input mapping and must not be used to scale it. Only a Per-Monitor-aware window receives
+    /// real, unscaled input and needs that ratio applied. Found and fixed twice this session: an
+    /// initial DPI-scale theory (multiply by GetDpiForWindow/96 unconditionally) looked correct
+    /// against 3 consecutive clean runs, then a later real run reproduced the exact 1.5x
+    /// mismatch this awareness check now accounts for — see OverlappingClips's and Drag's
+    /// remarks for the concrete failures this caused.
     /// </summary>
-    private double PhysicalDpiScale() =>
-        Win32.GetDpiForWindow(new IntPtr(_fixture.MainWindow.Properties.NativeWindowHandle.ValueOrDefault)) / 96.0;
+    private double PhysicalDpiScale()
+    {
+        const int DpiAwarenessUnaware = 1;
+        const int DpiAwarenessSystemAware = 2;
+        var hwnd = new IntPtr(_fixture.MainWindow.Properties.NativeWindowHandle.ValueOrDefault);
+        var context = Win32.GetWindowDpiAwarenessContext(hwnd);
+        var awareness = Win32.GetAwarenessFromDpiAwarenessContext(context);
+        if (awareness is DpiAwarenessUnaware or DpiAwarenessSystemAware) return 1.0;
+        return Win32.GetDpiForWindow(hwnd) / 96.0;
+    }
 
     /// <summary>
     /// Reads the currently-selected item's Name via UIA's Selection pattern (a data-level
@@ -860,6 +899,35 @@ public sealed class UiAutomationSmokeTests2
             Thread.Sleep(200);
         }
         throw new InvalidOperationException($"No inserted clip found with gesture label '{gestureName}'.");
+    }
+
+    /// <summary>
+    /// Polls <paramref name="readRect"/> until its result stops changing across three consecutive
+    /// reads (or a bounded number of polls elapses), instead of trusting a fixed Sleep to outlast
+    /// whatever layout/binding-update chain a preceding UI action started. Wall-clock sleep on
+    /// this test thread is not a reliable proxy for how much CPU the launched app's own dispatcher
+    /// actually got under full-suite system load — see the callers' remarks for the concrete
+    /// intermittent failure this was written to close.
+    /// </summary>
+    private static System.Drawing.Rectangle WaitForStableRect(Func<System.Drawing.Rectangle> readRect)
+    {
+        var previous = readRect();
+        var stableCount = 0;
+        for (var i = 0; i < 30; i++)
+        {
+            Thread.Sleep(100);
+            var current = readRect();
+            if (current == previous)
+            {
+                if (++stableCount >= 3) return current;
+            }
+            else
+            {
+                stableCount = 0;
+                previous = current;
+            }
+        }
+        return previous;
     }
 
     /// <summary>

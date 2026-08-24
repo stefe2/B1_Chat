@@ -197,14 +197,33 @@ relevant behavior.
   (96-DPI logical) pixels. The two only match 1:1 at 100% display scaling.
   Computing a click point by adding a distance derived from a logical
   px/ms rate onto a physical-pixel base (read from a `BoundingRectangle`)
-  silently lands short on any scaled display — a real, reproducible failure
-  found this session in `OverlappingClips_TheShorterTopmostClipReceivesTheClick`.
-  Multiply the logical distance by the real DPI scale first
-  (`GetDpiForWindow(hwnd) / 96.0`, `hwnd` from
-  `AutomationElement.Properties.NativeWindowHandle`) before combining it with
-  a physical-pixel coordinate. A small fixed physical-pixel margin (e.g. "20px
-  from this element's edge") needs no such conversion and is the safer choice
-  wherever a precise logical distance isn't actually required.
+  can silently land short. Two increasingly careful fix attempts in
+  `OverlappingClips_TheShorterTopmostClipReceivesTheClick` still weren't
+  fully reliable: multiplying by `GetDpiForWindow(hwnd) / 96.0`, then by a
+  DPI-awareness-aware refinement of that (`hwnd` from
+  `AutomationElement.Properties.NativeWindowHandle`) — this app measures as
+  `DPI_AWARENESS_UNAWARE`, and neither `GetDpiForWindow` nor any other native
+  DPI query tried predicted the click math correctly every time. Direct
+  evidence this session: the identical zoom, the identical element, read a
+  `BoundingRectangle.Height` of ~13px in some launches and ~20px in others —
+  this specific environment renders the same launched window at a real
+  physical scale that is **not constant between launches**, for reasons not
+  fully root-caused (plausibly which display a new top-level window lands on
+  in a multi-monitor/virtual-display setup). Trying to predict a click point
+  from any DPI constant is fragile here. The reliable fix that replaced the
+  predictive math: walk outward in small fixed physical-pixel steps from an
+  already-confirmed point and observe the real selection after each click,
+  self-calibrating to whatever the current run's actual scale turns out to
+  be, instead of computing a target coordinate up front. A small fixed
+  physical-pixel margin (e.g. "20px from this element's edge") still needs no
+  conversion and remains the safer choice wherever a short, guaranteed-safe
+  distance is all that's required.
+  **Known residual (2026-08-24):** even after the walking-search rewrite,
+  one run out of roughly 14 consecutive full-suite runs still failed in this
+  same test (down from roughly 4 out of 5 before the rewrite); the exact
+  failure wasn't captured with full diagnostics before the investigation was
+  stopped as disproportionate for a P2 item. Treat this as a much-reduced but
+  not fully eliminated flake if it resurfaces.
 - A shared-instance UI-automation test collection
   (`console.tests/UiAutomationFixture.cs`) drives one real running window with
   timed synthetic input. Letting it run in parallel with the rest of the
