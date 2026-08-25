@@ -33,4 +33,4 @@ C++ runtime.
 
 SHA-256 for `b1-chat-console-setup-0.13.2.exe`:
 
-`TBD`
+`cf6aa510e232a6f3395bfe5698a22b313da868d088a10b4496e10c112e001bf8`
