@@ -25,6 +25,16 @@ internal static class GestureSceneV2Persistence
 
     internal static bool IsSupportedTemporaryAnimId(int animId) => animId >= 0 && animId < Catalog.Ordered.Count;
 
+    // The single place execution kind (immediate/finite/continuous) is looked up by gesture key
+    // or animId. Replaces the old "AnimId is 16 or 17" legacy magic numbers (pre-V2 POWER_DOWN/
+    // TALK IDs) that broke once a new catalog entry could land on animId 17 by ordinary array
+    // position instead of that specific meaning.
+    internal static GestureExecutionKind? ExecutionKindFor(string gestureKey) =>
+        Catalog.Gestures.TryGetValue(gestureKey, out var gesture) ? gesture.Execution : null;
+
+    internal static GestureExecutionKind? ExecutionKindFor(int animId) =>
+        animId >= 0 && animId < Catalog.Ordered.Count ? Catalog.Ordered[animId].Execution : null;
+
     internal static string Serialize(SequenceSnapshot document, IReadOnlyList<SequenceTrackDto> tracks)
     {
         ArgumentNullException.ThrowIfNull(document);

@@ -58,13 +58,13 @@ public sealed class AnimationDurationProvider
     {
         var animId = step.AnimId;
         if (_metadata.TryGetValue(animId, out var value)) return value;
-        var inferredKind = step.GestureKey == "dialogue.talk"
-            ? AnimationDurationKind.Infinite
-            : animId == 0
-            ? AnimationDurationKind.Immediate
-            : animId is 16 or 17
-                ? AnimationDurationKind.Infinite
-                : AnimationDurationKind.Finite;
+        var inferredKind = GestureSceneV2Persistence.ExecutionKindFor(step.GestureKey) switch
+        {
+            GestureExecutionKind.Immediate => AnimationDurationKind.Immediate,
+            GestureExecutionKind.Continuous => AnimationDurationKind.Infinite,
+            GestureExecutionKind.Finite => AnimationDurationKind.Finite,
+            _ => animId == 0 ? AnimationDurationKind.Immediate : AnimationDurationKind.Finite,
+        };
         var legacyNominal = _legacyDurations.TryGetValue(animId, out var duration) && duration >= 0
             ? duration
             : inferredKind == AnimationDurationKind.Finite ? FallbackFiniteMs : 0;

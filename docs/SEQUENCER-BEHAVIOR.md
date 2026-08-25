@@ -43,8 +43,8 @@ A missing start report expires after 1.5 s (`UNCONF`/`MISS n/N`); finite
 gestures that start but do not send a terminal report expire after their
 reported duration plus 1.5 s (`TIMEOUT`). Late reports recover the display, and
 delayed duplicate `started` reports cannot regress a terminal state. These
-warnings never delay or stop the show. Continuous Talk requires only a start
-report because completion requires a later interruption.
+warnings never delay or stop the show. Any continuous gesture requires only a
+start report because completion requires a later interruption.
 
 This proves firmware execution, not physical servo movement or mechanical
 inter-droid skew.
@@ -60,7 +60,7 @@ continuous expression layer without discarding a held orientation such as Look
 right. A whole-pass Loop boundary
 and Pause deliberately do not clean up. Failed serial cleanup remains retryable.
 
-Sequencer playback starts Talk with a 5 s firmware lease and
+Sequencer playback starts any continuous gesture with a 5 s firmware lease and
 renews it every 2 s while the owning pass remains valid. Missing renewal clears
 the leased gesture layer and reports `interrupted/leaseExpired`; renewals are
 correlated to the originating mesh sequence so stale packets cannot extend a
@@ -69,6 +69,18 @@ Stop/end/restart/disconnect/shutdown cancel it before targeted gesture cleanup.
 There is no autonomous firmware gesture path. The standalone Animation card was
 removed during the V2 transition; the current gesture library remains inside the
 Sequencer.
+
+**Firmware lease eligibility (2026-08-24, fw 1.12.1):** the lease was
+originally wired to accept only `dialogue.talk` by its generated ID
+(`main.cpp`'s `validLeasedAnimPayload`, `serial_console.cpp`'s `gesture`
+command handler) because it was the only continuous gesture that existed.
+Stage 7 added nine more (`rest.idle-sway`, `attention.scan`,
+`attention.follow-slow`, `dialogue.listen`, `emotion.excited`,
+`emotion.confused`, `emotion.affection`, `emotion.bored`,
+`mechanical.self-check`, `mechanical.scan-vertical`); both checks now call
+the already-existing `MotionEngine::isContinuous(gestureId)` instead of
+comparing against the one hardcoded ID, so any catalog entry whose
+`execution` is `continuous` gets a lease, not just Talk.
 
 The Gestures palette, the inspector's GESTURE combo, click/drag insertion and
 serial dispatch all derive their `animId`↔`key` mapping from the same parsed

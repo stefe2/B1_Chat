@@ -474,8 +474,8 @@ void SerialConsole::handleLine(const char* line) {
         const uint8_t animId = (uint8_t)gestureIdValue;
         if (leaseMsValue > 0 &&
             (leaseMsValue < ANIM_LEASE_MIN_MS ||
-             animId != GESTURE_DIALOGUE_TALK)) {
-            pushErr("invalid gesture: lease requires dialogue.talk and %u..%u ms",
+             !MotionEngine::isContinuous((GestureWireId)animId))) {
+            pushErr("invalid gesture: lease requires a continuous gesture and %u..%u ms",
                     ANIM_LEASE_MIN_MS, ANIM_LEASE_MAX_MS);
             return;
         }

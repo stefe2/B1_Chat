@@ -411,6 +411,42 @@ just isn't repeated per chip (see
 [SEQUENCER-BEHAVIOR.md](SEQUENCER-BEHAVIOR.md)'s "Explicit gesture insertion
 target" section for that mechanic).
 
+**Bench audition round 1 (2026-08-24, fw 1.12.1/console 0.13.1):** live testing
+against a real master+slave fleet found and fixed four bugs, none in the new
+trajectory data itself:
+
+- The clip label converter (`AnimIdToNameConverter`) was a sixth hardcoded
+  animId table missed in the earlier sweep, showing `?` for every gesture past
+  the original 7.
+- Delete/Undo/Redo/Restart went dead after clicking a transport button until
+  the operator clicked a clip again (see KNOWN-PITFALLS.md, "WPF layout and
+  input").
+- `communicate.yes` (generated ID 17) silently never executed: a leftover
+  pre-V2 legacy check (`AnimId is 16 or 17`) misidentified it as the old
+  numeric alias for `dialogue.talk`'s continuous/leased behavior, and firmware
+  rejected the resulting lease request. Fixed by deriving execution kind from
+  the catalog everywhere instead (see KNOWN-PITFALLS.md, "Protocol and
+  compatibility").
+- The same landmine existed one layer down: the firmware's lease mechanism
+  itself (`main.cpp`, `serial_console.cpp`) only accepted `dialogue.talk` by
+  hardcoded ID, so all nine other new continuous gestures (`rest.idle-sway`,
+  `attention.scan`, `attention.follow-slow`, `dialogue.listen`,
+  `emotion.excited`, `emotion.confused`, `emotion.affection`, `emotion.bored`,
+  `mechanical.self-check`, `mechanical.scan-vertical`) got rejected the same
+  way once the console started correctly requesting a lease for them. Both
+  checks now call the already-existing `MotionEngine::isContinuous(gestureId)`.
+  Confirmed fixed on the master; the slave still needs the same firmware
+  update before its continuous gestures will work.
+- The clip's hover tooltip no longer appends live per-droid delivery detail
+  (`Request N: serial: written; master: accepted...`) under the static
+  interaction hint — mixing a live diagnostic trace into a tooltip whose first
+  line is generic instructions read as broken/confusing rather than useful;
+  that detail remains available via the clip's compact execution badge
+  (`WRITE`/`MASTER`/`DONE`/`UNCONF`/...).
+
+Trajectory/timing content itself has not yet needed a correction. Audition
+continues on the remaining gestures.
+
 ### Stage 8 — Simulation and observability
 
 - Add a no-motion Dry Run using the real compiled plan.

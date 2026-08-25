@@ -55,7 +55,8 @@ public sealed class SequencerPlaybackPlan
         var infiniteGestures = new List<(GesturePlaybackEvent Gesture, int EndMs)>();
         foreach (var step in steps)
         {
-            var isContinuous = step.GestureKey == "dialogue.talk" || step.AnimId is 16 or 17;
+            var isContinuous = Services.GestureSceneV2Persistence.ExecutionKindFor(step.GestureKey)
+                == GestureExecutionKind.Continuous;
             var duration = isContinuous
                 ? Math.Max(100, step.EndAfterMs)
                 : resolveDurationMs != null

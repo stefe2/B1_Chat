@@ -775,12 +775,8 @@
                                                     MouseLeftButtonUp="Clip_MouseLeftButtonUp"
                                                     LostMouseCapture="Interaction_LostMouseCapture">
                                                 <Border.ToolTip>
-                                                    <StackPanel MaxWidth="360">
-                                                        <TextBlock Text="Click to inspect this gesture. Drag to change its start time or target track; right-click to duplicate or delete it."
-                                                                   TextWrapping="Wrap" />
-                                                        <TextBlock Text="{Binding ExecutionDetail}" Margin="0,4,0,0"
-                                                                   FontFamily="{StaticResource MonoFont}" TextWrapping="Wrap" />
-                                                    </StackPanel>
+                                                    <TextBlock Text="Click to inspect this gesture. Drag to change its start time or target track; right-click to duplicate or delete it."
+                                                               MaxWidth="360" TextWrapping="Wrap" />
                                                 </Border.ToolTip>
                                                 <!-- Vertical glide while dragged (transient DragOffsetY) — Target (the row)
                                                      only settles at mouse-up, like the horizontal snap (see code-behind). -->

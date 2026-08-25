@@ -159,10 +159,14 @@ public partial class SequenceTimelineView : UserControl
             return;
         }
         if (Vm is not { } vm || Keyboard.FocusedElement is TextBoxBase or PasswordBox
-            or ComboBox or Slider or ButtonBase) return;
+            or ComboBox or Slider) return;
 
         if (e.Key == Key.Space && Keyboard.Modifiers == ModifierKeys.None)
         {
+            // A focused button (e.g. Play/Stop still holding focus after being clicked) handles
+            // its own Space activation; every other shortcut below is unaffected by button focus,
+            // otherwise Delete/Undo/Redo/Restart stay dead until the operator clicks a clip again.
+            if (Keyboard.FocusedElement is ButtonBase) return;
             vm.PlayCommand.Execute(null);
             e.Handled = true;
         }

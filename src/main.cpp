@@ -285,7 +285,7 @@ static void startAnimationCommand(const AnimPayload& payload, uint16_t originSeq
 
 static bool validLeasedAnimPayload(const LeasedAnimPayload& payload) {
     return validMeshTarget(payload.targetId) &&
-           payload.animId == GESTURE_DIALOGUE_TALK &&
+           MotionEngine::isContinuous((GestureWireId)payload.animId) &&
            payload.leaseMs >= ANIM_LEASE_MIN_MS &&
            payload.leaseMs <= ANIM_LEASE_MAX_MS;
 }

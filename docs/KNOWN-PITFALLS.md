@@ -68,6 +68,24 @@ relevant behavior.
   further explanation in the UI. Update `RequiredGestureCatalogHash` (and the
   id/revision if those changed) in the same change, and remember the
   `console.tests` V2 scene fixtures embed their own catalog hash string too.
+- A gesture's generated numeric ID (`animId`/`GestureWireId`) is only its
+  position in `catalog/gesture-catalog-v1.json`. Never special-case a literal
+  ID value anywhere, console or firmware, for anything other than `idle.center`
+  staying position 0 by convention — Stage 7 (2026-08-24) landed
+  `communicate.yes` on the numeric ID an old pre-V2 scheme once used for
+  `dialogue.talk` (`AnimId is 16 or 17`, left over in four console files), so
+  `Yes` was silently treated as a continuous leased gesture and rejected by
+  firmware every time it played, with no visible error beyond an `UNCONF`
+  timeout badge. Look up behavior (execution kind, display name, seed policy)
+  by `GestureKey` against the parsed catalog, or by `animId` against the
+  catalog's own `Ordered` array — never against a hand-picked number, however
+  stable that number looks today.
+- The lease mechanism (`main.cpp`'s `validLeasedAnimPayload`,
+  `serial_console.cpp`'s `gesture` command handler) was hardcoded to accept
+  only `dialogue.talk` because it was the only continuous gesture that existed
+  before Stage 7. Both now call `MotionEngine::isContinuous(gestureId)`
+  instead — the same landmine as above, just on the firmware side of the same
+  boundary.
 
 ## Concurrency, timing and storage
 
@@ -163,6 +181,14 @@ relevant behavior.
   child must respect its own `Dock`.
 - A nested `ButtonBase` handles its click before an ancestor `MouseBinding`;
   use a real `Button` for an intentional second click target.
+- A window-level `PreviewKeyDown` handler that excludes focused text-input
+  controls (`TextBoxBase`, `ComboBox`, `Slider`, ...) should not also exclude
+  `ButtonBase` wholesale: a transport button (Play/Stop) keeps keyboard focus
+  after being clicked, so blanket-excluding `ButtonBase` silently swallows
+  every other shortcut (Delete, Undo/Redo, Restart, Return-to-start) until the
+  operator clicks something else first. Only `ButtonBase` needs excluding from
+  the `Space` branch specifically (a focused button should handle its own
+  Space-activates-click), not from the handler as a whole.
 - Treat tooltips as part of the interaction contract, not decorative copy. Every
   operator-facing interactive control needs a concise action/consequence tooltip;
   keep safety, persistence and timing claims synchronized with the command path.

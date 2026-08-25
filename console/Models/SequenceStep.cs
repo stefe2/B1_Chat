@@ -33,7 +33,7 @@ public partial class SequenceStep : ObservableObject
     [ObservableProperty] private AnimationDurationKind _durationKind = AnimationDurationKind.Finite;
 
     public bool IsInfinite => DurationKind == AnimationDurationKind.Infinite ||
-        GestureKey == "dialogue.talk" || AnimId is 16 or 17;
+        Services.GestureSceneV2Persistence.ExecutionKindFor(GestureKey) == GestureExecutionKind.Continuous;
 
     // Matches the catalog's seedPolicy:"required" gestures (communicate.nod, dialogue.talk) —
     // see catalog/gesture-catalog-v1.json. Everything else declares seedPolicy:"ignored".

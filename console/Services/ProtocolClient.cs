@@ -490,11 +490,13 @@ public partial class ProtocolClient : ObservableObject, ISequencerProtocol
                         "continuous" => AnimationDurationKind.Infinite,
                         _ => AnimationDurationKind.Finite,
                     }
-                    : animId == 0
-                        ? AnimationDurationKind.Immediate
-                        : animId is 16 or 17
-                            ? AnimationDurationKind.Infinite
-                            : AnimationDurationKind.Finite;
+                    : GestureSceneV2Persistence.ExecutionKindFor(animId) switch
+                    {
+                        GestureExecutionKind.Immediate => AnimationDurationKind.Immediate,
+                        GestureExecutionKind.Continuous => AnimationDurationKind.Infinite,
+                        GestureExecutionKind.Finite => AnimationDurationKind.Finite,
+                        _ => animId == 0 ? AnimationDurationKind.Immediate : AnimationDurationKind.Finite,
+                    };
                 var nominalMs = item.TryGetProperty("nominalMs", out var nominal)
                     ? Math.Max(0, nominal.GetInt32())
                     : kind == AnimationDurationKind.Finite ? Math.Max(0, legacyMs) : 0;
