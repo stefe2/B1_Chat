@@ -73,7 +73,13 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     public IReadOnlyList<GestureFamily> GestureFamilies { get; } = BuildGestureFamilies();
 
     private static GestureLibraryEntry ToLibraryEntry(GestureDefinitionV2 gesture, int id) =>
-        new() { Id = id, Name = gesture.DisplayName, Description = gesture.Description };
+        new()
+        {
+            Id = id,
+            Name = gesture.DisplayName,
+            Description = gesture.Description,
+            IsContinuous = gesture.Execution == GestureExecutionKind.Continuous,
+        };
 
     private static List<GestureFamily> BuildGestureFamilies() =>
         GestureSceneV2Persistence.Catalog.Ordered

@@ -1119,21 +1119,8 @@
                                                         <TextBlock Text="{Binding Id, StringFormat='#{0}'}" FontFamily="{StaticResource MonoFont}"
                                                                    FontSize="9" Foreground="{StaticResource Muted2Brush}"
                                                                    Margin="5,1.5,0,0" />
-                                                        <TextBlock Text="⟲" FontSize="9" Foreground="{StaticResource Muted2Brush}" Margin="4,0.5,0,0">
-                                                            <TextBlock.Style>
-                                                                <Style TargetType="TextBlock">
-                                                                    <Setter Property="Visibility" Value="Collapsed" />
-                                                                    <Style.Triggers>
-                                                                        <DataTrigger Binding="{Binding Id}" Value="16">
-                                                                            <Setter Property="Visibility" Value="Visible" />
-                                                                        </DataTrigger>
-                                                                        <DataTrigger Binding="{Binding Id}" Value="17">
-                                                                            <Setter Property="Visibility" Value="Visible" />
-                                                                        </DataTrigger>
-                                                                    </Style.Triggers>
-                                                                </Style>
-                                                            </TextBlock.Style>
-                                                        </TextBlock>
+                                                        <TextBlock Text="⟲" FontSize="9" Foreground="{StaticResource Muted2Brush}" Margin="4,0.5,0,0"
+                                                                   Visibility="{Binding IsContinuous, Converter={StaticResource BoolToVisConv}}" />
                                                     </StackPanel>
                                                 </Border>
                                             </DataTemplate>

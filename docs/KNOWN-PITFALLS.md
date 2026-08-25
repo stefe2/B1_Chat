@@ -79,7 +79,14 @@ relevant behavior.
   timeout badge. Look up behavior (execution kind, display name, seed policy)
   by `GestureKey` against the parsed catalog, or by `animId` against the
   catalog's own `Ordered` array — never against a hand-picked number, however
-  stable that number looks today.
+  stable that number looks today. A fifth instance surfaced the next day
+  (2026-08-25): the GESTURES library chip's own loop-badge (⟲) trigger,
+  cosmetic only — it never affected execution, just which chip looked
+  continuous — still matched `Id == 16 || Id == 17` directly in
+  `SequenceTimelineView.xaml`. Fixed the same way: `GestureLibraryEntry` now
+  carries `IsContinuous`, populated from `GestureDefinitionV2.Execution` in
+  `SequencerViewModel.ToLibraryEntry`, and the badge binds `Visibility` to it
+  instead of a two-case `DataTrigger`.
 - The lease mechanism (`main.cpp`'s `validLeasedAnimPayload`,
   `serial_console.cpp`'s `gesture` command handler) was hardcoded to accept
   only `dialogue.talk` because it was the only continuous gesture that existed

@@ -90,5 +90,16 @@ than dragged.
 **Snap** — optional rounding of placement to 100 ms when a clip is inserted or
 released.
 
+**Continuous gesture** — a catalog gesture (`Talk`, `Listen`, `Idle sway`,
+`Scan`, `Follow slow`, four `Emotion` gestures, and two `Mechanical` gestures
+today) that loops on the droid instead of finishing on its own. Its Sequencer
+clip carries a five-second safety lease, renewed every two seconds, and its
+inspector exposes a real endpoint instead of a fixed duration.
+
+**Variation / seed** — a deterministic random seed behind a clip's pose. Only
+gestures that need it (`Nod` and `Talk` today) show a VARIATION section in the
+inspector; Regenerate picks a new seed, and Duplicate always keeps the
+original.
+
 **Console-driven playback** — the PC schedules and sends individual commands in
 real time. No standalone sequence remains on the master.

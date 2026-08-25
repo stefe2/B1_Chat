@@ -447,6 +447,20 @@ trajectory data itself:
 Trajectory/timing content itself has not yet needed a correction. Audition
 continues on the remaining gestures.
 
+**A fifth `animId is 16 or 17` spot found the next day (2026-08-25):** the
+GESTURES palette chip's own loop badge (⟲) was still a `SequenceTimelineView.xaml`
+`DataTrigger` on literal `Id == 16`/`Id == 17`, missed by the console-wide sweep
+above because it is purely cosmetic — it never affected execution, only which
+chip looked continuous in the library. It now marked the wrong two gestures
+(`Yes`, `attention.quizzical`) and missed all eleven real ones. Fixed the same
+way as the rest of the sweep: `GestureLibraryEntry` gained `IsContinuous`,
+populated in `SequencerViewModel.ToLibraryEntry` from
+`GestureDefinitionV2.Execution == GestureExecutionKind.Continuous`, and the
+badge's `Visibility` binds to it directly. Verified live against the bench
+fleet: the badge now lands on exactly `Talk`, `Listen`, `Idle sway`, `Scan`,
+`Follow slow`, `Excited`, `Confused`, `Affection`, `Bored`, `Self check`, and
+`Scan vertical`.
+
 ### Stage 8 — Simulation and observability
 
 - Add a no-motion Dry Run using the real compiled plan.

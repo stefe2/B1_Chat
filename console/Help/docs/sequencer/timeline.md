@@ -85,11 +85,12 @@ cancelled ruler scrubbing returns the playhead to its starting position.
 
 ![Gesture library](../images/gesture-library.png)
 
-*Figure: All six behavior groups are visible, including Alert & Glitch and the
-audio-synchronized Talk loop.*
+*Figure: The full catalog spans seven families — REST, COMMUNICATION,
+DIALOGUE, ATTENTION, EMOTION, REACTION, MECHANICAL — for 53 gestures total.
+Each family's label and its chips share one color.*
 
-*The built-in gestures are grouped by purpose; loop badges identify
-`POWER_DOWN` and `TALK`.*
+*Hover a chip to read its catalog description instead of a repeated
+interaction hint.*
 
 - **Insert:** first arm a track, then click a library chip to insert it there at
   the playhead. A click with **NO TRACK ARMED** inserts nothing. Dragging a chip
@@ -101,8 +102,11 @@ audio-synchronized Talk loop.*
   duplicate is selected and placed on the same target 0.2 seconds after the
   original so the copy does not remain hidden underneath it.
 - **Inspector:** choose a different gesture or target, view its exact start and
-  duration estimate, and use the ±0.1 s buttons. For `POWER_DOWN`/`TALK`, a
-  second pair of buttons edits the real endpoint. Displayed values are not
+  duration estimate, and use the ±0.1 s buttons. For a continuous gesture, a
+  second pair of buttons edits the real endpoint. A gesture that needs pose
+  variation (today: `Nod` and `Talk`) also gets a VARIATION section showing
+  its seed, with Regenerate to pick a new pose without touching timing;
+  Duplicate always keeps the original clip's seed. Displayed values are not
   text-entry fields in the current release.
 
 One shared timing estimate drives clip width, active highlighting, total time
@@ -110,12 +114,13 @@ and inspector text. Finite gestures use the firmware's fixed nominal duration;
 deterministic pose variation does not shift the timeline. Before metadata
 arrives, the same 1.5 s provisional fallback appears everywhere.
 
-The loop badge identifies `POWER_DOWN` and `TALK`. Their width is a persisted
-fixed duration (2 s by default), not an indication: at the right edge the
-Sequencer sends targeted `IDLE` if that looping gesture still owns the droid.
-A later replacement gesture always wins. `IDLE` itself is an immediate command;
-its physical return to center takes approximately 0.6 s but adds no timeline
-tail.
+The catalog currently marks eleven gestures continuous — `Talk`, `Listen`,
+`Idle sway`, `Scan`, `Follow slow`, four `Emotion` gestures, and two
+`Mechanical` gestures. Their clip width is a persisted fixed duration (2 s by
+default), not an indication: at the right edge the Sequencer sends targeted
+`IDLE` if that gesture still owns the droid. A later replacement gesture
+always wins. `IDLE` itself is an immediate command; its physical return to
+center takes approximately 0.6 s but adds no timeline tail.
 
 ## Undo and Redo
 

@@ -55,7 +55,7 @@ before clicking a chip, or drag it when target and timing must be explicit.*
 - Start with all required droids online. Missed timeline events are not replayed
   when a droid reconnects.
 - Remember that Pause cannot retract a gesture already sent. Normal Stop cleans
-  up Sequencer-owned `TALK`/`POWER_DOWN`, but finite gestures finish naturally;
+  up Sequencer-owned continuous gestures, but finite gestures finish naturally;
   use Safe Stop or E-STOP for their distinct fleet-wide safety policies.
 
 ## Firmware work

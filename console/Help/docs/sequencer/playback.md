@@ -50,7 +50,7 @@ Every finding is advisory: Preflight never disables or intercepts Play, Restart
 or Resume. It runs only when you open the panel; closing it does not rescan, and
 there is no persistent red result badge beside the button. The scan checks
 overlapping/duplicate/ambiguous gestures, missing/unreadable audio, pending or
-unknown audio duration, and `TALK`/`POWER_DOWN` clips without a valid represented
+unknown audio duration, and continuous-gesture clips without a valid represented
 endpoint. Muted gesture tracks are ignored, including conflict analysis.
 
 Preflight deliberately does not inspect the serial port, handshake, master or
@@ -86,12 +86,12 @@ Muted or offline rows do not create a queue for missed commands.*
 - **Pause** freezes the console playhead, pauses active PC audio, and cancels
   future scheduled sends. It sends no pause/stop command to the droids: every
   finite gesture already received continues to its natural completion, and a
-  running `TALK`/`POWER_DOWN` continues while its safety lease is renewed.
+  running continuous gesture continues while its safety lease is renewed.
   Moving the timeline playhead while paused abandons that retained pass through
   normal Stop cleanup and changes the transport to Stopped at the new position;
   clicking without moving preserves ordinary Resume.
 - **Stop** cancels future sends, stops local audio, sends targeted `IDLE` cleanup
-  to droids whose latest Sequencer gesture is `TALK` or `POWER_DOWN`, and retains
+  to droids whose latest Sequencer gesture is continuous, and retains
   the playhead for inspection. **Return to start** (`Ctrl+Home`) is a separate
   navigation action available after stopping.
 - **Safe Stop** cancels the same console work, then tells every reachable droid
@@ -109,7 +109,7 @@ Muted or offline rows do not create a queue for missed commands.*
   content, END remains at that content tail instead of truncating it. **Auto**
   returns to the calculated tail, and endpoint edits support Undo/Redo.
 - **Loop** starts a new pass when the Scene endpoint is reached. A
-  `POWER_DOWN`/`TALK` clip first reaches its authored endpoint and sends IDLE;
+  continuous-gesture clip first reaches its authored endpoint and sends IDLE;
   the next pass then starts cleanly at t = 0. Without Loop, natural completion
   stops at the authoritative Scene endpoint so the finished position remains
   visible.
@@ -134,7 +134,7 @@ not an automatic fallback for a lost master.
 
 > **Important:** Pause cannot freeze or retract a gesture already sent to a
 > droid, and Stop does not interrupt finite one-shot gestures. A one-shot gesture
-> finishes naturally. For a tracked looping `POWER_DOWN` or `TALK`, Stop,
+> finishes naturally. For a tracked looping continuous gesture, Stop,
 > non-looping natural end, application shutdown, or restarting Play sends a
 > targeted `IDLE` to each affected droid without disturbing other targets.
 
@@ -148,8 +148,8 @@ The console remembers the latest Sequencer gesture written for each concrete
 droid. Broadcast looping gestures are expanded to the droids online at dispatch;
 a later per-droid finite gesture removes only that droid from cleanup. Repeated
 Stop is idempotent after a successful serial write. If the link is unavailable,
-cleanup remains retryable. Current firmware also gives Sequencer-started
-`TALK`/`POWER_DOWN` a five-second safety lease, renewed every two seconds while
+cleanup remains retryable. Current firmware also gives any Sequencer-started
+continuous gesture a five-second safety lease, renewed every two seconds while
 the pass still owns the gesture. If the console crashes, the cable is removed,
 the master becomes unreachable, or renewal otherwise stops, the target returns
 to `IDLE` automatically. Pause keeps renewing until the authored clip endpoint;
@@ -186,7 +186,7 @@ Older firmware without the additive `animAccepted` event can move directly from
 the radio stack accepted the outgoing frame; it is not proof that a slave
 received it. Target execution remains the success signal.
 
-`POWER_DOWN` and `TALK` loop while their Sequencer lease is renewed, so their
+Continuous gestures loop while their Sequencer lease is renewed, so their
 healthy state remains `START`; they become terminal when another gesture
 interrupts them, the firmware rejects the command, or the lease expires
 (`STOP`, reason `leaseExpired`). Execution feedback confirms the firmware

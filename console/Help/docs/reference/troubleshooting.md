@@ -115,8 +115,9 @@ See [OTA over the Mesh](../firmware/ota.md) for the complete outcome model.
 ## Sequencer Play does not stop a moving droid
 
 Pause and Stop cancel future timeline sends; they cannot retract a gesture already
-received by firmware. One-shot gestures finish naturally. Replace `TALK` or
-`POWER_DOWN` with another gesture, or disable Servos for an immediate motion cut.
+received by firmware. One-shot gestures finish naturally. Replace the running
+continuous gesture with another gesture, or disable Servos for an immediate
+motion cut.
 
 ## A sequence was not there after restart
 
