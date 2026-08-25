@@ -49,4 +49,6 @@ C++ runtime.
 
 ## Download verification
 
-SHA-256 for `b1-chat-console-setup-0.13.1.exe`: filled in after build.
+SHA-256 for `b1-chat-console-setup-0.13.1.exe`:
+
+`b3ba44951a4a71128f83c89e2aabad80ea62a894e086e997ee27b991c5c89f2c`
