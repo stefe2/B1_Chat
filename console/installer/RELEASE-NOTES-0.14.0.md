@@ -63,4 +63,4 @@ C++ runtime.
 
 SHA-256 for `b1-chat-console-setup-0.14.0.exe`:
 
-`(filled in after the installer is built)`
+`5b8786f2fc3cf859a0b7dabcdaa23605ee3694df7d4250d28026627d29eb1b00`
