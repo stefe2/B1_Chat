@@ -655,6 +655,7 @@
                                                                                 <Slider Width="150" Minimum="0" Maximum="200" SmallChange="5" LargeChange="25"
                                                                                         TickFrequency="5" IsSnapToTickEnabled="True"
                                                                                         AutoToolTipPlacement="TopLeft" AutoToolTipPrecision="0"
+                                                                                        ToolTip="Drag, click, or use the arrow keys to set this clip's volume (0–200 %). Releasing the slider creates one undo step."
                                                                                         Style="{StaticResource MetalSliderStyle}" VerticalAlignment="Center"
                                                                                         Value="{Binding PlacementTarget.DataContext.Volume, RelativeSource={RelativeSource AncestorType=ContextMenu}, Mode=OneWay}"
                                                                                         Tag="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"

@@ -30,7 +30,7 @@ public sealed class SequencerPersistenceTests
 
         vm.ExportTo(path);
         var json = JsonNode.Parse(File.ReadAllText(path))!.AsObject();
-        Assert.Equal(1, json["version"]!.GetValue<int>());
+        Assert.Equal(SceneV2Parser.CurrentVersion, json["version"]!.GetValue<int>());
         Assert.True(json.ContainsKey("endMs"));
         Assert.Null(json["endMs"]);
         Assert.Equal(2_200, json["gestureClips"]![0]!["holdMs"]!.GetValue<int>());

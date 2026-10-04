@@ -22,11 +22,13 @@ Sequencer backlog item by item.
 - Ctrl+click multi-selection of gesture and audio clips, moved together in time
   as one Undo step (SEQ-G09, partial).
 - Console version 0.14.0 (Scene schema change). Validation: firmware
-  `pio run -e b1` and console/test builds succeed. The full console suite ran
-  once: 336 passed, 27 failed. The two failures inspected predate this work:
-  they still use the legacy numeric IDs 16/17 as continuous gestures, which
-  e3b77e7 replaced with catalog-derived execution kinds. The complete failure
-  list has not been captured yet. No hardware or manual UI check yet.
+  `pio run -e b1` and console/test builds succeed. Full console suite (second
+  run, 2026-10-04): 337 passed, 26 failed. Two failures came from this work
+  (volume slider without its own tooltip; a test pinned Scene version 1) and
+  were fixed afterwards, not yet re-run. The other 24 predate it: they still
+  use the legacy numeric IDs 16/17 as continuous gestures, which e3b77e7
+  replaced with catalog-derived execution kinds. Master flashed with fw 1.12.2
+  after a full flash backup and chip erase; no manual UI check yet.
 
 ## 2026-08-16 — Gesture Sequencer V2: stage 3B complete
 
