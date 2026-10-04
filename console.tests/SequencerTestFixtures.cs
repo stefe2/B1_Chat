@@ -387,3 +387,31 @@ internal sealed class TemporaryJsonFixture : IDisposable
         if (Directory.Exists(DirectoryPath)) Directory.Delete(DirectoryPath, recursive: true);
     }
 }
+
+/// <summary>
+/// A real catalog gesture for tests. Since e3b77e7 the console derives execution kind from the
+/// catalog key, never from a numeric ID, so a test step needs both the key and its generated ID
+/// (the legacy continuous IDs 16/17 are now finite gestures). The ID is resolved by key and the
+/// kind re-checked, so a reordered or edited catalog fails loudly instead of silently turning
+/// these tests finite again.
+/// </summary>
+internal sealed record CatalogGesture(string Key, int Id);
+
+internal static class ContinuousGestures
+{
+    internal static CatalogGesture Talk { get; } = Resolve("dialogue.talk");
+    internal static CatalogGesture IdleSway { get; } = Resolve("rest.idle-sway");
+
+    internal static CatalogGesture Resolve(string key)
+    {
+        var ordered = GestureSceneV2Persistence.Catalog.Ordered;
+        for (var id = 0; id < ordered.Count; id++)
+        {
+            if (ordered[id].Key != key) continue;
+            if (ordered[id].Execution != GestureExecutionKind.Continuous)
+                throw new InvalidOperationException($"{key} is no longer a continuous gesture.");
+            return new CatalogGesture(key, id);
+        }
+        throw new InvalidOperationException($"{key} is missing from the gesture catalog.");
+    }
+}

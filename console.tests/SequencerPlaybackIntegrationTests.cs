@@ -286,7 +286,7 @@ public sealed class SequencerPlaybackIntegrationTests
         {
             StartMs = 0,
             Target = 0x1234,
-            AnimId = 16,
+            AnimId = ContinuousGestures.Talk.Id, GestureKey = ContinuousGestures.Talk.Key,
             EndAfterMs = 2_000,
         });
 
@@ -300,7 +300,7 @@ public sealed class SequencerPlaybackIntegrationTests
 
         Assert.False(vm.IsPaused);
         Assert.Equal(2, protocol.Sent.Count);
-        Assert.Equal(16, protocol.Sent[0].AnimId);
+        Assert.Equal(ContinuousGestures.Talk.Id, protocol.Sent[0].AnimId);
         Assert.Equal(0, protocol.Sent[1].AnimId);
         Assert.Equal((ushort)0x1234, protocol.Sent[1].Target);
     }
@@ -1013,7 +1013,7 @@ public sealed class SequencerPlaybackIntegrationTests
             }, vm => vm.NudgeStartForwardCommand.Execute(null)),
             ("infinite gesture end", vm =>
             {
-                vm.Steps.Add(new SequenceStep { AnimId = 17, Target = 0xFFFF, StartMs = 100 });
+                vm.Steps.Add(new SequenceStep { AnimId = ContinuousGestures.IdleSway.Id, GestureKey = ContinuousGestures.IdleSway.Key, Target = 0xFFFF, StartMs = 100 });
                 vm.SelectedStep = vm.Steps[0];
             }, vm => vm.NudgeEndLongerCommand.Execute(null)),
             ("regenerate gesture seed", vm =>
@@ -1848,12 +1848,12 @@ public sealed class SequencerPlaybackIntegrationTests
     public void LoopingGesture_OnlyRequiresStartAndDelayedStartCannotRegressCompletion()
     {
         var protocol = new FakeSequencerProtocol();
-        protocol.Durations[17] = 4000;
+        protocol.Durations[ContinuousGestures.IdleSway.Id] = 4000;
         protocol.Droids.Add(new Droid { Id = 0x1234, Online = true });
         var scheduler = new FakePlaybackTimerScheduler();
         var executionScheduler = new FakePlaybackTimerScheduler();
         using var vm = CreateViewModel(protocol, scheduler, executionScheduler: executionScheduler);
-        var step = new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = 17 };
+        var step = new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = ContinuousGestures.IdleSway.Id, GestureKey = ContinuousGestures.IdleSway.Key };
         vm.Steps.Add(step);
 
         vm.PlayCommand.Execute(null);
@@ -1861,27 +1861,28 @@ public sealed class SequencerPlaybackIntegrationTests
         var requestId = Assert.Single(protocol.Sent).RequestId;
         Assert.Single(executionScheduler.Entries);
 
-        protocol.RaiseAnimExecution(requestId, 0x1234, 17, "started");
+        protocol.RaiseAnimExecution(requestId, 0x1234, ContinuousGestures.IdleSway.Id, "started");
         executionScheduler.Entries[0].Invoke();
         Assert.Equal("START", step.ExecutionSummary);
 
-        protocol.RaiseAnimExecution(requestId, 0x1234, 17, "interrupted");
-        protocol.RaiseAnimExecution(requestId, 0x1234, 17, "started");
+        protocol.RaiseAnimExecution(requestId, 0x1234, ContinuousGestures.IdleSway.Id, "interrupted");
+        protocol.RaiseAnimExecution(requestId, 0x1234, ContinuousGestures.IdleSway.Id, "started");
         Assert.Equal("STOP", step.ExecutionSummary);
         Assert.Equal("interrupted", step.ExecutionTone);
     }
 
     [Theory]
-    [InlineData(16)]
-    [InlineData(17)]
-    public void Stop_SendsTargetedIdleToAnActiveInfiniteGestureExactlyOnce(int infiniteAnimId)
+    [InlineData("dialogue.talk")]
+    [InlineData("rest.idle-sway")]
+    public void Stop_SendsTargetedIdleToAnActiveInfiniteGestureExactlyOnce(string infiniteKey)
     {
+        var infiniteAnimId = ContinuousGestures.Resolve(infiniteKey).Id;
         var protocol = new FakeSequencerProtocol();
         protocol.Durations[infiniteAnimId] = 4000;
         protocol.Droids.Add(new Droid { Id = 0x1234, Online = true });
         var scheduler = new FakePlaybackTimerScheduler();
         using var vm = CreateViewModel(protocol, scheduler);
-        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = infiniteAnimId });
+        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = infiniteAnimId, GestureKey = infiniteKey });
 
         vm.PlayCommand.Execute(null);
         scheduler.Entries[0].Invoke();
@@ -1897,13 +1898,13 @@ public sealed class SequencerPlaybackIntegrationTests
     public void BroadcastInfinite_WithPerDroidFiniteOverride_CleansOnlyRemainingTargets()
     {
         var protocol = new FakeSequencerProtocol();
-        protocol.Durations[17] = 4000;
+        protocol.Durations[ContinuousGestures.IdleSway.Id] = 4000;
         protocol.Durations[2] = 500;
         foreach (var id in new ushort[] { 100, 200, 300 })
             protocol.Droids.Add(new Droid { Id = id, Online = true });
         var scheduler = new FakePlaybackTimerScheduler();
         using var vm = CreateViewModel(protocol, scheduler);
-        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = ushort.MaxValue, AnimId = 17 });
+        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = ushort.MaxValue, AnimId = ContinuousGestures.IdleSway.Id, GestureKey = ContinuousGestures.IdleSway.Key });
         vm.Steps.Add(new SequenceStep { StartMs = 40, Target = 200, AnimId = 2 });
 
         vm.PlayCommand.Execute(null);
@@ -1922,19 +1923,19 @@ public sealed class SequencerPlaybackIntegrationTests
     public void RepeatedInfiniteGestures_OnTheSameDroid_RequireOneCleanup()
     {
         var protocol = new FakeSequencerProtocol();
-        protocol.Durations[16] = 3000;
-        protocol.Durations[17] = 4000;
+        protocol.Durations[ContinuousGestures.Talk.Id] = 3000;
+        protocol.Durations[ContinuousGestures.IdleSway.Id] = 4000;
         var scheduler = new FakePlaybackTimerScheduler();
         using var vm = CreateViewModel(protocol, scheduler);
-        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = 16 });
-        vm.Steps.Add(new SequenceStep { StartMs = 40, Target = 0x1234, AnimId = 17 });
+        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = ContinuousGestures.Talk.Id, GestureKey = ContinuousGestures.Talk.Key });
+        vm.Steps.Add(new SequenceStep { StartMs = 40, Target = 0x1234, AnimId = ContinuousGestures.IdleSway.Id, GestureKey = ContinuousGestures.IdleSway.Key });
 
         vm.PlayCommand.Execute(null);
         scheduler.Entries[0].Invoke();
         scheduler.Entries[1].Invoke();
         vm.StopCommand.Execute(null);
 
-        Assert.Equal(new[] { 16, 17, 0 }, protocol.Sent.Select(s => s.AnimId));
+        Assert.Equal(new[] { ContinuousGestures.Talk.Id, ContinuousGestures.IdleSway.Id, 0 }, protocol.Sent.Select(s => s.AnimId));
         Assert.All(protocol.Sent, sent => Assert.Equal((ushort)0x1234, sent.Target));
     }
 
@@ -1944,14 +1945,14 @@ public sealed class SequencerPlaybackIntegrationTests
         var protocol = new FakeSequencerProtocol { NextDispatchState = AnimDispatchState.WriteFailed };
         var scheduler = new FakePlaybackTimerScheduler();
         using var vm = CreateViewModel(protocol, scheduler);
-        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = 17 });
+        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = ContinuousGestures.IdleSway.Id, GestureKey = ContinuousGestures.IdleSway.Key });
 
         vm.PlayCommand.Execute(null);
         scheduler.Entries[0].Invoke();
         vm.StopCommand.Execute(null);
 
         Assert.Single(protocol.Sent);
-        Assert.Equal(17, protocol.Sent[0].AnimId);
+        Assert.Equal(ContinuousGestures.IdleSway.Id, protocol.Sent[0].AnimId);
     }
 
     [Fact]
@@ -1960,7 +1961,7 @@ public sealed class SequencerPlaybackIntegrationTests
         var protocol = new FakeSequencerProtocol();
         var scheduler = new FakePlaybackTimerScheduler();
         using var vm = CreateViewModel(protocol, scheduler);
-        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = 17 });
+        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = ContinuousGestures.IdleSway.Id, GestureKey = ContinuousGestures.IdleSway.Key });
 
         vm.PlayCommand.Execute(null);
         scheduler.Entries[0].Invoke();
@@ -1969,23 +1970,23 @@ public sealed class SequencerPlaybackIntegrationTests
         protocol.NextDispatchState = AnimDispatchState.Written;
         vm.StopCommand.Execute(null);
 
-        Assert.Equal(new[] { 17, 0, 0 }, protocol.Sent.Select(s => s.AnimId));
+        Assert.Equal(new[] { ContinuousGestures.IdleSway.Id, 0, 0 }, protocol.Sent.Select(s => s.AnimId));
     }
 
     [Fact]
     public void NaturalEnd_CleansAnInfiniteGesture()
     {
         var protocol = new FakeSequencerProtocol();
-        protocol.Durations[17] = 4000;
+        protocol.Durations[ContinuousGestures.IdleSway.Id] = 4000;
         var scheduler = new FakePlaybackTimerScheduler();
         using var vm = CreateViewModel(protocol, scheduler);
-        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = 17 });
+        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = ContinuousGestures.IdleSway.Id, GestureKey = ContinuousGestures.IdleSway.Key });
 
         vm.PlayCommand.Execute(null);
         scheduler.Entries[0].Invoke();
         scheduler.Entries[1].Invoke();
 
-        Assert.Equal(new[] { 17, 0 }, protocol.Sent.Select(s => s.AnimId));
+        Assert.Equal(new[] { ContinuousGestures.IdleSway.Id, 0 }, protocol.Sent.Select(s => s.AnimId));
         Assert.False(vm.IsPlaying);
     }
 
@@ -2000,7 +2001,7 @@ public sealed class SequencerPlaybackIntegrationTests
         {
             StartMs = 20,
             Target = 0x1234,
-            AnimId = 17,
+            AnimId = ContinuousGestures.IdleSway.Id, GestureKey = ContinuousGestures.IdleSway.Key,
             EndAfterMs = 350,
         });
         vm.Steps.Add(new SequenceStep { StartMs = 370, Target = 0x1234, AnimId = 2 });
@@ -2012,28 +2013,28 @@ public sealed class SequencerPlaybackIntegrationTests
         scheduler.Entries[1].Invoke();
 
         // The finite replacement shares the explicit endpoint. Editor order dispatches it
-        // first; ownership checking then suppresses the stale TALK termination.
-        Assert.Equal(new[] { 17, 2 }, protocol.Sent.Select(item => item.AnimId));
+        // first; ownership checking then suppresses the stale continuous-gesture termination.
+        Assert.Equal(new[] { ContinuousGestures.IdleSway.Id, 2 }, protocol.Sent.Select(item => item.AnimId));
     }
 
     [Fact]
     public void LoopBoundary_EndsInfiniteGestureBeforeStartingTheNextPass()
     {
         var protocol = new FakeSequencerProtocol();
-        protocol.Durations[17] = 4000;
+        protocol.Durations[ContinuousGestures.IdleSway.Id] = 4000;
         var scheduler = new FakePlaybackTimerScheduler();
         using var vm = CreateViewModel(protocol, scheduler);
         vm.Loop = true;
-        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = 17 });
+        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = ContinuousGestures.IdleSway.Id, GestureKey = ContinuousGestures.IdleSway.Key });
 
         vm.PlayCommand.Execute(null);
         scheduler.Entries[0].Invoke();
         scheduler.Entries[1].Invoke();
-        Assert.Equal(new[] { 17, 0 }, protocol.Sent.Select(sent => sent.AnimId));
+        Assert.Equal(new[] { ContinuousGestures.IdleSway.Id, 0 }, protocol.Sent.Select(sent => sent.AnimId));
         Assert.True(vm.IsPlaying);
 
         vm.StopCommand.Execute(null);
-        Assert.Equal(new[] { 17, 0 }, protocol.Sent.Select(s => s.AnimId));
+        Assert.Equal(new[] { ContinuousGestures.IdleSway.Id, 0 }, protocol.Sent.Select(s => s.AnimId));
     }
 
     [Fact]
@@ -2044,13 +2045,13 @@ public sealed class SequencerPlaybackIntegrationTests
         var scheduler = new FakePlaybackTimerScheduler();
         var executionScheduler = new FakePlaybackTimerScheduler();
         using var vm = CreateViewModel(protocol, scheduler, executionScheduler: executionScheduler);
-        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = 17 });
+        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = ContinuousGestures.IdleSway.Id, GestureKey = ContinuousGestures.IdleSway.Key });
         vm.Steps.Add(new SequenceStep { StartMs = 40, Target = 0x1234, AnimId = 2 });
 
         vm.PlayCommand.Execute(null);
         scheduler.Entries[0].Invoke();
         var infiniteRequest = protocol.Sent[0].RequestId;
-        protocol.RaiseAnimMasterAccepted(infiniteRequest, 0x1234, 17,
+        protocol.RaiseAnimMasterAccepted(infiniteRequest, 0x1234, ContinuousGestures.IdleSway.Id,
             meshSeq: 76, leaseMs: 5000);
         var infiniteRenewal = executionScheduler.Entries[1];
         scheduler.Entries[1].Invoke();
@@ -2060,7 +2061,7 @@ public sealed class SequencerPlaybackIntegrationTests
         infiniteRenewal.Invoke();
         vm.StopCommand.Execute(null);
 
-        Assert.Equal(new[] { 17, 2, 0 }, protocol.Sent.Select(s => s.AnimId));
+        Assert.Equal(new[] { ContinuousGestures.IdleSway.Id, 2, 0 }, protocol.Sent.Select(s => s.AnimId));
         Assert.Equal((ushort)0x1234, protocol.Sent[^1].Target);
         Assert.Equal(new SentLeaseRenewal(0x1234, 76, 5000),
             Assert.Single(protocol.LeaseRenewals));
@@ -2070,16 +2071,16 @@ public sealed class SequencerPlaybackIntegrationTests
     public void Restart_CleansTheOldInfiniteGestureBeforeArmingTheNewPass()
     {
         var protocol = new FakeSequencerProtocol();
-        protocol.Durations[17] = 4000;
+        protocol.Durations[ContinuousGestures.IdleSway.Id] = 4000;
         var scheduler = new FakePlaybackTimerScheduler();
         using var vm = CreateViewModel(protocol, scheduler);
-        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = 17 });
+        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = ContinuousGestures.IdleSway.Id, GestureKey = ContinuousGestures.IdleSway.Key });
 
         vm.PlayCommand.Execute(null);
         scheduler.Entries[0].Invoke();
         vm.RestartCommand.Execute(null);
 
-        Assert.Equal(new[] { 17, 0 }, protocol.Sent.Select(s => s.AnimId));
+        Assert.Equal(new[] { ContinuousGestures.IdleSway.Id, 0 }, protocol.Sent.Select(s => s.AnimId));
         Assert.True(vm.IsPlaying);
     }
 
@@ -2089,13 +2090,13 @@ public sealed class SequencerPlaybackIntegrationTests
         var protocol = new FakeSequencerProtocol();
         var scheduler = new FakePlaybackTimerScheduler();
         var vm = CreateViewModel(protocol, scheduler);
-        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = 16 });
+        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = ContinuousGestures.Talk.Id, GestureKey = ContinuousGestures.Talk.Key });
 
         vm.PlayCommand.Execute(null);
         scheduler.Entries[0].Invoke();
         vm.Dispose();
 
-        Assert.Equal(new[] { 16, 0 }, protocol.Sent.Select(s => s.AnimId));
+        Assert.Equal(new[] { ContinuousGestures.Talk.Id, 0 }, protocol.Sent.Select(s => s.AnimId));
         Assert.False(vm.IsPlaying);
     }
 
@@ -2105,31 +2106,32 @@ public sealed class SequencerPlaybackIntegrationTests
         var protocol = new FakeSequencerProtocol();
         var scheduler = new FakePlaybackTimerScheduler();
         using var vm = CreateViewModel(protocol, scheduler);
-        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = 17 });
+        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = ContinuousGestures.IdleSway.Id, GestureKey = ContinuousGestures.IdleSway.Key });
 
         vm.PlayCommand.Execute(null);
         scheduler.Entries[0].Invoke();
         protocol.NextDispatchState = AnimDispatchState.NotConnected;
         protocol.RaiseLinkClosed();
         Assert.False(vm.IsPlaying);
-        Assert.Equal(new[] { 17, 0 }, protocol.Sent.Select(s => s.AnimId));
+        Assert.Equal(new[] { ContinuousGestures.IdleSway.Id, 0 }, protocol.Sent.Select(s => s.AnimId));
 
         protocol.NextDispatchState = AnimDispatchState.Written;
         vm.StopCommand.Execute(null);
-        Assert.Equal(new[] { 17, 0, 0 }, protocol.Sent.Select(s => s.AnimId));
+        Assert.Equal(new[] { ContinuousGestures.IdleSway.Id, 0, 0 }, protocol.Sent.Select(s => s.AnimId));
     }
 
     [Theory]
-    [InlineData(16)]
-    [InlineData(17)]
-    public void InfiniteGesture_UsesFiveSecondLeaseAndRenewsEveryTwoSeconds(int animId)
+    [InlineData("dialogue.talk")]
+    [InlineData("rest.idle-sway")]
+    public void InfiniteGesture_UsesFiveSecondLeaseAndRenewsEveryTwoSeconds(string gestureKey)
     {
+        var animId = ContinuousGestures.Resolve(gestureKey).Id;
         var protocol = new FakeSequencerProtocol();
         protocol.Droids.Add(new Droid { Id = 0x1234, Online = true });
         var scheduler = new FakePlaybackTimerScheduler();
         var executionScheduler = new FakePlaybackTimerScheduler();
         using var vm = CreateViewModel(protocol, scheduler, executionScheduler: executionScheduler);
-        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = animId });
+        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = animId, GestureKey = gestureKey });
 
         vm.PlayCommand.Execute(null);
         scheduler.Entries[0].Invoke();
@@ -2154,7 +2156,7 @@ public sealed class SequencerPlaybackIntegrationTests
         var scheduler = new FakePlaybackTimerScheduler();
         var executionScheduler = new FakePlaybackTimerScheduler();
         using var vm = CreateViewModel(protocol, scheduler, executionScheduler: executionScheduler);
-        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = 17 });
+        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = ContinuousGestures.IdleSway.Id, GestureKey = ContinuousGestures.IdleSway.Key });
         vm.Steps.Add(new SequenceStep { StartMs = 40, Target = 0x1234, AnimId = 2 });
 
         vm.PlayCommand.Execute(null);
@@ -2169,13 +2171,13 @@ public sealed class SequencerPlaybackIntegrationTests
     public void PauseKeepsLeaseButExplicitLoopBoundaryTerminatesIt()
     {
         var protocol = new FakeSequencerProtocol();
-        protocol.Durations[17] = 4000;
+        protocol.Durations[ContinuousGestures.IdleSway.Id] = 4000;
         protocol.Droids.Add(new Droid { Id = 0x1234, Online = true });
         var scheduler = new FakePlaybackTimerScheduler();
         var executionScheduler = new FakePlaybackTimerScheduler();
         using var vm = CreateViewModel(protocol, scheduler, executionScheduler: executionScheduler);
         vm.Loop = true;
-        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = 17 });
+        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = ContinuousGestures.IdleSway.Id, GestureKey = ContinuousGestures.IdleSway.Key });
 
         vm.PlayCommand.Execute(null);
         scheduler.Entries[0].Invoke();
@@ -2189,7 +2191,7 @@ public sealed class SequencerPlaybackIntegrationTests
         vm.PlayCommand.Execute(null);
         scheduler.Entries[2].Invoke();
         Assert.True(renewalTimer.Disposed);
-        Assert.Equal(new[] { 17, 0 }, protocol.Sent.Select(item => item.AnimId));
+        Assert.Equal(new[] { ContinuousGestures.IdleSway.Id, 0 }, protocol.Sent.Select(item => item.AnimId));
         Assert.Empty(protocol.LeaseRenewals);
     }
 
@@ -2201,7 +2203,7 @@ public sealed class SequencerPlaybackIntegrationTests
         var scheduler = new FakePlaybackTimerScheduler();
         var executionScheduler = new FakePlaybackTimerScheduler();
         using var vm = CreateViewModel(protocol, scheduler, executionScheduler: executionScheduler);
-        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = 17 });
+        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = ContinuousGestures.IdleSway.Id, GestureKey = ContinuousGestures.IdleSway.Key });
 
         vm.PlayCommand.Execute(null);
         scheduler.Entries[0].Invoke();
@@ -2215,7 +2217,7 @@ public sealed class SequencerPlaybackIntegrationTests
         renewalTimer.InvokeEvenIfDisposed();
 
         Assert.Empty(protocol.LeaseRenewals);
-        Assert.Equal(new[] { 17, 0 }, protocol.Sent.Select(item => item.AnimId));
+        Assert.Equal(new[] { ContinuousGestures.IdleSway.Id, 0 }, protocol.Sent.Select(item => item.AnimId));
     }
 
     [Fact]
@@ -2226,7 +2228,7 @@ public sealed class SequencerPlaybackIntegrationTests
         var scheduler = new FakePlaybackTimerScheduler();
         var executionScheduler = new FakePlaybackTimerScheduler();
         using var vm = CreateViewModel(protocol, scheduler, executionScheduler: executionScheduler);
-        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = 16 });
+        vm.Steps.Add(new SequenceStep { StartMs = 20, Target = 0x1234, AnimId = ContinuousGestures.Talk.Id, GestureKey = ContinuousGestures.Talk.Key });
 
         vm.PlayCommand.Execute(null);
         scheduler.Entries[0].Invoke();

@@ -241,18 +241,18 @@ public sealed class SequencerPlaybackPlanTests
     }
 
     [Fact]
-    public void Capture_TalkAndPowerDownUsePersistedEndsAndCreateTerminationEvents()
+    public void Capture_ContinuousGesturesUsePersistedEndsAndCreateTerminationEvents()
     {
-        const int powerDown = 16;
-        const int talk = 17;
+        var talk = ContinuousGestures.Talk;
+        var idleSway = ContinuousGestures.IdleSway;
         var plan = SequencerPlaybackPlan.Capture(
             new[]
             {
-                new SequenceStep { StartMs = 100, AnimId = powerDown },
-                new SequenceStep { StartMs = 200, AnimId = talk },
+                new SequenceStep { StartMs = 100, AnimId = talk.Id, GestureKey = talk.Key },
+                new SequenceStep { StartMs = 200, AnimId = idleSway.Id, GestureKey = idleSway.Key },
             },
             Array.Empty<AudioLane>(),
-            new Dictionary<int, int> { [powerDown] = 3_000, [talk] = 4_000 },
+            new Dictionary<int, int> { [talk.Id] = 3_000, [idleSway.Id] = 4_000 },
             false,
             () => 1);
 

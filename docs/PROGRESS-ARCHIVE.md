@@ -25,10 +25,12 @@ Sequencer backlog item by item.
   `pio run -e b1` and console/test builds succeed. Full console suite (second
   run, 2026-10-04): 337 passed, 26 failed. Two failures came from this work
   (volume slider without its own tooltip; a test pinned Scene version 1) and
-  were fixed afterwards, not yet re-run. The other 24 predate it: they still
-  use the legacy numeric IDs 16/17 as continuous gestures, which e3b77e7
-  replaced with catalog-derived execution kinds. Master flashed with fw 1.12.2
-  after a full flash backup and chip erase; no manual UI check yet.
+  were fixed. The other 24 predated it: they still used the legacy numeric IDs
+  16/17 as continuous gestures, which e3b77e7 replaced with catalog-derived
+  execution kinds. They now build real continuous catalog gestures
+  (`dialogue.talk`, `rest.idle-sway`, resolved by key in the test fixtures).
+  Final run: 363/363 passed. Master flashed with fw 1.12.2 after a full flash
+  backup and chip erase; no manual UI check yet.
 
 ## 2026-08-16 — Gesture Sequencer V2: stage 3B complete
 

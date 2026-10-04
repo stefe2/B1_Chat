@@ -78,11 +78,12 @@ public sealed class SequencerPreflightServiceTests
     }
 
     [Theory]
-    [InlineData(16)]
-    [InlineData(17)]
-    public void InfiniteGestureWithoutRepresentedEndpoint_IsReported(int animId)
+    [InlineData("dialogue.talk")]
+    [InlineData("rest.idle-sway")]
+    public void InfiniteGestureWithoutRepresentedEndpoint_IsReported(string gestureKey)
     {
-        var step = Step(0x1234, animId: animId);
+        var gesture = ContinuousGestures.Resolve(gestureKey);
+        var step = Step(0x1234, animId: gesture.Id, gestureKey: gesture.Key);
         step.EndAfterMs = 0;
 
         var issues = Analyze(Input(steps: new[] { step }, effectiveEndMs: 100));
@@ -203,7 +204,8 @@ public sealed class SequencerPreflightServiceTests
     [Fact]
     public void InfiniteTargetOverlap_IsStillReportedForRepair()
     {
-        var infinite = Step(0x4002, animId: 17);
+        var infinite = Step(0x4002, animId: ContinuousGestures.IdleSway.Id,
+            gestureKey: ContinuousGestures.IdleSway.Key);
         infinite.EndAfterMs = 2_000;
         var later = Step(0x4002, startMs: 1_500, animId: 3, durationMs: 500);
 
@@ -216,7 +218,8 @@ public sealed class SequencerPreflightServiceTests
     [Fact]
     public void ErrorsSortBeforeWarningsAndInformation()
     {
-        var unterminated = Step(0x9999, animId: 17);
+        var unterminated = Step(0x9999, animId: ContinuousGestures.IdleSway.Id,
+            gestureKey: ContinuousGestures.IdleSway.Key);
         unterminated.EndAfterMs = 0;
         var issues = Analyze(Input(
             steps: new[] { unterminated },
@@ -365,12 +368,14 @@ public sealed class SequencerPreflightServiceTests
         ushort target,
         int startMs = 0,
         int animId = 2,
-        int durationMs = SequencerPlaybackPlan.DefaultGestureDurationMs) =>
+        int durationMs = SequencerPlaybackPlan.DefaultGestureDurationMs,
+        string gestureKey = "") =>
         new()
         {
             Target = target,
             StartMs = startMs,
             AnimId = animId,
+            GestureKey = gestureKey,
             ResolvedDurationMs = durationMs,
         };
 
