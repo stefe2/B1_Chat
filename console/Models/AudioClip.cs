@@ -22,6 +22,20 @@ public partial class AudioClip : ObservableObject
     // Restarts on completion while playing — see SequencerViewModel.ScheduleTimers.
     [ObservableProperty] private bool _loop;
 
+    /// <summary>Unity playback gain: the level every clip had before per-clip volume existed.</summary>
+    public const int DefaultVolume = 100;
+    public const int MaxVolume = 200;
+
+    // Playback gain in percent (0..MaxVolume). Non-destructive: only the played sound changes,
+    // never the audio file. 100 % keeps the historical MediaPlayer level (its 0.5 default), so
+    // 200 % is the player's full scale and the only headroom above the old fixed level.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsVolumeAdjusted))]
+    private int _volume = DefaultVolume;
+
+    /// <summary>Drives the clip's volume badge; unity gain shows nothing.</summary>
+    public bool IsVolumeAdjusted => Volume != DefaultVolume;
+
     // Waveform preview (WaveformService), populated asynchronously after load/add/replace — null
     // until then, or if decoding failed (missing/corrupt file), in which case no waveform renders.
     [ObservableProperty] private float[]? _peaks;
@@ -56,6 +70,9 @@ public partial class AudioClip : ObservableObject
     // with the cursor across lanes; the actual lane move only settles at mouse-up. Drives a
     // TranslateTransform in the view; never serialized.
     [ObservableProperty] private double _dragOffsetY;
+
+    // Transient view state: member of the Ctrl+click multi-selection, see SequenceStep.IsGrouped.
+    [ObservableProperty] private bool _isGrouped;
 
     /// <summary>
     /// Bumped every time the clip's source changes. A waveform decode captures the value it
@@ -96,6 +113,7 @@ public partial class AudioClip : ObservableObject
         DurationMs = DurationMs,
         StartMs = StartMs,
         Loop = Loop,
+        Volume = Volume,
         ProbeStatus = ProbeStatus,
         ProbeMessage = ProbeMessage,
         ValidationPending = ValidationPending,

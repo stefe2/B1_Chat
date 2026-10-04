@@ -96,8 +96,9 @@ internal sealed class FakeAudioPlayer : ISequencerAudioPlayer
     public List<AudioAction> Actions { get; } = new();
     public event Action<AudioPlaybackFailure>? PlaybackFailed;
 
-    public void Play(string? path, bool loop = false, int clipId = 0, int startOffsetMs = 0) =>
-        Actions.Add(new("Play", path, loop, clipId, startOffsetMs));
+    public void Play(string? path, bool loop = false, int clipId = 0, int startOffsetMs = 0,
+                     int volumePercent = AudioClip.DefaultVolume) =>
+        Actions.Add(new("Play", path, loop, clipId, startOffsetMs, volumePercent));
     public void PauseAll() => Actions.Add(new("PauseAll", null, false, 0));
     public void ResumeAll() => Actions.Add(new("ResumeAll", null, false, 0));
     public void StopAll() => Actions.Add(new("StopAll", null, false, 0));
@@ -108,7 +109,8 @@ internal sealed class FakeAudioPlayer : ISequencerAudioPlayer
 }
 
 internal sealed record AudioAction(
-    string Kind, string? Path, bool Loop, int ClipId = 0, int StartOffsetMs = 0);
+    string Kind, string? Path, bool Loop, int ClipId = 0, int StartOffsetMs = 0,
+    int VolumePercent = AudioClip.DefaultVolume);
 
 internal sealed class FakeSequencerSettings : ISequencerSettings
 {

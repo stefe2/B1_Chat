@@ -175,7 +175,9 @@ internal static class CatalogIntegrity
 internal static class SceneV2Parser
 {
     internal const string SchemaType = "b1-scene";
-    internal const int CurrentVersion = 1;
+    // Version 2 adds the required per-clip audio "volume". Version 1 files stay readable and
+    // load at unity gain; they are rewritten as version 2 on the next save.
+    internal const int CurrentVersion = 2;
 
     internal static SceneV2 Parse(string json)
     {
@@ -183,12 +185,12 @@ internal static class SceneV2Parser
         var root = document.RootElement;
         Schema.Fields(root, "$", new[] { "type", "version", "name", "loop", "endMs", "catalog", "tracks", "audioLanes", "gestureClips" });
         Schema.Equal(Schema.String(root, "type", "$", 64), SchemaType, "$.type");
-        Schema.Equal(Schema.Int(root, "version", "$", 1, CurrentVersion), CurrentVersion, "$.version");
+        var version = Schema.Int(root, "version", "$", 1, CurrentVersion);
         var catalog = ReadIdentity(Schema.Object(root, "catalog", "$"), "$.catalog");
         return new SceneV2(
             Schema.String(root, "name", "$", 128, allowEmpty: true), Schema.Bool(root, "loop", "$"),
             Schema.NullableInt(root, "endMs", "$", 0, Schema.MaxTimelineMs), catalog,
-            ReadTracks(root), ReadAudioLanes(root), ReadClips(root));
+            ReadTracks(root), ReadAudioLanes(root, version), ReadClips(root));
     }
 
     internal static void ValidateAgainstCatalog(SceneV2 scene, GestureCatalogV2 catalog)
@@ -245,7 +247,10 @@ internal static class SceneV2Parser
         return values;
     }
 
-    private static IReadOnlyList<SceneAudioLaneV2> ReadAudioLanes(JsonElement root)
+    private static readonly string[] AudioClipFieldsV1 = { "filePath", "durationMs", "startMs", "loop" };
+    private static readonly string[] AudioClipFieldsV2 = { "filePath", "durationMs", "startMs", "loop", "volume" };
+
+    private static IReadOnlyList<SceneAudioLaneV2> ReadAudioLanes(JsonElement root, int version)
     {
         var lanes = new List<SceneAudioLaneV2>(); var total = 0; var index = 0;
         foreach (var value in Schema.Array(root, "audioLanes", "$", 0, 64).EnumerateArray())
@@ -254,11 +259,12 @@ internal static class SceneV2Parser
             var clips = new List<SceneAudioClipV2>(); var clipIndex = 0;
             foreach (var clip in Schema.Array(value, "clips", path, 0, 10_000).EnumerateArray())
             {
-                var clipPath = $"{path}.clips[{clipIndex++}]"; Schema.Fields(clip, clipPath, new[] { "filePath", "durationMs", "startMs", "loop" });
+                var clipPath = $"{path}.clips[{clipIndex++}]"; Schema.Fields(clip, clipPath, version >= 2 ? AudioClipFieldsV2 : AudioClipFieldsV1);
                 var duration = Schema.Int(clip, "durationMs", clipPath, 0, Schema.MaxTimelineMs);
                 var start = Schema.Int(clip, "startMs", clipPath, 0, Schema.MaxTimelineMs);
                 if ((long)duration + start > Schema.MaxTimelineMs) throw Schema.Error($"{clipPath}.durationMs", "clip exceeds the maximum timeline length");
-                clips.Add(new SceneAudioClipV2(Schema.String(clip, "filePath", clipPath, 32_767), duration, start, Schema.Bool(clip, "loop", clipPath)));
+                var volume = version >= 2 ? Schema.Int(clip, "volume", clipPath, 0, AudioClip.MaxVolume) : AudioClip.DefaultVolume;
+                clips.Add(new SceneAudioClipV2(Schema.String(clip, "filePath", clipPath, 32_767), duration, start, Schema.Bool(clip, "loop", clipPath), volume));
                 if (++total > 10_000) throw Schema.Error("$.audioLanes", "document exceeds 10000 audio clips");
             }
             lanes.Add(new SceneAudioLaneV2(Schema.String(value, "label", path, 64), clips));

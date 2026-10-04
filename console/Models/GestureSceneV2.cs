@@ -54,7 +54,8 @@ public sealed record GestureClipV2(
     uint Seed,
     int? HoldMs);
 
-public sealed record SceneAudioClipV2(string FilePath, int DurationMs, int StartMs, bool Loop);
+/// <summary><paramref name="Volume"/> is a playback gain percentage; see <see cref="AudioClip.Volume"/>.</summary>
+public sealed record SceneAudioClipV2(string FilePath, int DurationMs, int StartMs, bool Loop, int Volume = AudioClip.DefaultVolume);
 public sealed record SceneAudioLaneV2(string Label, IReadOnlyList<SceneAudioClipV2> Clips);
 
 public sealed record SceneV2(

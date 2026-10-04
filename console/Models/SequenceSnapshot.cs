@@ -58,7 +58,8 @@ public record SequenceSnapshot(
                 if (!string.Equals(left.FilePath, right.FilePath, StringComparison.Ordinal) ||
                     left.DurationMs != right.DurationMs ||
                     left.StartMs != right.StartMs ||
-                    left.Loop != right.Loop)
+                    left.Loop != right.Loop ||
+                    left.Volume != right.Volume)
                     return false;
             }
         }

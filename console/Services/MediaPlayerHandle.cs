@@ -81,6 +81,11 @@ public sealed class MediaPlayerHandle : IMediaHandle
         if (!_disposed) _player.Position = TimeSpan.Zero;
     }
 
+    public void SetVolume(double volume)
+    {
+        if (!_disposed) _player.Volume = Math.Clamp(volume, 0.0, 1.0);
+    }
+
     private void OnMediaOpened(object? sender, EventArgs e)
     {
         _opened = true;

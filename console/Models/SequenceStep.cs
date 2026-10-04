@@ -48,6 +48,10 @@ public partial class SequenceStep : ObservableObject
     // horizontal snap). Drives a TranslateTransform in the view; never serialized.
     [ObservableProperty] private double _dragOffsetY;
 
+    // Transient view state: member of the Ctrl+click multi-selection (moved as a group). Never
+    // serialized or cloned; a snapshot restore rebuilds the clip and so clears it.
+    [ObservableProperty] private bool _isGrouped;
+
     // Transient execution telemetry. It is intentionally excluded from
     // Clone()/serialization: every Play pass starts with fresh reports.
     [ObservableProperty] private string _executionSummary = "";

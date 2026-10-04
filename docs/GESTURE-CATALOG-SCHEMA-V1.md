@@ -71,10 +71,16 @@ head talks.
 
 ## Scene
 
-A V2 Scene has root `{ "type": "b1-scene", "version": 1 }`. It contains a
+A V2 Scene has root `{ "type": "b1-scene", "version": 2 }`. It contains a
 name, loop/end settings, the exact catalog identity, physical tracks, audio
 lanes and `gestureClips`. An old `b1-sequence` file is not a V2 Scene and is
 rejected without migration.
+
+Scene version 2 (console, 2026-10-03) adds a required integer `volume` (0–200,
+percent, 100 = the file's normal level) to every audio clip, beside
+`filePath`, `durationMs`, `startMs` and `loop`. A version 1 file stays readable:
+it must not carry `volume`, and its clips load at 100. The console always
+writes version 2, so a Scene it saves cannot be opened by an older console.
 
 Every gesture clip persists:
 

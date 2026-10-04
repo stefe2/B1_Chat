@@ -1111,6 +1111,112 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     public bool CompleteEditTransaction() => CommitSequenceEdit();
     public bool CancelEditTransaction() => CancelSequenceEdit();
 
+    // --- Multi-selection (Ctrl+click) of gesture and audio clips, moved together in time.
+    // Membership is a transient flag on the clip objects: a snapshot restore (Undo/Redo/load)
+    // rebuilds them and so clears it, and a deleted clip simply drops out of the enumeration.
+    // A group moves only horizontally; rows, targets and lanes stay unchanged.
+
+    internal IEnumerable<SequenceStep> GroupedSteps => Steps.Where(step => step.IsGrouped);
+    internal IEnumerable<AudioClip> GroupedAudioClips =>
+        AudioLanes.SelectMany(lane => lane.Clips).Where(clip => clip.IsGrouped);
+    internal int GroupCount => GroupedSteps.Count() + GroupedAudioClips.Count();
+
+    private Dictionary<ObservableObject, int>? _groupDragOrigins;
+
+    internal void ToggleGroupSelection(SequenceStep step)
+    {
+        if (!Steps.Contains(step)) return;
+        SeedGroupWithSelectedStep();
+        step.IsGrouped = !step.IsGrouped;
+        if (step.IsGrouped) SelectedStep = step;
+        else if (ReferenceEquals(SelectedStep, step)) SelectedStep = GroupedSteps.FirstOrDefault();
+    }
+
+    internal void ToggleGroupSelection(AudioClip clip)
+    {
+        if (!AudioLanes.Any(lane => lane.Clips.Contains(clip))) return;
+        SeedGroupWithSelectedStep();
+        clip.IsGrouped = !clip.IsGrouped;
+    }
+
+    /// <summary>
+    /// Audio clips have no inspector selection, so a plain click makes the clip a one-member
+    /// group: it is highlighted and is the seed the next Ctrl+click extends.
+    /// </summary>
+    internal void SelectAudioClip(AudioClip clip)
+    {
+        ClearGroupSelection();
+        SelectedStep = null;
+        if (AudioLanes.Any(lane => lane.Clips.Contains(clip))) clip.IsGrouped = true;
+    }
+
+    internal void ClearGroupSelection()
+    {
+        foreach (var step in Steps) step.IsGrouped = false;
+        foreach (var clip in AudioLanes.SelectMany(lane => lane.Clips)) clip.IsGrouped = false;
+    }
+
+    // A plain click followed by Ctrl+clicks extends the clip already selected for the inspector.
+    private void SeedGroupWithSelectedStep()
+    {
+        if (SelectedStep is { IsGrouped: false } selected && Steps.Contains(selected))
+            selected.IsGrouped = true;
+    }
+
+    /// <summary>Opens one edit transaction for the whole group, so the move is one Undo step.</summary>
+    internal bool BeginGroupDrag()
+    {
+        if (GroupCount < 2 || !BeginSequenceEdit()) return false;
+        _groupDragOrigins = new Dictionary<ObservableObject, int>();
+        foreach (var step in GroupedSteps) { _groupDragOrigins[step] = step.StartMs; step.Dragging = true; }
+        foreach (var clip in GroupedAudioClips) { _groupDragOrigins[clip] = clip.StartMs; clip.Dragging = true; }
+        return true;
+    }
+
+    internal void UpdateGroupDrag(double deltaMs) => ApplyGroupOffset((int)deltaMs);
+
+    /// <summary>The grabbed clip snaps to the grid; every other member keeps its relative offset.</summary>
+    internal bool CompleteGroupDrag(ObservableObject anchor)
+    {
+        if (_groupDragOrigins == null) return false;
+        // As for a single clip, a Play transition during capture freezes placement unsnapped.
+        if (CanEditSequence && _groupDragOrigins.TryGetValue(anchor, out var anchorOrigin))
+            ApplyGroupOffset(RoundToGrid(StartOf(anchor)) - anchorOrigin);
+        EndGroupDrag();
+        return CommitSequenceEdit();
+    }
+
+    /// <summary>Clears drag visuals only; the caller cancels the edit transaction itself.</summary>
+    internal void EndGroupDrag()
+    {
+        if (_groupDragOrigins == null) return;
+        foreach (var item in _groupDragOrigins.Keys)
+        {
+            if (item is SequenceStep step) step.Dragging = false;
+            else if (item is AudioClip clip) clip.Dragging = false;
+        }
+        _groupDragOrigins = null;
+    }
+
+    private void ApplyGroupOffset(int offsetMs)
+    {
+        if (_groupDragOrigins == null || _groupDragOrigins.Count == 0) return;
+        // The earliest member stops at 0 rather than the group compressing against it.
+        var offset = Math.Max(offsetMs, -_groupDragOrigins.Values.Min());
+        foreach (var (item, origin) in _groupDragOrigins)
+        {
+            if (item is SequenceStep step) step.StartMs = origin + offset;
+            else if (item is AudioClip clip) clip.StartMs = origin + offset;
+        }
+    }
+
+    private static int StartOf(ObservableObject item) => item switch
+    {
+        SequenceStep step => step.StartMs,
+        AudioClip clip => clip.StartMs,
+        _ => 0,
+    };
+
     [RelayCommand(CanExecute = nameof(CanClickInsertGesture))]
     private void InsertGesture(int animId)
     {
@@ -1342,7 +1448,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     private List<AudioLaneDto> AudioLanesToDto() => AudioLanes.Select(l => new AudioLaneDto
     {
         Label = l.Label,
-        Clips = l.Clips.Select(c => new AudioClipDto { FilePath = c.FilePath, DurationMs = c.DurationMs, StartMs = c.StartMs, Loop = c.Loop }).ToList(),
+        Clips = l.Clips.Select(c => new AudioClipDto { FilePath = c.FilePath, DurationMs = c.DurationMs, StartMs = c.StartMs, Loop = c.Loop, Volume = c.Volume }).ToList(),
     }).ToList();
 
     // Null and legacy-library empty lists seed the two default lanes. Current document
@@ -1367,7 +1473,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
             var lane = new AudioLane { Label = dto.Label, RowIndex = row++ };
             foreach (var c in dto.Clips)
             {
-                var clip = new AudioClip { FilePath = c.FilePath, DurationMs = c.DurationMs, StartMs = c.StartMs, Loop = c.Loop };
+                var clip = new AudioClip { FilePath = c.FilePath, DurationMs = c.DurationMs, StartMs = c.StartMs, Loop = c.Loop, Volume = c.Volume };
                 // A Scene stores paths, not audio. Flag a file that has since moved or been
                 // deleted right away, rather than letting the operator discover it at Play
                 // time — a cheap existence check, no decoding (SEQ-F04).
@@ -1812,6 +1918,18 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
     private void ToggleAudioLoop(AudioClip? clip)
     {
         if (clip != null) SetAudioClipLoop(clip, !clip.Loop);
+    }
+
+    /// <summary>
+    /// One committed volume change is one Undo step. The clip's context-menu slider commits on
+    /// release (or per click/key step), never per drag tick. Takes effect on the next Play.
+    /// </summary>
+    internal bool SetAudioClipVolume(AudioClip clip, int value)
+    {
+        if (!CanEditSequence || !AudioLanes.Any(lane => lane.Clips.Contains(clip))) return false;
+        var volume = Math.Clamp(value, 0, AudioClip.MaxVolume);
+        if (clip.Volume == volume) return false;
+        return ExecuteSequenceEdit(() => clip.Volume = volume);
     }
 
     [RelayCommand(CanExecute = nameof(CanEditSequence))]
@@ -2398,7 +2516,8 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
 
             var offsetMs = audio.Loop ? elapsedMs % audio.DurationMs : elapsedMs;
             _audioPlayer.Play(
-                audio.FilePath, audio.Loop, audio.SourceOrder, startOffsetMs: offsetMs);
+                audio.FilePath, audio.Loop, audio.SourceOrder, startOffsetMs: offsetMs,
+                volumePercent: audio.Volume);
         }
     }
 
@@ -2473,7 +2592,7 @@ public partial class SequencerViewModel : ObservableObject, IDisposable
             case AudioPlaybackEvent audio:
                 // SourceOrder is the clip's identity in this plan, so a playback failure can name
                 // the offending clip instead of reporting an anonymous audio error (SEQ-F07).
-                _audioPlayer.Play(audio.FilePath, audio.Loop, audio.SourceOrder);
+                _audioPlayer.Play(audio.FilePath, audio.Loop, audio.SourceOrder, volumePercent: audio.Volume);
                 break;
         }
     }

@@ -79,7 +79,7 @@ public sealed class SequencerPlaybackPlan
             {
                 captured.Add(new AudioPlaybackEvent(
                     Math.Max(0, clip.StartMs), sourceOrder++, clip.FilePath,
-                    Math.Max(0, clip.EffectiveDurationMs), clip.Loop));
+                    Math.Max(0, clip.EffectiveDurationMs), clip.Loop, clip.Volume));
             }
         }
 
@@ -192,4 +192,5 @@ public sealed record AudioPlaybackEvent(
     int SourceOrder,
     string FilePath,
     int DurationMs,
-    bool Loop) : SequencerPlaybackEvent(StartMs, SourceOrder);
+    bool Loop,
+    int Volume = AudioClip.DefaultVolume) : SequencerPlaybackEvent(StartMs, SourceOrder);

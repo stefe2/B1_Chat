@@ -240,6 +240,17 @@ Duplicate's own placement exactly (+200ms from the copied step's stored
 `StartMs`, selected), so the two paths read as one behavior regardless of
 which is used.
 
+**Multi-selection (SEQ-G09, partial).** Ctrl+click toggles a gesture or audio
+clip in a transient selection (`IsGrouped` on the clip object, never persisted;
+a snapshot restore rebuilds the clips and so clears it). A plain click seeds it:
+the selected gesture, or for audio — which has no inspector — a one-member
+selection. Dragging any member of a 2+ selection moves every member in time by
+one offset inside one edit transaction (one Undo step); rows, targets and lanes
+never change, the earliest member stops at 0 rather than compressing the group,
+and only the grabbed clip snaps, the others keeping their relative offsets. A
+plain click on a member without dragging collapses the selection to that clip;
+a click on empty timeline space clears it.
+
 A newly inserted gesture clip receives a fresh random `Seed` (not a fixed
 default), matching Duplicate's copy-preserves-seed rule from the other
 direction: insertion should not always reproduce the same pose variation
@@ -307,6 +318,16 @@ therefore touch only genuinely active clips, and Resume cannot restart something
 that already finished. `StopAll` is idempotent. A playback failure is reported
 once per clip, naming the file in a visible `⚠ AUDIO` transport badge and tooltip,
 and the rest of the pass continues.
+
+**Clip volume.** Each audio clip carries a persisted `Volume` percentage
+(0–200, default 100), set from its context-menu slider; a slider release or a
+discrete step is one Undo step, never one per drag tick. It is non-destructive:
+`AudioPlaybackService` sets the media handle level before Play, and the file is
+never touched. 100 % maps to `MediaPlayer.Volume` 0.5, the player default every
+clip used before the setting existed, so older Scenes sound unchanged; 200 % is
+the player's full scale. The plan captures the level, so a change applies from
+the next Play. There is no master volume or equalizer: `MediaPlayer` has no DSP
+chain, and an equalizer would require replacing the audio engine.
 
 **Audio-loop endpoint.** A clip's natural duration remains its seek/modulo cycle;
 its `Loop` flag never fabricates an unbounded document tail. Once started, the

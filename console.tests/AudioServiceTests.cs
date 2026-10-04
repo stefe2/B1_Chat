@@ -300,6 +300,24 @@ public class AudioPlaybackLifecycleTests
         Assert.True(handle.Disposed);
     }
 
+    [Theory]
+    [InlineData(100, 0.5)] // unity: the MediaPlayer default every clip used before volume existed
+    [InlineData(0, 0.0)]
+    [InlineData(50, 0.25)]
+    [InlineData(200, 1.0)]
+    [InlineData(250, 1.0)]
+    public void Play_applies_the_clip_volume_before_playback(int percent, double expected)
+    {
+        var factory = new FakeMediaHandleFactory(_ => { });
+        using var service = new AudioPlaybackService(factory, fileExists: _ => true);
+
+        service.Play("a.mp3", volumePercent: percent);
+
+        var handle = Assert.Single(factory.Created);
+        Assert.Equal(expected, handle.Volume);
+        Assert.Equal(1, handle.PlayCount);
+    }
+
     [Fact]
     public void A_missing_file_is_reported_without_creating_a_handle()
     {
@@ -929,6 +947,7 @@ internal sealed class FakeMediaHandle : IMediaHandle
     public int StopCount { get; private set; }
     public int RewindCount { get; private set; }
     public List<int> SeekPositions { get; } = new();
+    public double? Volume { get; private set; }
 
     public void Open(string path)
     {
@@ -942,6 +961,7 @@ internal sealed class FakeMediaHandle : IMediaHandle
     public void Stop() => StopCount++;
     public void Seek(int positionMs) => SeekPositions.Add(positionMs);
     public void Rewind() => RewindCount++;
+    public void SetVolume(double volume) => Volume = volume;
 
     public void RaiseOpened() => Opened?.Invoke();
     public void RaiseEnded() => Ended?.Invoke();

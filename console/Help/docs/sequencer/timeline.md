@@ -98,6 +98,12 @@ interaction hint.*
   identifies the target.
 - **Move:** drag a clip horizontally in time or vertically to retarget it.
 - **Select:** click a clip to open its inspector.
+- **Multi-select:** Ctrl+click gesture or audio clips to add them to (or remove
+  them from) a selection, outlined in white. Dragging any selected clip moves
+  the whole selection in time by the same amount, keeping their spacing; rows,
+  targets, and lanes do not change, and the grabbed clip snaps to the grid. The
+  move is one undo step. A plain click on another clip, or on empty timeline
+  space, ends the multi-selection.
 - **Duplicate/Delete:** right-click the clip or use the inspector buttons. A
   duplicate is selected and placed on the same target 0.2 seconds after the
   original so the copy does not remain hidden underneath it.

@@ -44,8 +44,11 @@ public sealed class AudioPlaybackService : ISequencerAudioPlayer, IDisposable
     /// Starts an independent playback. <paramref name="clipId"/> is the plan's source order, used
     /// only to name the clip in a failure report — 0 when the caller has no identity to give.
     /// <paramref name="startOffsetMs"/> is applied before playback for play-from-cursor rehearsal.
+    /// <paramref name="volumePercent"/> is applied before playback too, so no sample is heard
+    /// at the wrong level.
     /// </summary>
-    public void Play(string? path, bool loop = false, int clipId = 0, int startOffsetMs = 0)
+    public void Play(string? path, bool loop = false, int clipId = 0, int startOffsetMs = 0,
+                     int volumePercent = Models.AudioClip.DefaultVolume)
     {
         if (string.IsNullOrEmpty(path)) return;
         if (!_fileExists(path))
@@ -64,6 +67,7 @@ public sealed class AudioPlaybackService : ISequencerAudioPlayer, IDisposable
         try
         {
             entry.Handle.Open(path);
+            entry.Handle.SetVolume(ToPlayerVolume(volumePercent));
             if (startOffsetMs > 0)
                 entry.Handle.Seek(startOffsetMs);
             entry.Handle.Play();
@@ -73,6 +77,13 @@ public sealed class AudioPlaybackService : ISequencerAudioPlayer, IDisposable
             OnFailed(entry, ex.Message);
         }
     }
+
+    /// <summary>
+    /// Clip percent to the player's 0..1 scale. 100 % maps to 0.5, the WPF MediaPlayer default
+    /// every clip played at before per-clip volume existed, so old Scenes sound unchanged.
+    /// </summary>
+    internal static double ToPlayerVolume(int volumePercent) =>
+        Math.Clamp(volumePercent, 0, Models.AudioClip.MaxVolume) / (double)Models.AudioClip.MaxVolume;
 
     private void OnEnded(Entry entry)
     {

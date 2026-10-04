@@ -69,9 +69,11 @@ public interface ISequencerAudioPlayer
     /// <paramref name="clipId"/> is the playback plan's source order for this clip. It is optional
     /// so the existing dispatch call site stays unchanged; it exists only so a failure can name
     /// the clip that caused it (SEQ-F07). <paramref name="startOffsetMs"/> seeks overlapping audio
-    /// when a stopped pass begins from a retained playhead.
+    /// when a stopped pass begins from a retained playhead. <paramref name="volumePercent"/> is
+    /// the clip's non-destructive gain (see <see cref="Models.AudioClip.Volume"/>).
     /// </summary>
-    void Play(string? path, bool loop = false, int clipId = 0, int startOffsetMs = 0);
+    void Play(string? path, bool loop = false, int clipId = 0, int startOffsetMs = 0,
+              int volumePercent = Models.AudioClip.DefaultVolume);
     void PauseAll();
     void ResumeAll();
     void StopAll();

@@ -42,13 +42,26 @@ missing/unreadable files and uncertain durations, but it never blocks Play.
 - Drag a clip horizontally to change its time.
 - Drag vertically to move it to another audio lane.
 - Clips may overlap and play concurrently, even in the same lane.
-- Right-click a clip for **Replace file…**, **Loop**, or **Delete**.
+- Right-click a clip for **Replace file…**, **Loop**, **Volume**, or **Delete**.
+- Ctrl+click clips (audio and gesture alike) to select several, then drag one of
+  them to move the whole selection together in time. See the Timeline page.
 - Click the lane name in the gutter to edit it directly. Right-clicking the lane
   offers Delete; it does not provide a separate Rename command.
 - Deleting a nonempty lane asks before deleting all of its clips.
 
 Audio lanes currently have no mute switch. Droid-track mute controls affect only
 gesture commands.
+
+## Clip volume
+
+Right-click a clip and drag its **Volume** slider (0–200 %, in 5 % steps) to set
+that clip's playback level independently of the others; **Reset volume to
+100 %** returns it to normal. 100 % is the file's normal level, the level every
+clip had before this setting existed; values above 100 % play louder. The change
+is non-destructive: the audio file is never modified, only the Scene stores the
+value. A clip whose volume is not 100 % shows a small 🔊 percentage on the
+timeline. Releasing the slider creates one undo step, and the new level applies
+from the next Play.
 
 ## Looping an audio clip
 
@@ -73,8 +86,8 @@ offset; looping audio uses the corresponding point in its current cycle.
 
 ## Files are linked, not embedded
 
-The sequence stores only each file's full local path, duration, timing, and Loop
-flag. Moving, renaming, disconnecting, or deleting a sound file breaks that clip.
+The sequence stores only each file's full local path, duration, timing, Loop
+flag, and volume. Moving, renaming, disconnecting, or deleting a sound file breaks that clip.
 Exporting a sequence does not copy the sound file.
 
 For a portable show folder:

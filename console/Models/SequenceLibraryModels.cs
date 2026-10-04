@@ -62,6 +62,7 @@ public class AudioClipDto
     public int DurationMs { get; set; }
     public int StartMs { get; set; }
     public bool Loop { get; set; }
+    public int Volume { get; set; } = AudioClip.DefaultVolume;
 }
 
 /// <summary>Flat form (POCO) for JSON serialization of AudioLane.</summary>

@@ -7,6 +7,27 @@ an archival split. `CLAUDE.md`'s *Current open work* section lists what is
 still open; [`SEQUENCER-HARDENING.md`](SEQUENCER-HARDENING.md) tracks the
 Sequencer backlog item by item.
 
+## 2026-10-03 — Bench-test requests: calibration, clip volume, multi-select
+
+- Servo calibration: sliders no longer send a live preview; only the
+  → Min/Center/Max buttons move a servo, and a button first flushes a pending
+  save so it reaches the value shown. Min/Max now carry direction labels
+  (PAN left/right, TILT down/up). Firmware 1.12.2 no longer recenters the head
+  when a calibration is applied at runtime (`ServoEngine::holdWithinLimits()`);
+  boot still centers. Droids on older firmware keep recentering until flashed.
+- Per-clip audio volume (0–200 %, 100 = previous level, non-destructive) from
+  the clip's right-click menu. Scene schema bumped to `b1-scene` version 2;
+  version 1 Scenes still load at 100 %. A requested equalizer (per clip and
+  master) and a master volume were dropped: WPF `MediaPlayer` has no DSP chain.
+- Ctrl+click multi-selection of gesture and audio clips, moved together in time
+  as one Undo step (SEQ-G09, partial).
+- Console version 0.14.0 (Scene schema change). Validation: firmware
+  `pio run -e b1` and console/test builds succeed. The full console suite ran
+  once: 336 passed, 27 failed. The two failures inspected predate this work:
+  they still use the legacy numeric IDs 16/17 as continuous gestures, which
+  e3b77e7 replaced with catalog-derived execution kinds. The complete failure
+  list has not been captured yet. No hardware or manual UI check yet.
+
 ## 2026-08-16 — Gesture Sequencer V2: stage 3B complete
 
 - Replaced active Scene Export, Import and Local Library persistence with strict

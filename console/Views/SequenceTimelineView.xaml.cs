@@ -20,6 +20,9 @@ public partial class SequenceTimelineView : UserControl
 {
     private bool _clipCandidate;
     private bool _draggingClip;
+    // The press landed on a member of a 2+ clip Ctrl+click group: a drag moves the whole group
+    // in time, a click without drag collapses the selection to that one clip.
+    private bool _groupCandidate;
     private SequenceStep? _dragStep;
     private double _dragStartMouseX;
     private double _dragStartMouseY;
@@ -244,6 +247,8 @@ public partial class SequenceTimelineView : UserControl
         GhostBorder.Visibility = Visibility.Collapsed;
         _scrubbing = false;
 
+        _groupCandidate = false;
+        Vm?.EndGroupDrag();
         Vm?.CancelEditTransaction();
         if (restoreScrub && Vm is { } vm) vm.PlayheadMs = _scrubStartPlayheadMs;
         captured?.ReleaseMouseCapture();
@@ -392,10 +397,19 @@ public partial class SequenceTimelineView : UserControl
         if (sender is not FrameworkElement fe || fe.DataContext is not SequenceStep hitStep || Vm is not { } vm) return;
         var pos = e.GetPosition(TracksCanvas);
         var step = PickStepAt(vm, pos, Keyboard.Modifiers.HasFlag(ModifierKeys.Alt), hitStep);
+        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+        {
+            vm.ToggleGroupSelection(step);
+            e.Handled = true;
+            return;
+        }
+        var groupPress = step.IsGrouped && vm.GroupCount >= 2;
+        if (!groupPress) vm.ClearGroupSelection();
         vm.SelectedStep = step;
         if (!vm.CanEditSequence) { e.Handled = true; return; }
         _clipCandidate = true;
         _draggingClip = false;
+        _groupCandidate = groupPress;
         _dragStep = step;
         _dragStartMouseX = pos.X;
         _dragStartMouseY = pos.Y;
@@ -435,11 +449,12 @@ public partial class SequenceTimelineView : UserControl
         if (!_draggingClip)
         {
             if (!ExceedsDragThreshold(new Point(_dragStartMouseX, _dragStartMouseY), pos)) return;
-            if (!vm.BeginStepDrag()) { CancelAllInteractions(); return; }
+            if (!(_groupCandidate ? vm.BeginGroupDrag() : vm.BeginStepDrag())) { CancelAllInteractions(); return; }
             _draggingClip = true;
             _dragStep.Dragging = true;
         }
         var deltaMs = (pos.X - _dragStartMouseX) / vm.PxPerMs;
+        if (_groupCandidate) { vm.UpdateGroupDrag(deltaMs); return; }
         // Free pixel-level movement while dragging, on BOTH axes — Snap (horizontal grid) and
         // Target (row) only apply at release, so the clip glides with the cursor instead of
         // hopping 100ms or a full 52px row at a time.
@@ -453,6 +468,15 @@ public partial class SequenceTimelineView : UserControl
         var completedDrag = _draggingClip;
         _clipCandidate = false;
         _draggingClip = false;
+        if (_groupCandidate)
+        {
+            _groupCandidate = false;
+            if (sender is FrameworkElement groupElement) groupElement.ReleaseMouseCapture();
+            if (completedDrag && _dragStep != null) Vm?.CompleteGroupDrag(_dragStep);
+            else Vm?.ClearGroupSelection();
+            _dragStep = null;
+            return;
+        }
         if (_dragStep != null)
         {
             if (completedDrag && Vm is { CanEditSequence: true } vm)
@@ -481,7 +505,9 @@ public partial class SequenceTimelineView : UserControl
     // IsHitTestVisible=False).
     private void TracksCanvas_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (Vm is { } vm) vm.SelectedStep = null;
+        if (Vm is not { } vm) return;
+        vm.ClearGroupSelection();
+        vm.SelectedStep = null;
     }
 
     // --- Audio clip drag: StartMs (horizontal) plus an optional cross-lane move. The clip
@@ -498,9 +524,18 @@ public partial class SequenceTimelineView : UserControl
     private void AudioClip_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (sender is not FrameworkElement fe || fe.DataContext is not AudioClip clip || Vm is not { } vm) return;
+        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+        {
+            vm.ToggleGroupSelection(clip);
+            e.Handled = true;
+            return;
+        }
+        var groupPress = clip.IsGrouped && vm.GroupCount >= 2;
+        if (!groupPress) vm.SelectAudioClip(clip);
         if (!vm.CanEditSequence) { e.Handled = true; return; }
         _audioClipCandidate = true;
         _draggingAudioClip = false;
+        _groupCandidate = groupPress;
         _dragAudioClip = clip;
         _dragAudioSourceLane = vm.AudioLanes.FirstOrDefault(l => l.Clips.Contains(clip));
         var posRoot = e.GetPosition(RootGrid);
@@ -519,11 +554,12 @@ public partial class SequenceTimelineView : UserControl
         {
             if (!ExceedsDragThreshold(
                     new Point(_dragAudioStartMouseX, _dragAudioStartMouseY), posRoot)) return;
-            if (!vm.BeginAudioClipDrag()) { CancelAllInteractions(); return; }
+            if (!(_groupCandidate ? vm.BeginGroupDrag() : vm.BeginAudioClipDrag())) { CancelAllInteractions(); return; }
             _draggingAudioClip = true;
             _dragAudioClip.Dragging = true;
         }
         var deltaMs = (posRoot.X - _dragAudioStartMouseX) / vm.PxPerMs;
+        if (_groupCandidate) { vm.UpdateGroupDrag(deltaMs); return; }
         // Same smooth-drag rule as gesture clips: free on both axes while moving, snap (time
         // grid) and lane both settle at release.
         _dragAudioClip.StartMs = Math.Max(0, (int)(_dragAudioStartMs + deltaMs));
@@ -537,6 +573,19 @@ public partial class SequenceTimelineView : UserControl
         _audioClipCandidate = false;
         _draggingAudioClip = false;
         if (sender is FrameworkElement fe) fe.ReleaseMouseCapture();
+
+        if (_groupCandidate)
+        {
+            _groupCandidate = false;
+            if (_dragAudioClip != null)
+            {
+                if (completedDrag) Vm?.CompleteGroupDrag(_dragAudioClip);
+                else Vm?.SelectAudioClip(_dragAudioClip);
+            }
+            _dragAudioClip = null;
+            _dragAudioSourceLane = null;
+            return;
+        }
 
         if (_dragAudioClip != null)
         {
@@ -558,6 +607,40 @@ public partial class SequenceTimelineView : UserControl
         _dragAudioClip = null;
         _dragAudioSourceLane = null;
         if (completedDrag) Vm?.CompleteEditTransaction();
+    }
+
+    // --- Audio clip volume (context menu). A drag commits once at release so it is one Undo
+    // step; a track click or arrow key is already a single discrete step and commits at once.
+
+    private bool _draggingVolume;
+
+    private void AudioClipVolume_DragStarted(object sender, DragStartedEventArgs e) => _draggingVolume = true;
+
+    private void AudioClipVolume_DragCompleted(object sender, DragCompletedEventArgs e)
+    {
+        _draggingVolume = false;
+        CommitAudioClipVolume(sender as Slider);
+    }
+
+    private void AudioClipVolume_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (!_draggingVolume) CommitAudioClipVolume(sender as Slider);
+    }
+
+    private void CommitAudioClipVolume(Slider? slider)
+    {
+        if (slider?.Tag is not AudioClip clip || Vm is not { } vm) return;
+        var value = (int)Math.Round(slider.Value);
+        // Binding refreshes (initial load, Undo) arrive here with the clip's own value: no edit.
+        if (value == clip.Volume) return;
+        // SetCurrentValue, not Value=: a local value would replace the OneWay binding.
+        if (!vm.SetAudioClipVolume(clip, value)) slider.SetCurrentValue(RangeBase.ValueProperty, (double)clip.Volume);
+    }
+
+    private void AudioClipVolumeReset_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.Tag is AudioClip clip)
+            Vm?.SetAudioClipVolume(clip, AudioClip.DefaultVolume);
     }
 
     private void LaneLabel_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)

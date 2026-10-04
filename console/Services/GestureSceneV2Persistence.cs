@@ -62,6 +62,7 @@ internal static class GestureSceneV2Persistence
                     DurationMs = clip.DurationMs,
                     StartMs = clip.StartMs,
                     Loop = clip.Loop,
+                    Volume = clip.Volume,
                 }).ToList(),
             }).ToList(),
             scene.GestureClips.Select(ToStep).ToList(),
@@ -92,7 +93,7 @@ internal static class GestureSceneV2Persistence
             document.AudioLanes.Select(lane => new SceneAudioLaneV2(
                 lane.Label,
                 lane.Clips.Select(clip => new SceneAudioClipV2(
-                    clip.FilePath, clip.DurationMs, clip.StartMs, clip.Loop)).ToArray())).ToArray(),
+                    clip.FilePath, clip.DurationMs, clip.StartMs, clip.Loop, clip.Volume)).ToArray())).ToArray(),
             clips);
     }
 
@@ -185,6 +186,7 @@ internal static class GestureSceneV2Persistence
                     ["durationMs"] = clip.DurationMs,
                     ["startMs"] = clip.StartMs,
                     ["loop"] = clip.Loop,
+                    ["volume"] = clip.Volume,
                 }).ToArray()),
             }).ToArray()),
             ["gestureClips"] = new JsonArray(scene.GestureClips.Select(clip => (JsonNode)new JsonObject

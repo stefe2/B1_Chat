@@ -95,11 +95,42 @@ public sealed class GestureSceneV2SchemaTests
     public void Scene_RejectsAnUnsupportedFutureVersion()
     {
         var root = JsonNode.Parse(ReadFixture("scene-v1.json"))!.AsObject();
-        root["version"] = 2;
+        root["version"] = SceneV2Parser.CurrentVersion + 1;
 
         var error = Assert.Throws<GestureSceneV2SchemaException>(() => SceneV2Parser.Parse(root.ToJsonString()));
 
         Assert.Equal("$.version", error.FieldPath);
+    }
+
+    [Fact]
+    public void Scene_Version1AudioClipLoadsAtUnityVolumeAndCannotCarryOne()
+    {
+        var root = JsonNode.Parse(ReadFixture("scene-v1.json"))!.AsObject();
+        root["audioLanes"] = JsonNode.Parse(
+            """[{"label":"AUDIO","clips":[{"filePath":"a.wav","durationMs":100,"startMs":0,"loop":false}]}]""");
+
+        Assert.Equal(AudioClip.DefaultVolume, SceneV2Parser.Parse(root.ToJsonString()).AudioLanes[0].Clips[0].Volume);
+
+        root["audioLanes"]![0]!["clips"]![0]!.AsObject()["volume"] = 50;
+        var error = Assert.Throws<GestureSceneV2SchemaException>(() => SceneV2Parser.Parse(root.ToJsonString()));
+        Assert.Equal("$.audioLanes[0].clips[0].volume", error.FieldPath);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(-1)]
+    [InlineData(201)]
+    public void Scene_Version2RequiresAnAudioVolumeInRange(int? volume)
+    {
+        var root = JsonNode.Parse(ReadFixture("scene-v1.json"))!.AsObject();
+        root["version"] = 2;
+        var clip = JsonNode.Parse("""{"filePath":"a.wav","durationMs":100,"startMs":0,"loop":false}""")!.AsObject();
+        if (volume is int value) clip["volume"] = value;
+        root["audioLanes"] = new JsonArray(new JsonObject { ["label"] = "AUDIO", ["clips"] = new JsonArray(clip) });
+
+        var error = Assert.Throws<GestureSceneV2SchemaException>(() => SceneV2Parser.Parse(root.ToJsonString()));
+
+        Assert.Equal("$.audioLanes[0].clips[0].volume", error.FieldPath);
     }
 
     [Fact]

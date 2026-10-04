@@ -239,13 +239,20 @@ SEQ-G17, SEQ-G18.
   variation.
 - **Validation:** repeated-pass protocol captures.
 
-### [D] SEQ-G09 — Add multi-select, copy/paste and grouped movement
+### [~] SEQ-G09 — Add multi-select, copy/paste and grouped movement
 
 - **Priority:** P3
 - **Depends on:** SEQ-C01.
 - **Acceptance:** selections and clipboard operations create one coherent Undo,
   preserve relative timing/targets, and remain safe around broadcast tracks.
 - **Validation:** interaction and history tests.
+- **Progress (2026-10-03, bench request):** Ctrl+click multi-selection of
+  gesture and audio clips and grouped movement in time are implemented (one
+  Undo step, relative timing preserved, rows/targets/lanes unchanged, earliest
+  member clamped at 0, grabbed clip snaps). History test:
+  `CtrlClickGroupMovesGestureAndAudioTogetherAsOneUndoStep`. Still open: a
+  manual UI check, copy/paste and Delete of a whole selection, and grouped
+  retargeting. Rectangle (marquee) selection was explicitly declined.
 
 ### [D] SEQ-G10 — Add per-track latency compensation
 

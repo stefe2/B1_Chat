@@ -582,8 +582,9 @@
                                                     <Canvas>
                                                         <!-- Translucent accent gradient + orange border + light waveform
                                                              (mockup .audio-clip / .wave / .audio-label). -->
-                                                        <Border Canvas.Top="5" Height="42" CornerRadius="5" BorderThickness="1"
-                                                                BorderBrush="#80FF9D2E"
+                                                        <!-- BorderBrush/BorderThickness live in the Style: a local value would
+                                                             override the warning and selection triggers. -->
+                                                        <Border Canvas.Top="5" Height="42" CornerRadius="5"
                                                                 Cursor="SizeAll"
                                                                 Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=ItemsControl, AncestorLevel=2}}"
                                                                 MouseLeftButtonDown="AudioClip_MouseLeftButtonDown"
@@ -605,7 +606,9 @@
                                                             <Border.Style>
                                                                 <Style TargetType="Border">
                                                                     <Setter Property="Opacity" Value="1" />
-                                                                    <Setter Property="ToolTip" Value="Drag to change the start time or move this clip to another audio lane. Right-click for Replace, Loop, and Delete." />
+                                                                    <Setter Property="BorderThickness" Value="1" />
+                                                                    <Setter Property="BorderBrush" Value="#80FF9D2E" />
+                                                                    <Setter Property="ToolTip" Value="Drag to change the start time or move this clip to another audio lane. Ctrl+click to add clips to a selection that moves together in time. Right-click for Replace, Loop, Volume, and Delete." />
                                                                     <Style.Triggers>
                                                                         <!-- Dimmed while "in hand" (same convention as gesture clips) —
                                                                              the clip itself glides with the cursor, no ghost. -->
@@ -617,6 +620,11 @@
                                                                         <DataTrigger Binding="{Binding HasDurationWarning}" Value="True">
                                                                             <Setter Property="ToolTip" Value="{Binding StatusTooltip}" />
                                                                             <Setter Property="BorderBrush" Value="#E0FFB347" />
+                                                                        </DataTrigger>
+                                                                        <!-- Selected (plain click) or Ctrl+click group member. -->
+                                                                        <DataTrigger Binding="{Binding IsGrouped}" Value="True">
+                                                                            <Setter Property="BorderBrush" Value="White" />
+                                                                            <Setter Property="BorderThickness" Value="2" />
                                                                         </DataTrigger>
                                                                     </Style.Triggers>
                                                                 </Style>
@@ -633,6 +641,34 @@
                                                                               Command="{Binding PlacementTarget.Tag.ToggleAudioLoopCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                                                               CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                                                               ToolTip="Repeat this audio file until the Scene endpoint. Stop playback before changing this setting." />
+                                                                    <!-- Per-clip gain, non-destructive (the file is never modified).
+                                                                         The slider commits one Undo step on release, not per drag tick
+                                                                         (AudioClipVolume_* in the code-behind). -->
+                                                                    <MenuItem Style="{StaticResource DarkMenuItemStyle}" StaysOpenOnClick="True"
+                                                                              IsEnabled="{Binding PlacementTarget.Tag.CanEditSequence, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                                              ToolTip="Playback volume of this clip only. 100 % is the file's normal level; the audio file itself is never modified. Applies from the next Play.">
+                                                                        <MenuItem.Header>
+                                                                            <StackPanel Orientation="Horizontal">
+                                                                                <TextBlock Width="84" VerticalAlignment="Center">
+                                                                                    <Run Text="Volume" /><Run Text=" " /><Run Text="{Binding PlacementTarget.DataContext.Volume, RelativeSource={RelativeSource AncestorType=ContextMenu}, Mode=OneWay}" /><Run Text=" %" />
+                                                                                </TextBlock>
+                                                                                <Slider Width="150" Minimum="0" Maximum="200" SmallChange="5" LargeChange="25"
+                                                                                        TickFrequency="5" IsSnapToTickEnabled="True"
+                                                                                        AutoToolTipPlacement="TopLeft" AutoToolTipPrecision="0"
+                                                                                        Style="{StaticResource MetalSliderStyle}" VerticalAlignment="Center"
+                                                                                        Value="{Binding PlacementTarget.DataContext.Volume, RelativeSource={RelativeSource AncestorType=ContextMenu}, Mode=OneWay}"
+                                                                                        Tag="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                                                        Thumb.DragStarted="AudioClipVolume_DragStarted"
+                                                                                        Thumb.DragCompleted="AudioClipVolume_DragCompleted"
+                                                                                        ValueChanged="AudioClipVolume_ValueChanged" />
+                                                                            </StackPanel>
+                                                                        </MenuItem.Header>
+                                                                    </MenuItem>
+                                                                    <MenuItem Header="Reset volume to 100 %" Style="{StaticResource DarkMenuItemStyle}"
+                                                                              IsEnabled="{Binding PlacementTarget.Tag.CanEditSequence, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                                              Tag="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                                              Click="AudioClipVolumeReset_Click"
+                                                                              ToolTip="Play this clip at the file's normal level again." />
                                                                     <Separator />
                                                                     <MenuItem Header="Delete" Style="{StaticResource DarkMenuItemStyle}"
                                                                               Command="{Binding PlacementTarget.Tag.DeleteAudioClipCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
@@ -670,6 +706,8 @@
                                                                                Visibility="{Binding HasDurationWarning, Converter={StaticResource BoolToVisConv}}" />
                                                                     <TextBlock Text="🔁" FontSize="9" Margin="0,0,3,0"
                                                                                Visibility="{Binding Loop, Converter={StaticResource BoolToVisConv}}" />
+                                                                    <TextBlock FontSize="9" Margin="0,0,4,0" Foreground="#FFD9A3"
+                                                                               Visibility="{Binding IsVolumeAdjusted, Converter={StaticResource BoolToVisConv}}"><Run Text="🔊" /><Run Text="{Binding Volume, Mode=OneWay}" /><Run Text="%" /></TextBlock>
                                                                     <TextBlock Text="{Binding FileName}" FontSize="9.5" FontWeight="Bold"
                                                                                Foreground="#FFD9A3" TextTrimming="CharacterEllipsis" />
                                                                 </StackPanel>
@@ -858,6 +896,17 @@
                                                                         <Binding Path="DataContext.SelectedStep" RelativeSource="{RelativeSource AncestorType=ItemsControl}" />
                                                                     </MultiBinding>
                                                                 </DataTrigger.Binding>
+                                                                <Setter Property="BorderBrush" Value="White" />
+                                                                <Setter Property="BorderThickness" Value="2" />
+                                                                <Setter Property="Opacity" Value="1" />
+                                                                <Setter Property="Effect">
+                                                                    <Setter.Value>
+                                                                        <DropShadowEffect Color="White" ShadowDepth="0" BlurRadius="14" Opacity="0.75" />
+                                                                    </Setter.Value>
+                                                                </Setter>
+                                                            </DataTrigger>
+                                                            <!-- Ctrl+click multi-selection member: same highlight as the selected clip. -->
+                                                            <DataTrigger Binding="{Binding IsGrouped}" Value="True">
                                                                 <Setter Property="BorderBrush" Value="White" />
                                                                 <Setter Property="BorderThickness" Value="2" />
                                                                 <Setter Property="Opacity" Value="1" />

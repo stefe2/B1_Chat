@@ -73,6 +73,63 @@ public sealed class SequencerPersistenceTests
     }
 
     [Fact]
+    public void AudioClipVolumeIsOneUndoStepAndRoundTripsThroughExport()
+    {
+        using var fixture = new TemporaryJsonFixture();
+        var path = Path.Combine(fixture.DirectoryPath, "volume.b1seq.json");
+        using var vm = CreateViewModel(writer: new AtomicTextFileWriter());
+        var clip = new AudioClip { FilePath = @"C:\fixtures\voice.wav", DurationMs = 600 };
+        Assert.True(vm.InsertAudioClip(vm.AudioLanes[0], clip));
+        vm.ExportTo(path);
+        Assert.False(vm.Dirty);
+
+        Assert.True(vm.SetAudioClipVolume(clip, 70));
+        Assert.False(vm.SetAudioClipVolume(clip, 70)); // unchanged value: no extra Undo step
+        Assert.True(vm.Dirty);
+        Assert.Equal(70, clip.Volume);
+
+        vm.UndoCommand.Execute(null);
+        Assert.Equal(AudioClip.DefaultVolume, vm.AudioLanes[0].Clips[0].Volume);
+        Assert.False(vm.Dirty);
+        vm.RedoCommand.Execute(null);
+        Assert.Equal(70, vm.AudioLanes[0].Clips[0].Volume);
+
+        vm.ExportTo(path);
+        Assert.Equal(70, Assert.Single(GestureSceneV2Persistence.ParseFile(path).AudioLanes[0].Clips).Volume);
+    }
+
+    [Fact]
+    public void CtrlClickGroupMovesGestureAndAudioTogetherAsOneUndoStep()
+    {
+        var protocol = new FakeSequencerProtocol();
+        protocol.Droids.Add(new Droid { Id = 0x4001, Name = "R2-D2" });
+        using var vm = CreateViewModel(protocol);
+        vm.InsertGestureAt(2, vm.Tracks.Single(track => track.Id == 0x4001), 400);
+        var step = vm.Steps.Single();
+        var clip = new AudioClip { FilePath = "a.wav", DurationMs = 600, StartMs = 1_000 };
+        var outside = new AudioClip { FilePath = "b.wav", DurationMs = 600, StartMs = 5_000 };
+        Assert.True(vm.InsertAudioClip(vm.AudioLanes[0], clip));
+        Assert.True(vm.InsertAudioClip(vm.AudioLanes[1], outside));
+
+        vm.SelectedStep = step;
+        vm.ToggleGroupSelection(clip); // a plain-click selection seeds the group
+        Assert.Equal(2, vm.GroupCount);
+
+        Assert.True(vm.BeginGroupDrag());
+        vm.UpdateGroupDrag(-1_000); // the earliest member stops at 0; spacing is preserved
+        Assert.Equal((0, 600), (step.StartMs, clip.StartMs));
+        vm.UpdateGroupDrag(1_234);
+        Assert.True(vm.CompleteGroupDrag(step)); // the grabbed clip snaps 1634 -> 1600
+        Assert.Equal((1_600, 2_200, 5_000), (step.StartMs, clip.StartMs, outside.StartMs));
+        Assert.False(step.Dragging || clip.Dragging);
+
+        vm.UndoCommand.Execute(null);
+        Assert.Equal(400, vm.Steps.Single().StartMs);
+        Assert.Equal(1_000, vm.AudioLanes[0].Clips.Single().StartMs);
+        Assert.Equal(0, vm.GroupCount); // restored clips are rebuilt unselected
+    }
+
+    [Fact]
     public void ManualSceneEndpointAdvancesWithLaterContentInsideTheSameUndoTransaction()
     {
         using var vm = CreateViewModel();

@@ -88,6 +88,9 @@ public interface IMediaHandle : IDisposable
 
     /// <summary>Seeks back to the start, used to restart a looping clip.</summary>
     void Rewind();
+
+    /// <summary>Player output level, 0.0..1.0 (the player's own scale, linear).</summary>
+    void SetVolume(double volume);
 }
 
 public interface IMediaHandleFactory
