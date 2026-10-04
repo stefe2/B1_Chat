@@ -117,12 +117,17 @@ relevant behavior.
   `ServoEngine::setTargetOffset()`, so persisted calibration centers are kept.
 - Audio is console-side only; the DFPlayer is retired from firmware.
 - `ServoEngine::setLimits()` only updates the calibrated range/center; it never
-  moves the current-position state. Any call site that loads calibration
-  (boot, mesh `MSG_CALIB`, console `calib`) must follow it with `head.center()`
-  the way `applyCalib()` does. Boot once skipped this: a droid that persisted
-  `servosEnabled=true` would snap to the generic pre-calibration default
+  moves the current-position state. Boot must follow it with `head.center()`:
+  boot once skipped this, and a droid that persisted `servosEnabled=true` would
+  snap to the generic pre-calibration default
   (`SERVO_PAN_CENTER`/`SERVO_TILT_CENTER`) instead of its real calibrated
-  center on every restart.
+  center on every restart. A runtime calibration (mesh `MSG_CALIB`, console
+  `calib`, both through `applyCalib()`) must instead call
+  `head.holdWithinLimits()` and must not recenter: since fw 1.12.2 a
+  calibration save never moves the head on its own (only a position the new
+  range excludes is pulled to the nearest limit), and the console calibration
+  sliders no longer send a live preview — only the → Min/Center/Max buttons
+  move a servo.
 - A catalog gesture frame's declared `moveMs` must be at least the travel it
   requests divided by `SERVO_MAX_DEGREES_PER_SECOND` (180°/s), in real
   calibrated degrees for that frame's percent delta — not just a duration that

@@ -389,7 +389,10 @@ static void applyCalib(const ServoCalib& c) {
     Config.setCalib(Mesh.myId(), c);
     head.setLimits(c.panMin, c.panCenter, c.panMax, c.tiltMin, c.tiltCenter, c.tiltMax);
     head.setReversed(c.panReversed != 0, c.tiltReversed != 0);
-    head.center();
+    // No recenter: a calibration save must not move the head on its own; the
+    // operator checks a position explicitly with a console preview. Boot
+    // (setup) still centers, because there the position state is generic.
+    head.holdWithinLimits();
     LOGF("calibration applied (pan %u/%u/%u%s, tilt %u/%u/%u%s)",
          c.panMin, c.panCenter, c.panMax, c.panReversed ? " reversed" : "",
          c.tiltMin, c.tiltCenter, c.tiltMax, c.tiltReversed ? " reversed" : "");

@@ -500,8 +500,8 @@ public sealed class UiAutomationSmokeTests2
     // (DroidsCardView's ⚙ button -> DroidsViewModel.OpenCalibrationRequested(Droid)), which
     // requires a real connected droid to exist in the Droids collection at all. On a machine
     // with no fleet attached there is nothing to open; on a machine with one attached, opening
-    // it immediately issues a real RequestCalib serial command and every slider/Goto button
-    // sends a real Preview/SetCalib movement command the instant it's touched (see
+    // it immediately issues a real RequestCalib serial command, every slider sends a real
+    // SetCalib after its debounce and every Goto button a real Preview movement command (see
     // CalibrationViewModel.cs). There's no safe, hardware-state-independent path to this panel
     // through the real UI, so it's left uncovered rather than forced.
 

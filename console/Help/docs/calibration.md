@@ -4,7 +4,7 @@ Calibration defines the safe mechanical envelope and neutral pose of one droid.
 Pan is horizontal; tilt is vertical. Each axis uses degrees from 0 through 180.
 
 > **Motion safety:** clear hands, cables, costume parts, and hard stops before
-> moving a slider. Use an external regulated servo supply with common ground.
+> pressing a **→** test button. Use an external regulated servo supply with common ground.
 > If a servo binds, buzzes, overheats, or pulls the mechanism hard against a
 > stop, disable **Servos** in the Droids card immediately.
 
@@ -16,7 +16,10 @@ Min, Center, and Max controls plus exact-position test buttons.*
 ## What the six values mean
 
 - **Min** and **Max** are the allowed motion endpoints. Firmware clamps every
-  preview and gesture to this interval.
+  preview and gesture to this interval. For PAN, Min is **left** and Max is
+  **right**; for TILT, Min is **down** and Max is **up** (the labels under Min
+  and Max say so). Gestures follow the same convention: a positive PAN offset
+  turns right and a positive TILT offset looks up.
 - **Center** is the droid's neutral position and the reference point from which
   gesture offsets are applied.
 - **Reverse** independently inverts that servo's electrical direction. Scene,
@@ -34,22 +37,30 @@ correct without changing firmware.
 
 1. Select the intended droid and physically verify it with **Locate** if needed.
 2. Begin with conservative values near the existing center.
-3. If PAN moves opposite to the intended logical direction, select its
-   **Reverse** option and allow the head to return to center.
-4. Adjust Pan Min slowly. The selected droid previews that position live.
-5. Repeat for Pan Max, then choose a comfortable Pan Center.
-6. Configure TILT Reverse if required, then its Min, Center, and Max.
-7. Use **→ Min**, **→ Center**, and **→ Max** to retest exact stored positions.
-8. After the final change, wait at least **1.2 seconds** without moving another
+3. Press **→ Min** for PAN. If the head turns right instead of left, select
+   PAN **Reverse** (never swap the Min and Max values).
+4. Adjust Pan Min slowly, then press **→ Min** to check it. Moving a slider
+   never moves the servo by itself.
+5. Repeat for Pan Max, then choose a comfortable Pan Center, checking each with
+   its **→** button.
+6. For TILT, **→ Min** must lower the head; select TILT **Reverse** if it rises.
+   Then set its Min, Center, and Max the same way.
+7. After the final change, wait at least **1.2 seconds** without moving another
    slider or changing targets.
 9. Reselect the droid to request its values again and confirm they persisted.
 
 ## Preview versus saved calibration
 
-Every slider movement sends a transient preview immediately. The six limits and
-two Reverse flags are sent only after 1.2 seconds without another change. The
-target is captured when the edit is made, but selecting another droid before the
-delay expires cancels that pending save.
+A slider only edits a value; the servo moves exclusively when you press a
+**→ Min**, **→ Center**, or **→ Max** button. The six limits and two Reverse
+flags are sent only after 1.2 seconds without another change; pressing a **→**
+button before then sends the pending values first, so the button reaches the
+value shown. The target is captured when the edit is made, but selecting
+another droid before the delay expires cancels that pending save.
+
+Saving does not move the head (firmware 1.12.2 and later): it stays where it
+is, unless its position now lies outside the new range, in which case it moves
+to the nearest new limit. Older firmware recenters the head after every save.
 
 The actual droid writes a received calibration directly to its own persistent
 storage. It does not use the master's **unsaved/synced** badge, and calibration

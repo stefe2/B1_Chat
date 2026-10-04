@@ -71,19 +71,20 @@ public partial class CalibrationViewModel : ObservableObject
         finally { _loadingCalibration = false; }
     }
 
-    private void OnAxisChanged(int pan, int tilt)
+    // A slider only edits the value: the servo moves exclusively on an explicit → button press,
+    // so dragging a limit can never drive the head into a mechanical stop on its own.
+    private void OnAxisChanged()
     {
         if (_loadingCalibration || SelectedTarget == null) return;
-        _protocol.Preview(SelectedTarget.Id, pan, tilt);
         ScheduleSave();
     }
 
-    partial void OnPanMinChanged(int value) => OnAxisChanged(value, TiltCenter);
-    partial void OnPanCenterChanged(int value) => OnAxisChanged(value, TiltCenter);
-    partial void OnPanMaxChanged(int value) => OnAxisChanged(value, TiltCenter);
-    partial void OnTiltMinChanged(int value) => OnAxisChanged(PanCenter, value);
-    partial void OnTiltCenterChanged(int value) => OnAxisChanged(PanCenter, value);
-    partial void OnTiltMaxChanged(int value) => OnAxisChanged(PanCenter, value);
+    partial void OnPanMinChanged(int value) => OnAxisChanged();
+    partial void OnPanCenterChanged(int value) => OnAxisChanged();
+    partial void OnPanMaxChanged(int value) => OnAxisChanged();
+    partial void OnTiltMinChanged(int value) => OnAxisChanged();
+    partial void OnTiltCenterChanged(int value) => OnAxisChanged();
+    partial void OnTiltMaxChanged(int value) => OnAxisChanged();
     partial void OnPanReversedChanged(bool value) => ScheduleDirectionSave();
     partial void OnTiltReversedChanged(bool value) => ScheduleDirectionSave();
 
@@ -137,6 +138,15 @@ public partial class CalibrationViewModel : ObservableObject
 
     private void Preview(int pan, int tilt)
     {
-        if (SelectedTarget != null) _protocol.Preview(SelectedTarget.Id, pan, tilt);
+        if (SelectedTarget == null) return;
+        // The firmware clamps a preview to its applied limits. Send a still-pending edit first so
+        // the button reaches the value shown, not the previously saved one.
+        if (_saveDebounce != null)
+        {
+            CancelPendingSave();
+            _protocol.SetCalib(SelectedTarget.Id, PanMin, PanCenter, PanMax,
+                               TiltMin, TiltCenter, TiltMax, PanReversed, TiltReversed);
+        }
+        _protocol.Preview(SelectedTarget.Id, pan, tilt);
     }
 }

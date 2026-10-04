@@ -93,6 +93,17 @@ void ServoEngine::center(uint32_t durationMs) {
     setTarget(_panCenter, _tiltCenter, durationMs);
 }
 
+void ServoEngine::holdWithinLimits() {
+    // writeServos() already clamps every output; clamping the interpolation
+    // state too keeps the next move from starting at an excluded angle.
+    _curPan = clampf(_curPan, _panMin, _panMax);
+    _curTilt = clampf(_curTilt, _tiltMin, _tiltMax);
+    _startPan = clampf(_startPan, _panMin, _panMax);
+    _startTilt = clampf(_startTilt, _tiltMin, _tiltMax);
+    _targetPan = clampf(_targetPan, _panMin, _panMax);
+    _targetTilt = clampf(_targetTilt, _tiltMin, _tiltMax);
+}
+
 void ServoEngine::setLimits(uint8_t panMin, uint8_t panCenter, uint8_t panMax,
                             uint8_t tiltMin, uint8_t tiltCenter, uint8_t tiltMax) {
     if (panMin > panMax) { const uint8_t t = panMin; panMin = panMax; panMax = t; }

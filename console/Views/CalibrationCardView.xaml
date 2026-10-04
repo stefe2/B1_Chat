@@ -6,13 +6,13 @@
             <DockPanel LastChildFill="False" Margin="0,0,0,12">
                 <TextBlock Text="SERVOS CALIBRATION" Style="{StaticResource CardTitleStyle}" Margin="0" DockPanel.Dock="Left" />
                 <TextBlock Text="auto-save" Style="{StaticResource MetaTextStyle}" DockPanel.Dock="Right" VerticalAlignment="Center"
-                           ToolTip="Slider motion previews immediately. After 1.2 seconds without another change, all calibration values are sent and saved on the selected droid." />
+                           ToolTip="Moving a slider never moves the servo. After 1.2 seconds without another change, all calibration values are sent and saved on the selected droid; the head stays where it is unless it now lies outside the new range." />
             </DockPanel>
 
             <TextBlock Text="DROID" Style="{StaticResource FieldLabelStyle}" Margin="0,0,0,4" />
             <ComboBox Style="{StaticResource DarkComboBoxStyle}" ItemsSource="{Binding Targets}" SelectedItem="{Binding SelectedTarget}"
                       DisplayMemberPath="DisplayLabel" Margin="0,0,0,14"
-                      ToolTip="Choose the droid to calibrate. Slider motion previews immediately; saving occurs after 1.2 seconds without another change." />
+                      ToolTip="Choose the droid to calibrate. Sliders only change values; the → buttons move the servo. Saving occurs after 1.2 seconds without another change." />
 
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -25,7 +25,7 @@
                         <TextBlock Text="PAN · HORIZONTAL" Style="{StaticResource SectionSubtitleStyle}" Margin="0" />
                         <CheckBox Content="Reverse" IsChecked="{Binding PanReversed}" IsEnabled="{Binding SupportsServoReverse}" DockPanel.Dock="Right"
                                   Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center"
-                                  ToolTip="Invert the PAN servo electrical direction without changing Scene coordinates or calibration limits. Saved after the 1.2-second delay; unavailable on older firmware."
+                                  ToolTip="Invert the PAN servo electrical direction without changing Scene coordinates or calibration limits. Use it when MIN turns the head right instead of left. Saved after the 1.2-second delay; unavailable on older firmware."
                                   ToolTipService.ShowOnDisabled="True" />
                     </DockPanel>
 
@@ -35,9 +35,9 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="MIN" Style="{StaticResource FieldLabelStyle}" />
+                        <TextBlock Grid.Column="0" Style="{StaticResource FieldLabelStyle}"><Run Text="MIN" /><LineBreak /><Run Text="left" FontWeight="Normal" Foreground="{StaticResource Muted2Brush}" /></TextBlock>
                         <Slider Grid.Column="1" Style="{StaticResource MetalSliderStyle}" Minimum="0" Maximum="180" Value="{Binding PanMin}" Margin="6,0"
-                                ToolTip="Set the horizontal minimum angle. The pan servo previews immediately; all calibration values are saved after 1.2 seconds without another change." />
+                                ToolTip="Set the horizontal minimum angle (head turned left). The servo does not move; use → Min to check it. All calibration values are saved after 1.2 seconds without another change." />
                         <Border Grid.Column="2" Style="{StaticResource ValuePillStyle}"><TextBlock Text="{Binding PanMin}" Style="{StaticResource ValuePillTextStyle}" /></Border>
                     </Grid>
 
@@ -49,7 +49,7 @@
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0" Text="CENTER" Style="{StaticResource FieldLabelStyle}" />
                         <Slider Grid.Column="1" Style="{StaticResource MetalSliderStyle}" Minimum="0" Maximum="180" Value="{Binding PanCenter}" Margin="6,0"
-                                ToolTip="Set the horizontal center angle. The pan servo previews immediately; all calibration values are saved after 1.2 seconds without another change." />
+                                ToolTip="Set the horizontal center angle (head looking straight ahead). The servo does not move; use → Center to check it. All calibration values are saved after 1.2 seconds without another change." />
                         <Border Grid.Column="2" Style="{StaticResource ValuePillStyle}"><TextBlock Text="{Binding PanCenter}" Style="{StaticResource ValuePillTextStyle}" /></Border>
                     </Grid>
 
@@ -59,19 +59,19 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="MAX" Style="{StaticResource FieldLabelStyle}" />
+                        <TextBlock Grid.Column="0" Style="{StaticResource FieldLabelStyle}"><Run Text="MAX" /><LineBreak /><Run Text="right" FontWeight="Normal" Foreground="{StaticResource Muted2Brush}" /></TextBlock>
                         <Slider Grid.Column="1" Style="{StaticResource MetalSliderStyle}" Minimum="0" Maximum="180" Value="{Binding PanMax}" Margin="6,0"
-                                ToolTip="Set the horizontal maximum angle. The pan servo previews immediately; all calibration values are saved after 1.2 seconds without another change." />
+                                ToolTip="Set the horizontal maximum angle (head turned right). The servo does not move; use → Max to check it. All calibration values are saved after 1.2 seconds without another change." />
                         <Border Grid.Column="2" Style="{StaticResource ValuePillStyle}"><TextBlock Text="{Binding PanMax}" Style="{StaticResource ValuePillTextStyle}" /></Border>
                     </Grid>
 
                     <UniformGrid Rows="1" Columns="3">
                         <Button Content="→ Min" Style="{StaticResource MiniButtonStyle}" Command="{Binding GotoPanMinCommand}" Margin="0,0,4,0"
-                                ToolTip="Move the pan servo to the minimum value currently shown." />
+                                ToolTip="Move the pan servo to the minimum value currently shown (left)." />
                         <Button Content="→ Center" Style="{StaticResource MiniButtonStyle}" Command="{Binding GotoPanCenterCommand}" Margin="0,0,4,0"
                                 ToolTip="Move the pan servo to the center value currently shown." />
                         <Button Content="→ Max" Style="{StaticResource MiniButtonStyle}" Command="{Binding GotoPanMaxCommand}"
-                                ToolTip="Move the pan servo to the maximum value currently shown." />
+                                ToolTip="Move the pan servo to the maximum value currently shown (right)." />
                     </UniformGrid>
                 </StackPanel>
 
@@ -80,7 +80,7 @@
                         <TextBlock Text="TILT · VERTICAL" Style="{StaticResource SectionSubtitleStyle}" Margin="0" />
                         <CheckBox Content="Reverse" IsChecked="{Binding TiltReversed}" IsEnabled="{Binding SupportsServoReverse}" DockPanel.Dock="Right"
                                   Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center"
-                                  ToolTip="Invert the TILT servo electrical direction without changing Scene coordinates or calibration limits. Saved after the 1.2-second delay; unavailable on older firmware."
+                                  ToolTip="Invert the TILT servo electrical direction without changing Scene coordinates or calibration limits. Use it when MIN raises the head instead of lowering it. Saved after the 1.2-second delay; unavailable on older firmware."
                                   ToolTipService.ShowOnDisabled="True" />
                     </DockPanel>
 
@@ -90,9 +90,9 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="MIN" Style="{StaticResource FieldLabelStyle}" />
+                        <TextBlock Grid.Column="0" Style="{StaticResource FieldLabelStyle}"><Run Text="MIN" /><LineBreak /><Run Text="down" FontWeight="Normal" Foreground="{StaticResource Muted2Brush}" /></TextBlock>
                         <Slider Grid.Column="1" Style="{StaticResource MetalSliderStyle}" Minimum="0" Maximum="180" Value="{Binding TiltMin}" Margin="6,0"
-                                ToolTip="Set the vertical minimum angle. The tilt servo previews immediately; all calibration values are saved after 1.2 seconds without another change." />
+                                ToolTip="Set the vertical minimum angle (head down). The servo does not move; use → Min to check it. All calibration values are saved after 1.2 seconds without another change." />
                         <Border Grid.Column="2" Style="{StaticResource ValuePillStyle}"><TextBlock Text="{Binding TiltMin}" Style="{StaticResource ValuePillTextStyle}" /></Border>
                     </Grid>
 
@@ -104,7 +104,7 @@
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0" Text="CENTER" Style="{StaticResource FieldLabelStyle}" />
                         <Slider Grid.Column="1" Style="{StaticResource MetalSliderStyle}" Minimum="0" Maximum="180" Value="{Binding TiltCenter}" Margin="6,0"
-                                ToolTip="Set the vertical center angle. The tilt servo previews immediately; all calibration values are saved after 1.2 seconds without another change." />
+                                ToolTip="Set the vertical center angle (head level). The servo does not move; use → Center to check it. All calibration values are saved after 1.2 seconds without another change." />
                         <Border Grid.Column="2" Style="{StaticResource ValuePillStyle}"><TextBlock Text="{Binding TiltCenter}" Style="{StaticResource ValuePillTextStyle}" /></Border>
                     </Grid>
 
@@ -114,24 +114,24 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="MAX" Style="{StaticResource FieldLabelStyle}" />
+                        <TextBlock Grid.Column="0" Style="{StaticResource FieldLabelStyle}"><Run Text="MAX" /><LineBreak /><Run Text="up" FontWeight="Normal" Foreground="{StaticResource Muted2Brush}" /></TextBlock>
                         <Slider Grid.Column="1" Style="{StaticResource MetalSliderStyle}" Minimum="0" Maximum="180" Value="{Binding TiltMax}" Margin="6,0"
-                                ToolTip="Set the vertical maximum angle. The tilt servo previews immediately; all calibration values are saved after 1.2 seconds without another change." />
+                                ToolTip="Set the vertical maximum angle (head up). The servo does not move; use → Max to check it. All calibration values are saved after 1.2 seconds without another change." />
                         <Border Grid.Column="2" Style="{StaticResource ValuePillStyle}"><TextBlock Text="{Binding TiltMax}" Style="{StaticResource ValuePillTextStyle}" /></Border>
                     </Grid>
 
                     <UniformGrid Rows="1" Columns="3">
                         <Button Content="→ Min" Style="{StaticResource MiniButtonStyle}" Command="{Binding GotoTiltMinCommand}" Margin="0,0,4,0"
-                                ToolTip="Move the tilt servo to the minimum value currently shown." />
+                                ToolTip="Move the tilt servo to the minimum value currently shown (down)." />
                         <Button Content="→ Center" Style="{StaticResource MiniButtonStyle}" Command="{Binding GotoTiltCenterCommand}" Margin="0,0,4,0"
                                 ToolTip="Move the tilt servo to the center value currently shown." />
                         <Button Content="→ Max" Style="{StaticResource MiniButtonStyle}" Command="{Binding GotoTiltMaxCommand}"
-                                ToolTip="Move the tilt servo to the maximum value currently shown." />
+                                ToolTip="Move the tilt servo to the maximum value currently shown (up)." />
                     </UniformGrid>
                 </StackPanel>
             </Grid>
 
-            <TextBlock Text="Move a slider: the droid's servo moves to that position (live preview)."
+            <TextBlock Text="Sliders only change the values. Press a → button to move the servo and check a position."
                        Style="{StaticResource HintTextStyle}" />
         </StackPanel>
     </Border>

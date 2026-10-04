@@ -35,6 +35,10 @@ public:
     // Recenters the head.
     void center(uint32_t durationMs = 800);
 
+    // Keeps the head where it is after setLimits(): only a position (or an
+    // in-flight target) the new range excludes is pulled to its nearest limit.
+    void holdWithinLimits();
+
     // To be called very regularly (in loop()). Updates the servos at the
     // SERVO_UPDATE_HZ rate.
     void update();
